@@ -1,0 +1,403 @@
+{
+  "schemaVersion": 1,
+  "lorcana": {
+    "groupOrder": [
+      "Booster Sets",
+      "Special Sets",
+      "Promos & Other"
+    ],
+    "sets": [
+      {
+        "setName": "The First Chapter",
+        "code": "TFC",
+        "lorcastId": "1",
+        "releaseDate": "2023-08-18",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "TFC",
+          "released": "2023-08-18",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Rise of the Floodborn",
+        "code": "ROF",
+        "lorcastId": "2",
+        "releaseDate": "2023-11-17",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "ROF",
+          "released": "2023-11-17",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Into the Inklands",
+        "code": "ITI",
+        "lorcastId": "3",
+        "releaseDate": "2024-02-23",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "ITI",
+          "released": "2024-02-23",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Ursula's Return",
+        "code": "URR",
+        "lorcastId": "4",
+        "releaseDate": "2024-05-17",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "UR",
+          "released": "2024-05-17",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Shimmering Skies",
+        "code": "SSK",
+        "lorcastId": "5",
+        "releaseDate": "2024-08-09",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "SS",
+          "released": "2024-08-09",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Azurite Sea",
+        "code": "AZS",
+        "lorcastId": "6",
+        "releaseDate": "2024-11-01",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "AZS",
+          "released": "2024-11-08",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Archazia's Island",
+        "code": "ARI",
+        "lorcastId": "7",
+        "releaseDate": "2025-03-07",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "AI",
+          "released": "2025-02-28",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Reign of Jafar",
+        "code": "ROJ",
+        "lorcastId": "8",
+        "releaseDate": "2025-05-16",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "ROJ",
+          "released": "2025-05-16",
+          "packPrice": 5.99,
+          "hasEpic": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Whispers in the Well",
+        "code": "WIW",
+        "lorcastId": "10",
+        "releaseDate": "2025-11-07",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "WITW",
+          "released": "2025-08-08",
+          "packPrice": 5.99,
+          "hasEpic": true
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Winterspell",
+        "code": "WIN",
+        "lorcastId": "11",
+        "releaseDate": "2026-02-06",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "WS",
+          "released": "2025-11-14",
+          "packPrice": 5.99,
+          "hasEpic": true
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Wilds Unknown",
+        "code": "WIU",
+        "lorcastId": "12",
+        "releaseDate": "2026-05-09",
+        "cardexGroup": "Booster Sets",
+        "packAnalysis": {
+          "included": true,
+          "id": "WU",
+          "released": "2026-02-27",
+          "packPrice": 5.99,
+          "hasEpic": true
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Fabled",
+        "code": "FAB",
+        "lorcastId": "9",
+        "releaseDate": "2025-09-05",
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Attack of the Vine!",
+        "code": "AOV",
+        "lorcastId": "13",
+        "releaseDate": "2026-07-24",
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Promo Set 2",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Promos & Other",
+        "cardexLabel": "Promos",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "D23 Promos",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Disney Lorcana Promo Cards",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Disney100 Promos",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Format Coconut",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Hyperia City",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Illumineer's Quest: Deep Trouble",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Illumineer's Quest: Palace Heist",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      },
+      {
+        "setName": "Illumineer's Quest: The Great Hunny Rescue",
+        "code": null,
+        "lorcastId": null,
+        "releaseDate": null,
+        "cardexGroup": "Special Sets",
+        "packAnalysis": {
+          "included": false
+        },
+        "needsReview": false,
+        "source": "auto-detected",
+        "addedAt": "2026-08-02T02:46:49.242Z"
+      }
+    ]
+  },
+  "riftbound": {
+    "groupOrder": [
+      "Main Sets",
+      "Promos"
+    ],
+    "sets": [
+      {
+        "setName": "Origins",
+        "setCode": "OGN",
+        "releaseDate": "2025-10-31",
+        "cardCount": 298,
+        "cardexGroup": "Main Sets",
+        "tcgcsvGroupId": 24344,
+        "groupMatchConfidence": null,
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Spiritforged",
+        "setCode": "SFD",
+        "releaseDate": "2026-02-13",
+        "cardCount": 221,
+        "cardexGroup": "Main Sets",
+        "tcgcsvGroupId": 24519,
+        "groupMatchConfidence": null,
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Unleashed",
+        "setCode": "UNL",
+        "releaseDate": "2026-05-08",
+        "cardCount": 219,
+        "cardexGroup": "Main Sets",
+        "tcgcsvGroupId": 24560,
+        "groupMatchConfidence": null,
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Proving Grounds",
+        "setCode": "OGS",
+        "releaseDate": null,
+        "cardCount": 24,
+        "cardexGroup": "Promos",
+        "tcgcsvGroupId": 24439,
+        "groupMatchConfidence": null,
+        "needsReview": false,
+        "source": "seed"
+      },
+      {
+        "setName": "Vendetta",
+        "setCode": "VEN",
+        "releaseDate": "2026-07-31",
+        "cardCount": 228,
+        "cardexGroup": "Main Sets",
+        "tcgcsvGroupId": 24698,
+        "groupMatchConfidence": 1,
+        "needsReview": true,
+        "source": "seed"
+      },
+      {
+        "setName": "Radiance",
+        "setCode": "RAD",
+        "releaseDate": "2026-10-01",
+        "cardCount": 0,
+        "cardexGroup": null,
+        "tcgcsvGroupId": null,
+        "groupMatchConfidence": null,
+        "needsReview": false,
+        "source": "seed"
+      }
+    ]
+  }
+}
