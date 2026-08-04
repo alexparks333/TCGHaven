@@ -27,9 +27,48 @@ export function formatDate(iso: string): string {
 // Signature's "*" suffix is intentionally dropped — the "(Signature)" name suffix already
 // disambiguates it, and "*" isn't how collectors write the number.
 export function riftboundDisplayNumber(number: string, publicCode?: string): string {
+  // "SP" subset cards (e.g. Vendetta's foil-only Special printings) have their real collector
+  // code only in publicCode too ("VEN-SP6/006") — the bare `number` field is just "6", which
+  // collides with an unrelated plain-numbered card sharing that digit. Must be checked before
+  // the digit-suffix regex below, since "SP6" doesn't start with a digit and would otherwise
+  // silently fall through to the bare, ambiguous number.
+  const spMatch = (publicCode ?? '').match(/-(SP\d+)\//i)
+  if (spMatch) return spMatch[1].toUpperCase()
   const m = (publicCode ?? '').match(/-(\d+)([a-zA-Z]?)\*?\//)
   if (!m) return number
   return `${parseInt(m[1], 10)}${m[2]}`
+}
+
+/**
+ * Classifies a Riftbound card's variant type from its catalog `rarity` + `publicCode`.
+ * "Showcase" rarity covers two structurally different prints: a genuine same-number alt-art
+ * (foil-only) and an "Overnumbered" chase variant (collector number exceeds the set's total
+ * card count, e.g. "189/166") — which prints as a regular card, not foil-only. Both get
+ * flattened to the same `rarity: 'Showcase'` value on the catalog card, so the two are told
+ * apart here by comparing the card's own number against the set-size denominator in
+ * publicCode — the same signal the download script uses to assign that rarity in the first
+ * place. Shared by lib/api/search.ts (new-card display) and the Settings repair tool
+ * (fixing already-owned cards), so both agree on what "correct" looks like.
+ */
+export function riftboundVariantFlags(rarity: string | undefined, publicCode?: string) {
+  const isStar = rarity === 'Star'
+  const pubNums = (publicCode ?? '').match(/-(\d+)[a-zA-Z]?\*?\/(\d+)/)
+  const isOvernumber = !!pubNums && parseInt(pubNums[1], 10) > parseInt(pubNums[2], 10)
+  const isAltArtShowcase = rarity === 'Showcase' && !isOvernumber
+  return { isStar, isOvernumber, isAltArtShowcase }
+}
+
+/**
+ * Whether a Riftbound card variant is inherently foil-only (Star signatures, same-number
+ * alt-art Showcase) or inherently NOT foil (Overnumbered — only ever has one, non-foil-labeled
+ * price point). Returns null for regular cards, where foil-or-not is a genuine purchasing
+ * choice this can't second-guess — callers should leave `isFoil` alone in that case.
+ */
+export function riftboundInherentFoil(rarity: string | undefined, publicCode?: string): boolean | null {
+  const { isStar, isOvernumber, isAltArtShowcase } = riftboundVariantFlags(rarity, publicCode)
+  if (isStar || isAltArtShowcase) return true
+  if (isOvernumber) return false
+  return null
 }
 
 // Build an eBay sold-listings search URL for a card.

@@ -6,17 +6,18 @@ import { Package, TrendingUp, Layers, Sparkles, LogOut, ShoppingBag, BookOpen, S
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
+import { ADMIN_UID } from '@/lib/firebase/config'
 
-const nav = [
+const BASE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/sold', label: 'Sold', icon: Banknote },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
   { href: '/spending', label: 'Spending', icon: ShoppingBag },
   { href: '/pack-analysis', label: 'Pack Analysis', icon: Layers },
-  { href: '/admin', label: 'Admin', icon: ShieldCheck },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
+const ADMIN_NAV_ITEM = { href: '/admin', label: 'Admin', icon: ShieldCheck }
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -26,6 +27,11 @@ export function Sidebar() {
 
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   if (isAuthPage) return null
+
+  // UI-level only — hides the link for non-admins, same as AdminCatalogPage.tsx hides its
+  // write controls. Real enforcement is Firestore/Storage security rules, not this check.
+  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
+  const nav = isAdmin ? [...BASE_NAV.slice(0, -1), ADMIN_NAV_ITEM, BASE_NAV[BASE_NAV.length - 1]] : BASE_NAV
 
   async function handleSignOut() {
     await signOut()

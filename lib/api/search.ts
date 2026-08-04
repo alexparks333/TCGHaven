@@ -2,7 +2,7 @@ import type { Game } from '../types'
 import { searchPokemonCards, getPokemonSets, getPokemonCardMarketPrice } from './pokemon'
 import { searchLorcanaCards, getLorcanaSets } from './lorcana'
 import { searchRiftboundCards, getRiftboundSets } from './riftbound'
-import { riftboundDisplayNumber } from '../utils'
+import { riftboundDisplayNumber, riftboundVariantFlags } from '../utils'
 
 export interface CardSearchResult {
   id: string
@@ -102,17 +102,17 @@ export async function searchCards(game: Game, query: string): Promise<CardSearch
     const results: CardSearchResult[] = []
     for (const c of cards) {
       const isLegend = c.cardType === 'Legend'
-      const isStar = c.id.includes('-star-')
-      const isShowcase = c.rarity === 'Showcase'
-      const isSpecial = isShowcase || isStar
+      const { isStar, isOvernumber, isAltArtShowcase } = riftboundVariantFlags(c.rarity, c.publicCode)
+      const isSpecial = isAltArtShowcase || isStar
 
       // Build the display name suffix
       let suffix = ''
       if (isLegend && isStar) suffix = ' · Legend Overnumbered Signature'
-      else if (isLegend && isShowcase) suffix = ' · Legend Overnumbered'
+      else if (isLegend && isOvernumber) suffix = ' · Legend Overnumbered'
       else if (isLegend) suffix = ' · Legend'
       else if (isStar) suffix = ' · Star'
-      else if (isShowcase) suffix = ' · Showcase'
+      else if (isOvernumber) suffix = ' · Overnumbered'
+      else if (isAltArtShowcase) suffix = ' · Showcase'
 
       const normalPrice = c.marketPrice ?? 0
       const foilPrice = c.marketPriceFoil ?? 0
@@ -131,10 +131,11 @@ export async function searchCards(game: Game, query: string): Promise<CardSearch
       }
 
       if (isSpecial) {
-        // Showcase/Star are foil-only — one entry
+        // Alt-art Showcase / Star are foil-only — one entry
         results.push({ ...base, marketPrice: normalPrice, marketPriceFoil: normalPrice, isFoil: true })
       } else {
-        // Regular cards: show Normal entry, plus separate Foil if it has a distinct price
+        // Regular cards (including Overnumbered, which prints like a normal card): show a
+        // Normal entry, plus a separate Foil entry if it has a distinct price
         results.push({ ...base, marketPrice: normalPrice, marketPriceFoil: foilPrice, isFoil: false })
         if (foilPrice > 0 && foilPrice !== normalPrice) {
           results.push({

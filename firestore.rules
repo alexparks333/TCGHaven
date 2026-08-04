@@ -1,0 +1,51 @@
+rules_version = '2';
+
+// TCGHaven Firestore rules.
+//
+// Two UIDs count as admin — neither is a secret, so it's fine for them to live here as plain
+// text; the real protection is that only a signed-in session with one of these exact UIDs can
+// write to the catalog collections below:
+//   - Alex's real (Google-login) account — used when he uses the Admin Catalog page himself.
+//   - A dedicated email/password "sync" account, used only by scripts/download-card-catalog.mjs
+//     (Alex's real account has no password to sign in with from a Node script, since it's a
+//     Google-only login — this account exists purely so the script can authenticate at all).
+// Deploy via `firebase deploy --only firestore:rules` (needs `firebase login` once) or by
+// pasting this file's contents into the Console's Rules tab.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null &&
+        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'];
+    }
+
+    // Card catalog — the shared source of truth. Content isn't sensitive (names, images,
+    // prices), so reads are open to anyone; only the admin account can write.
+    match /catalog/{game}/cards/{cardId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Pre-sharded full-catalog snapshot chunks (~1500 cards each, under Firestore's 1MiB
+    // per-document limit) — what a cold app instance reads on startup instead of scanning
+    // every card document individually.
+    match /catalog_snapshot/{game}/chunks/{chunkId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Sync bookkeeping (lastBulkSyncAt per game) used by the download script to avoid
+    // clobbering a manual admin edit made since its last run.
+    match /catalog_meta/{game} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Per-user inventory data — unchanged from before this migration. A user may only
+    // read/write their own subtree.
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch } from '@/lib/utils'
@@ -38,7 +38,10 @@ interface CardGroup {
 }
 
 export default function InventoryPage() {
-  const { cards, deleteCard, addSoldCard, activeGame, setActiveGame, updateCardPrice } = useStore()
+  const {
+    cards, deleteCard, addSoldCard, activeGame, setActiveGame, updateCardPrice,
+    catalogSyncNotices, dismissCatalogSyncNotice,
+  } = useStore()
   const { user, dataLoading } = useAuth()
   const router = useRouter()
   const [search, setSearch] = useState('')
@@ -272,6 +275,33 @@ export default function InventoryPage() {
             <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
             <span>{saveError}</span>
             <button onClick={() => setSaveError(null)} className="ml-auto text-red-500 hover:text-red-300">✕</button>
+          </div>
+        )}
+        {catalogSyncNotices.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {catalogSyncNotices.map((notice) => (
+              <div
+                key={notice.id}
+                className="flex items-start gap-3 bg-violet-950/40 border border-violet-800/50 rounded-xl px-4 py-3 text-sm text-violet-200"
+              >
+                <RefreshCw size={16} className="text-violet-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  {notice.matchedCount} card{notice.matchedCount !== 1 ? 's were' : ' was'} updated to match a catalog
+                  correction: {notice.cardName}
+                  {notice.changedFields.length > 0 && (
+                    <span className="text-violet-400/80">
+                      {' '}({notice.changedFields.map((f) => `${f.field} ${f.from} → ${f.to}`).join(', ')})
+                    </span>
+                  )}
+                </span>
+                <button
+                  onClick={() => dismissCatalogSyncNotice(notice.id)}
+                  className="ml-auto text-violet-500 hover:text-violet-300 flex-shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <div className="flex items-center justify-between mb-6">

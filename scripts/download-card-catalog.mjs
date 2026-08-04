@@ -1,24 +1,134 @@
 /**
- * Downloads all card catalogs (name, image, set, number) as static JSON files.
- * Run once: npm run download-cards
+ * Downloads all card catalogs (name, image, set, number) and syncs them into Firestore —
+ * the shared, admin-only-writable catalog every copy of the app reads from (see
+ * lib/api/catalog.ts and firestore.rules). Run once: npm run download-cards
  * Re-run whenever new sets release.
  *
- * Output:
- *   public/data/pokemon-cards.json
- *   public/data/lorcana-cards.json  (all rarities including Epic + Enchanted)
- *   public/data/riftbound-cards.json
+ * Requires ADMIN_EMAIL/ADMIN_PASSWORD + the NEXT_PUBLIC_FIREBASE_* vars in .env.local — run
+ * via `npm run download-cards`, which passes --env-file=.env.local. Signs in as the admin
+ * account (same as a real browser session) rather than using a service-account key, so this
+ * script satisfies the exact same Firestore security rules as the Admin Catalog page.
+ *
+ * Sync behavior: never deletes a card. New cards are created; existing cards are only
+ * overwritten if something actually changed AND no admin edit has happened to them since the
+ * last bulk sync (an edit made from /admin always wins over a fresh re-scrape). `hidden` is
+ * never touched by this script — only the Admin Catalog page's Hide/Unhide toggle changes it.
  */
 
 import { writeFileSync, mkdirSync, readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { initializeApp } from 'firebase/app'
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp,
+} from 'firebase/firestore'
 import { normSetName } from './lib/text-norm.mjs'
-import { applyCustomCatalog } from './lib/custom-catalog.mjs'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
-const OUT_DIR = join(__dir, '..', 'public', 'data')
 const DATA_DIR = join(__dir, '..', 'data')
-mkdirSync(OUT_DIR, { recursive: true })
+
+const firebaseApp = initializeApp({
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+})
+const auth = getAuth(firebaseApp)
+const db = getFirestore(firebaseApp)
+
+async function ensureSignedIn() {
+  if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+    throw new Error(
+      'ADMIN_EMAIL and ADMIN_PASSWORD must be set in .env.local to sync the catalog to Firestore ' +
+      '(this is what lets this script write under the same rules as a real admin browser session).'
+    )
+  }
+  await signInWithEmailAndPassword(auth, process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD)
+}
+
+const SNAPSHOT_CHUNK_SIZE = 1500 // cards per catalog_snapshot chunk doc — see lib/api/catalog.ts
+
+function chunk(arr, size) {
+  const out = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+/** Rewrites catalog_snapshot/{game}/chunks/* from a final in-memory card list. */
+async function writeSnapshot(game, finalCards) {
+  const chunkCount = Math.max(1, Math.ceil(finalCards.length / SNAPSHOT_CHUNK_SIZE))
+  for (let i = 0; i < chunkCount; i++) {
+    const slice = finalCards.slice(i * SNAPSHOT_CHUNK_SIZE, (i + 1) * SNAPSHOT_CHUNK_SIZE)
+    await setDoc(doc(db, 'catalog_snapshot', game, 'chunks', String(i)), { cards: JSON.stringify(slice) })
+  }
+  // Clean up leftover higher-numbered chunks from a previous, larger snapshot.
+  const existingChunks = await getDocs(collection(db, 'catalog_snapshot', game, 'chunks'))
+  const toDelete = existingChunks.docs.filter((d) => parseInt(d.id, 10) >= chunkCount)
+  if (toDelete.length > 0) {
+    const batch = writeBatch(db)
+    for (const d of toDelete) batch.delete(d.ref)
+    await batch.commit()
+  }
+}
+
+/**
+ * Syncs a freshly-scraped card array into Firestore for one game. Returns the distinct set
+ * names present in the final (post-sync) catalog, for the summary file written at the end.
+ */
+async function syncToFirestore(game, freshCards) {
+  const metaRef = doc(db, 'catalog_meta', game)
+  const metaSnap = await getDoc(metaRef)
+  const lastBulkSyncAt = metaSnap.exists() ? metaSnap.data().lastBulkSyncAt ?? null : null
+
+  const existingSnap = await getDocs(collection(db, 'catalog', game, 'cards'))
+  const existingMap = new Map(existingSnap.docs.map((d) => [d.id, d.data()]))
+
+  const finalMap = new Map(existingMap) // start from current Firestore state — never drop a card
+  const writes = []
+
+  for (const card of freshCards) {
+    const existing = existingMap.get(card.id)
+
+    if (!existing) {
+      finalMap.set(card.id, { ...card, hidden: false })
+      writes.push({ id: card.id, data: { ...card, hidden: false, updatedAt: serverTimestamp() } })
+      continue
+    }
+
+    const editedSinceLastSync =
+      lastBulkSyncAt && existing.updatedAt && existing.updatedAt.toMillis() > lastBulkSyncAt.toMillis()
+    if (editedSinceLastSync) continue // an admin correction happened since — never clobber it
+
+    const changed = {}
+    for (const key of Object.keys(card)) {
+      if (JSON.stringify(existing[key]) !== JSON.stringify(card[key])) changed[key] = card[key]
+    }
+    if (Object.keys(changed).length === 0) continue // nothing real changed — no write, no timestamp churn
+
+    finalMap.set(card.id, { ...existing, ...changed })
+    writes.push({ id: card.id, data: { ...changed, updatedAt: serverTimestamp() } })
+  }
+
+  if (writes.length > 0) {
+    for (const batchOps of chunk(writes, 450)) { // headroom under Firestore's 500-op batch cap
+      const batch = writeBatch(db)
+      for (const { id, data } of batchOps) batch.set(doc(db, 'catalog', game, 'cards', id), data, { merge: true })
+      await batch.commit()
+    }
+    console.log(`   Firestore sync (${game}): ${writes.length} card(s) created/updated`)
+  } else {
+    console.log(`   Firestore sync (${game}): no changes`)
+  }
+
+  const finalCards = [...finalMap.values()]
+  await writeSnapshot(game, finalCards)
+  await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp() })
+
+  return [...new Set(finalCards.map((c) => c.setName).filter(Boolean))]
+}
 
 // Registry (data/set-registry.json) is the mutable source of truth for Riftbound
 // TCGPlayer group IDs discovered by the sync feature — it overrides/extends the
@@ -80,13 +190,6 @@ function normCardNum(n) {
   return base.replace(/^([A-Za-z]*)0*(\d+)([a-z]?)$/, (_, alpha, digits, suffix) =>
     alpha.toUpperCase() + parseInt(digits, 10) + suffix
   ) || base
-}
-
-function save(filename, data) {
-  const path = join(OUT_DIR, filename)
-  writeFileSync(path, JSON.stringify(data))
-  const kb = Math.round(Buffer.byteLength(JSON.stringify(data)) / 1024)
-  console.log(`  ✅ ${filename} — ${data.length} cards (${kb} KB)`)
 }
 
 // ── Pokemon ───────────────────────────────────────────────────────────────────
@@ -245,9 +348,8 @@ async function downloadPokemon() {
     console.warn(`   ⚠️  Price fetch failed: ${err.message} — catalog saved without prices`)
   }
 
-  const merged = applyCustomCatalog('pokemon', all)
-  merged.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
-  save('pokemon-cards.json', merged)
+  all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
+  return syncToFirestore('pokemon', all)
 }
 
 // ── Lorcana ───────────────────────────────────────────────────────────────────
@@ -305,9 +407,9 @@ async function downloadLorcana() {
     )
   }
 
-  // Phase 2: rarity-based searches — Epic and Enchanted cards ONLY appear here.
+  // Phase 2: rarity-based searches — Epic, Enchanted, and Iconic cards ONLY appear here.
   // These are the most valuable cards in each set and are missed by text search.
-  const rarityQueries = ['enchanted', 'epic', 'mythic', 'special']
+  const rarityQueries = ['enchanted', 'epic', 'iconic', 'mythic', 'special']
   for (const rarity of rarityQueries) {
     await fetchAndStore(
       `https://api.lorcast.com/v0/cards/search?q=rarity:${rarity}&page_size=500`,
@@ -340,22 +442,35 @@ async function downloadLorcana() {
       )
       if (!res.ok) { console.warn(`   ⚠️  ${setName}: ${res.status}`); return }
       const lines = (await res.text()).split('\n')
-      // Lorcana CSV columns:
-      // 0:productId  1:name  3:imageUrl  9:extRarity  10:extNumber
-      // 23:extPromoType  27:marketPrice  29:subTypeName
+      if (lines.length === 0) return
+      // TCGPlayer's CSV column layout is NOT fixed across groups — a group containing only
+      // sealed product (booster boxes, cases, troves — no actual cards, e.g. "Hyperia City")
+      // has no extRarity/extNumber columns at all, since those are per-card fields. Reading by
+      // fixed index there would silently grab price columns instead (that's exactly how price
+      // values like "199.62" ended up in the `rarity` field). Look columns up by header name
+      // instead: real card groups resolve every name below; sealed-goods-only groups resolve
+      // extRarity/extNumber to -1, so every row in them is skipped by the guard further down.
+      const header = parseCSVLine(lines[0]).map((h) => h.trim())
+      const col = (name) => header.indexOf(name)
+      const idx = {
+        productId: col('productId'), name: col('name'), imageUrl: col('imageUrl'),
+        extRarity: col('extRarity'), extNumber: col('extNumber'),
+        marketPrice: col('marketPrice'), midPrice: col('midPrice'), subTypeName: col('subTypeName'),
+      }
       let added = 0
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim()
         if (!line) continue
         const f = parseCSVLine(line)
-        const productId   = f[0]?.trim() ?? ''
-        const name        = f[1]?.trim() ?? ''
-        const imageUrl    = (f[3]?.trim() ?? '').replace('_200w.jpg', '_400w.jpg')
-        const extRarity   = f[9]?.trim() ?? 'Promo'
-        const extNumber   = f[10]?.trim() ?? ''
-        // marketPrice (f[27]) is empty for low-volume promos; fall back to midPrice (f[25])
-        const marketPrice = parseFloat(f[27]) || parseFloat(f[25]) || 0
-        const subTypeName = f[29]?.trim() ?? ''
+        const get = (i) => (i >= 0 ? f[i]?.trim() ?? '' : '')
+        const productId   = get(idx.productId)
+        const name        = get(idx.name)
+        const imageUrl    = get(idx.imageUrl).replace('_200w.jpg', '_400w.jpg')
+        const extRarity   = get(idx.extRarity) || 'Promo'
+        const extNumber   = get(idx.extNumber)
+        // marketPrice can be empty for low-volume promos; fall back to midPrice
+        const marketPrice = parseFloat(get(idx.marketPrice)) || parseFloat(get(idx.midPrice)) || 0
+        const subTypeName = get(idx.subTypeName)
         if (!productId || !name || !extNumber) continue
         if (seenByNameSet.has(`${name}|${setName}`)) continue // already in lorcast
 
@@ -391,11 +506,11 @@ async function downloadLorcana() {
     seen.set(id, card)
   }
 
-  const merged = applyCustomCatalog('lorcana', [...seen.values()])
+  const merged = [...seen.values()]
   merged.sort((a, b) =>
     a.setName.localeCompare(b.setName) || a.number.localeCompare(b.number, undefined, { numeric: true })
   )
-  save('lorcana-cards.json', merged)
+  return syncToFirestore('lorcana', merged)
 }
 
 // ── Riftbound ─────────────────────────────────────────────────────────────────
@@ -494,11 +609,15 @@ const TCGCSV_HEADERS = {
   'Accept': 'text/csv,*/*',
 }
 
-// Rune cards use an R-format collector number (R01–R06, R01a–R06a, R01b–R06b)
-// and are NOT listed on the official playriftbound.com gallery — sourced from TCGPlayer only.
+// Rune cards use an R-format collector number (R01–R06, R01a–R06a, R01b–R06b). They were
+// historically absent from the official playriftbound.com gallery (sourced from TCGPlayer
+// only) — but Vendetta's gallery does list them (see the id-collision handling below), so this
+// can no longer be assumed true for every set.
 const RUNE_NAMES = { R01: 'Fury Rune', R02: 'Calm Rune', R03: 'Mind Rune', R04: 'Body Rune', R05: 'Chaos Rune', R06: 'Order Rune' }
 const RUNE_TAGS  = { R01: ['Fury'],    R02: ['Calm'],    R03: ['Mind'],    R04: ['Body'],    R05: ['Chaos'],    R06: ['Order'] }
-const SET_NAMES_MAP = { OGN: 'Origins', SFD: 'Spiritforged', UNL: 'Unleashed', OGS: 'Proving Grounds' }
+// VEN/RAD were missing here previously — any Rune sourced from TCGCSV for those sets fell back
+// to the literal set code ("VEN") instead of the real name ("Vendetta").
+const SET_NAMES_MAP = { OGN: 'Origins', SFD: 'Spiritforged', UNL: 'Unleashed', OGS: 'Proving Grounds', VEN: 'Vendetta', RAD: 'Radiance' }
 
 async function fetchRiftboundPrices() {
   // Returns { prices: Map<key, {normal, foil, lowNormal, lowFoil}>, extraCards: Card[] }
@@ -682,10 +801,18 @@ async function downloadRiftbound() {
       return card
     })
 
-  // Append extra cards (Rune alt-arts etc.) that aren't in the official gallery
-  const galleryIds = new Set(all.map((c) => c.id))
+  // Append extra cards (Runes etc.) sourced from TCGCSV rather than the official gallery.
+  // Some sets' galleries (e.g. Vendetta) DO also list a Rune under the same id, but with a
+  // bogus bare-digit `collectorNumber` (Riot's gallery data isn't Rune-aware) — e.g. gallery
+  // "ven-r02" gets number "2" instead of the correct "R02" that TCGCSV's extNumber carries.
+  // When ids collide, the TCGCSV-derived version always wins for numbering purposes: replace
+  // the gallery entry instead of skipping the extra, rather than assuming (as before) that a
+  // colliding id always means the gallery already has it right.
+  const galleryIndexById = new Map(all.map((c, i) => [c.id, i]))
   for (const extra of extraCards) {
-    if (!galleryIds.has(extra.id)) all.push(extra)
+    const existingIndex = galleryIndexById.get(extra.id)
+    if (existingIndex === undefined) all.push(extra)
+    else all[existingIndex] = extra
   }
 
   // Create Signature (Star) stubs from TCGCSV price entries.
@@ -717,6 +844,10 @@ async function downloadRiftbound() {
       id: starId,
       name: baseCard.name + ' (Signature)',
       rarity: 'Star',
+      // The base card's publicCode (e.g. "VEN-190/166") doesn't carry a signature marker —
+      // insert "*" right before the trailing "/NNN" so this stub's publicCode matches the
+      // "190*/166" convention real gallery-sourced signatures already have.
+      publicCode: baseCard.publicCode ? baseCard.publicCode.replace(/\/(\d+)$/, '*/$1') : baseCard.publicCode,
       imageUrl: p.img || baseCard.imageUrl,
       // These ultra-low-volume listings often have no TCGPlayer "market price" yet (insufficient
       // recent sales) — only low/mid/high estimates. Falling back to the low price beats showing
@@ -732,8 +863,7 @@ async function downloadRiftbound() {
   }
   if (starCount > 0) console.log(`   Created ${starCount} Signature (Star) stubs from TCGCSV`)
 
-  const merged = applyCustomCatalog('riftbound', all)
-  merged.sort((a, b) => {
+  all.sort((a, b) => {
     const setDiff = (SET_ORDER[a.setCode] ?? 99) - (SET_ORDER[b.setCode] ?? 99)
     if (setDiff !== 0) return setDiff
     const aNum = parseInt(a.number, 10)
@@ -745,31 +875,25 @@ async function downloadRiftbound() {
     return aIsR ? 1 : -1  // R-format cards sort after numeric cards
   })
 
-  const priced = merged.filter(c => c.marketPrice > 0).length
-  console.log(`   Priced ${priced}/${merged.length} cards from TCGCSV`)
-  save('riftbound-cards.json', merged)
+  const priced = all.filter(c => c.marketPrice > 0).length
+  console.log(`   Priced ${priced}/${all.length} cards from TCGCSV`)
+  return syncToFirestore('riftbound', all)
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
 console.log('📦 Downloading card catalogs...')
-await Promise.all([downloadPokemon(), downloadLorcana(), downloadRiftbound()])
+await ensureSignedIn()
+const [pokemonSetNames, lorcanaSetNames, riftboundSetNames] =
+  await Promise.all([downloadPokemon(), downloadLorcana(), downloadRiftbound()])
 
 // Structured summary for scripts/sync-runner.mjs — avoids scraping human-readable stdout.
-function distinctSetNames(filename) {
-  try {
-    const cards = JSON.parse(readFileSync(join(OUT_DIR, filename), 'utf-8'))
-    return [...new Set(cards.map((c) => c.setName).filter(Boolean))]
-  } catch {
-    return []
-  }
-}
 mkdirSync(DATA_DIR, { recursive: true })
 writeFileSync(join(DATA_DIR, 'last-download-summary.json'), JSON.stringify({
   completedAt: new Date().toISOString(),
-  pokemon: { setNames: distinctSetNames('pokemon-cards.json') },
-  lorcana: { setNames: distinctSetNames('lorcana-cards.json') },
-  riftbound: { setNames: distinctSetNames('riftbound-cards.json') },
+  pokemon: { setNames: pokemonSetNames },
+  lorcana: { setNames: lorcanaSetNames },
+  riftbound: { setNames: riftboundSetNames },
 }))
 
-console.log('\n✅ Done! Run npm run build to bundle the updated catalogs.')
+console.log('\n✅ Done! Catalog synced to Firestore — every running app instance picks up the change on its next cache refresh, no rebuild needed.')

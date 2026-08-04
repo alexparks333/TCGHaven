@@ -1,4 +1,4 @@
-import { loadCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
 import { getRiftboundRegistrySets } from './registry'
 
 export interface RiftboundCard {
@@ -16,6 +16,7 @@ export interface RiftboundCard {
   marketPriceFoil?: number
   lowPriceNM?: number
   lowPriceNMFoil?: number
+  hidden?: boolean
 }
 
 export interface RiftboundSet {
@@ -50,7 +51,7 @@ export async function searchRiftboundCards(query: string): Promise<RiftboundCard
   if (!query.trim()) return []
   const { nameQuery, numberFilter } = parseSearchQuery(query)
   if (!nameQuery) return []
-  const cards = loadCatalog<RiftboundCard>('riftbound-cards.json')
+  const cards = await loadVisibleCatalog<RiftboundCard>('riftbound')
   return cards
     .filter((c) => !numberFilter || normNum(c.number) === normNum(numberFilter))
     .map((c) => ({ c, score: scoreMatch(c.name, nameQuery, c.tags) }))

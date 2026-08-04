@@ -1,4 +1,4 @@
-import { loadCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
 import { getLorcanaRegistrySets } from './registry'
 
 const BASE = 'https://api.lorcast.com/v0'
@@ -34,6 +34,7 @@ interface LorcanaCatalogCard {
   imageUrl: string
   marketPrice: number
   marketPriceFoil: number
+  hidden?: boolean
 }
 
 // Lorcana tiebreaker: small bonus when the first query word matches the start
@@ -50,7 +51,7 @@ function scoreLorcanaMatch(name: string, query: string): number {
 
 export async function searchLorcanaCards(query: string): Promise<LorcanaCard[]> {
   if (!query.trim()) return []
-  const catalog = loadCatalog<LorcanaCatalogCard>('lorcana-cards.json')
+  const catalog = await loadVisibleCatalog<LorcanaCatalogCard>('lorcana')
   if (catalog.length > 0) {
     const { nameQuery, numberFilter } = parseSearchQuery(query)
     if (!nameQuery) return []

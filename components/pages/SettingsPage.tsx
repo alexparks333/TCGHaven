@@ -6,7 +6,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { editCard } from '@/lib/firebase/db'
-import { cn, riftboundDisplayNumber } from '@/lib/utils'
+import { cn, riftboundDisplayNumber, riftboundInherentFoil } from '@/lib/utils'
 
 // ── Types (mirror app/api/sync/status and lib/api/registry.ts shapes) ─────────
 
@@ -276,21 +276,24 @@ interface CatalogCardLite {
   id: string
   number: string
   publicCode?: string
+  rarity?: string
 }
 
-interface NumberMismatch {
+interface CardMismatch {
   cardId: string
   name: string
   set: string
-  oldNumber: string
-  newNumber: string
+  oldNumber?: string
+  newNumber?: string
+  oldFoil?: boolean
+  newFoil?: boolean
 }
 
 function InventoryNumberRepairCard() {
   const { user } = useAuth()
   const { cards, updateCard } = useStore()
   const [scanning, setScanning] = useState(false)
-  const [mismatches, setMismatches] = useState<NumberMismatch[] | null>(null)
+  const [mismatches, setMismatches] = useState<CardMismatch[] | null>(null)
   const [fixing, setFixing] = useState(false)
   const [fixedCount, setFixedCount] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -306,15 +309,33 @@ function InventoryNumberRepairCard() {
       const catalog: CatalogCardLite[] = await res.json()
       const byId = new Map(catalog.map((c) => [c.id, c]))
 
-      const found: NumberMismatch[] = []
+      const found: CardMismatch[] = []
       for (const card of cards) {
         if (card.game !== 'riftbound' || !card.apiId) continue
         const catalogCard = byId.get(card.apiId)
         if (!catalogCard) continue
-        const correct = riftboundDisplayNumber(catalogCard.number, catalogCard.publicCode)
-        if (correct !== card.number) {
-          found.push({ cardId: card.id, name: card.name, set: card.set, oldNumber: card.number, newNumber: correct })
+
+        const m: CardMismatch = { cardId: card.id, name: card.name, set: card.set }
+        let hasMismatch = false
+
+        const correctNumber = riftboundDisplayNumber(catalogCard.number, catalogCard.publicCode)
+        if (correctNumber !== card.number) {
+          m.oldNumber = card.number
+          m.newNumber = correctNumber
+          hasMismatch = true
         }
+
+        // Overnumbered/alt-art Showcase/Signature variants have a definitively correct foil
+        // status (see riftboundInherentFoil) — regular cards return null and are left alone,
+        // since foil-or-not there is a genuine purchase choice, not a data error.
+        const correctFoil = riftboundInherentFoil(catalogCard.rarity, catalogCard.publicCode)
+        if (correctFoil !== null && correctFoil !== card.isFoil) {
+          m.oldFoil = card.isFoil
+          m.newFoil = correctFoil
+          hasMismatch = true
+        }
+
+        if (hasMismatch) found.push(m)
       }
       setMismatches(found)
     } catch (err) {
@@ -331,8 +352,11 @@ function InventoryNumberRepairCard() {
     let fixed = 0
     try {
       for (const m of mismatches) {
-        await editCard(user.uid, m.cardId, { number: m.newNumber })
-        updateCard(m.cardId, { number: m.newNumber })
+        const patch: { number?: string; isFoil?: boolean } = {}
+        if (m.newNumber !== undefined) patch.number = m.newNumber
+        if (m.newFoil !== undefined) patch.isFoil = m.newFoil
+        await editCard(user.uid, m.cardId, patch)
+        updateCard(m.cardId, patch)
         fixed++
       }
       setFixedCount(fixed)
@@ -346,12 +370,14 @@ function InventoryNumberRepairCard() {
 
   return (
     <div className="card-glass p-5 mb-6">
-      <h2 className="text-white font-semibold mb-1">Fix Riftbound Card Numbers</h2>
+      <h2 className="text-white font-semibold mb-1">Fix Riftbound Numbers &amp; Foil Status</h2>
       <p className="text-slate-400 text-sm mb-4">
         Alt-art Riftbound cards (e.g. an alt-art printed as &quot;92a&quot;) were sometimes saved with
-        just the bare number (&quot;92&quot;), missing the letter suffix printed on the card. This only
-        ever changes the card number field — nothing else about the card is touched. Only cards
-        originally added via the search dropdown (which carries a catalog link) can be checked.
+        just the bare number (&quot;92&quot;), missing the letter suffix printed on the card. Overnumbered
+        and Signature cards could also be saved with the wrong Foil status. This only ever
+        touches the card&apos;s number and foil fields — nothing else about the card (price,
+        quantity, condition) is changed. Only cards originally added via the search dropdown
+        (which carries a catalog link) can be checked.
       </p>
 
       <div className="flex items-center gap-2 mb-3">
@@ -384,7 +410,7 @@ function InventoryNumberRepairCard() {
 
       {mismatches && mismatches.length === 0 && fixedCount === null && (
         <div className="flex items-center gap-2 text-sm text-emerald-400">
-          <CheckCircle2 size={14} /> No mismatches found — your Riftbound numbers already look correct.
+          <CheckCircle2 size={14} /> No mismatches found — your Riftbound numbers and foil status already look correct.
         </div>
       )}
 
@@ -397,10 +423,18 @@ function InventoryNumberRepairCard() {
       {mismatches && mismatches.length > 0 && (
         <div className="space-y-1 text-xs max-h-60 overflow-y-auto border-t border-slate-800 pt-2">
           {mismatches.map((m) => (
-            <div key={m.cardId} className="flex justify-between items-center border-b border-slate-900 py-1">
-              <span className="text-white">{m.name}</span>
-              <span className="text-slate-400">
-                {m.oldNumber} → <span className="text-violet-300 font-medium">{m.newNumber}</span>
+            <div key={m.cardId} className="flex justify-between items-center border-b border-slate-900 py-1 gap-3">
+              <span className="text-white truncate">{m.name}</span>
+              <span className="text-slate-400 flex items-center gap-3 shrink-0">
+                {m.newNumber !== undefined && (
+                  <span>{m.oldNumber} → <span className="text-violet-300 font-medium">{m.newNumber}</span></span>
+                )}
+                {m.newFoil !== undefined && (
+                  <span>
+                    {m.oldFoil ? '✨ Foil' : 'Normal'} →{' '}
+                    <span className="text-violet-300 font-medium">{m.newFoil ? '✨ Foil' : 'Normal'}</span>
+                  </span>
+                )}
               </span>
             </div>
           ))}

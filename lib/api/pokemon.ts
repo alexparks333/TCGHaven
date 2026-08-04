@@ -1,4 +1,4 @@
-import { loadCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
 
 const BASE_URL = 'https://api.pokemontcg.io/v2'
 
@@ -44,11 +44,12 @@ interface CatalogCard {
   marketPriceFoil: number
   lowPriceNM: number
   lowPriceNMFoil: number
+  hidden?: boolean
 }
 
 export async function searchPokemonCards(query: string): Promise<PokemonCard[]> {
   if (!query.trim()) return []
-  const catalog = loadCatalog<CatalogCard>('pokemon-cards.json')
+  const catalog = await loadVisibleCatalog<CatalogCard>('pokemon')
   if (catalog.length > 0) {
     const { nameQuery, numberFilter } = parseSearchQuery(query)
     if (!nameQuery) return []

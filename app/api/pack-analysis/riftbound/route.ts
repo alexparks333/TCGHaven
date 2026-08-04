@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { loadCatalog } from '@/lib/api/catalog'
+import { loadVisibleCatalog } from '@/lib/api/catalog'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +37,7 @@ interface CatalogCard {
   imageUrl: string
   marketPrice: number
   marketPriceFoil: number
+  hidden?: boolean
 }
 
 function parseCSVLine(line: string): string[] {
@@ -89,7 +90,7 @@ function top5(cards: CatalogCard[], key: 'marketPrice' | 'marketPriceFoil') {
 }
 
 export async function GET() {
-  const catalog = loadCatalog<CatalogCard>('riftbound-cards.json')
+  const catalog = await loadVisibleCatalog<CatalogCard>('riftbound')
   const byId = new Map(catalog.map((c) => [c.id, c]))
 
   // Fetch live prices from tcgcsv for all booster sets in parallel

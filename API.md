@@ -92,10 +92,11 @@ GET /v0/cards/search?q=e&page_size=500
 ... (vowels: a, e, i, o, u, y, th)
 ```
 
-**Phase 2 — rarity searches** (REQUIRED — Enchanted and Epic cards do NOT appear in text searches):
+**Phase 2 — rarity searches** (REQUIRED — Enchanted, Epic, and Iconic cards do NOT appear in text searches):
 ```
 GET /v0/cards/search?q=rarity:enchanted&page_size=500
 GET /v0/cards/search?q=rarity:epic&page_size=500
+GET /v0/cards/search?q=rarity:iconic&page_size=500
 GET /v0/cards/search?q=rarity:mythic&page_size=500
 GET /v0/cards/search?q=rarity:special&page_size=500
 ```

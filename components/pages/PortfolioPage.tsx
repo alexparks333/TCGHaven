@@ -46,7 +46,7 @@ export default function PortfolioPage() {
   const {
     cards, priceHistory, updateCardPrice, addPriceHistoryPoint,
     setLastPriceRefresh, lastPriceRefresh,
-    purchases, calcFloor, activeGames, timeFrame,
+    purchases, soldCards, calcFloor, activeGames, timeFrame,
     priceMode, setPriceMode,
     hiddenGroups,
   } = useStore()
@@ -56,11 +56,17 @@ export default function PortfolioPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [includePacks, setIncludePacks] = useState(false)
+  const [includeSold, setIncludeSold] = useState(false)
   const [barWidth, setBarWidth] = useState(0)   // 0–100, drives progress bar
 
   const totalPackSpend = useMemo(
     () => purchases.reduce((s, p) => s + p.pricePaid * p.quantity, 0),
     [purchases],
+  )
+
+  const totalSoldRevenue = useMemo(
+    () => soldCards.reduce((s, c) => s + c.soldPrice, 0),
+    [soldCards],
   )
 
   // All cards enriched + sorted (respects activeGames filter)
@@ -146,7 +152,7 @@ export default function PortfolioPage() {
   const totals = useMemo(() => {
     const value = filtered.reduce((s, c) => s + c.currentVal, 0)
     const cardCost = filtered.reduce((s, c) => s + c.cost, 0)
-    const adjustedCost = cardCost + (includePacks ? totalPackSpend : 0)
+    const adjustedCost = cardCost + (includePacks ? totalPackSpend : 0) - (includeSold ? totalSoldRevenue : 0)
 
     let pnl: number
     let pnlPct: number
@@ -166,7 +172,7 @@ export default function PortfolioPage() {
     }
 
     return { value, cardCost, adjustedCost, pnl, pnlPct }
-  }, [filtered, includePacks, totalPackSpend, timeFrame])
+  }, [filtered, includePacks, totalPackSpend, includeSold, totalSoldRevenue, timeFrame])
 
   // By-game breakdown — respects floor + activeGames but always shows selected games
   const byGame = useMemo(() => {
@@ -367,11 +373,26 @@ export default function PortfolioPage() {
                   + packs
                 </button>
               )}
+              {timeFrame === 'entry' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setIncludeSold((v) => !v) }}
+                  title={includeSold ? 'Click to remove sold proceeds' : 'Click to subtract sold proceeds from cost basis'}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                    includeSold
+                      ? 'bg-emerald-600 border-emerald-500 text-white'
+                      : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  - sold
+                </button>
+              )}
             </div>
             <span className="text-2xl font-bold text-white">{formatCurrency(totals.adjustedCost)}</span>
-            {includePacks && totalPackSpend > 0 && timeFrame === 'entry' && (
+            {(includePacks && totalPackSpend > 0 || includeSold && totalSoldRevenue > 0) && timeFrame === 'entry' && (
               <span className="text-[11px] text-slate-500 mt-0.5">
-                cards {formatCurrency(totals.cardCost)} · packs {formatCurrency(totalPackSpend)}
+                cards {formatCurrency(totals.cardCost)}
+                {includePacks && totalPackSpend > 0 && <> · packs {formatCurrency(totalPackSpend)}</>}
+                {includeSold && totalSoldRevenue > 0 && <> · sold -{formatCurrency(totalSoldRevenue)}</>}
               </span>
             )}
           </div>

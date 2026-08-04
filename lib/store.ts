@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { Card, PriceHistory, PackSet, Game, SoldCard } from './types'
+import { Card, PriceHistory, PackSet, Game, SoldCard, CatalogSyncNotice } from './types'
 import type { Purchase } from './spending/types'
 
 interface TCGStore {
@@ -18,6 +18,7 @@ interface TCGStore {
   timeFrame: 'entry' | '1d' | '7d' | '30d'
   priceMode: 'market' | 'lowestNM'
   hiddenGroups: string[]
+  catalogSyncNotices: CatalogSyncNotice[]
 
   // Populated by AuthProvider on login
   loadUserCards: (cards: Card[]) => void
@@ -47,6 +48,8 @@ interface TCGStore {
   toggleHiddenGroup: (group: string) => void
   editPurchase: (id: string, updates: Partial<Purchase>) => void
   removePurchase: (id: string) => void
+  addCatalogSyncNotice: (notice: CatalogSyncNotice) => void
+  dismissCatalogSyncNotice: (id: string) => void
 }
 
 const defaultPackSets: PackSet[] = [
@@ -146,12 +149,13 @@ export const useStore = create<TCGStore>()(
   timeFrame: 'entry' as const,
   priceMode: 'market' as const,
   hiddenGroups: [] as string[],
+  catalogSyncNotices: [] as CatalogSyncNotice[],
 
   loadUserCards: (cards) => set({ cards }),
   loadUserSoldCards: (soldCards) => set({ soldCards }),
   loadUserPriceHistory: (priceHistory) => set({ priceHistory }),
   loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [] }),
+  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [], catalogSyncNotices: [] }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, card] })),
@@ -217,6 +221,12 @@ export const useStore = create<TCGStore>()(
 
   removePurchase: (id) =>
     set((state) => ({ purchases: state.purchases.filter((p) => p.id !== id) })),
+
+  addCatalogSyncNotice: (notice) =>
+    set((state) => ({ catalogSyncNotices: [notice, ...state.catalogSyncNotices] })),
+
+  dismissCatalogSyncNotice: (id) =>
+    set((state) => ({ catalogSyncNotices: state.catalogSyncNotices.filter((n) => n.id !== id) })),
 
   setCalcFloor: (v) => set({ calcFloor: v }),
   setShowFilters: (v) => set({ showFilters: v }),

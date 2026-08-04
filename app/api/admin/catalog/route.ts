@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server'
 import { loadCatalog, sortCatalogCards } from '@/lib/api/catalog'
-import { loadCustomCatalog, type CatalogGame } from '@/lib/api/custom-catalog'
+import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const FILES: Record<CatalogGame, string> = {
-  pokemon: 'pokemon-cards.json',
-  lorcana: 'lorcana-cards.json',
-  riftbound: 'riftbound-cards.json',
-}
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
 
 interface CatalogCard {
   id: string
@@ -21,24 +17,27 @@ interface CatalogCard {
   imageUrl: string
   marketPrice?: number
   marketPriceFoil?: number
+  hidden?: boolean
+  source?: 'scraped' | 'manual'
 }
 
 // Read-only listing — no environment gating, browsing the catalog is harmless in prod.
+// Deliberately includes hidden cards (unlike loadVisibleCatalog) so the Admin page can show
+// and un-hide them.
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const game = searchParams.get('game') as CatalogGame | null
+  const game = searchParams.get('game') as Game | null
   const setName = searchParams.get('set')
 
-  if (!game || !FILES[game]) {
+  if (!game || !GAMES.includes(game)) {
     return NextResponse.json({ error: 'game must be pokemon, lorcana, or riftbound' }, { status: 400 })
   }
 
-  const catalog = loadCatalog<CatalogCard>(FILES[game])
+  const catalog = await loadCatalog<CatalogCard>(game)
   const filtered = setName ? catalog.filter((c) => c.setName === setName) : catalog
   const sorted = sortCatalogCards(filtered)
 
-  const customIds = new Set(loadCustomCatalog()[game].additions.map((c) => c.id))
-  const cards = sorted.map((c) => ({ ...c, isCustom: customIds.has(c.id) }))
+  const cards = sorted.map((c) => ({ ...c, isCustom: c.source === 'manual', isHidden: !!c.hidden }))
 
   return NextResponse.json(cards)
 }

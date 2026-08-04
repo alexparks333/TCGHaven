@@ -1,0 +1,16 @@
+rules_version = '2';
+
+// TCGHaven Firebase Storage rules — catalog card photos uploaded from the Admin Catalog page.
+// Same two admin UIDs as firestore.rules (Alex's real account + the download script's
+// dedicated sync account). Deploy via `firebase deploy --only storage`, or paste into the
+// Console's Storage Rules tab.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /catalog/{game}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'];
+    }
+  }
+}

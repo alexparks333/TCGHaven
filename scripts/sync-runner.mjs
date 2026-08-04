@@ -144,7 +144,7 @@ async function main() {
   setPhase('downloading')
   status.phases.download.status = 'running'; save()
   const beforeRegistry = loadRegistry()
-  const dl1 = await runCmd(process.execPath, [join(ROOT, 'scripts', 'download-card-catalog.mjs')], { label: 'download-card-catalog.mjs' })
+  const dl1 = await runCmd(process.execPath, ['--env-file=.env.local', join(ROOT, 'scripts', 'download-card-catalog.mjs')], { label: 'download-card-catalog.mjs' })
   if (dl1.code !== 0) {
     phaseFailed('download', `exit code ${dl1.code}`)
     status.phase = 'failed'
@@ -279,7 +279,7 @@ async function main() {
   const anyNewGroupMatched = status.summary.riftboundGroupMatches.some((m) => m.matched)
   if (anyNewGroupMatched) {
     setPhase('repricing')
-    const dl2 = await runCmd(process.execPath, [join(ROOT, 'scripts', 'download-card-catalog.mjs')], { label: 'download-card-catalog.mjs (repricing pass)' })
+    const dl2 = await runCmd(process.execPath, ['--env-file=.env.local', join(ROOT, 'scripts', 'download-card-catalog.mjs')], { label: 'download-card-catalog.mjs (repricing pass)' })
     if (dl2.code !== 0) {
       log(`repricing pass failed with code ${dl2.code} — proceeding with first-pass catalogs`)
     } else {

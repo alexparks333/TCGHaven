@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
-import { sortCatalogCards } from '@/lib/api/catalog'
+import { sortCatalogCards, loadVisibleCatalog } from '@/lib/api/catalog'
+import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +14,7 @@ interface CatalogCard {
   rarity: string
   imageUrl: string
   marketPrice?: number
+  hidden?: boolean
 }
 
 export async function GET(request: Request) {
@@ -23,19 +23,14 @@ export async function GET(request: Request) {
   const setName = searchParams.get('set')
 
   if (!game || !setName) return NextResponse.json([])
+  if (game !== 'lorcana' && game !== 'riftbound') return NextResponse.json([])
 
-  const file =
-    game === 'lorcana'   ? 'lorcana-cards.json' :
-    game === 'riftbound' ? 'riftbound-cards.json' :
-    null
+  // loadVisibleCatalog already excludes hidden cards (via the in-memory cache described in
+  // lib/api/catalog.ts) — a hide/unhide shows up here as soon as this instance's cache next
+  // syncs, no rebuild needed.
+  const visible = await loadVisibleCatalog<CatalogCard>(game as Game)
 
-  if (!file) return NextResponse.json([])
-
-  const catalog: CatalogCard[] = JSON.parse(
-    fs.readFileSync(path.join(process.cwd(), 'public', 'data', file), 'utf-8')
-  )
-
-  const cards = sortCatalogCards(catalog.filter((c) => c.setName === setName))
+  const cards = sortCatalogCards(visible.filter((c) => c.setName === setName))
     .map((c) => ({
       id:         c.id,
       name:       c.name,

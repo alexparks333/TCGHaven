@@ -1,6 +1,10 @@
 /** Maps Firebase Auth error codes to human-readable messages (login + signup). */
 export function friendlyAuthError(err: unknown): string {
   const code = (err as { code?: string })?.code ?? ''
+  // A plain Error with no Firebase .code (e.g. the invite-code checks in AuthProvider) already
+  // carries a human-readable message — surface it directly instead of falling through to the
+  // generic "unknown error" case below.
+  if (!code && err instanceof Error && err.message) return err.message
   switch (code) {
     // Sign-in
     case 'auth/invalid-credential':

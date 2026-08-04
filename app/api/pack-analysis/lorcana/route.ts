@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
 import { getLorcanaBoosterSets } from '@/lib/api/registry'
+import { loadVisibleCatalog } from '@/lib/api/catalog'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +12,7 @@ interface CatalogCard {
   marketPrice: number
   marketPriceFoil: number
   imageUrl: string
+  hidden?: boolean
 }
 
 // Fetch current prices for all Lorcana cards from lorcast.com.
@@ -20,7 +20,7 @@ interface CatalogCard {
 // Falls back gracefully — any cards not returned by lorcast keep their catalog price.
 async function fetchLivePrices(): Promise<Map<string, { marketPrice: number; marketPriceFoil: number }>> {
   const live = new Map<string, { marketPrice: number; marketPriceFoil: number }>()
-  const queries = ['a', 'e', 'i', 'o', 'u', 'y', 'th', 'rarity:enchanted', 'rarity:epic', 'rarity:mythic', 'rarity:special']
+  const queries = ['a', 'e', 'i', 'o', 'u', 'y', 'th', 'rarity:enchanted', 'rarity:epic', 'rarity:iconic', 'rarity:mythic', 'rarity:special']
 
   await Promise.all(queries.map(async (q) => {
     try {
@@ -60,8 +60,8 @@ function topN(cards: CatalogCard[], key: 'marketPrice' | 'marketPriceFoil', n: n
 }
 
 export async function GET() {
-  const catalogPath = path.join(process.cwd(), 'public', 'data', 'lorcana-cards.json')
-  const catalog: CatalogCard[] = JSON.parse(fs.readFileSync(catalogPath, 'utf-8'))
+  // Hidden cards must never factor into the EV math — loadVisibleCatalog already excludes them.
+  const catalog = await loadVisibleCatalog<CatalogCard>('lorcana')
 
   // Fetch live prices — this is the primary source; catalog prices are the fallback
   const live = await fetchLivePrices()

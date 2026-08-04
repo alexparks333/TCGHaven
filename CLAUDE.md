@@ -204,10 +204,12 @@ The download strategy is unusual and important to understand:
 Since virtually every card name contains a vowel, this catches all Common, Uncommon, Rare,
 Super Rare, and Legendary cards.
 
-**Phase 2 — Rarity searches:** Query for `rarity:enchanted`, `rarity:epic`, `rarity:mythic`,
-`rarity:special`. **This is critical.** Enchanted and Epic cards do NOT appear in text
-searches — the lorcast API only returns them via rarity-filtered queries. These are the most
-valuable cards in each set ($5–$1000+) and would be completely missing without Phase 2.
+**Phase 2 — Rarity searches:** Query for `rarity:enchanted`, `rarity:epic`, `rarity:iconic`,
+`rarity:mythic`, `rarity:special`. **This is critical.** Enchanted, Epic, and Iconic cards do
+NOT appear in text searches — the lorcast API only returns them via rarity-filtered queries.
+These are the most valuable cards in each set ($5–$1000+) and would be completely missing
+without Phase 2. (Iconic was missing from this list until it was discovered the catalog had
+zero Iconic-rarity cards despite Iconic being a real, valuable rarity tier lorcast returns.)
 
 A `seen` Map deduplicates by card ID across both phases.
 
@@ -890,11 +892,13 @@ All writes go through `clean()` in `db.ts` which strips undefined. Never pass
 All three games' search calls go through `/api/cards/search` (a Next.js server route)
 specifically to avoid CORS. Never call `api.pokemontcg.io` directly from the browser.
 
-### 4. Lorcana Enchanted/Epic MUST use rarity queries
-The lorcast API does NOT return Enchanted or Epic cards in text-based searches.
-These cards only appear via `rarity:enchanted` and `rarity:epic` queries. If the
-download script's Phase 2 is removed or skipped, the catalog will be missing the most
-valuable Lorcana cards entirely.
+### 4. Lorcana Enchanted/Epic/Iconic MUST use rarity queries
+The lorcast API does NOT return Enchanted, Epic, or Iconic cards in text-based searches.
+These cards only appear via `rarity:enchanted`, `rarity:epic`, and `rarity:iconic` queries. If
+the download script's Phase 2 is removed or skipped, the catalog will be missing the most
+valuable Lorcana cards entirely. (Iconic itself was missing from Phase 2's query list for a
+stretch — any rarity tier introduced in a future set needs to be added here explicitly; lorcast
+doesn't return an "all rarities" query that would catch new ones automatically.)
 
 ### 5. Riftbound Showcase/Overnumber/Signature share collector numbers
 Cards #227 (Overnumber), #227 (Signature), and the base card #227 all have the same

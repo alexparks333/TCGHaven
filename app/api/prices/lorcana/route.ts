@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, uniqueApiIds.length) }, worker))
 
   // Fall back to static catalog for any cards where live fetch failed
-  const catalog = loadCatalog<CatalogCard>('lorcana-cards.json')
+  const catalog = await loadCatalog<CatalogCard>('lorcana')
   const catalogById = new Map(catalog.map((c) => [c.id, c]))
 
   const results: Record<string, number> = {}

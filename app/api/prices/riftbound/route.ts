@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
   const { cards, priceMode = 'market' }: { cards: CardInput[]; priceMode?: string } = await req.json()
   if (!cards.length) return NextResponse.json({})
 
-  const catalog = loadCatalog<CatalogCard>('riftbound-cards.json')
+  const catalog = await loadCatalog<CatalogCard>('riftbound')
   const byId = new Map(catalog.map((c) => [c.id, c]))
 
   // Fetch live prices from tcgcsv.com for each set the user has cards from

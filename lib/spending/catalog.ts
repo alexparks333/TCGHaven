@@ -1,6 +1,6 @@
 import type { Game } from '../types'
 
-export type ProductType = 'pack' | 'booster-box' | 'etb' | 'bundle' | 'case' | 'pre-rift'
+export type ProductType = 'pack' | 'booster-box' | 'etb' | 'bundle' | 'case' | 'pre-rift' | 'vault-box'
 
 export interface SpendingProduct {
   id: string
@@ -22,6 +22,7 @@ export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
   'bundle': 'Bundle',
   'case': 'Case',
   'pre-rift': 'Pre-Rift',
+  'vault-box': 'Vault Box',
 }
 
 export const PRODUCT_TYPE_COLORS: Record<ProductType, string> = {
@@ -31,6 +32,7 @@ export const PRODUCT_TYPE_COLORS: Record<ProductType, string> = {
   'bundle': '#8b5cf6',
   'case': '#ef4444',
   'pre-rift': '#06b6d4',
+  'vault-box': '#eab308',
 }
 
 // ── Pokemon CDN helpers ────────────────────────────────────────────────────────
@@ -239,19 +241,23 @@ export const SPENDING_CATALOG: SpendingProduct[] = [
   { id: 'riftbound-ven-prerift', game: 'riftbound', setCode: 'VEN', setName: 'Vendetta',   type: 'pre-rift',    name: 'Pre-Rift Bundle', price: 35.00, packsIncluded: 6, releaseDate: '2026-07-31', imageUrl: RIFTBOUND_IMGS.VEN },
   { id: 'riftbound-ven-pack',    game: 'riftbound', setCode: 'VEN', setName: 'Vendetta',   type: 'pack',        name: 'Booster Pack',    price: 4.99,  packsIncluded: 1,  releaseDate: '2026-07-31', imageUrl: RIFTBOUND_IMGS.VEN },
   { id: 'riftbound-ven-box',     game: 'riftbound', setCode: 'VEN', setName: 'Vendetta',   type: 'booster-box', name: 'Booster Box',     price: 89.99, packsIncluded: 24, releaseDate: '2026-07-31', imageUrl: RIFTBOUND_IMGS.VEN },
+  { id: 'riftbound-ven-vault',   game: 'riftbound', setCode: 'VEN', setName: 'Vendetta',   type: 'vault-box',   name: 'Vault Box',       price: 35.99, packsIncluded: 6, releaseDate: '2026-07-31', imageUrl: RIFTBOUND_IMGS.VEN },
 
   // Unleashed (May 8, 2026)
   { id: 'riftbound-unl-prerift', game: 'riftbound', setCode: 'UNL', setName: 'Unleashed',    type: 'pre-rift',    name: 'Pre-Rift Bundle', price: 35.00, packsIncluded: 6, releaseDate: '2026-05-08', imageUrl: RIFTBOUND_IMGS.UNL },
   { id: 'riftbound-unl-pack',    game: 'riftbound', setCode: 'UNL', setName: 'Unleashed',    type: 'pack',        name: 'Booster Pack',    price: 4.99,  packsIncluded: 1,  releaseDate: '2026-05-08', imageUrl: RIFTBOUND_IMGS.UNL },
   { id: 'riftbound-unl-box',     game: 'riftbound', setCode: 'UNL', setName: 'Unleashed',    type: 'booster-box', name: 'Booster Box',     price: 89.99, packsIncluded: 24, releaseDate: '2026-05-08', imageUrl: RIFTBOUND_IMGS.UNL },
+  { id: 'riftbound-unl-vault',   game: 'riftbound', setCode: 'UNL', setName: 'Unleashed',    type: 'vault-box',   name: 'Vault Box',       price: 35.99, packsIncluded: 6, releaseDate: '2026-05-08', imageUrl: RIFTBOUND_IMGS.UNL },
 
   // Spiritforged (Feb 13, 2026)
   { id: 'riftbound-sfd-prerift', game: 'riftbound', setCode: 'SFD', setName: 'Spiritforged', type: 'pre-rift',    name: 'Pre-Rift Bundle', price: 35.00, packsIncluded: 6, releaseDate: '2026-02-13', imageUrl: RIFTBOUND_IMGS.SFD },
   { id: 'riftbound-sfd-pack',    game: 'riftbound', setCode: 'SFD', setName: 'Spiritforged', type: 'pack',        name: 'Booster Pack',    price: 4.99,  packsIncluded: 1,  releaseDate: '2026-02-13', imageUrl: RIFTBOUND_IMGS.SFD },
   { id: 'riftbound-sfd-box',     game: 'riftbound', setCode: 'SFD', setName: 'Spiritforged', type: 'booster-box', name: 'Booster Box',     price: 89.99, packsIncluded: 24, releaseDate: '2026-02-13', imageUrl: RIFTBOUND_IMGS.SFD },
+  { id: 'riftbound-sfd-vault',   game: 'riftbound', setCode: 'SFD', setName: 'Spiritforged', type: 'vault-box',   name: 'Vault Box',       price: 35.99, packsIncluded: 6, releaseDate: '2026-02-13', imageUrl: RIFTBOUND_IMGS.SFD },
 
   // Origins (Oct 31, 2025)
   { id: 'riftbound-ogn-prerift', game: 'riftbound', setCode: 'OGN', setName: 'Origins',      type: 'pre-rift',    name: 'Pre-Rift Bundle', price: 35.00, packsIncluded: 6, releaseDate: '2025-10-31', imageUrl: RIFTBOUND_IMGS.OGN },
   { id: 'riftbound-ogn-pack',    game: 'riftbound', setCode: 'OGN', setName: 'Origins',      type: 'pack',        name: 'Booster Pack',    price: 4.99,  packsIncluded: 1,  releaseDate: '2025-10-31', imageUrl: RIFTBOUND_IMGS.OGN },
   { id: 'riftbound-ogn-box',     game: 'riftbound', setCode: 'OGN', setName: 'Origins',      type: 'booster-box', name: 'Booster Box',     price: 89.99, packsIncluded: 24, releaseDate: '2025-10-31', imageUrl: RIFTBOUND_IMGS.OGN },
+  { id: 'riftbound-ogn-vault',   game: 'riftbound', setCode: 'OGN', setName: 'Origins',      type: 'vault-box',   name: 'Vault Box',       price: 35.99, packsIncluded: 6, releaseDate: '2025-10-31', imageUrl: RIFTBOUND_IMGS.OGN },
 ]
