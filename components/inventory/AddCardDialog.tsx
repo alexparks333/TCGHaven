@@ -182,6 +182,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
       imageUrl: result.imageUrl,
       apiId: result.id,
       isFoil: result.isFoil,
+      rarity: result.rarity,
     }))
     setCardQuery(result.name)
     setSetQuery(result.setName)
@@ -247,6 +248,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
       ...(form.gradingCompany && { gradingCompany: form.gradingCompany }),
       ...(form.grade && { grade: form.grade }),
       ...(form.group && { group: form.group }),
+      ...(form.rarity && { rarity: form.rarity }),
       priceLocked: marketSource === 'manual' && resolvedMarketPrice > 0,
       ...(resolvedMarketPrice > 0 && {
         currentPrice: resolvedMarketPrice,

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Package } from 'lucide-react'
+import { Loader2, Package, FolderHeart } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { PersonalCollectionsView } from './PersonalCollectionsView'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -119,7 +120,7 @@ function getOwnedInfo(
 
 export default function CardexPage() {
   const { cards } = useStore()
-  const [activeGame, setActiveGame] = useState<'lorcana' | 'riftbound'>('lorcana')
+  const [activeGame, setActiveGame] = useState<'lorcana' | 'riftbound' | 'personal'>('lorcana')
   const [activeSet, setActiveSet] = useState<SetMeta>(PLACEHOLDER_SET)
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
   const [loading, setLoading] = useState(false)
@@ -127,7 +128,11 @@ export default function CardexPage() {
   const [groupsByGame, setGroupsByGame] = useState(EMPTY_GROUPS_BY_GAME)
   const [registryLoading, setRegistryLoading] = useState(true)
 
-  const gameColor = GAME_COLORS[activeGame]
+  // "Personalized Collections" isn't a catalog game — fall back to a safe key for the
+  // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
+  // rendered while that tab is active.
+  const catalogGame: 'lorcana' | 'riftbound' = activeGame === 'personal' ? 'lorcana' : activeGame
+  const gameColor = activeGame === 'personal' ? '#8b5cf6' : GAME_COLORS[catalogGame]
 
   // Load set groups/known-sets from the registry once on mount.
   useEffect(() => {
@@ -147,14 +152,14 @@ export default function CardexPage() {
 
   const knownSets = useMemo(() => {
     const s = new Set<string>()
-    for (const g of groupsByGame[activeGame]) {
+    for (const g of groupsByGame[catalogGame]) {
       for (const set of g.sets) if (!set.fromInventory) s.add(set.name)
     }
     return s
-  }, [groupsByGame, activeGame])
+  }, [groupsByGame, catalogGame])
 
   // Cards for the active game from inventory
-  const gameCards = useMemo(() => cards.filter((c) => c.game === activeGame), [cards, activeGame])
+  const gameCards = useMemo(() => cards.filter((c) => c.game === catalogGame), [cards, catalogGame])
 
   // Special bucket: inventory cards whose set is NOT in the known catalog sets
   const specialCards = useMemo(
@@ -162,9 +167,10 @@ export default function CardexPage() {
     [gameCards, knownSets],
   )
 
-  // Fetch catalog when set changes (skip for inventory-only buckets or before sets have loaded)
+  // Fetch catalog when set changes (skip for inventory-only buckets, the Personalized
+  // Collections tab, or before sets have loaded)
   useEffect(() => {
-    if (!activeSet.name || activeSet.fromInventory) { setCatalogCards([]); return }
+    if (activeGame === 'personal' || !activeSet.name || activeSet.fromInventory) { setCatalogCards([]); return }
     let stale = false // rapid set switching: ignore responses for a set we've left
     setLoading(true)
     setCatalogCards([])
@@ -176,15 +182,15 @@ export default function CardexPage() {
     return () => { stale = true }
   }, [activeGame, activeSet])
 
-  function switchGame(game: 'lorcana' | 'riftbound') {
+  function switchGame(game: 'lorcana' | 'riftbound' | 'personal') {
     setActiveGame(game)
-    setActiveSet(groupsByGame[game][0]?.sets[0] ?? PLACEHOLDER_SET)
+    if (game !== 'personal') setActiveSet(groupsByGame[game][0]?.sets[0] ?? PLACEHOLDER_SET)
   }
 
   // Enrich catalog cards with owned status
   const enriched = useMemo(
-    () => catalogCards.map((cc) => ({ ...cc, ...getOwnedInfo(cc, gameCards, activeGame) })),
-    [catalogCards, gameCards, activeGame],
+    () => catalogCards.map((cc) => ({ ...cc, ...getOwnedInfo(cc, gameCards, catalogGame) })),
+    [catalogCards, gameCards, catalogGame],
   )
 
   const ownedCount = enriched.filter((c) => c.owned).length
@@ -204,111 +210,120 @@ export default function CardexPage() {
         </div>
 
         {/* Game tabs */}
-        <div className="flex gap-2 mb-6">
-          {(['lorcana', 'riftbound'] as const).map((game) => (
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {(['lorcana', 'riftbound', 'personal'] as const).map((game) => (
             <button
               key={game}
               onClick={() => switchGame(game)}
               className={cn(
-                'px-4 py-2 rounded-xl text-sm font-medium transition-all',
+                'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all',
                 activeGame === game
                   ? 'text-white shadow-lg'
                   : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800',
               )}
-              style={activeGame === game ? { backgroundColor: GAME_COLORS[game] + '33', color: GAME_COLORS[game], border: `1px solid ${GAME_COLORS[game]}55` } : {}}
+              style={activeGame === game
+                ? { backgroundColor: (game === 'personal' ? '#8b5cf6' : GAME_COLORS[game]) + '33', color: game === 'personal' ? '#8b5cf6' : GAME_COLORS[game], border: `1px solid ${(game === 'personal' ? '#8b5cf6' : GAME_COLORS[game])}55` }
+                : {}}
             >
-              {game === 'lorcana' ? 'Lorcana' : 'Riftbound'}
+              {game === 'personal' && <FolderHeart size={14} />}
+              {game === 'lorcana' ? 'Lorcana' : game === 'riftbound' ? 'Riftbound' : 'Personalized Collections'}
             </button>
           ))}
         </div>
 
-        {/* Grouped set selector */}
-        {registryLoading && (
-          <div className="flex items-center gap-2 text-slate-500 text-sm mb-6">
-            <Loader2 size={14} className="animate-spin" />
-            Loading sets…
-          </div>
-        )}
-        <div className="space-y-3 mb-6">
-          {groupsByGame[activeGame].map((group) => (
-            <div key={group.label}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1.5 px-0.5">
-                {group.label}
+        {activeGame === 'personal' ? (
+          <PersonalCollectionsView />
+        ) : (
+          <>
+            {/* Grouped set selector */}
+            {registryLoading && (
+              <div className="flex items-center gap-2 text-slate-500 text-sm mb-6">
+                <Loader2 size={14} className="animate-spin" />
+                Loading sets…
               </div>
-              <div className="flex gap-2 flex-wrap">
-                {group.sets.map((set) => {
-                  const isActive = activeSet.name === set.name
-                  return (
-                    <button
-                      key={set.name}
-                      onClick={() => setActiveSet(set)}
-                      className={cn(
-                        'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-                        isActive
-                          ? 'text-white border-transparent'
-                          : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
-                        set.fromInventory && !isActive && 'border-dashed',
-                      )}
-                      style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
-                    >
-                      {set.label ?? set.name}
-                    </button>
-                  )
-                })}
+            )}
+            <div className="space-y-3 mb-6">
+              {groupsByGame[catalogGame].map((group) => (
+                <div key={group.label}>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1.5 px-0.5">
+                    {group.label}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {group.sets.map((set) => {
+                      const isActive = activeSet.name === set.name
+                      return (
+                        <button
+                          key={set.name}
+                          onClick={() => setActiveSet(set)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+                            isActive
+                              ? 'text-white border-transparent'
+                              : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
+                            set.fromInventory && !isActive && 'border-dashed',
+                          )}
+                          style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
+                        >
+                          {set.label ?? set.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Progress bar (catalog-backed sets only) */}
+            {!loading && !isSpecial && totalCount > 0 && (
+              <div className="mb-5 card-glass px-4 py-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-white">{activeSet.label ?? activeSet.name}</span>
+                  <span className="text-sm font-bold" style={{ color: gameColor }}>
+                    {ownedCount} / {totalCount}
+                    <span className="text-slate-500 font-normal text-xs ml-1">({pct}%)</span>
+                  </span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: gameColor }} />
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            )}
 
-        {/* Progress bar (catalog-backed sets only) */}
-        {!loading && !isSpecial && totalCount > 0 && (
-          <div className="mb-5 card-glass px-4 py-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-white">{activeSet.label ?? activeSet.name}</span>
-              <span className="text-sm font-bold" style={{ color: gameColor }}>
-                {ownedCount} / {totalCount}
-                <span className="text-slate-500 font-normal text-xs ml-1">({pct}%)</span>
-              </span>
-            </div>
-            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: gameColor }} />
-            </div>
-          </div>
-        )}
+            {/* Loading */}
+            {loading && (
+              <div className="flex items-center justify-center py-24 gap-3 text-slate-500">
+                <Loader2 size={24} className="animate-spin" style={{ color: gameColor }} />
+                <span className="text-sm">Loading {activeSet.label ?? activeSet.name}…</span>
+              </div>
+            )}
 
-        {/* Loading */}
-        {loading && (
-          <div className="flex items-center justify-center py-24 gap-3 text-slate-500">
-            <Loader2 size={24} className="animate-spin" style={{ color: gameColor }} />
-            <span className="text-sm">Loading {activeSet.label ?? activeSet.name}…</span>
-          </div>
-        )}
+            {/* Catalog-backed card grid */}
+            {!loading && !isSpecial && enriched.length > 0 && (
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+                {enriched.map((card) => (
+                  <CardTile
+                    key={card.id}
+                    card={card}
+                    gameColor={gameColor}
+                    isHovered={hoveredId === card.id}
+                    onHover={() => setHoveredId(card.id)}
+                    onLeave={() => setHoveredId(null)}
+                  />
+                ))}
+              </div>
+            )}
 
-        {/* Catalog-backed card grid */}
-        {!loading && !isSpecial && enriched.length > 0 && (
-          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))' }}>
-            {enriched.map((card) => (
-              <CardTile
-                key={card.id}
-                card={card}
-                gameColor={gameColor}
-                isHovered={hoveredId === card.id}
-                onHover={() => setHoveredId(card.id)}
-                onLeave={() => setHoveredId(null)}
-              />
-            ))}
-          </div>
-        )}
+            {/* Inventory-only "special" bucket */}
+            {isSpecial && <SpecialBucket cards={specialCards} gameColor={gameColor} game={catalogGame} />}
 
-        {/* Inventory-only "special" bucket */}
-        {isSpecial && <SpecialBucket cards={specialCards} gameColor={gameColor} game={activeGame} />}
-
-        {/* Empty states */}
-        {!loading && !isSpecial && enriched.length === 0 && (
-          <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
-            <div className="text-4xl mb-3">📖</div>
-            <div className="text-slate-400 font-medium">No cards found for this set</div>
-          </div>
+            {/* Empty states */}
+            {!loading && !isSpecial && enriched.length === 0 && (
+              <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
+                <div className="text-4xl mb-3">📖</div>
+                <div className="text-slate-400 font-medium">No cards found for this set</div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </AuthGuard>
@@ -348,7 +363,7 @@ function SpecialBucket({ cards, gameColor, game }: { cards: Card[]; gameColor: s
             <span className="text-sm font-bold text-white">{setName}</span>
             <span className="text-xs text-slate-500">{setCards.length} card{setCards.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))' }}>
+          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
             {setCards.map((card) => (
               <InventoryCardTile
                 key={card.id}

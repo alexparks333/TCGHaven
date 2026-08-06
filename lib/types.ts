@@ -24,6 +24,7 @@ export interface Card {
   grade?: string          // e.g. "10", "9.5", "Authentic"
   group?: string          // user-defined group label, e.g. "Alex & Brother's Cards"
   priceLocked?: boolean   // when true, Refresh Prices never overwrites currentPrice
+  rarity?: string         // from the catalog at add time; Pokemon catalog cards don't carry one
 }
 
 export interface SoldCard extends Card {

@@ -20,6 +20,7 @@ export interface LorcanaSet {
   name: string
   card_count?: number
   released_at?: string
+  source?: string
 }
 
 // ── Static catalog search (built by npm run download-cards) ──────────────────
@@ -86,14 +87,30 @@ export async function searchLorcanaCards(query: string): Promise<LorcanaCard[]> 
 }
 
 export async function getLorcanaSets(): Promise<LorcanaSet[]> {
+  let sets: LorcanaSet[]
   try {
     const res = await fetch(`${BASE}/sets`)
-    if (!res.ok) return getRegistryLorcanaSets()
-    const data = await res.json()
-    return (data.results ?? data ?? []).length > 0 ? (data.results ?? data) : getRegistryLorcanaSets()
+    if (!res.ok) sets = getRegistryLorcanaSets()
+    else {
+      const data = await res.json()
+      const results = data.results ?? data ?? []
+      sets = results.length > 0 ? results : getRegistryLorcanaSets()
+    }
   } catch {
-    return getRegistryLorcanaSets()
+    sets = getRegistryLorcanaSets()
   }
+  // Sets created via the Admin Catalog page ("source": "manual" in set-registry.json) don't
+  // exist on lorcast at all, so the live /sets call above will never include them — merge them
+  // in here regardless of which branch above ran, or they'd never appear in the set picker.
+  const manualOnly = getLorcanaRegistrySets().filter(
+    (s) => s.source === 'manual' && !sets.some((x) => x.name === s.setName),
+  )
+  if (manualOnly.length > 0) {
+    sets = [...sets, ...manualOnly.map((s) => ({
+      id: s.lorcastId ?? '', code: s.code ?? '', name: s.setName, released_at: s.releaseDate ?? undefined, source: s.source,
+    }))]
+  }
+  return sets
 }
 
 // Fallback when the live lorcast /sets API is unreachable — sourced from
@@ -108,6 +125,7 @@ function getRegistryLorcanaSets(): LorcanaSet[] {
     code: s.code ?? '',
     name: s.setName,
     released_at: s.releaseDate ?? undefined,
+    source: s.source,
   }))
 }
 

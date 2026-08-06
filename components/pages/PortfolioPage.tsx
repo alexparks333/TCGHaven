@@ -13,8 +13,15 @@ import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 
 type SortKey = 'pnl' | 'pnlAsc' | 'pnlPct' | 'pnlPctAsc' | 'value' | 'valueAsc' | 'name' | 'nameDesc'
 
-const TIME_LABELS: Record<string, string> = { 'entry': 'Since Entry', '1d': '24H', '7d': '7D', '30d': '30D' }
-const TIME_DAYS: Record<string, number> = { '1d': 1, '7d': 7, '30d': 30 }
+const TIME_LABELS: Record<string, string> = { 'entry': 'Since Entry', '1d': '24H', '7d': '7D', '30d': '30D', '365d': '1Y' }
+const TIME_DAYS: Record<string, number> = { '1d': 1, '7d': 7, '30d': 30, '365d': 365 }
+const TIME_FRAME_OPTIONS: { value: 'entry' | '1d' | '7d' | '30d' | '365d'; label: string }[] = [
+  { value: 'entry', label: 'Since Entry' },
+  { value: '1d', label: '24 Hours' },
+  { value: '7d', label: '1 Week' },
+  { value: '30d', label: '1 Month' },
+  { value: '365d', label: '1 Year' },
+]
 
 /** Returns the most-recent price recorded at or before `cutoff`, or null if none. */
 function priceAtCutoff(
@@ -46,7 +53,7 @@ export default function PortfolioPage() {
   const {
     cards, priceHistory, updateCardPrice, addPriceHistoryPoint,
     setLastPriceRefresh, lastPriceRefresh,
-    purchases, soldCards, calcFloor, activeGames, timeFrame,
+    purchases, soldCards, calcFloor, activeGames, timeFrame, setTimeFrame,
     priceMode, setPriceMode,
     hiddenGroups,
   } = useStore()
@@ -460,6 +467,25 @@ export default function PortfolioPage() {
           </div>
         </div>
 
+        {/* Time frame — drives Top Performers' per-card P&L below; Collection Value above is
+            never affected, since that's just current market value with no time dimension. */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold mr-1">Time Frame</span>
+          {TIME_FRAME_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setTimeFrame(value)}
+              className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
+                timeFrame === value
+                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="card-glass p-6 lg:col-span-1">
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">By Game</h3>
@@ -576,7 +602,7 @@ export default function PortfolioPage() {
           {showHistoryNote && periodCardCount === 0 && searched.length > 0 && (
             <div className="px-5 py-3 bg-slate-900/60 border-b border-slate-800 text-xs text-slate-500 flex items-center gap-2">
               <span className="text-amber-400">⚠</span>
-              No price history yet for the {periodLabel} window — hit <span className="text-slate-300 font-medium">Refresh Prices</span> and check back after {timeFrame === '1d' ? '24 hours' : timeFrame === '7d' ? '7 days' : '30 days'}.
+              No price history yet for the {periodLabel} window — hit <span className="text-slate-300 font-medium">Refresh Prices</span> and check back after {timeFrame === '1d' ? '24 hours' : timeFrame === '7d' ? '7 days' : timeFrame === '30d' ? '30 days' : 'a year'}.
             </div>
           )}
           <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_40px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">

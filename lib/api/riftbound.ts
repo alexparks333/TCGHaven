@@ -24,6 +24,7 @@ export interface RiftboundSet {
   name: string
   releaseDate: string
   cardCount: number
+  source?: string
 }
 
 // Fallback used only if data/set-registry.json is missing (e.g. first run before
@@ -44,6 +45,7 @@ export function getRiftboundSets(): RiftboundSet[] {
     name: s.setName,
     releaseDate: s.releaseDate ?? '',
     cardCount: s.cardCount,
+    source: s.source,
   }))
 }
 

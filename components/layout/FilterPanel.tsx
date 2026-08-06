@@ -13,6 +13,7 @@ const TIME_OPTIONS = [
   { value: '1d',    label: '1 Day' },
   { value: '7d',    label: '1 Week' },
   { value: '30d',   label: '1 Month' },
+  { value: '365d',  label: '1 Year' },
 ] as const
 
 // Pill styles — three states

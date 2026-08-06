@@ -299,6 +299,9 @@ function ProductCard({ product, gameColor, purchaseCount, onAdd }: ProductCardPr
         className="relative h-32 flex items-center justify-center overflow-hidden"
         style={{ background: `linear-gradient(135deg, ${gameColor}18 0%, ${gameColor}08 100%)` }}
       >
+        {/* Plain <img>, deliberately not next/image: onError below replaces this element's
+            parent innerHTML directly, which would fight next/image's own DOM management on
+            any later re-render. */}
         {product.imageUrl ? (
           <img
             src={product.imageUrl}

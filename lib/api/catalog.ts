@@ -111,6 +111,18 @@ export async function regenerateSnapshot(game: Game): Promise<void> {
   if (hasDeletes) await batch.commit()
 
   invalidateCatalogCache(game) // this instance's own cache should reflect the change immediately too
+
+  // regenerateSnapshot() is only ever called from Admin Catalog's client-side code, i.e. a
+  // separate browser copy of this module from the one the Next.js server process reads through
+  // for every real request. The invalidateCatalogCache() call above only clears that unused
+  // browser-side copy, so tell the actual server process to drop its cache too.
+  if (typeof window !== 'undefined') {
+    await fetch('/api/admin/catalog/invalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game }),
+    }).catch(() => {})
+  }
 }
 
 /** Reads catalog_meta/{game}.lastBulkSyncAt, or null if a bulk sync has never run. */

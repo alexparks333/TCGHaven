@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw, Filter } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
+import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -39,7 +40,7 @@ interface CardGroup {
 
 export default function InventoryPage() {
   const {
-    cards, deleteCard, addSoldCard, activeGame, setActiveGame, updateCardPrice,
+    cards, deleteCard, addSoldCard, activeGame, setActiveGame, updateCard,
     catalogSyncNotices, dismissCatalogSyncNotice,
   } = useStore()
   const { user, dataLoading } = useAuth()
@@ -48,6 +49,9 @@ export default function InventoryPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dateFilter, setDateFilter] = useState<string>('')
+  const [selectedRarities, setSelectedRarities] = useState<Set<string>>(new Set())
+  const [showRarityFilter, setShowRarityFilter] = useState(false)
+  const rarityFilterRef = useRef<HTMLDivElement>(null)
   const [sellCard, setSellCard] = useState<Card | null>(null)
   const [salePrice, setSalePrice] = useState('')
   const [saleDate, setSaleDate] = useState(todayISO)
@@ -60,15 +64,18 @@ export default function InventoryPage() {
   const holdStartRef = useRef<number | null>(null)
   const holdFiredRef = useRef(false)
 
-  // Background: fill in missing market prices for cards that don't have one yet.
-  // Runs once per visit, after the Firestore load finishes — running earlier
-  // would see an empty store and never retry.
+  // Background: fill in missing market prices AND missing rarity (used by the rarity filter
+  // below) for cards that don't have them yet, from the same catalog lookup. Rarity was never
+  // captured before AddCardDialog started storing it, so this is what makes the rarity filter
+  // actually work on cards added before that — same shape as the price backfill it's merged
+  // into. Runs once per visit, after the Firestore load finishes — running earlier would see an
+  // empty store and never retry.
   const backfillRan = useRef(false)
   useEffect(() => {
     if (!user || dataLoading || backfillRan.current) return
     const uid = user.uid
-    const unpriced = cards.filter((c) => !((c.currentPrice ?? 0) > 0) && c.name && !c.priceLocked)
-    if (!unpriced.length) return
+    const needsBackfill = cards.filter((c) => c.name && ((!((c.currentPrice ?? 0) > 0) && !c.priceLocked) || !c.rarity))
+    if (!needsBackfill.length) return
     backfillRan.current = true
     let cancelled = false
     const now = new Date().toISOString()
@@ -83,17 +90,26 @@ export default function InventoryPage() {
           results.find((r: { number: string; set: string }) => r.number === card.number && r.set === card.setCode) ??
           results.find((r: { name: string }) => r.name === card.name)
         if (!match) return
-        const price = card.isFoil && match.marketPriceFoil > 0 ? match.marketPriceFoil : match.marketPrice
-        if (price > 0 && !cancelled) {
-          updateCardPrice(card.id, price)
-          editCardInFirestore(uid, card.id, { currentPrice: price, priceUpdatedAt: now }).catch(() => {})
+        const updates: Partial<Card> = {}
+        if (!((card.currentPrice ?? 0) > 0) && !card.priceLocked) {
+          const price = card.isFoil && match.marketPriceFoil > 0 ? match.marketPriceFoil : match.marketPrice
+          if (price > 0) { updates.currentPrice = price; updates.priceUpdatedAt = now }
+        }
+        if (!card.rarity && match.rarity) updates.rarity = match.rarity
+        if (Object.keys(updates).length > 0 && !cancelled) {
+          updateCard(card.id, updates)
+          editCardInFirestore(uid, card.id, updates).catch(() => {})
         }
       } catch { /* ignore individual failures */ }
     }
-    Promise.all(unpriced.map(backfill))
+    Promise.all(needsBackfill.map(backfill))
     return () => { cancelled = true }
+  // `cards` deliberately excluded: this only needs the snapshot present once dataLoading flips
+  // false (by then AuthProvider's initial Firestore load has already populated it). Depending on
+  // `cards` here would re-fire on every single write this same effect makes — cancelling every
+  // other in-flight lookup mid-backfill, so only a handful of cards would ever actually get filled in.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid, dataLoading, cards])
+  }, [user?.uid, dataLoading])
   const [editCard, setEditCard] = useState<Card | null>(null)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
 
@@ -180,7 +196,7 @@ export default function InventoryPage() {
     }
   }
 
-  // Cards visible in the table: game tab + search + date filter
+  // Cards visible in the table: game tab + search + date filter + rarity filter
   const filtered = useMemo(
     () =>
       cards
@@ -190,11 +206,30 @@ export default function InventoryPage() {
             (search === '' ||
               c.name.toLowerCase().includes(search.toLowerCase()) ||
               c.set.toLowerCase().includes(search.toLowerCase())) &&
-            (dateFilter === '' || cardDate(c) === dateFilter)
+            (dateFilter === '' || cardDate(c) === dateFilter) &&
+            (selectedRarities.size === 0 || (c.rarity ? selectedRarities.has(c.rarity) : false))
         )
         .sort((a, b) => (b.createdAt ?? b.purchaseDate ?? '').localeCompare(a.createdAt ?? a.purchaseDate ?? '')),
-    [cards, activeGame, search, dateFilter]
+    [cards, activeGame, search, dateFilter, selectedRarities]
   )
+
+  // Rarity options for the filter popover — scoped to the active game tab only (not further
+  // narrowed by search/date), so picking a rarity doesn't make the option list shift under you.
+  const availableRarities = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of cards) { if (c.game === activeGame && c.rarity) set.add(c.rarity) }
+    return Array.from(set).sort((a, b) => (CARDEX_RARITY_ORDER[a] ?? 50) - (CARDEX_RARITY_ORDER[b] ?? 50))
+  }, [cards, activeGame])
+
+  // Close the rarity popover on outside click
+  useEffect(() => {
+    if (!showRarityFilter) return
+    function onClick(e: MouseEvent) {
+      if (rarityFilterRef.current && !rarityFilterRef.current.contains(e.target as Node)) setShowRarityFilter(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [showRarityFilter])
 
   // When no date filter: group duplicate cards into a single row.
   // When date filter active: show individual lots so the session view is accurate.
@@ -265,6 +300,20 @@ export default function InventoryPage() {
     if (!user) return
     deleteCard(card.id)
     await removeCard(user.uid, card.id)
+  }
+
+  // Deletes every lot in a grouped row at once (e.g. 9x Defy bought across separate lots) —
+  // one click from the collapsed row, no need to expand and delete each lot individually.
+  // Only confirms when there's actually more than one lot to lose in a single action.
+  async function handleDeleteGroup(lots: Card[]) {
+    if (!user) return
+    if (lots.length > 1) {
+      const totalQty = lots.reduce((s, c) => s + c.quantity, 0)
+      if (!window.confirm(`Delete all ${lots.length} lots (×${totalQty} total) of this card?`)) return
+    }
+    const ids = lots.map((l) => l.id)
+    ids.forEach((id) => deleteCard(id))
+    await Promise.all(ids.map((id) => removeCard(user.uid, id)))
   }
 
   return (
@@ -356,6 +405,54 @@ export default function InventoryPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-slate-600"
             />
+          </div>
+          <div className="relative" ref={rarityFilterRef}>
+            <button
+              onClick={() => setShowRarityFilter((v) => !v)}
+              className={cn(
+                'flex items-center gap-1.5 h-full px-3 py-2.5 rounded-xl text-sm border transition-colors',
+                selectedRarities.size > 0
+                  ? 'bg-violet-600/20 border-violet-700 text-violet-300'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800',
+              )}
+              title="Filter by rarity"
+            >
+              <Filter size={14} />
+              {selectedRarities.size > 0 ? `Rarity (${selectedRarities.size})` : 'Rarity'}
+            </button>
+            {showRarityFilter && (
+              <div className="absolute top-full left-0 mt-1 z-30 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 w-48 max-h-72 overflow-y-auto">
+                {availableRarities.length === 0 ? (
+                  <div className="text-xs text-slate-500 px-2 py-1.5">No rarity data yet</div>
+                ) : (
+                  <>
+                    {availableRarities.map((r) => (
+                      <label key={r} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-800 cursor-pointer text-sm text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={selectedRarities.has(r)}
+                          onChange={() => setSelectedRarities((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(r)) next.delete(r); else next.add(r)
+                            return next
+                          })}
+                          className="accent-violet-500"
+                        />
+                        {r.replace('_', ' ')}
+                      </label>
+                    ))}
+                    {selectedRarities.size > 0 && (
+                      <button
+                        onClick={() => setSelectedRarities(new Set())}
+                        className="w-full text-left text-xs text-slate-500 hover:text-white px-2 py-1.5 mt-1 border-t border-slate-800"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
           <div className="relative flex items-center">
             <CalendarDays size={14} className="absolute left-3 text-slate-500 pointer-events-none z-10" />
@@ -519,19 +616,19 @@ export default function InventoryPage() {
                       {multiLot && (
                         <button
                           onClick={() => setExpandedKey(isExpanded ? null : key)}
+                          title="Expand to edit or delete individual lots"
                           className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
                         >
                           <ChevronDown size={14} className={cn('transition-transform', isExpanded && 'rotate-180')} />
                         </button>
                       )}
-                      {!multiLot && (
-                        <button
-                          onClick={() => handleDelete(lots[0])}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDeleteGroup(lots)}
+                        title={multiLot ? `Delete all ${lots.length} lots at once` : 'Delete'}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
 

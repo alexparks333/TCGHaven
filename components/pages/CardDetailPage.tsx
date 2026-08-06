@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
@@ -67,7 +68,7 @@ export default function CardDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="card-glass p-6 flex gap-5">
             {card.imageUrl ? (
-              <img src={card.imageUrl} alt={card.name} className="w-28 h-40 object-contain rounded-xl" />
+              <Image src={card.imageUrl} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
             ) : (
               <div className="w-28 h-40 bg-slate-800 rounded-xl flex items-center justify-center text-2xl text-slate-600">🃏</div>
             )}

@@ -17,6 +17,7 @@ export interface CardSearchResult {
   lowPriceNMFoil?: number
   isFoil: boolean
   game: Game
+  rarity?: string
 }
 
 export interface SetOption {
@@ -25,6 +26,7 @@ export interface SetOption {
   releaseDate: string
   cardCount?: number
   symbolUrl?: string
+  isCustom?: boolean
 }
 
 // ── Card Search ─────────────────────────────────────────────────────────────
@@ -76,6 +78,7 @@ export async function searchCards(game: Game, query: string): Promise<CardSearch
         number: c.collector_number,
         imageUrl: c.image_uris?.digital?.small ?? c.image_uris?.digital?.normal ?? '',
         game: 'lorcana' as Game,
+        rarity: c.rarity || undefined,
       }
       if (isFoilOnly) {
         // Show one foil-only entry with rarity label so it's distinguishable from the regular version
@@ -128,6 +131,7 @@ export async function searchCards(game: Game, query: string): Promise<CardSearch
         game: 'riftbound' as Game,
         lowPriceNM: lowNM,
         lowPriceNMFoil: lowNMFoil,
+        rarity: c.rarity || undefined,
       }
 
       if (isSpecial) {
@@ -184,6 +188,7 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
         name: s.name,
         releaseDate: s.released_at ?? '',
         cardCount: s.card_count,
+        isCustom: s.source === 'manual',
       }))
       .reverse()
   }
@@ -194,10 +199,18 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
       name: s.name,
       releaseDate: s.releaseDate,
       cardCount: s.cardCount,
+      isCustom: s.source === 'manual',
     })).reverse()
   }
 
   // Only cache non-empty results so a transient API failure doesn't stick
   if (sets.length > 0) setsCache[game] = sets
   return sets
+}
+
+/** Drops the cached set list for a game (or all games) — called after registering a new set
+ * in data/set-registry.json so it shows up without waiting for server restart. */
+export function invalidateSetsCache(game?: Game) {
+  if (game) delete setsCache[game]
+  else for (const g of Object.keys(setsCache) as Game[]) delete setsCache[g]
 }

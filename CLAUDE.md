@@ -10,19 +10,21 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 1. [Tech Stack](#tech-stack)
 2. [Running the App](#running-the-app)
 3. [How Card Data Works (The Big Picture)](#how-card-data-works-the-big-picture)
-4. [Static Catalog System — Deep Dive](#static-catalog-system--deep-dive)
-5. [Pokémon — Data Source, Schema, Add-a-Set Guide](#pokemon--data-source-schema-add-a-set-guide)
-6. [Lorcana — Data Source, Schema, Add-a-Set Guide](#lorcana--data-source-schema-add-a-set-guide)
-7. [Riftbound — Data Source, Schema, Add-a-Set Guide](#riftbound--data-source-schema-add-a-set-guide)
-8. [Card Search Flow](#card-search-flow)
-9. [Price Data](#price-data)
-10. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
-11. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
-12. [Automated Sync — Settings Page](#automated-sync--settings-page)
-13. [Firestore / User Data](#firestore--user-data)
-14. [Zustand Store](#zustand-store)
-15. [Full File Map](#full-file-map)
-16. [Key Quirks & Gotchas](#key-quirks--gotchas)
+4. [Card Catalog System — Deep Dive (Firestore-backed)](#card-catalog-system--deep-dive-firestore-backed)
+5. [Admin Catalog Page — Architecture, Caching & Diagnostics](#admin-catalog-page--architecture-caching--diagnostics)
+6. [Personal Collections (vs. the Admin Catalog)](#personal-collections-vs-the-admin-catalog)
+7. [Pokémon — Data Source, Schema, Add-a-Set Guide](#pokemon--data-source-schema-add-a-set-guide)
+8. [Lorcana — Data Source, Schema, Add-a-Set Guide](#lorcana--data-source-schema-add-a-set-guide)
+9. [Riftbound — Data Source, Schema, Add-a-Set Guide](#riftbound--data-source-schema-add-a-set-guide)
+10. [Card Search Flow](#card-search-flow)
+11. [Price Data](#price-data)
+12. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
+13. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
+14. [Automated Sync — Settings Page](#automated-sync--settings-page)
+15. [Firestore / User Data](#firestore--user-data)
+16. [Zustand Store](#zustand-store)
+17. [Full File Map](#full-file-map)
+18. [Key Quirks & Gotchas](#key-quirks--gotchas)
 
 ---
 
@@ -52,7 +54,7 @@ specifically, e.g. `lsof -ti :3000 | xargs -r kill -9`.
 # Development (hot reload, no build needed)
 npm run dev
 
-# Production (must rebuild after any code or data change) — serves port 3000,
+# Production (must rebuild after any CODE change) — serves port 3000,
 # same as dev; `package.json`'s "start" script hardcodes `next start -p 3000`,
 # so a PORT env var has no effect here.
 npm run build
@@ -62,15 +64,24 @@ npm run start
 lsof -ti :3000 | xargs -r kill -9
 npm run start
 
-# Download fresh card catalogs (run when new sets release)
+# Download fresh card catalogs (run when new sets release) — syncs straight into
+# Firestore, no rebuild needed (see §4). Only still useful for actually picking up
+# new upstream sets/cards; it is NOT how Admin Catalog edits get applied — see §5.
 npm run download-cards
-npm run build
-npm run start
 ```
 
-All of the above is also available as one click: Settings → "Sync Card Data" (see
-[§12](#automated-sync--settings-page)) runs the download + build + restart sequence
-automatically, including for newly-released sets.
+**Card catalog data no longer requires a rebuild to pick up changes** — as of the Firestore
+migration (see [§4](#card-catalog-system--deep-dive-firestore-backed)), the catalog lives in
+Firestore and is read live (with a short in-memory staleness window), not bundled into the
+build. `npm run build && npm run start` is still required for actual **code** changes (editing
+`.tsx`/`.ts` files), just not for `npm run download-cards` or any edit made from the Admin
+Catalog page.
+
+All of the above download+registry-sync workflow is also available as one click: Settings →
+"Sync Card Data" (see [§14](#automated-sync--settings-page)) — it still runs a full rebuild+restart
+today (it predates the Firestore migration picking up data live), so it remains the right tool
+for actually deploying registry/code changes together, even though a bare `npm run
+download-cards` alone is now enough just to refresh catalog data.
 
 ---
 
@@ -78,15 +89,29 @@ automatically, including for newly-released sets.
 
 There are **two completely separate data concerns**:
 
-### 1. Card Catalog (Search & Display)
-Used when Alex searches for a card to add to inventory. All card names, images, set names,
-and collector numbers are pre-downloaded as **static JSON files** at build time and stored in
-`public/data/`. When Alex types in the AddCardDialog search box, the app hits a Next.js
-server route (`/api/cards/search`) which filters the static JSON in memory and returns
-matches. No external API call happens during a search.
+### 1. Card Catalog (Search & Display) — shared, admin-owned, Firestore-backed
 
-These JSON files must be regenerated with `npm run download-cards` whenever new sets release.
-After regeneration, `npm run build` bundles the new JSON into the server.
+As of the "Migrate card catalog to Firestore as shared source of truth" migration, this is
+**no longer static JSON files**. All card names, images, set names, prices, and collector
+numbers live in **Firestore**, under `catalog/{game}/cards/{cardId}` — one document per card,
+readable by anyone, writable only by the admin account (see `firestore.rules`). This is what
+makes it a genuinely *shared* catalog: every user's copy of the app reads the same live data,
+and an admin edit (hide a card, fix a name, add a missing card, register a whole new set)
+applies to everyone immediately, no rebuild/redeploy required. See
+[§4](#card-catalog-system--deep-dive-firestore-backed) for the caching mechanics and
+[§5](#admin-catalog-page--architecture-caching--diagnostics) for the admin-facing page that
+edits it.
+
+When Alex (or the admin) types in the AddCardDialog search box, the app hits a Next.js server
+route (`/api/cards/search`) which searches this Firestore-backed catalog (via an in-memory
+cache, not a live Firestore read per keystroke) and returns matches. No external card-database
+API call happens during a normal search.
+
+`npm run download-cards` (`scripts/download-card-catalog.mjs`) is what keeps this catalog in
+sync with the three upstream sources (Pokémon TCG data, lorcast, the Riftbound gallery/TCGCSV)
+— it scrapes fresh data and **writes it into Firestore**, never clobbering an admin edit made
+since the last sync (see [§4](#card-catalog-system--deep-dive-firestore-backed)). It's for
+picking up new upstream cards/sets, not a prerequisite for the catalog to work at all.
 
 ### 2. User Collection (Inventory)
 When Alex adds a card, the card data is written to **Firestore** under
@@ -99,38 +124,193 @@ unique card ID that gets stored on the Card object when a card is selected from 
 
 ---
 
-## Static Catalog System — Deep Dive
+## Card Catalog System — Deep Dive (Firestore-backed)
 
-### Files
+### Firestore collections
 
 ```
-public/data/
-  pokemon-cards.json     # ~20,000+ cards, all sets + promos
-  lorcana-cards.json     # ~2,700+ cards, all sets including Enchanted/Epic/Promo
-  riftbound-cards.json   # ~950+ cards, all sets including Showcase/Overnumber/Signature
+catalog/{game}/cards/{cardId}          — one doc per card, full schema (see per-game sections
+                                          below). `hidden: boolean` controls visibility;
+                                          `updatedAt` (serverTimestamp) drives both admin-edit-
+                                          wins-over-resync logic and the delta-sync below.
+catalog_snapshot/{game}/chunks/{0,1,…} — pre-sharded full-catalog snapshot, ~1500 cards/chunk
+                                          (Firestore's 1MiB/doc limit), JSON-stringified in a
+                                          `cards` field. What a cold app instance reads instead
+                                          of scanning every card doc individually.
+catalog_meta/{game}                    — { lastBulkSyncAt } — lets download-card-catalog.mjs
+                                          know whether an admin edit happened since its last
+                                          run, so it never clobbers one.
 ```
 
-### How they are generated
+`game` is `pokemon` | `lorcana` | `riftbound`. Reads are public (`allow read: if true`);
+writes require the admin UID (see `firestore.rules`).
 
-`scripts/download-card-catalog.mjs` downloads all three catalogs in parallel.
-Run via `npm run download-cards`.
+### How reads work — `lib/api/catalog.ts`
 
-### How they are read
+`loadCatalog<T>(game)` is the shared entry point every real consumer goes through
+(`lib/api/pokemon.ts`, `lorcana.ts`, `riftbound.ts` all call it under the hood via
+`loadVisibleCatalog`, which is the same thing minus `hidden` cards). It keeps one **in-memory
+cache per game, per Node.js server process** — the same "lives for the process lifetime" shape
+the old static-JSON cache had, just fed from Firestore instead of a file:
 
-The server-side search functions (`lib/api/pokemon.ts`, `lib/api/lorcana.ts`,
-`lib/api/riftbound.ts`) load the JSON using Node's `readFileSync` on the first
-request, then cache it in a module-level variable (`_catalogCache` / `_cardCache`).
-The cache lives for the lifetime of the server process and resets on restart.
+1. **Cold cache** (first call, or after `invalidateCatalogCache()`): reads the full catalog from
+   `catalog_snapshot/{game}/chunks/*` — cheap, a handful of doc reads instead of thousands.
+2. **Warm cache, < 2 minutes old** (`STALE_MS`): served straight from memory, zero Firestore
+   reads.
+3. **Warm cache, ≥ 2 minutes old**: runs `pullDeltas()` — a single query for
+   `catalog/{game}/cards where updatedAt > lastSyncAt` — and merges just the changed docs into
+   the in-memory Map. This is why every catalog write (hide, edit, add, and the download
+   script's own upserts) **must** stamp `updatedAt: serverTimestamp()` — a write that skips it
+   is invisible to this delta mechanism forever, only fixable by a full cache invalidation.
 
-### Module-level cache caveat
+`regenerateSnapshot(game)` rewrites `catalog_snapshot/{game}/chunks/*` from the current
+`catalog/{game}/cards` collection and calls `invalidateCatalogCache(game)` — called after every
+Admin Catalog write so a fresh app instance (or a stale one past the 2-minute window) sees the
+change without a full resync.
 
-In **production**, the module cache is permanent until the server restarts. After
-`npm run download-cards`, you must also `npm run build && npm run start` to pick up
-new card data — just restarting the server is not enough because the build bundles
-the JSON into the server chunks.
+### The cache-invalidation gotcha (client vs. server module instances)
 
-In **development** (`npm run dev`), Next.js hot-reloads server modules, so a fresh
-`npm run download-cards` is picked up on the next request.
+**This bit is easy to get wrong and did in fact ship wrong once.** `regenerateSnapshot()` is
+only ever called from Admin Catalog's client-side code (`AdminCatalogPage.tsx`, a `'use client'`
+component) — meaning it executes in the **browser's** JS bundle, which has its own separate copy
+of `lib/api/catalog.ts` (and therefore its own separate `_cache` module variable) from the copy
+running in the Next.js **server** process that `/api/admin/catalog`, `/api/cards/search`,
+`/api/cardex`, etc. actually read through. Calling `invalidateCatalogCache()` from the browser
+only clears the browser's own unused copy — the server's cache, which is what matters, never
+hears about it, and silently keeps serving pre-edit data until its own 2-minute staleness timer
+happens to expire (and even then, only for cards whose write stamped `updatedAt`).
+
+The fix (already applied): `regenerateSnapshot()` additionally does
+`fetch('/api/admin/catalog/invalidate', { method: 'POST', body: { game } })` whenever
+`typeof window !== 'undefined'` — a tiny server route (`app/api/admin/catalog/invalidate/route.ts`)
+that calls `invalidateCatalogCache(game)` **in the server's own process**, which is what
+actually needs to happen. If you ever add a new way to write to the catalog from client code,
+route it through `regenerateSnapshot()` (or replicate this invalidate-fetch) rather than
+inventing a new write path — otherwise the same silent-staleness bug reappears.
+
+The exact same class of bug exists for `getSetsForGame()`'s `setsCache` in `lib/api/search.ts`
+(a separate, never-expiring cache of the set picker's contents) — see
+[§5](#admin-catalog-page--architecture-caching--diagnostics)'s New Set section for how that one
+gets invalidated (it's simpler, because that write path is server-side already).
+
+---
+
+## Admin Catalog Page — Architecture, Caching & Diagnostics
+
+`/admin` (`components/pages/AdminCatalogPage.tsx`) is the UI for the shared, Firestore-backed
+catalog described in [§4](#card-catalog-system--deep-dive-firestore-backed). It is **the**
+source of truth every user's search, inventory-add, and Cardex read from — not a personal
+per-user thing (see [§6](#personal-collections-vs-the-admin-catalog) for the feature that
+actually is per-user and easy to confuse this with). Gated by `isAdmin` (`user.uid ===
+NEXT_PUBLIC_ADMIN_UID`, enforced for real by `firestore.rules`, not just hidden in the UI) —
+anyone can browse the table read-only; only the admin sees the write controls.
+
+### What it does
+
+- **Hide / Unhide** (`toggleHideCard`) — flips `hidden` on a card's Firestore doc. Reversible,
+  never deletes data. Hidden cards stay visible in this table (greyed out, "hidden" badge) but
+  disappear from `loadVisibleCatalog()` — search, Cardex, Pack Analysis, everywhere else.
+- **Edit** (`saveCardEdit`) — patches a card's fields, then **cascades** `number`/`name`/
+  `imageUrl` (never price) to any inventory entries across all users whose `apiId` matches, via
+  `editCardInFirestore`. Auto-applies with no confirm gate — [[feedback_catalog_source_of_truth]]:
+  the Admin Catalog is meant to be trusted as ground truth, so an edit here should just take
+  effect everywhere, not require per-user approval.
+- **Add Missing Card** (`AddCardForm`) — manually add a card the scrapers missed (or a fully
+  custom one) to the currently-selected set. Supports an "Auto-fetch price & image" lookup
+  (`POST /api/admin/catalog/lookup`) that does an *exact* number-match query against TCGCSV/
+  lorcast/pokemontcg.io — this is a convenience prefill, not the diagnostic tool (see Raw Source
+  Check below for why an exact-match lookup isn't enough to answer "is this card upstream at
+  all?"). Accepts an optional `prefill` prop so other tools (Raw Source Check) can hand it a
+  ready-made candidate.
+- **New Set** (`NewSetForm`, `POST /api/set-registry`) — registers a brand new set in
+  `data/set-registry.json`, Lorcana or Riftbound only (Pokémon's set list comes live from
+  `api.pokemontcg.io`, a different mechanism entirely — see [§7](#pokemon--data-source-schema-add-a-set-guide)).
+  Two real use cases: (a) a real upstream set the sync hasn't auto-detected/matched yet, or (b)
+  a fully custom/curated set that will never come from any scraper. Either way it's created with
+  `tcgcsvGroupId`/`lorcastId` left `null` and `source: "manual"`, so a future sync never mistakes
+  it for something it should be overwriting or re-scraping — cards get added to it one at a time
+  via "Add Missing Card" afterward. Requires picking an existing `cardexGroup` label from that
+  game's `groupOrder` (see [§12](#cardex-feature--how-sets-register)) so the new set actually
+  shows up in the Cardex set picker once it has cards.
+  - **Cache gotcha, same shape as the one in §4:** `getSetsForGame()` (`lib/api/search.ts`)
+    caches the set picker's contents in a module-level `setsCache` that, unlike the catalog
+    cache, **never expires on its own** — "only cache non-empty results so a transient API
+    failure doesn't stick" means once populated it's permanent until server restart. The `POST
+    /api/set-registry` route calls `invalidateSetsCache(game)` directly after writing — this one
+    doesn't need the client-fetch dance §4 describes, because set creation is *already* a
+    server-side round trip (unlike `regenerateSnapshot()`, which runs client-side).
+  - Lorcana has its own extra wrinkle: `getLorcanaSets()` normally prefers the **live** lorcast
+    `/sets` API over the registry, so a manually-created Lorcana set (which lorcast has never
+    heard of) would never surface even with the registry correctly updated. Fixed by always
+    merging in any `source: "manual"` registry sets that the live/fallback list doesn't already
+    contain.
+- **Check Raw Source** (`RawSourceCheckPanel`, `GET /api/admin/catalog/raw-source`) — Riftbound
+  only, for now. Answers "is a card actually upstream and we're just silently skipping it?" by
+  fetching the **raw** TCGCSV CSV and the **raw** official gallery (`playriftbound.com`)
+  `__NEXT_DATA__` blob directly, then diffing each against the local catalog — deliberately
+  independent of `download-card-catalog.mjs`'s own `tcgKey()`/`catalogKey()` matching logic, so
+  a bug in that matching wouldn't hide the gap from this tool the way it hid it from the sync.
+  Two independent diffs are shown:
+  - **Gallery vs. local catalog**, matched by Riot's own card `id` (the catalog stores the
+    gallery's `id` verbatim for gallery-sourced cards) — anything in the gallery with no
+    matching local `id` is a card the scrape flow is missing entirely.
+  - **TCGCSV rows vs. local catalog**, matched by collector number — **must** compare against
+    both a card's bare `number` *and* the number+suffix embedded in its `publicCode`,
+    not `number` alone. Showcase/Overnumber/Signature variants share their base card's bare
+    `number` (the `a`/`*` suffix only ever lives in `publicCode` — see
+    [§9](#riftbound--data-source-schema-add-a-set-guide)'s variant table), while TCGCSV's
+    `extNumber` column always carries that suffix (e.g. `"007a/298"`). Matching only against
+    `number` produces a wall of false-positive "unmatched" Showcase rows — this was caught and
+    fixed the same session this tool was built; if you touch this matching logic again, test it
+    against a set with Showcase cards (e.g. Origins) before trusting the output.
+  - Each finding has an "Add" button that opens Add Missing Card prefilled from the raw source
+    entry (name/number/rarity/image — price is left for the admin to fill in, since the exact
+    row that matched isn't surfaced through this button, only through the separate TCGCSV-only
+    diff list).
+  - Real example this tool caught on first use: Vendetta's TCGCSV feed has a priced
+    "Zed - Master of Shadows (Signature)" row that doesn't exist under any name in the local
+    catalog at all — a genuinely missing card the normal sync silently skipped.
+
+### Key files
+
+- `components/pages/AdminCatalogPage.tsx` — the whole page: `CatalogBrowser`, `CardTable`,
+  `AddCardForm`, `EditCardForm`, `NewSetForm`, `RawSourceCheckPanel`, `ImageUploadField`.
+- `app/api/admin/catalog/route.ts` — `GET`, read-only listing (includes hidden cards, unlike
+  every other catalog consumer — the admin table needs to show and un-hide them).
+- `app/api/admin/catalog/lookup/route.ts` — exact-match external price/image lookup, used by
+  "Auto-fetch price & image" in Add Missing Card. Never writes anything.
+- `app/api/admin/catalog/invalidate/route.ts` — `POST { game }`, drops the **server's** catalog
+  cache for a game. See the cache-invalidation gotcha in [§4](#card-catalog-system--deep-dive-firestore-backed).
+- `app/api/admin/catalog/raw-source/route.ts` — the Raw Source Check diff, Riftbound-only today.
+- `app/api/set-registry/route.ts` — `GET` full registry; `PUT` a structured patch to one existing
+  set entry (Settings "Needs Review" editor); `POST` registers a brand new set entry (New Set
+  form). All three only ever touch `data/set-registry.json`, never TypeScript source.
+- `lib/api/catalog.ts` — `loadCatalog`/`loadVisibleCatalog`/`regenerateSnapshot`/
+  `invalidateCatalogCache`, plus `sortCatalogCards`/`scoreMatch`/`parseSearchQuery` shared by all
+  three games' search.
+- `lib/firebase/config.ts` — exports `ADMIN_UID` (from `NEXT_PUBLIC_ADMIN_UID`), used by both
+  this page's `isAdmin` check and (independently, for real enforcement) `firestore.rules`.
+
+---
+
+## Personal Collections (vs. the Admin Catalog)
+
+`components/pages/PersonalCollectionsView.tsx` (a tab inside `/cardex`, backed by
+`lib/firebase/collections.ts`) is **easy to confuse with the Admin Catalog and is a
+fundamentally different feature** — worth stating plainly since a past conversation conflated
+them before landing on the right design:
+
+| | Admin Catalog (§5) | Personal Collections |
+|---|---|---|
+| Scope | Shared — every user reads the same data | Private — `users/{uid}/collections/{id}`, one user's own |
+| Who can write | Admin only (`isAdmin`, enforced by `firestore.rules`) | Any signed-in user, their own collections only |
+| What it holds | Real catalog card **documents** (name, image, price, `hidden`, etc.) | A named list of **references** to existing catalog card ids — no new card data, just curation |
+| Can it add a brand-new, never-cataloged card? | Yes — that's the whole point of "Add Missing Card" / "New Set" | No — `AddCardToCollectionModal` only searches the existing catalog via `/api/cards/search` |
+| Purpose | Be the ground truth the rest of the app (search, Cardex, inventory) reads from | Let a user build their own themed want-list/grouping ("Fury Runes", an alt-art wishlist, a champion's cards across every set) and track completion against their own inventory, Cardex-style |
+
+If a request is "I want to track a themed group of cards I already own or want" → Personal
+Collections. If a request is "the catalog is missing/wrong about a real card, or I want a whole
+new *set* other users would see too" → Admin Catalog (§5).
 
 ---
 
@@ -148,9 +328,9 @@ parallel using their raw CDN URLs (no rate limiting, no API key required).
 Set metadata (names) comes from:
 `https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json`
 
-### Catalog Schema (`pokemon-cards.json`)
+### Catalog Schema (`catalog/pokemon/cards/{id}` Firestore doc)
 
-Each card in the array:
+Each card doc:
 ```json
 {
   "id": "sv7-1",           // "{setId}-{number}" — globally unique
@@ -172,13 +352,15 @@ New sets appear in the GitHub repo automatically when Pokémon releases them (us
 within 24 hours of release). To pull them in:
 
 ```bash
-npm run download-cards   # re-downloads all sets from GitHub, new set is included
-npm run build
-npm run start
+npm run download-cards   # re-downloads all sets from GitHub, syncs into Firestore
 ```
 
-That's it. No code changes required. The download script fetches the full GitHub file
-listing dynamically — it does not have a hardcoded set list.
+That's it — no `npm run build`/restart needed (see [§4](#card-catalog-system--deep-dive-firestore-backed)),
+no code changes required. The download script fetches the full GitHub file listing
+dynamically — it does not have a hardcoded set list. There's no Admin Catalog "New Set"
+equivalent for Pokémon (its set list comes live from `api.pokemontcg.io`, not
+`data/set-registry.json`) — for Pokémon, individual missing cards can still be added via
+"Add Missing Card" once the set itself exists in that live list.
 
 ### AddCardDialog behavior for Pokémon
 
@@ -213,9 +395,9 @@ zero Iconic-rarity cards despite Iconic being a real, valuable rarity tier lorca
 
 A `seen` Map deduplicates by card ID across both phases.
 
-### Catalog Schema (`lorcana-cards.json`)
+### Catalog Schema (`catalog/lorcana/cards/{id}` Firestore doc)
 
-Each card in the array:
+Each card doc:
 ```json
 {
   "id": "5-100",                    // lorcast internal ID
@@ -274,20 +456,29 @@ The `setName` string is the canonical match key used everywhere in this app.
 
 ### How New Lorcana Sets Are Added
 
-**As of the Settings "Sync Card Data" button (see [§12](#automated-sync--settings-page)), the steps below
-run automatically** — the manual version is kept here because it's still what happens under the hood,
-and because the Settings page's "Needs Review" list uses the exact same registration fields described here.
+**Three ways to do this, in increasing order of manual effort:**
+
+1. **Admin Catalog → "New Set"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics)) —
+   fastest for a set that isn't fully synced yet or a curated/custom one. Registers the set in
+   `data/set-registry.json` directly from the UI with no group-metadata guessing.
+2. **Settings → "Sync Card Data"** (see [§14](#automated-sync--settings-page)) — the steps below
+   run automatically for real, newly-detected upstream sets, with conservative review-required
+   defaults.
+3. **Manual**, described below — what both of the above actually do under the hood, and the
+   fallback if you'd rather not use either UI.
 
 When Ravensburger releases a new set, lorcast.com adds it within days. To pull it in:
 
 ```bash
-npm run download-cards   # lorcast API returns all sets automatically
-npm run build
-npm run start
+npm run download-cards   # lorcast API returns all sets automatically, syncs into Firestore
 ```
 
+No `npm run build`/restart needed for the card data itself (see
+[§4](#card-catalog-system--deep-dive-firestore-backed)) — only the registry entry below is what
+makes a set show up in the Cardex/Pack Analysis, and that's a plain JSON write too.
+
 Then register the set in **`data/set-registry.json`** (this one file replaced the three
-hardcoded arrays that used to need separate edits — see [§12](#automated-sync--settings-page)):
+hardcoded arrays that used to need separate edits — see [§14](#automated-sync--settings-page)):
 
 ```json
 { "setName": "New Set Name", "code": "XYZ", "lorcastId": "14", "releaseDate": "2026-08-01",
@@ -296,10 +487,9 @@ hardcoded arrays that used to need separate edits — see [§12](#automated-sync
   "needsReview": false, "source": "manual" }
 ```
 
-- `setName` MUST exactly match the `setName` field in the catalog JSON. Verify with:
-  ```bash
-  node -e "const d=require('./public/data/lorcana-cards.json'); console.log([...new Set(d.map(c=>c.setName))])"
-  ```
+- `setName` MUST exactly match the `setName` field on the catalog's Firestore card docs.
+  Verify via the Admin Catalog page (`/admin` → Lorcana → pick the set from the picker), or
+  `GET /api/sets?game=lorcana` for the full list of names the app currently knows about.
 - `lorcastId` is the lorcast numeric set ID — check via `api.lorcast.com/v0/sets`.
 - `cardexGroup` must be one of the labels in `groupOrder` for the Cardex set picker to show it
   (`"Booster Sets"`, `"Special Sets"`, or `"Promos & Other"` today).
@@ -307,12 +497,13 @@ hardcoded arrays that used to need separate edits — see [§12](#automated-sync
 - `hasEpic: true` for any set released after Shimmering Skies (set 9+); `false` for sets 1–8. This flag
   changes the foil pull rate calculation: `false` → foilSR = 22%, no Epic slot; `true` → foilSR = 20%,
   foilEpic = 1/48 packs.
+- `source: "manual"` sets created via Admin Catalog's "New Set" form don't exist on lorcast at
+  all — `getLorcanaSets()` (`lib/api/lorcana.ts`) specifically merges these in since the live
+  lorcast `/sets` call would otherwise never include them (see [§5](#admin-catalog-page--architecture-caching--diagnostics)).
 
 `lib/api/lorcana.ts`, `components/pages/CardexPage.tsx`, and
 `app/api/pack-analysis/lorcana/route.ts` all read this file at runtime via `lib/api/registry.ts` —
-no code changes needed once the entry is added. The Settings page's "Sync Card Data" button does
-this step automatically for newly-detected sets (defaulting to conservative, review-required values);
-this manual JSON edit is the fallback / what to do if you'd rather not wait for a sync.
+no code changes needed once the entry is added.
 
 ---
 
@@ -343,9 +534,9 @@ When a new set releases on TCGPlayer, you need to find its group ID. Go to:
 `https://tcgcsv.com/tcgplayer/89/` and look for the new group, OR search TCGPlayer for
 the set and extract the groupId from the URL structure.
 
-### Catalog Schema (`riftbound-cards.json`)
+### Catalog Schema (`catalog/riftbound/cards/{id}` Firestore doc)
 
-Each card in the array:
+Each card doc:
 ```json
 {
   "id": "origins-001-regular",  // Riot's internal card ID from __NEXT_DATA__
@@ -409,11 +600,20 @@ price for these variants.
 
 ### How New Riftbound Sets Are Added
 
-**As of the Settings "Sync Card Data" button (see [§12](#automated-sync--settings-page)), this whole
-flow — including the group-ID lookup — runs automatically.** The manual version below is the fallback,
-and it's what a sync does under the hood: card data (names, images, sets) is already fully automatic
-via the `__NEXT_DATA__` gallery scrape with zero code changes; the only genuinely manual piece is
-finding the set's TCGPlayer group ID for prices.
+**Four ways, in increasing order of manual effort:**
+
+1. **Admin Catalog → "New Set"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics))
+   — fastest for a set with no TCGCSV group yet, or a curated/custom one. No group-ID hunting
+   needed since it's created with `tcgcsvGroupId: null`.
+2. **Admin Catalog → "Check Raw Source"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics))
+   — once a set exists (via either path here), use this to catch individual cards the scrape
+   silently skipped, independent of whether the set-level sync worked.
+3. **Settings → "Sync Card Data"** (see [§14](#automated-sync--settings-page)) — this whole flow,
+   including the group-ID lookup, runs automatically for real newly-detected sets.
+4. **Manual**, described below — what the automated paths actually do under the hood, and the
+   fallback if you'd rather not use either UI. Card data (names, images, sets) is already fully
+   automatic via the `__NEXT_DATA__` gallery scrape with zero code changes; the only genuinely
+   manual piece here is finding the set's TCGPlayer group ID for prices.
 
 New sets appear on `playriftbound.com/en-us/card-gallery/` when Riot adds them.
 The download script automatically finds all cards in `__NEXT_DATA__` regardless of set.
@@ -440,24 +640,27 @@ edits that used to be needed across three separate files:
   "needsReview": false, "source": "manual" }
 ```
 
-- `setName` MUST exactly match the `setName` in the catalog. Verify with:
-  ```bash
-  node -e "const d=require('./public/data/riftbound-cards.json'); console.log([...new Set(d.map(c=>c.setName))])"
-  ```
+- `setName` MUST exactly match the `setName` on the catalog's Firestore card docs. Verify via
+  the Admin Catalog page (`/admin` → Riftbound → pick the set), or `GET /api/sets?game=riftbound`.
 - `tcgcsvGroupId` is the group ID from Step 1 — `download-card-catalog.mjs` merges this into its
   bootstrap `TCGCSV_GROUPS` list at runtime via `getTcgcsvGroups()`, so no script edit is needed.
 - `cardexGroup` must be one of `groupOrder`'s labels (`"Main Sets"` or `"Promos"` today) for the set
   to appear in the Cardex picker — sets present in the registry are automatically "known," so there's
   no separate catch-all-bucket list to update.
-- Sort order in `riftbound-cards.json` still comes from `SET_ORDER` in the download script (a code
-  edit) — it's cosmetic only (unknown codes default to sorting last), so it's not part of this file.
+- Sort order for the final synced card list comes from `SET_ORDER` in the download script (a
+  code edit) — it's cosmetic only (unknown codes default to sorting last), so it's not part of
+  this file. (No local `riftbound-cards.json` gets written anymore — `download-card-catalog.mjs`
+  only writes local files for its own bookkeeping now, `data/last-download-summary.json`; all
+  card data goes straight to Firestore, see [§4](#card-catalog-system--deep-dive-firestore-backed).)
 
-**Step 3 — Run download and rebuild**
+**Step 3 — Run the download**
 
 ```bash
 npm run download-cards
-npm run build && npm run start
 ```
+
+No rebuild/restart needed for the card data itself — only actual code changes require one (see
+[§4](#card-catalog-system--deep-dive-firestore-backed)).
 
 ---
 
@@ -472,7 +675,8 @@ User types query
   → app/api/cards/search/route.ts (server-side)
   → searchCards(game, query) in lib/api/search.ts
   → calls searchLorcanaCards(query) / searchPokemonCards(query) / searchRiftboundCards(query)
-  → reads static JSON catalog via readFileSync (cached in module memory)
+  → loadVisibleCatalog(game) in lib/api/catalog.ts — Firestore-backed, in-memory cached
+    per server process (see §4 for the caching/staleness mechanics)
   → scoreMatch() ranks results by word-start prefix matching
   → returns top 20 results as JSON
   → AddCardDialog renders dropdown with name, image, set, price
@@ -508,34 +712,38 @@ themed card).
 
 ### Lorcana
 
-- **Source:** `api.lorcast.com` via the static catalog
-- **When fetched:** Included in `lorcana-cards.json` at download time (no live fetch during use)
-- **To update prices:** `npm run download-cards && npm run build && npm run start`
+- **Source:** `api.lorcast.com`, synced into each card's Firestore doc
+- **When fetched:** At `npm run download-cards` time (no live fetch during a normal search) —
+  Pack Analysis is the one exception, see [§13](#pack-analysis-feature--how-sets-register)
+- **To update prices:** `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
 - **Fields in catalog:** `marketPrice` (non-foil) and `marketPriceFoil` (foil/cold foil)
 - **Note:** Enchanted and Epic cards may have `marketPrice: 0` because they are foil-only;
   their price is in `marketPriceFoil`
 
 ### Riftbound
 
-- **Source:** `tcgcsv.com` (TCGPlayer mirror) via the static catalog
-- **When fetched:** Included in `riftbound-cards.json` at download time
+- **Source:** `tcgcsv.com` (TCGPlayer mirror), synced into each card's Firestore doc
+- **When fetched:** At `npm run download-cards` time
 - **Showcase/Star cards:** These are foil-only; `marketPrice` is set to the foil price,
   `marketPriceFoil` is 0 (they don't have separate foil vs non-foil listing)
-- **To update prices:** `npm run download-cards && npm run build && npm run start`
+- **To update prices:** `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
 
 ---
 
 ## Cardex Feature — How Sets Register
 
 The Cardex (`/cardex`) shows a Pokédex-style grid for any set. Cards are greyed out if
-not in inventory, full color if owned, with quantity badges.
+not in inventory, full color if owned, with quantity badges. It also hosts the unrelated,
+per-user "Personalized Collections" tab — see [§6](#personal-collections-vs-the-admin-catalog)
+for why that's a fundamentally different feature sharing a page, not another set source.
 
 ### Architecture
 
 1. Alex picks a set in `components/pages/CardexPage.tsx`
 2. The component calls `GET /api/cardex?game=lorcana&set=Shimmering+Skies`
-3. `app/api/cardex/route.ts` reads the appropriate static JSON, filters by `setName`,
-   sorts by number then rarity, and returns a simplified card array
+3. `app/api/cardex/route.ts` reads the Firestore-backed catalog via `loadVisibleCatalog()`
+   (`lib/api/catalog.ts`, see [§4](#card-catalog-system--deep-dive-firestore-backed)), filters
+   by `setName`, sorts by number then rarity, and returns a simplified card array
 4. The component overlays owned status by matching against Zustand `cards`
 
 ### The Two Matching Strategies
@@ -556,11 +764,12 @@ select cards from the dropdown so `apiId` is set.
 ### Set Registration
 
 To appear in the Cardex set picker, a set must have a `cardexGroup` value in its
-**`data/set-registry.json`** entry (see [§12](#automated-sync--settings-page)) matching one of
+**`data/set-registry.json`** entry (see [§14](#automated-sync--settings-page)) matching one of
 that game's `groupOrder` labels. `CardexPage.tsx` fetches `GET /api/set-registry` once on mount
 and derives the equivalent of the old hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS` client-side
-via `buildGroupsByGame()`. The `setName` field must exactly match the `setName` field in the
-catalog JSON.
+via `buildGroupsByGame()`. The `setName` field must exactly match the `setName` field on the
+catalog's Firestore card docs — this is also exactly what Admin Catalog's "New Set" form
+registers (see [§5](#admin-catalog-page--architecture-caching--diagnostics)).
 
 A set is automatically "known" (excluded from the "Special" catch-all below) simply by being
 present in the registry with a non-null `cardexGroup` — there's no separate known-sets list to
@@ -587,11 +796,16 @@ Lorcana set based on current market prices.
 
 1. `PackAnalysisPage` detects `activeGame === 'lorcana'`
 2. Fetches `GET /api/pack-analysis/lorcana`
-3. `app/api/pack-analysis/lorcana/route.ts`:
-   - Reads `lorcana-cards.json` fresh on every request (`export const dynamic = 'force-dynamic'`)
+3. `app/api/pack-analysis/lorcana/route.ts` (`export const dynamic = 'force-dynamic'`, so Next
+   never pre-renders/caches this route at build time):
+   - Reads the catalog via `loadVisibleCatalog('lorcana')` (`lib/api/catalog.ts` — same
+     Firestore-backed, in-memory-cached read every other consumer uses, see [§4](#card-catalog-system--deep-dive-firestore-backed))
+   - Additionally does its own **live** lorcast fetch for current prices on top of the catalog's
+     cached prices (`fetchLivePrices()` in that route) — any card lorcast doesn't return for
+     falls back to its catalog price
    - Calls `getLorcanaBoosterSets()` (`lib/api/registry.ts`), which reads `data/set-registry.json`
      and returns every set with `packAnalysis.included: true` — this replaced the old hardcoded
-     `BOOSTER_SETS` array (see [§12](#automated-sync--settings-page))
+     `BOOSTER_SETS` array (see [§14](#automated-sync--settings-page))
    - Groups by rarity, computes average prices, applies pull rates, returns EV breakdown
 
 ### Pull Rates Used
@@ -689,15 +903,24 @@ explanation of what the sync does under the hood.
 
 ## Firestore / User Data
 
-### Collections
+### Collections — the full picture
 
 ```
+catalog/{game}/cards/{cardId}          — Shared catalog, admin-write-only (§4, §5)
+catalog_snapshot/{game}/chunks/{n}     — Pre-sharded catalog snapshot for cheap cold reads (§4)
+catalog_meta/{game}                    — { lastBulkSyncAt } — resync-vs-admin-edit bookkeeping (§4)
+
 users/{uid}/
-  cards/{cardId}        — Card objects
+  cards/{cardId}        — Card objects (this user's inventory)
   priceHistory/{cardId} — Price history points per card
   purchases/{id}        — Pack purchase records (Spending page)
-  _diag/test            — Temporary diagnostics document (auto-deleted)
+  collections/{id}      — Personal Collections (§6) — { game, name, cards: [...], createdAt }
 ```
+
+`game` throughout is `pokemon` | `lorcana` | `riftbound`. The `catalog*` collections are public
+read / admin write; everything under `users/{uid}/**` is readable/writable only by that same
+uid — see `firestore.rules` for the actual enforcement (the app-level `isAdmin`/`ADMIN_UID`
+checks are UX only, never the real gate).
 
 ### Card Object (stored in Firestore)
 
@@ -784,42 +1007,51 @@ All three must succeed before `dataLoading` is set to false. If any fails,
 
 ```
 TCGHaven/
+├── firestore.rules                ← Firestore security rules — public read/admin write on
+│                                     catalog/*, catalog_snapshot/*, catalog_meta/*; per-user
+│                                     read/write on users/{uid}/** (§5, §15)
+├── storage.rules                  ← Firebase Storage rules — catalog image uploads (Admin
+│                                     Catalog's ImageUploadField)
+│
 ├── data/
-│   ├── set-registry.json          ← Source of truth for Lorcana/Riftbound set metadata (§12)
+│   ├── set-registry.json          ← Source of truth for Lorcana/Riftbound set metadata. In git.
+│   │                                 GET/PUT/POST via app/api/set-registry/route.ts (§5, §14)
 │   ├── sync-status.json           ← Live progress of the current/last sync run. Not in git.
 │   ├── sync-run.log               ← Combined stdout/stderr from sync subprocesses. Not in git.
 │   ├── last-download-summary.json ← Written by download-card-catalog.mjs for sync-runner.mjs. Not in git.
-│   └── backups/<runId>/           ← Pre-sync snapshots of catalogs + registry. Not in git.
+│   └── backups/<runId>/           ← Pre-sync snapshots of the registry (+ Firestore export refs)
+│                                     taken before every sync run. Not in git.
 │
 ├── scripts/
-│   ├── download-card-catalog.mjs  ← Downloads all 3 game catalogs to public/data/
-│   ├── sync-runner.mjs            ← Settings "Sync Card Data" orchestrator (§12), detached+unref'd
+│   ├── download-card-catalog.mjs  ← Scrapes all 3 game sources and syncs into Firestore
+│   │                                 (catalog/{game}/cards + catalog_snapshot) — see §4. Writes
+│   │                                 no local card JSON anymore, only its own bookkeeping file.
+│   ├── sync-runner.mjs            ← Settings "Sync Card Data" orchestrator (§14), detached+unref'd
 │   ├── gen-icons.mjs              ← Generates PWA icons at multiple sizes
 │   └── lib/
 │       ├── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set matching
 │       └── sync-status.mjs        ← writeStatus()/readStatus() — atomic data/sync-status.json I/O
-│
-├── public/
-│   └── data/
-│       ├── pokemon-cards.json     ← Generated (20K+ cards). Not in git.
-│       ├── lorcana-cards.json     ← Generated (2700+ cards). Not in git.
-│       └── riftbound-cards.json   ← Generated (950+ cards). Not in git.
 │
 ├── lib/
 │   ├── types.ts                   ← Card, Game, Condition, GAME_COLORS, etc.
 │   ├── store.ts                   ← Zustand store (in-memory, no persist)
 │   ├── utils.ts                   ← cn(), formatCurrency(), formatPercent()
 │   ├── firebase/
-│   │   ├── config.ts              ← Firebase app init, auth, db instances
+│   │   ├── config.ts              ← Firebase app init, auth, db, storage instances, ADMIN_UID
 │   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, newCardRef
-│   │   └── spending.ts            ← loadPurchases, savePurchase, removePurchase
+│   │   ├── spending.ts            ← loadPurchases, savePurchase, removePurchase
+│   │   └── collections.ts         ← Personal Collections CRUD (§6) — users/{uid}/collections/*
 │   ├── auth-errors.ts             ← friendlyAuthError() — shared Firebase error messages
 │   ├── api/
-│   │   ├── catalog.ts             ← loadCatalog() + scoreMatch() — shared by all 3 games
-│   │   ├── registry.ts            ← loadSetRegistry() etc. — reads data/set-registry.json (§12)
-│   │   ├── search.ts              ← searchCards(), getSetsForGame() — unified entry point
+│   │   ├── catalog.ts             ← loadCatalog()/loadVisibleCatalog()/regenerateSnapshot()/
+│   │   │                             invalidateCatalogCache() + scoreMatch() — Firestore-backed
+│   │   │                             catalog read/write core shared by all 3 games (§4)
+│   │   ├── registry.ts            ← loadSetRegistry() etc. — reads data/set-registry.json (§14)
+│   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
+│   │   │                             unified entry point (§5's New Set cache note)
 │   │   ├── pokemon.ts             ← searchPokemonCards(), getPokemonCardPrice()
-│   │   ├── lorcana.ts             ← searchLorcanaCards(), getLorcanaSets()
+│   │   ├── lorcana.ts             ← searchLorcanaCards(), getLorcanaSets() (merges in manual/
+│   │   │                             registry-only sets — §5)
 │   │   └── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()
 │   └── pack-analysis/
 │       └── lorcana-ev.ts          ← TypeScript interfaces for Lorcana EV data
@@ -828,8 +1060,9 @@ TCGHaven/
 │   ├── layout.tsx                 ← Root HTML layout, ClientWrapper (SSR disabled)
 │   ├── page.tsx                   ← Portfolio page (root route "/")
 │   ├── inventory/page.tsx         ← Inventory page wrapper
-│   ├── cardex/page.tsx            ← Cardex page wrapper
-│   ├── settings/page.tsx          ← Settings page wrapper (§12)
+│   ├── cardex/page.tsx            ← Cardex page wrapper (includes Personal Collections tab, §6)
+│   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
+│   ├── settings/page.tsx          ← Settings page wrapper (§14)
 │   ├── portfolio/
 │   │   └── [cardId]/page.tsx      ← Individual card detail page
 │   ├── spending/page.tsx          ← Pack spending tracker
@@ -840,9 +1073,16 @@ TCGHaven/
 │       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS)
 │       ├── cardex/route.ts        ← Cardex grid data (?game=&set=)
 │       ├── sets/route.ts          ← Set list for AddCardDialog autocomplete (?game=)
-│       ├── set-registry/route.ts  ← GET full registry, PUT a structured patch to one set (§12)
+│       ├── set-registry/route.ts  ← GET full registry; PUT a structured patch to one set
+│       │                             (Needs Review editor); POST registers a brand new set
+│       │                             (Admin Catalog "New Set", §5, §14)
+│       ├── admin/catalog/
+│       │   ├── route.ts           ← GET read-only listing incl. hidden cards (§5)
+│       │   ├── lookup/route.ts    ← POST exact-match external price/image lookup (§5)
+│       │   ├── invalidate/route.ts← POST — drops the server's catalog cache for a game (§4, §5)
+│       │   └── raw-source/route.ts← GET — Raw Source Check diff, Riftbound-only (§5)
 │       ├── sync/
-│       │   ├── route.ts           ← POST — spawns scripts/sync-runner.mjs detached (§12)
+│       │   ├── route.ts           ← POST — spawns scripts/sync-runner.mjs detached (§14)
 │       │   └── status/route.ts    ← GET data/sync-status.json
 │       ├── pack-analysis/
 │       │   └── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic)
@@ -863,10 +1103,15 @@ TCGHaven/
     ├── pages/
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
     │   ├── PortfolioPage.tsx       ← P&L tracking, price refresh, sort/filter
-    │   ├── CardexPage.tsx          ← Pokédex-style collection tracker (Lorcana + Riftbound)
+    │   ├── CardexPage.tsx          ← Pokédex-style collection tracker (Lorcana + Riftbound +
+    │   │                             the Personal Collections tab, §6)
+    │   ├── PersonalCollectionsView.tsx ← Per-user custom collections UI (§6) — rendered inside
+    │   │                             CardexPage's "Personalized Collections" tab
+    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): CatalogBrowser, CardTable,
+    │   │                             AddCardForm, EditCardForm, NewSetForm, RawSourceCheckPanel
     │   ├── SpendingPage.tsx        ← Pack purchase logging
     │   ├── PackAnalysisPage.tsx    ← Expected value analysis per set
-    │   └── SettingsPage.tsx        ← Sync Card Data button + Needs Review editor (§12)
+    │   └── SettingsPage.tsx        ← Sync Card Data button + Needs Review editor (§14)
     └── portfolio/
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
         └── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
@@ -876,13 +1121,17 @@ TCGHaven/
 
 ## Key Quirks & Gotchas
 
-### 1. Production server serves stale builds
-After any code change or `npm run download-cards`, you MUST:
+### 1. Production server serves stale builds — for CODE changes only
+After any **code** change, you MUST:
 ```bash
 npm run build && npm run start
 ```
-Just restarting the server is not enough — Next.js bundles the catalog JSON into build
-chunks. The static JSON cache in module memory is also stale until rebuild.
+Just restarting the server is not enough — Next.js bundles compiled code into build chunks.
+**This no longer applies to catalog data** (as of the Firestore migration — see
+[§4](#card-catalog-system--deep-dive-firestore-backed)): `npm run download-cards` and any Admin
+Catalog edit apply live, no rebuild needed. What *can* still make catalog data look stale
+without a rebuild is the in-memory cache gotchas in quirks #14 and #15 below — don't reach for
+`npm run build` to fix those, it won't.
 
 ### 2. Firestore rejects `undefined`
 All writes go through `clean()` in `db.ts` which strips undefined. Never pass
@@ -913,7 +1162,10 @@ pre-Chrome 85, pre-Firefox 93). No workaround without changing image source.
 ### 7. Pack Analysis route is force-dynamic
 `app/api/pack-analysis/lorcana/route.ts` has `export const dynamic = 'force-dynamic'`
 to prevent Next.js from pre-rendering it at build time. Without this, prices would be
-baked in at build time and never update. The route reads the catalog file on each request.
+baked in at build time and never update. The route reads the catalog via
+`loadVisibleCatalog()` on each request (plus its own live lorcast price fetch layered on top —
+see [§13](#pack-analysis-feature--how-sets-register)), same Firestore-backed cache as everywhere
+else described in [§4](#card-catalog-system--deep-dive-firestore-backed).
 
 ### 8. `apiId` is the catalog's `id` field
 When Alex selects a card from the search dropdown in AddCardDialog, the `id` field from
@@ -930,11 +1182,14 @@ with smaller, bounded set sizes.
 `diagnosFirestore()` has been removed from `InventoryPage.tsx` and `db.ts` entirely.
 No diagnostic writes happen on inventory mount anymore.
 
-### 11. The catalog cache resets on server restart but not mid-session
-All catalog files load through `lib/api/catalog.ts` (`loadCatalog()`), which keeps one
-in-memory copy per file for the lifetime of the Node.js process. In production, they
-load once and stay in memory until the server is restarted. This means a
-`npm run download-cards` without a rebuild and restart has no effect in production.
+### 11. The catalog cache is per-process and self-heals within ~2 minutes — mostly
+`loadCatalog()` (`lib/api/catalog.ts`) keeps one in-memory copy per game per Node.js process.
+Unlike the old static-JSON era, this cache **does** self-heal without a restart: it treats
+itself as stale after 2 minutes (`STALE_MS`) and pulls just the changed docs (`updatedAt >
+lastSyncAt`). A server restart isn't required for `npm run download-cards` to show up — worst
+case you wait ~2 minutes. What *does* still need explicit invalidation (see quirks #14–15) is
+the sub-2-minute case, and any write that forgot to stamp `updatedAt` (permanently invisible to
+the delta pull, any wait length).
 
 ### 12. Lorcana set matching uses `setName` string, not numeric code
 Cards are matched between the catalog and user inventory using the full set name string
@@ -947,3 +1202,46 @@ The `+ packs` toggle in Portfolio adds the Spending page's total pack purchases 
 cost basis for P&L calculations. The `purchases` state is loaded in `AuthProvider.tsx`
 alongside cards and price history. If `purchases` is empty when toggling, check that
 `loadPurchases` is being called in the `Promise.all` in `AuthProvider.tsx`.
+
+### 14. A catalog write from client code needs a server round-trip to actually be seen
+`regenerateSnapshot()` (`lib/api/catalog.ts`) is called from Admin Catalog's client-side code
+(a `'use client'` component), which runs in the **browser's** copy of that module — a totally
+separate JS instance from the one running in the Next.js **server** process that every real
+read (`/api/cards/search`, `/api/cardex`, `/api/admin/catalog`, …) actually goes through.
+`invalidateCatalogCache()` called from the browser clears only the browser's own unused copy of
+`_cache`; the server's copy — the one that matters — hears nothing about it, and silently keeps
+serving pre-edit data until its own 2-minute staleness timer happens to fire (see quirk #11),
+*and even then* only for cards whose write stamped `updatedAt`. This shipped broken once (the
+Admin Catalog Hide toggle looked like it worked, then reverted itself on refresh) before being
+fixed with a dedicated `POST /api/admin/catalog/invalidate` route that runs the invalidation
+**in the server's own process**. See [§4](#card-catalog-system--deep-dive-firestore-backed) for
+the full writeup. **If you add a new client-side catalog write path, route it through
+`regenerateSnapshot()` (or replicate its invalidate-fetch) — don't just call
+`invalidateCatalogCache()` directly from client code, it silently does nothing useful.**
+
+### 15. The set-picker cache (`getSetsForGame`) never expires on its own
+Separate from quirk #14/§4's catalog cache: `lib/api/search.ts`'s `setsCache` module variable
+caches each game's set list forever once populated ("only cache non-empty results so a
+transient API failure doesn't stick" means no TTL at all). Registering a new set via `POST
+/api/set-registry` calls `invalidateSetsCache(game)` directly — that route already runs
+server-side, so (unlike quirk #14) no client-fetch round-trip is needed; the direct call already
+executes in the same process as the cache. If you add another way to write
+`data/set-registry.json`, remember to invalidate this cache too, or new sets won't appear in
+`/api/sets` until server restart.
+
+### 16. Riftbound raw-source/TCGCSV number matching must check `publicCode`, not just `number`
+Showcase/Overnumber/Signature variants share their base card's bare `number` field — the `a`/`*`
+suffix only ever lives in `publicCode` (see [§9](#riftbound--data-source-schema-add-a-set-guide)'s
+variant table). TCGCSV's `extNumber` column, however, always carries that suffix (e.g.
+`"007a/298"`). Any tool that diffs/matches Riftbound cards by collector number against an
+external feed (like Admin Catalog's Raw Source Check, [§5](#admin-catalog-page--architecture-caching--diagnostics))
+must normalize and check *both* a card's `number` and the number+suffix parsed out of its
+`publicCode`, or every Showcase card in the set shows up as a false-positive mismatch.
+
+### 17. Admin Catalog vs. Personal Collections — don't conflate them
+See [§6](#personal-collections-vs-the-admin-catalog) for the full comparison table. Short
+version: Admin Catalog (`/admin`) is the shared, admin-only-writable source of truth every user
+reads from; Personal Collections (a tab inside `/cardex`) is a private, per-user curation tool
+that can only reference cards already in that shared catalog. A request to add a whole new
+*set* other users would see, or to add a card that doesn't exist anywhere in the catalog yet,
+belongs in Admin Catalog — not Personal Collections, which has no way to do either.

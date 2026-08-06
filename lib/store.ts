@@ -15,7 +15,7 @@ interface TCGStore {
   calcFloor: number
   showFilters: boolean
   activeGames: Game[]
-  timeFrame: 'entry' | '1d' | '7d' | '30d'
+  timeFrame: 'entry' | '1d' | '7d' | '30d' | '365d'
   priceMode: 'market' | 'lowestNM'
   hiddenGroups: string[]
   catalogSyncNotices: CatalogSyncNotice[]
@@ -43,7 +43,7 @@ interface TCGStore {
   setCalcFloor: (v: number) => void
   setShowFilters: (v: boolean) => void
   setActiveGames: (games: Game[]) => void
-  setTimeFrame: (frame: 'entry' | '1d' | '7d' | '30d') => void
+  setTimeFrame: (frame: 'entry' | '1d' | '7d' | '30d' | '365d') => void
   setPriceMode: (mode: 'market' | 'lowestNM') => void
   toggleHiddenGroup: (group: string) => void
   editPurchase: (id: string, updates: Partial<Purchase>) => void
