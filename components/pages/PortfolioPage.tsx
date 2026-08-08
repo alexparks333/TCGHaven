@@ -648,6 +648,11 @@ export default function PortfolioPage() {
                         {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
                       </span>
                     )}
+                    {card.nexus && (
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        Nexus
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-slate-500">{card.set} {card.isFoil && '✨'}</div>
                 </div>

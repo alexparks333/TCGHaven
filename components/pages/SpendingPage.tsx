@@ -5,7 +5,7 @@ import { Plus, Trash2, Pencil, Check, X, ShoppingBag, History } from 'lucide-rea
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, localDateString } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import {
@@ -28,7 +28,7 @@ function genId() {
 }
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+  return localDateString()
 }
 
 // Build a lookup map for quick product access

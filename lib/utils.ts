@@ -17,8 +17,24 @@ export function formatPercent(value: number): string {
   return `${sign}${value.toFixed(2)}%`
 }
 
+// Returns today (or any Date) as a LOCAL-calendar "YYYY-MM-DD" string. Never use
+// `new Date().toISOString().slice(0, 10)` for this — that reads the UTC day, which is a
+// different calendar date than "today" for anyone not in UTC once the UTC day has rolled
+// over but the local one hasn't (e.g. evenings in US timezones show tomorrow's date).
+export function localDateString(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  // Bare "YYYY-MM-DD" strings (what purchaseDate always is) get parsed by `new Date(iso)` as
+  // UTC midnight per spec — formatting that back in a local timezone west of UTC then displays
+  // the PREVIOUS day. Build the Date from local y/m/d parts instead so the displayed date always
+  // matches what was actually picked, regardless of the viewer's timezone.
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 // Riftbound's catalog `number` field is always the bare digit ("92") — any alt-art letter

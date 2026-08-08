@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { formatCurrency, formatPercent, formatDate } from '@/lib/utils'
+import { formatCurrency, formatPercent, formatDate, localDateString } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 
@@ -34,7 +34,7 @@ export default function CardDetailPage() {
     if (points.length === 0) {
       return [
         { date: card.purchaseDate, price: card.purchasePrice },
-        { date: new Date().toISOString().slice(0, 10), price: card.currentPrice ?? card.purchasePrice },
+        { date: localDateString(), price: card.currentPrice ?? card.purchasePrice },
       ]
     }
     return points
@@ -77,6 +77,11 @@ export default function CardDetailPage() {
                 {GAME_LABELS[card.game]}
               </span>
               <h1 className="text-xl font-bold text-white">{card.name}</h1>
+              {card.nexus && (
+                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 w-fit">
+                  Nexus
+                </span>
+              )}
               <div className="text-sm text-slate-400">{card.set}</div>
               <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
               <div className="text-xs text-slate-500">{CONDITION_LABELS[card.condition]}</div>

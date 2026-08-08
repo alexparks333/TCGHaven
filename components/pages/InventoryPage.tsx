@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw, Filter } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { formatCurrency, openEbaySearch } from '@/lib/utils'
+import { formatCurrency, openEbaySearch, localDateString } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
@@ -16,17 +16,27 @@ import { cn } from '@/lib/utils'
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10)
+  return localDateString()
 }
 
 function cardDate(card: Card): string {
-  return (card.createdAt ?? card.purchaseDate ?? '').slice(0, 10)
+  const raw = card.createdAt ?? card.purchaseDate ?? ''
+  if (!raw) return ''
+  // createdAt is a full UTC timestamp (new Date().toISOString()) — must convert to the local
+  // calendar day, not slice the UTC date, or "date added" is off by one near the UTC day
+  // boundary. purchaseDate is already a bare local YYYY-MM-DD from the date picker, so it's
+  // safe to slice as-is.
+  return raw.length > 10 ? localDateString(new Date(raw)) : raw.slice(0, 10)
 }
 
-// Unique identity key — same card from different purchase sessions shares this key
+// Unique identity key — same card from different purchase sessions shares this key.
+// A Nexus-flagged card shares its name/number/apiId with the regular printing it's a promo
+// variant of, so it gets its own key segment here — otherwise it'd silently merge into the
+// same group/row as your regular copies instead of standing as its own entry.
 function cardIdentityKey(card: Card): string {
-  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}`
-  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}`
+  const nexusPart = card.nexus ? '::nexus' : ''
+  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
+  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
 }
 
 interface CardGroup {
@@ -566,9 +576,14 @@ export default function InventoryPage() {
                         <div className="w-10 h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                       )}
                       <div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-white text-sm">{rep.name}</span>
                           {rep.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
+                          {rep.nexus && (
+                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                              Nexus
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}</div>
                         {rep.group && <div className="text-[10px] text-violet-400/70 mt-0.5">{rep.group}</div>}
@@ -732,6 +747,11 @@ export default function InventoryPage() {
                         {card.gradingCompany && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
                             {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
+                          </span>
+                        )}
+                        {card.nexus && (
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                            Nexus
                           </span>
                         )}
                       </div>

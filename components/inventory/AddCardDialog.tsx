@@ -7,7 +7,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore, addPricePoint } from '@/lib/firebase/db'
 import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } from '@/lib/types'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
-import { cn } from '@/lib/utils'
+import { cn, localDateString } from '@/lib/utils'
 
 type MarketSource = 'catalog' | 'ebay' | 'manual'
 
@@ -33,13 +33,14 @@ function emptyForm(game: Game): CardForm {
     condition: 'near_mint',
     quantity: 1,
     purchasePrice: 0,
-    purchaseDate: new Date().toISOString().slice(0, 10),
+    purchaseDate: localDateString(),
     isFoil: false,
     imageUrl: '',
     apiId: '',
     gradingCompany: '',
     grade: '',
     group: '',
+    nexus: false,
   }
 }
 
@@ -249,6 +250,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
       ...(form.grade && { grade: form.grade }),
       ...(form.group && { group: form.group }),
       ...(form.rarity && { rarity: form.rarity }),
+      ...(form.game === 'riftbound' && { nexus: !!form.nexus }),
       priceLocked: marketSource === 'manual' && resolvedMarketPrice > 0,
       ...(resolvedMarketPrice > 0 && {
         currentPrice: resolvedMarketPrice,
@@ -651,6 +653,19 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
             </span>
           </label>
 
+          {/* Nexus Night promo variant (Riftbound only) */}
+          {form.game === 'riftbound' && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={!!form.nexus}
+                onChange={(e) => setField('nexus', e.target.checked)}
+                className="w-4 h-4 rounded accent-blue-500"
+              />
+              <span className="text-sm text-slate-300">Nexus Night promo variant</span>
+            </label>
+          )}
+
           {/* Group */}
           <div>
             <label className="field-label">
@@ -740,6 +755,9 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
               <div>
                 <div className="text-sm font-medium text-white">{form.name}</div>
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>
+                {form.game === 'riftbound' && form.nexus && (
+                  <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-400 border border-blue-800 rounded px-1 py-0.5">Nexus</span>
+                )}
               </div>
             </div>
           )}

@@ -25,6 +25,7 @@ export interface Card {
   group?: string          // user-defined group label, e.g. "Alex & Brother's Cards"
   priceLocked?: boolean   // when true, Refresh Prices never overwrites currentPrice
   rarity?: string         // from the catalog at add time; Pokemon catalog cards don't carry one
+  nexus?: boolean         // Riftbound only — user-flagged Nexus Night promo-foil variant
 }
 
 export interface SoldCard extends Card {
