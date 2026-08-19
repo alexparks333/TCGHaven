@@ -1,4 +1,5 @@
 import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { getPokemonRegistrySets } from './registry'
 
 const BASE_URL = 'https://api.pokemontcg.io/v2'
 
@@ -29,6 +30,7 @@ export interface PokemonSet {
   releaseDate: string
   total: number
   images: { symbol: string; logo: string }
+  source?: string
 }
 
 // ── Static catalog search (built by npm run download-cards) ──────────────────
@@ -91,18 +93,44 @@ let _setsCache: PokemonSet[] | null = null
 
 export async function getPokemonSets(): Promise<PokemonSet[]> {
   if (_setsCache) return _setsCache
+  let sets: PokemonSet[] = []
   try {
     const res = await fetch(`${BASE_URL}/sets?orderBy=releaseDate&pageSize=250`, { headers: HEADERS })
-    if (!res.ok) return []
-    const data = await res.json()
-    const sets: PokemonSet[] = data.data ?? []
-    // Only cache a non-empty result — a transient API failure shouldn't
-    // pin an empty set list in memory for the life of the process
-    if (sets.length > 0) _setsCache = sets
-    return sets
+    if (res.ok) {
+      const data = await res.json()
+      sets = data.data ?? []
+    }
   } catch {
-    return []
+    // fall through — manual sets below still get returned even if the live API is unreachable
   }
+  // Sets created via the Admin Catalog "New Set" form ("source": "manual" in
+  // the registry) don't exist on api.pokemontcg.io at all, so the live fetch above will
+  // never include them — merge them in regardless of whether that fetch succeeded, same as
+  // getLorcanaSets() already does for Lorcana's manual sets.
+  const manualOnly = (await getPokemonRegistrySets()).filter(
+    (s) => s.source === 'manual' && !sets.some((x) => x.name === s.setName),
+  )
+  if (manualOnly.length > 0) {
+    sets = [...sets, ...manualOnly.map((s) => ({
+      id: s.code || s.setName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, ''),
+      name: s.setName,
+      series: 'Custom',
+      releaseDate: s.releaseDate ?? '',
+      total: 0,
+      images: { symbol: '', logo: '' },
+      source: 'manual',
+    }))]
+  }
+  // Only cache a non-empty result — a transient API failure shouldn't
+  // pin an empty set list in memory for the life of the process
+  if (sets.length > 0) _setsCache = sets
+  return sets
+}
+
+/** Drops the cached Pokemon set list — called after registering a new custom set so it shows
+ * up without waiting for server restart (this cache never expires on its own otherwise). */
+export function invalidatePokemonSetsCache() {
+  _setsCache = null
 }
 
 export async function getPokemonCardPrice(apiId: string, isFoil: boolean): Promise<number | null> {

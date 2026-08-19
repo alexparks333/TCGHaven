@@ -1,37 +1,32 @@
 import { NextResponse } from 'next/server'
-import { readFileSync, writeFileSync, renameSync } from 'fs'
-import { join } from 'path'
-import { loadSetRegistry, type SetRegistry } from '@/lib/api/registry'
+import { loadSetRegistry, saveSetRegistry } from '@/lib/api/registry'
+import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { invalidateSetsCache } from '@/lib/api/search'
+import { invalidatePokemonSetsCache } from '@/lib/api/pokemon'
+import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const REGISTRY_PATH = join(process.cwd(), 'data', 'set-registry.json')
-
 export async function GET() {
-  return NextResponse.json(loadSetRegistry())
+  return NextResponse.json(await loadSetRegistry())
 }
 
 // Structured patch of a single set entry — used by the Settings "Needs Review" editor.
-// Never touches TypeScript source; only ever reads/writes this one JSON file.
+// Only ever reads/writes the registry/main Firestore doc, never TypeScript source.
+const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+
 export async function PUT(request: Request) {
   const body = await request.json().catch(() => null)
   const gameRaw = body?.game
   const setName = body?.setName
   const patch = body?.patch
 
-  if ((gameRaw !== 'lorcana' && gameRaw !== 'riftbound') || typeof setName !== 'string' || typeof patch !== 'object' || patch === null) {
-    return NextResponse.json({ error: 'Expected { game: "lorcana"|"riftbound", setName: string, patch: object }' }, { status: 400 })
+  if (!REGISTRY_GAMES.includes(gameRaw) || typeof setName !== 'string' || typeof patch !== 'object' || patch === null) {
+    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound", setName: string, patch: object }' }, { status: 400 })
   }
-  const game: 'lorcana' | 'riftbound' = gameRaw
+  const game: Game = gameRaw
 
-  let registry: SetRegistry
-  try {
-    registry = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8'))
-  } catch {
-    return NextResponse.json({ error: 'set-registry.json does not exist yet' }, { status: 404 })
-  }
-
+  const registry = await loadSetRegistry()
   const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
   const idx = sets.findIndex((s) => s.setName === setName)
   if (idx === -1) {
@@ -40,9 +35,8 @@ export async function PUT(request: Request) {
 
   sets[idx] = { ...sets[idx], ...patch }
 
-  const tmpPath = REGISTRY_PATH + '.tmp'
-  writeFileSync(tmpPath, JSON.stringify(registry, null, 2))
-  renameSync(tmpPath, REGISTRY_PATH)
+  await ensureAdminAuth()
+  await saveSetRegistry(registry)
 
   return NextResponse.json({ ok: true, set: sets[idx] })
 }
@@ -58,22 +52,27 @@ export async function POST(request: Request) {
   const gameRaw = body?.game
   const setName = typeof body?.setName === 'string' ? body.setName.trim() : ''
   const code = typeof body?.code === 'string' ? body.code.trim() : ''
+  const releaseDate = typeof body?.releaseDate === 'string' && body.releaseDate.trim() ? body.releaseDate.trim() : null
+  // Pokemon has no Cardex/Pack Analysis integration at all (too many cards/sets for a
+  // Pokedex-style grid — see CLAUDE.md quirk #9), so a custom Pokemon set has nowhere to plug
+  // into a cardexGroup; it only needs to become addable/searchable in the catalog.
   const cardexGroup = typeof body?.cardexGroup === 'string' ? body.cardexGroup : null
 
-  if ((gameRaw !== 'lorcana' && gameRaw !== 'riftbound') || !setName || !cardexGroup) {
-    return NextResponse.json({ error: 'Expected { game: "lorcana"|"riftbound", setName: string, code?: string, cardexGroup: string }' }, { status: 400 })
+  if (!REGISTRY_GAMES.includes(gameRaw) || !setName) {
+    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound", setName: string, code?: string, releaseDate?: string, cardexGroup?: string }' }, { status: 400 })
   }
-  const game: 'lorcana' | 'riftbound' = gameRaw
-
-  let registry: SetRegistry
-  try {
-    registry = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8'))
-  } catch {
-    return NextResponse.json({ error: 'set-registry.json does not exist yet' }, { status: 404 })
+  const game: Game = gameRaw
+  if (game !== 'pokemon' && !cardexGroup) {
+    return NextResponse.json({ error: 'cardexGroup is required for lorcana/riftbound sets' }, { status: 400 })
   }
 
-  if (!registry[game].groupOrder.includes(cardexGroup)) {
-    return NextResponse.json({ error: `"${cardexGroup}" isn't a known Cardex group for ${game} (expected one of: ${registry[game].groupOrder.join(', ')})` }, { status: 400 })
+  const registry = await loadSetRegistry()
+
+  if (game !== 'pokemon' && cardexGroup) {
+    const groupOrder = registry[game].groupOrder
+    if (!groupOrder.includes(cardexGroup)) {
+      return NextResponse.json({ error: `"${cardexGroup}" isn't a known Cardex group for ${game} (expected one of: ${groupOrder.join(', ')})` }, { status: 400 })
+    }
   }
 
   const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
@@ -85,7 +84,7 @@ export async function POST(request: Request) {
     ? {
         setName,
         setCode: code || setName.slice(0, 3).toUpperCase(),
-        releaseDate: null,
+        releaseDate,
         cardCount: 0,
         cardexGroup,
         tcgcsvGroupId: null,
@@ -93,27 +92,35 @@ export async function POST(request: Request) {
         needsReview: false,
         source: 'manual',
       }
-    : {
+    : game === 'lorcana'
+    ? {
         setName,
         code: code || null,
         lorcastId: null,
-        releaseDate: null,
+        releaseDate,
         cardexGroup,
         packAnalysis: { included: false },
         needsReview: false,
         source: 'manual',
       }
+    : {
+        setName,
+        code: code || null,
+        releaseDate,
+        source: 'manual',
+      }
 
   sets.push(newSet)
 
-  const tmpPath = REGISTRY_PATH + '.tmp'
-  writeFileSync(tmpPath, JSON.stringify(registry, null, 2))
-  renameSync(tmpPath, REGISTRY_PATH)
+  await ensureAdminAuth()
+  await saveSetRegistry(registry)
 
   // getSetsForGame() caches its result in-process indefinitely (see lib/api/search.ts) — this
   // runs server-side in the same process as that cache, so a direct call is enough (no client
-  // round-trip needed, unlike the Admin Catalog card-hide cache fix).
+  // round-trip needed, unlike the Admin Catalog card-hide cache fix). Pokemon has its own
+  // separate cache one layer down (lib/api/pokemon.ts's getPokemonSets()) that also needs it.
   invalidateSetsCache(game)
+  if (game === 'pokemon') invalidatePokemonSetsCache()
 
   return NextResponse.json({ ok: true, set: newSet })
 }
@@ -122,25 +129,19 @@ export async function POST(request: Request) {
 // this same New Set form). Official/auto-detected sets are never deletable here: they'd just
 // reappear on the next sync anyway, and deleting one out from under real synced card data would
 // only orphan it. The caller (Admin Catalog's "Delete Set") is expected to have already deleted
-// every card doc for this set before calling this — this route only ever touches the registry
-// JSON file, never Firestore.
+// every card doc for this set before calling this — this route only ever touches the registry,
+// never the catalog itself.
 export async function DELETE(request: Request) {
   const body = await request.json().catch(() => null)
   const gameRaw = body?.game
   const setName = body?.setName
 
-  if ((gameRaw !== 'lorcana' && gameRaw !== 'riftbound') || typeof setName !== 'string' || !setName) {
-    return NextResponse.json({ error: 'Expected { game: "lorcana"|"riftbound", setName: string }' }, { status: 400 })
+  if (!REGISTRY_GAMES.includes(gameRaw) || typeof setName !== 'string' || !setName) {
+    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound", setName: string }' }, { status: 400 })
   }
-  const game: 'lorcana' | 'riftbound' = gameRaw
+  const game: Game = gameRaw
 
-  let registry: SetRegistry
-  try {
-    registry = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8'))
-  } catch {
-    return NextResponse.json({ error: 'set-registry.json does not exist yet' }, { status: 404 })
-  }
-
+  const registry = await loadSetRegistry()
   const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
   const idx = sets.findIndex((s) => s.setName === setName)
   if (idx === -1) {
@@ -152,11 +153,11 @@ export async function DELETE(request: Request) {
 
   sets.splice(idx, 1)
 
-  const tmpPath = REGISTRY_PATH + '.tmp'
-  writeFileSync(tmpPath, JSON.stringify(registry, null, 2))
-  renameSync(tmpPath, REGISTRY_PATH)
+  await ensureAdminAuth()
+  await saveSetRegistry(registry)
 
   invalidateSetsCache(game)
+  if (game === 'pokemon') invalidatePokemonSetsCache()
 
   return NextResponse.json({ ok: true })
 }

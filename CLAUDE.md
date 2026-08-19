@@ -20,7 +20,7 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 11. [Price Data](#price-data)
 12. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
 13. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
-14. [Automated Sync — Settings Page](#automated-sync--settings-page)
+14. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
 15. [Firestore / User Data](#firestore--user-data)
 16. [Zustand Store](#zustand-store)
 17. [Full File Map](#full-file-map)
@@ -77,11 +77,12 @@ build. `npm run build && npm run start` is still required for actual **code** ch
 `.tsx`/`.ts` files), just not for `npm run download-cards` or any edit made from the Admin
 Catalog page.
 
-All of the above download+registry-sync workflow is also available as one click: Settings →
-"Sync Card Data" (see [§14](#automated-sync--settings-page)) — it still runs a full rebuild+restart
-today (it predates the Firestore migration picking up data live), so it remains the right tool
-for actually deploying registry/code changes together, even though a bare `npm run
-download-cards` alone is now enough just to refresh catalog data.
+All of the above download+registry-sync workflow is also available as one click: Admin Catalog →
+"Sync Card Data" (see [§14](#automated-sync--admin-catalog)) — a plain per-game API request with
+no build/restart step, so it works identically against `npm run dev`, `npm run start`, and the
+deployed Vercel app. Pokémon's sync can take several minutes (170+ sets, 20k+ cards) and may time
+out on a shorter Vercel function limit — `npm run download-cards` locally has no such limit and
+is the reliable fallback for Pokémon specifically.
 
 ---
 
@@ -223,7 +224,7 @@ anyone can browse the table read-only; only the admin sees the write controls.
   all?"). Accepts an optional `prefill` prop so other tools (Raw Source Check) can hand it a
   ready-made candidate.
 - **New Set** (`NewSetForm`, `POST /api/set-registry`) — registers a brand new set in
-  `data/set-registry.json`, Lorcana or Riftbound only (Pokémon's set list comes live from
+  the registry (Firestore `registry/main`), Lorcana or Riftbound only (Pokémon's set list comes live from
   `api.pokemontcg.io`, a different mechanism entirely — see [§7](#pokemon--data-source-schema-add-a-set-guide)).
   Two real use cases: (a) a real upstream set the sync hasn't auto-detected/matched yet, or (b)
   a fully custom/curated set that will never come from any scraper. Either way it's created with
@@ -273,8 +274,8 @@ anyone can browse the table read-only; only the admin sees the write controls.
 
 ### Key files
 
-- `components/pages/AdminCatalogPage.tsx` — the whole page: `CatalogBrowser`, `CardTable`,
-  `AddCardForm`, `EditCardForm`, `NewSetForm`, `RawSourceCheckPanel`, `ImageUploadField`.
+- `components/pages/AdminCatalogPage.tsx` — the whole page: `SyncPanel` (§14), `CatalogBrowser`,
+  `CardTable`, `AddCardForm`, `EditCardForm`, `NewSetForm`, `RawSourceCheckPanel`, `ImageUploadField`.
 - `app/api/admin/catalog/route.ts` — `GET`, read-only listing (includes hidden cards, unlike
   every other catalog consumer — the admin table needs to show and un-hide them).
 - `app/api/admin/catalog/lookup/route.ts` — exact-match external price/image lookup, used by
@@ -284,7 +285,7 @@ anyone can browse the table read-only; only the admin sees the write controls.
 - `app/api/admin/catalog/raw-source/route.ts` — the Raw Source Check diff, Riftbound-only today.
 - `app/api/set-registry/route.ts` — `GET` full registry; `PUT` a structured patch to one existing
   set entry (Settings "Needs Review" editor); `POST` registers a brand new set entry (New Set
-  form). All three only ever touch `data/set-registry.json`, never TypeScript source.
+  form). All three only ever touch the registry (Firestore `registry/main`), never TypeScript source.
 - `lib/api/catalog.ts` — `loadCatalog`/`loadVisibleCatalog`/`regenerateSnapshot`/
   `invalidateCatalogCache`, plus `sortCatalogCards`/`scoreMatch`/`parseSearchQuery` shared by all
   three games' search.
@@ -359,7 +360,7 @@ That's it — no `npm run build`/restart needed (see [§4](#card-catalog-system-
 no code changes required. The download script fetches the full GitHub file listing
 dynamically — it does not have a hardcoded set list. There's no Admin Catalog "New Set"
 equivalent for Pokémon (its set list comes live from `api.pokemontcg.io`, not
-`data/set-registry.json`) — for Pokémon, individual missing cards can still be added via
+the registry) — for Pokémon, individual missing cards can still be added via
 "Add Missing Card" once the set itself exists in that live list.
 
 ### AddCardDialog behavior for Pokémon
@@ -460,8 +461,8 @@ The `setName` string is the canonical match key used everywhere in this app.
 
 1. **Admin Catalog → "New Set"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics)) —
    fastest for a set that isn't fully synced yet or a curated/custom one. Registers the set in
-   `data/set-registry.json` directly from the UI with no group-metadata guessing.
-2. **Settings → "Sync Card Data"** (see [§14](#automated-sync--settings-page)) — the steps below
+   the registry (Firestore `registry/main`) directly from the UI with no group-metadata guessing.
+2. **Admin Catalog → "Sync Card Data"** (see [§14](#automated-sync--admin-catalog)) — the steps below
    run automatically for real, newly-detected upstream sets, with conservative review-required
    defaults.
 3. **Manual**, described below — what both of the above actually do under the hood, and the
@@ -475,10 +476,10 @@ npm run download-cards   # lorcast API returns all sets automatically, syncs int
 
 No `npm run build`/restart needed for the card data itself (see
 [§4](#card-catalog-system--deep-dive-firestore-backed)) — only the registry entry below is what
-makes a set show up in the Cardex/Pack Analysis, and that's a plain JSON write too.
+makes a set show up in the Cardex/Pack Analysis, and that's a plain Firestore write too.
 
-Then register the set in **`data/set-registry.json`** (this one file replaced the three
-hardcoded arrays that used to need separate edits — see [§14](#automated-sync--settings-page)):
+Then register the set in **the registry** (Firestore `registry/main` — this one doc replaced the
+three hardcoded arrays that used to need separate edits — see [§14](#automated-sync--admin-catalog)):
 
 ```json
 { "setName": "New Set Name", "code": "XYZ", "lorcastId": "14", "releaseDate": "2026-08-01",
@@ -608,7 +609,7 @@ price for these variants.
 2. **Admin Catalog → "Check Raw Source"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics))
    — once a set exists (via either path here), use this to catch individual cards the scrape
    silently skipped, independent of whether the set-level sync worked.
-3. **Settings → "Sync Card Data"** (see [§14](#automated-sync--settings-page)) — this whole flow,
+3. **Admin Catalog → "Sync Card Data"** (see [§14](#automated-sync--admin-catalog)) — this whole flow,
    including the group-ID lookup, runs automatically for real newly-detected sets.
 4. **Manual**, described below — what the automated paths actually do under the hood, and the
    fallback if you'd rather not use either UI. Card data (names, images, sets) is already fully
@@ -629,7 +630,7 @@ Look for the new group in the listing. The group ID is a number like `24344`.
 `matchSetName()` — only accepting confident matches; anything uncertain is left for the
 Settings page's "Needs Review" list instead of guessing.)
 
-**Step 2 — Register the set in `data/set-registry.json`**
+**Step 2 — Register the set in the registry (Firestore `registry/main`)**
 
 This one file replaced the old `TCGCSV_GROUPS`/`RIFTBOUND_SETS`/`RIFTBOUND_GROUPS`/`RIFTBOUND_KNOWN`
 edits that used to be needed across three separate files:
@@ -764,7 +765,7 @@ select cards from the dropdown so `apiId` is set.
 ### Set Registration
 
 To appear in the Cardex set picker, a set must have a `cardexGroup` value in its
-**`data/set-registry.json`** entry (see [§14](#automated-sync--settings-page)) matching one of
+**registry** entry (Firestore `registry/main`, see [§14](#automated-sync--admin-catalog)) matching one of
 that game's `groupOrder` labels. `CardexPage.tsx` fetches `GET /api/set-registry` once on mount
 and derives the equivalent of the old hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS` client-side
 via `buildGroupsByGame()`. The `setName` field must exactly match the `setName` field on the
@@ -803,9 +804,9 @@ Lorcana set based on current market prices.
    - Additionally does its own **live** lorcast fetch for current prices on top of the catalog's
      cached prices (`fetchLivePrices()` in that route) — any card lorcast doesn't return for
      falls back to its catalog price
-   - Calls `getLorcanaBoosterSets()` (`lib/api/registry.ts`), which reads `data/set-registry.json`
-     and returns every set with `packAnalysis.included: true` — this replaced the old hardcoded
-     `BOOSTER_SETS` array (see [§14](#automated-sync--settings-page))
+   - Calls `getLorcanaBoosterSets()` (`lib/api/registry.ts`), which reads the registry (Firestore
+     `registry/main`) and returns every set with `packAnalysis.included: true` — this replaced the old hardcoded
+     `BOOSTER_SETS` array (see [§14](#automated-sync--admin-catalog))
    - Groups by rarity, computes average prices, applies pull rates, returns EV breakdown
 
 ### Pull Rates Used
@@ -827,7 +828,7 @@ Sets 1–8 (The First Chapter through Reign of Jafar): `hasEpic: false`
 ### Adding a New Lorcana Booster Set to Pack Analysis
 
 Set `packAnalysis.included: true` (with `id`, `released`, `packPrice`, `hasEpic`) on the set's
-entry in `data/set-registry.json` — see the [Lorcana add-a-set guide](#lorcana--data-source-schema-add-a-set-guide)
+entry in the registry (Firestore `registry/main`) — see the [Lorcana add-a-set guide](#lorcana--data-source-schema-add-a-set-guide)
 above for the exact shape. No route code changes needed; it reads the registry fresh every
 request, same as it always re-read the catalog fresh (`force-dynamic`).
 
@@ -837,67 +838,86 @@ booster sets.
 
 ---
 
-## Automated Sync — Settings Page
+## Automated Sync — Admin Catalog
 
-The Settings page (`/settings`) has a **"Sync Card Data"** button that automates the manual
-workflows described in the sections above. It's the recommended way to pick up new sets;
-the manual per-game instructions elsewhere in this doc remain accurate as a fallback and as an
-explanation of what the sync does under the hood.
+`/admin` has a **"Sync Card Data"** panel (admin-gated, same as the rest of the page) with one
+button per game — Pokémon, Lorcana, Riftbound. Each is a plain, synchronous `POST` to its own API
+route that runs the download/diff/registry-update logic directly against Firestore and returns a
+JSON result when done; there's no build, no server restart, and no local file writes, so this
+works identically whether you're on `npm run dev`, `npm run start`, or the deployed Vercel app.
+This used to live on the Settings page as a single button that also ran `next build` and
+kill-and-restarted whatever was on port 3000 — that model predated the Firestore migration (it
+was a leftover from when the catalog was baked into the build) and couldn't work at all once
+Vercel hosting was added: a Vercel function has a read-only filesystem and no persistent process
+to restart, so the old `/api/sync` route just threw on every call once the site was hosted there.
+The manual per-game instructions elsewhere in this doc remain accurate as a fallback and as an
+explanation of what each sync does under the hood.
 
-### What it does
+### What it does, per game
 
-1. **Download** — re-runs `scripts/download-card-catalog.mjs` (same as `npm run download-cards`)
-   to refresh all three catalogs.
-2. **Diff** — compares the fresh catalogs' distinct `setName` values against
-   `data/set-registry.json` to find genuinely new sets.
+1. **Download** — calls the matching function in `scripts/lib/catalog-sync.mjs` (the same module
+   `npm run download-cards` uses) to re-scrape that one game's catalog and sync it into Firestore.
+2. **Diff** (Lorcana/Riftbound only) — compares the fresh catalog's distinct `setName` values
+   against the registry (`registry/main` in Firestore) to find genuinely new sets.
 3. **Riftbound group matching** — for any new (or previously unmatched) Riftbound set, fetches
    `https://tcgcsv.com/tcgplayer/89/groups` and fuzzy-matches the set name against it using
    `scripts/lib/text-norm.mjs`'s `matchSetName()` (exact match, or prefix-stripped/substring
    match, or a high-confidence Levenshtein fallback). Only confident matches are accepted —
-   anything uncertain is left unmatched and surfaced in the "Needs Review" list instead of guessing.
-4. **Registry update** — appends new sets to `data/set-registry.json` with conservative defaults
-   (`needsReview: true`, Lorcana `packAnalysis.included: false`, Riftbound `cardexGroup: "Main Sets"`).
-   If a new Riftbound TCGPlayer group was matched, re-runs the download once more so that set's
-   prices get merged in.
-5. **Build** — runs `next build`. **If this fails, the currently running server is left
-   completely untouched** — nothing is restarted, and the failure (with an error tail) is
-   surfaced in the Settings UI.
-6. **Restart** — only reached if the build succeeded: kills whatever is listening on port 3000
-   and starts a fresh `next start -p 3000`.
+   anything uncertain is left unmatched for manual review instead of guessing. If a match is
+   found, the game re-downloads once more so that set's prices get merged in.
+4. **Registry update** — appends new sets with conservative defaults (`needsReview: true`,
+   Lorcana `packAnalysis.included: false`, Riftbound `cardexGroup: "Main Sets"`) and saves the
+   updated registry back to Firestore.
+
+Pokémon has no registry involvement at all (steps 2–4 don't apply) — its set list comes live from
+`api.pokemontcg.io`, so syncing it is just the download/Firestore-sync step. It's also by far the
+slowest of the three (170+ sets, 20k+ cards, a full existing-catalog read to diff against) — it
+can take several minutes and may exceed a Vercel function's time limit depending on your plan;
+`npm run download-cards` locally has no such limit and remains the reliable way to sync Pokémon.
 
 ### Key files
 
-- `data/set-registry.json` — the single source of truth this whole feature reads/writes. Replaced
-  the hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS`/`LORCANA_KNOWN`/`RIFTBOUND_KNOWN`
-  (`CardexPage.tsx`), `BOOSTER_SETS` (pack-analysis route), `RIFTBOUND_SETS` (`lib/api/riftbound.ts`),
-  and `LORCANA_SETS_FALLBACK` (`lib/api/lorcana.ts`).
-- `lib/api/registry.ts` — shared, uncached reader (`loadSetRegistry`, `getLorcanaRegistrySets`,
-  `getRiftboundRegistrySets`, `getLorcanaBoosterSets`) used by all the consumers above.
-- `scripts/sync-runner.mjs` — the actual orchestrator. Spawned **detached and unref'd** by
-  `app/api/sync/route.ts` so it survives the Next.js server process it may go on to kill and
-  restart in its final phase. Writes progress to `data/sync-status.json` (atomic write-then-rename)
-  after every phase; `GET /api/sync/status` just reads and returns that file, which is how the
-  Settings page keeps showing progress across the brief window where the server is down mid-restart
-  (the client tolerates a run of failed polls there rather than treating it as an error).
-- `app/api/set-registry/route.ts` — `GET` returns the full registry (used by `CardexPage.tsx` and
-  the Settings page); `PUT` does a structured JSON patch of one set entry (used by the "Needs
-  Review" editor) — it only ever touches this one JSON file, never TypeScript source.
-- `data/backups/<runId>/` — a copy of the catalogs + registry taken before every sync run, in case
-  a bad upstream response ever needs to be rolled back by hand. Nothing is ever deleted automatically.
+- **Firestore `registry/main`** — the single source of truth this whole feature reads/writes
+  (formerly `data/set-registry.json`, migrated because a Vercel serverless function can't durably
+  write to a git-tracked file). Replaced the hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS`/
+  `LORCANA_KNOWN`/`RIFTBOUND_KNOWN` (`CardexPage.tsx`), `BOOSTER_SETS` (pack-analysis route),
+  `RIFTBOUND_SETS` (`lib/api/riftbound.ts`), and `LORCANA_SETS_FALLBACK` (`lib/api/lorcana.ts`).
+- `lib/api/registry.ts` — `loadSetRegistry`/`saveSetRegistry`/`invalidateRegistryCache` plus the
+  per-game `getXRegistrySets`/`getLorcanaBoosterSets` readers, all async now (a Firestore read
+  isn't free the way a local fs read was) with a short in-process staleness cache, mirroring
+  `lib/api/catalog.ts`'s shape just without the chunked-snapshot machinery (this doc is tiny).
+- `scripts/lib/catalog-sync.mjs` — the actual per-game scraping + Firestore-sync logic
+  (`downloadPokemon`/`downloadLorcana`/`downloadRiftbound`/`syncToFirestore`/`ensureSignedIn`),
+  shared verbatim by `scripts/download-card-catalog.mjs` (the CLI entry point) and
+  `app/api/sync/{pokemon,lorcana,riftbound}/route.ts`. Deliberately plain ESM, not TypeScript, so
+  a bare `node` process can still run it directly — it does its own Firebase init/sign-in rather
+  than importing `lib/firebase/config.ts` (same "duplicated on purpose across the runtime
+  boundary" reasoning as `app/api/admin/catalog/lookup/route.ts`'s CSV parser).
+- `lib/firebase/adminAuth.ts` — `ensureAdminAuth()`, a small helper the plain `set-registry`
+  route (writes that don't need the scraping module) signs in with before writing; the sync
+  routes instead call `catalog-sync.mjs`'s own `ensureSignedIn()`, which authenticates the same
+  underlying Firebase Auth singleton (both resolve to the same app instance within one process —
+  see that file's header comment) so either path leaves the process equally signed in.
+- `app/api/sync/{pokemon,lorcana,riftbound}/route.ts` — one route per game, `export const
+  maxDuration` set generously (see Vercel's function-timeout docs for what your plan allows).
+  Each returns `{ ok, setCount, newSets?, groupMatches? }` directly — no polling, no status file.
+- `app/api/set-registry/route.ts` — `GET` returns the full registry; `PUT` does a structured
+  patch of one set entry (used by the "Needs Review" editor, still on the Settings page); `POST`
+  registers a brand new set (Admin Catalog "New Set"). All three read/write the Firestore doc via
+  `lib/api/registry.ts`, never touch TypeScript source.
 
 ### Guardrails
 
-- `POST /api/sync` returns `400` unless `NODE_ENV === 'production'` — it can never fire against
-  `npm run dev`, since the restart phase kills whatever is on port 3000.
-- Only a successful `next build` triggers the kill-and-restart step; a failed build always leaves
-  the running app untouched.
 - The Riftbound group-matching threshold is deliberately conservative (≥90% similarity with a
   confidence margin over the next-best candidate) — an unmatched set is left for manual review
   rather than risking a silently-wrong price feed.
 - A confident name match that nonetheless yields zero priced cards after the repricing pass gets
   flagged `needsReview` anyway, as a second safety net against a coincidentally-plausible but wrong
   group ID.
-- A coarse 15-minute overall timeout keeps a hung run from permanently blocking future syncs.
+- `syncToFirestore()`'s existing admin-edit-wins-over-resync protection (see [§4](#card-catalog-system--deep-dive-firestore-backed))
+  is the only safety net now — there's no more pre-sync backup snapshot (`data/backups/<runId>/`
+  doesn't exist anymore; it only made sense next to a local-file registry and local catalog JSON,
+  both gone). Nothing is ever deleted by a sync, same as before, just no separate backup copy.
 
 ---
 
@@ -1008,29 +1028,24 @@ All three must succeed before `dataLoading` is set to false. If any fails,
 ```
 TCGHaven/
 ├── firestore.rules                ← Firestore security rules — public read/admin write on
-│                                     catalog/*, catalog_snapshot/*, catalog_meta/*; per-user
-│                                     read/write on users/{uid}/** (§5, §15)
+│                                     catalog/*, catalog_snapshot/*, catalog_meta/*, registry/*;
+│                                     per-user read/write on users/{uid}/** (§5, §14, §15)
 ├── storage.rules                  ← Firebase Storage rules — catalog image uploads (Admin
 │                                     Catalog's ImageUploadField)
-│
-├── data/
-│   ├── set-registry.json          ← Source of truth for Lorcana/Riftbound set metadata. In git.
-│   │                                 GET/PUT/POST via app/api/set-registry/route.ts (§5, §14)
-│   ├── sync-status.json           ← Live progress of the current/last sync run. Not in git.
-│   ├── sync-run.log               ← Combined stdout/stderr from sync subprocesses. Not in git.
-│   ├── last-download-summary.json ← Written by download-card-catalog.mjs for sync-runner.mjs. Not in git.
-│   └── backups/<runId>/           ← Pre-sync snapshots of the registry (+ Firestore export refs)
-│                                     taken before every sync run. Not in git.
+├── firebase.json, .firebaserc     ← Just enough config for `firebase deploy --only
+│                                     firestore:rules` (this app has no Firebase Hosting/Functions
+│                                     — those sections of firebase.json don't exist here)
 │
 ├── scripts/
-│   ├── download-card-catalog.mjs  ← Scrapes all 3 game sources and syncs into Firestore
-│   │                                 (catalog/{game}/cards + catalog_snapshot) — see §4. Writes
-│   │                                 no local card JSON anymore, only its own bookkeeping file.
-│   ├── sync-runner.mjs            ← Settings "Sync Card Data" orchestrator (§14), detached+unref'd
+│   ├── download-card-catalog.mjs  ← Thin CLI entry point (`npm run download-cards`) — calls
+│   │                                 scripts/lib/catalog-sync.mjs, no local file writes anymore.
 │   ├── gen-icons.mjs              ← Generates PWA icons at multiple sizes
 │   └── lib/
-│       ├── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set matching
-│       └── sync-status.mjs        ← writeStatus()/readStatus() — atomic data/sync-status.json I/O
+│       ├── catalog-sync.mjs       ← The actual per-game scraping + Firestore-sync logic
+│       │                             (downloadPokemon/downloadLorcana/downloadRiftbound/
+│       │                             syncToFirestore/ensureSignedIn), shared by both the CLI
+│       │                             script and app/api/sync/{game}/route.ts (§14)
+│       └── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set matching
 │
 ├── lib/
 │   ├── types.ts                   ← Card, Game, Condition, GAME_COLORS, etc.
@@ -1038,6 +1053,9 @@ TCGHaven/
 │   ├── utils.ts                   ← cn(), formatCurrency(), formatPercent()
 │   ├── firebase/
 │   │   ├── config.ts              ← Firebase app init, auth, db, storage instances, ADMIN_UID
+│   │   ├── adminAuth.ts           ← ensureAdminAuth() — signs the server-process auth instance
+│   │   │                             in as the ADMIN_EMAIL/PASSWORD sync account, once per
+│   │   │                             process, for server-side admin Firestore writes (§14)
 │   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, newCardRef
 │   │   ├── spending.ts            ← loadPurchases, savePurchase, removePurchase
 │   │   └── collections.ts         ← Personal Collections CRUD (§6) — users/{uid}/collections/*
@@ -1046,7 +1064,8 @@ TCGHaven/
 │   │   ├── catalog.ts             ← loadCatalog()/loadVisibleCatalog()/regenerateSnapshot()/
 │   │   │                             invalidateCatalogCache() + scoreMatch() — Firestore-backed
 │   │   │                             catalog read/write core shared by all 3 games (§4)
-│   │   ├── registry.ts            ← loadSetRegistry() etc. — reads data/set-registry.json (§14)
+│   │   ├── registry.ts            ← loadSetRegistry()/saveSetRegistry() etc. — Firestore
+│   │                             registry/main doc, short in-process staleness cache (§14)
 │   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
 │   │   │                             unified entry point (§5's New Set cache note)
 │   │   ├── pokemon.ts             ← searchPokemonCards(), getPokemonCardPrice()
@@ -1062,7 +1081,8 @@ TCGHaven/
 │   ├── inventory/page.tsx         ← Inventory page wrapper
 │   ├── cardex/page.tsx            ← Cardex page wrapper (includes Personal Collections tab, §6)
 │   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
-│   ├── settings/page.tsx          ← Settings page wrapper (§14)
+│   ├── settings/page.tsx          ← Settings page wrapper — Needs Review editor + inventory
+│   │                                 number repair; "Sync Card Data" moved to /admin, see §14
 │   ├── portfolio/
 │   │   └── [cardId]/page.tsx      ← Individual card detail page
 │   ├── spending/page.tsx          ← Pack spending tracker
@@ -1082,8 +1102,9 @@ TCGHaven/
 │       │   ├── invalidate/route.ts← POST — drops the server's catalog cache for a game (§4, §5)
 │       │   └── raw-source/route.ts← GET — Raw Source Check diff, Riftbound-only (§5)
 │       ├── sync/
-│       │   ├── route.ts           ← POST — spawns scripts/sync-runner.mjs detached (§14)
-│       │   └── status/route.ts    ← GET data/sync-status.json
+│       │   ├── pokemon/route.ts   ← POST — syncs Pokémon via scripts/lib/catalog-sync.mjs (§14)
+│       │   ├── lorcana/route.ts   ← POST — syncs Lorcana + registers any new sets (§14)
+│       │   └── riftbound/route.ts ← POST — syncs Riftbound + TCGPlayer group-matching (§14)
 │       ├── pack-analysis/
 │       │   └── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic)
 │       └── prices/
@@ -1107,11 +1128,11 @@ TCGHaven/
     │   │                             the Personal Collections tab, §6)
     │   ├── PersonalCollectionsView.tsx ← Per-user custom collections UI (§6) — rendered inside
     │   │                             CardexPage's "Personalized Collections" tab
-    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): CatalogBrowser, CardTable,
-    │   │                             AddCardForm, EditCardForm, NewSetForm, RawSourceCheckPanel
+    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§14), CatalogBrowser,
+    │   │                             CardTable, AddCardForm, EditCardForm, NewSetForm, RawSourceCheckPanel
     │   ├── SpendingPage.tsx        ← Pack purchase logging
     │   ├── PackAnalysisPage.tsx    ← Expected value analysis per set
-    │   └── SettingsPage.tsx        ← Sync Card Data button + Needs Review editor (§14)
+    │   └── SettingsPage.tsx        ← Needs Review editor + inventory number repair (§14)
     └── portfolio/
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
         └── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
@@ -1225,9 +1246,8 @@ caches each game's set list forever once populated ("only cache non-empty result
 transient API failure doesn't stick" means no TTL at all). Registering a new set via `POST
 /api/set-registry` calls `invalidateSetsCache(game)` directly — that route already runs
 server-side, so (unlike quirk #14) no client-fetch round-trip is needed; the direct call already
-executes in the same process as the cache. If you add another way to write
-`data/set-registry.json`, remember to invalidate this cache too, or new sets won't appear in
-`/api/sets` until server restart.
+executes in the same process as the cache. If you add another way to write the registry, remember
+to invalidate this cache too, or new sets won't appear in `/api/sets` until server restart.
 
 ### 16. Riftbound raw-source/TCGCSV number matching must check `publicCode`, not just `number`
 Showcase/Overnumber/Signature variants share their base card's bare `number` field — the `a`/`*`

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, Upload, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, ScanSearch, Trash2, X } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, Upload, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw } from 'lucide-react'
 import {
   doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs,
 } from 'firebase/firestore'
@@ -11,7 +12,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { db, storage, ADMIN_UID } from '@/lib/firebase/config'
-import { regenerateSnapshot } from '@/lib/api/catalog'
+import { regenerateSnapshot, normNum } from '@/lib/api/catalog'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game, type CatalogSyncNotice } from '@/lib/types'
 
@@ -37,6 +38,21 @@ interface CatalogCard {
   marketPriceFoil?: number
   isCustom?: boolean
   isHidden?: boolean
+  // Set-level fact, not stored per card — populated client-side from the active set (browse
+  // mode) or passed through by the whole-catalog search route (search mode, where rows span
+  // multiple sets so it can't just be read off one shared "active set").
+  releaseDate?: string
+  // Present at runtime on the underlying Firestore doc (spread straight through by the admin
+  // catalog routes) but not previously typed on the frontend — surfaced in the per-card expand
+  // panel below. lowPriceNM/lowPriceNMFoil: Pokemon/Riftbound only. cardType/tags: Riftbound only.
+  lowPriceNM?: number
+  lowPriceNMFoil?: number
+  cardType?: string
+  tags?: string[]
+  // Free-text field an admin can attach to any card — never sourced from a scraper, purely a
+  // curation aid (e.g. "error card", "reprint of X", "watch for reprint"). Persists on the
+  // Firestore doc like any other field.
+  notes?: string
 }
 
 interface LookupCandidate {
@@ -62,9 +78,123 @@ export default function AdminCatalogPage() {
             copy of the app reads from — edits here apply immediately for everyone.
           </p>
         </div>
+        <SyncPanel />
         <CatalogBrowser />
       </div>
     </AuthGuard>
+  )
+}
+
+// ── Sync Card Data ──────────────────────────────────────────────────────────
+// Runs directly against Firestore via app/api/sync/{game}/route.ts — one plain, synchronous
+// request per game, no build/restart step (see CLAUDE.md §14). Works identically against
+// localhost and the deployed Vercel app, since neither writes to the local filesystem anymore.
+
+interface GameSyncResult {
+  setCount: number
+  newSets?: string[]
+  groupMatches?: Array<{ setName: string; matched: boolean; confidence: number | null }>
+}
+
+interface GameSyncState {
+  status: 'idle' | 'running' | 'done' | 'error'
+  error?: string
+  result?: GameSyncResult
+}
+
+const SYNC_GAMES: { game: Game; label: string }[] = [
+  { game: 'pokemon', label: 'Pokémon' },
+  { game: 'lorcana', label: 'Lorcana' },
+  { game: 'riftbound', label: 'Riftbound' },
+]
+
+function SyncPanel() {
+  const { user } = useAuth()
+  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
+  const [state, setState] = useState<Record<Game, GameSyncState>>({
+    pokemon: { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' },
+  })
+
+  if (!isAdmin) return null
+
+  async function runSync(game: Game) {
+    setState((s) => ({ ...s, [game]: { status: 'running' } }))
+    try {
+      const res = await fetch(`/api/sync/${game}`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setState((s) => ({ ...s, [game]: { status: 'error', error: data.error ?? `Request failed (${res.status})` } }))
+        return
+      }
+      setState((s) => ({ ...s, [game]: { status: 'done', result: data } }))
+    } catch {
+      setState((s) => ({ ...s, [game]: { status: 'error', error: 'Could not reach the server.' } }))
+    }
+  }
+
+  return (
+    <div className="card-glass p-5 mb-6">
+      <h2 className="text-white font-semibold mb-1">Sync Card Data</h2>
+      <p className="text-slate-400 text-sm mb-4">
+        Re-downloads a game&apos;s catalog and registers any newly-found sets. Each game syncs
+        independently — Pokémon has by far the most sets/cards, so it can take a while.
+      </p>
+      <div className="space-y-3">
+        {SYNC_GAMES.map(({ game, label }) => {
+          const s = state[game]
+          const running = s.status === 'running'
+          return (
+            <div key={game} className="border-t border-slate-800 pt-3 first:border-t-0 first:pt-0">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm text-white font-medium">{label}</span>
+                <button
+                  onClick={() => runSync(game)}
+                  disabled={running}
+                  className={cn(
+                    'shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                    running
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-violet-600 text-white hover:bg-violet-500',
+                  )}
+                >
+                  {running ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Sync
+                </button>
+              </div>
+
+              {s.status === 'error' && (
+                <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2 mt-2">
+                  <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                  <span>{s.error}</span>
+                </div>
+              )}
+
+              {s.status === 'done' && s.result && (
+                <div className="text-xs text-slate-400 mt-2 space-y-1">
+                  <div className="flex items-center gap-1.5 text-emerald-400">
+                    <CheckCircle2 size={13} />
+                    <span>{s.result.setCount} sets synced</span>
+                  </div>
+                  {!!s.result.newSets?.length && (
+                    <div>New sets found: {s.result.newSets.join(', ')} — flagged for review below.</div>
+                  )}
+                  {!!s.result.groupMatches?.length && (
+                    <div>
+                      TCGPlayer matches:{' '}
+                      {s.result.groupMatches.map((m) => (
+                        <span key={m.setName} className="inline-block mr-2">
+                          {m.setName}: {m.matched ? `matched (${Math.round((m.confidence ?? 0) * 100)}%)` : 'no confident match — needs manual group ID'}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -91,6 +221,11 @@ function CatalogBrowser() {
   const [jumpNameMissed, setJumpNameMissed] = useState(false)
   const [jumpNumberMissed, setJumpNumberMissed] = useState(false)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const [pendingJumpId, setPendingJumpId] = useState<string | null>(null)
+  const [globalQuery, setGlobalQuery] = useState('')
+  const [globalResults, setGlobalResults] = useState<CatalogCard[]>([])
+  const [globalSearching, setGlobalSearching] = useState(false)
+  const isSearchMode = globalQuery.trim().length >= 2
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -108,6 +243,25 @@ function CatalogBrowser() {
       .finally(() => { if (!stale) setLoadingSets(false) })
     return () => { stale = true }
   }, [activeGame])
+
+  // Whole-catalog search results are game-scoped and would otherwise show stale matches from
+  // whatever game was active before switching tabs.
+  useEffect(() => { setGlobalQuery(''); setGlobalResults([]) }, [activeGame])
+
+  useEffect(() => {
+    const q = globalQuery.trim()
+    if (q.length < 2) { setGlobalResults([]); setGlobalSearching(false); return }
+    let stale = false
+    setGlobalSearching(true)
+    const timer = setTimeout(() => {
+      fetch(`/api/admin/catalog/search?game=${activeGame}&q=${encodeURIComponent(q)}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data: CatalogCard[]) => { if (!stale) setGlobalResults(data) })
+        .catch(() => { if (!stale) setGlobalResults([]) })
+        .finally(() => { if (!stale) setGlobalSearching(false) })
+    }, 300)
+    return () => { stale = true; clearTimeout(timer) }
+  }, [globalQuery, activeGame])
 
   // Re-fetches the set picker and jumps to a specific set by name (used after creating a new
   // one) — /api/sets is server-cached indefinitely (see invalidateSetsCache in lib/api/search.ts,
@@ -127,9 +281,10 @@ function CatalogBrowser() {
   function loadCards() {
     if (!activeSet) return
     setLoadingCards(true)
+    const setReleaseDate = activeSet.releaseDate
     fetch(`/api/admin/catalog?game=${activeGame}&set=${encodeURIComponent(activeSet.name)}`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((data: CatalogCard[]) => setCards(data))
+      .then((data: CatalogCard[]) => setCards(data.map((c) => ({ ...c, releaseDate: setReleaseDate }))))
       .catch(() => {})
       .finally(() => setLoadingCards(false))
   }
@@ -139,20 +294,30 @@ function CatalogBrowser() {
     setJumpName(''); setJumpNumber(''); setJumpNameMissed(false); setJumpNumberMissed(false)
   }, [activeGame, activeSet])
 
+  // The card being acted on might currently be displayed via the per-set `cards` list or via
+  // whole-catalog `globalResults` (search mode) — check both rather than assuming one.
+  function findDisplayedCard(id: string): CatalogCard | undefined {
+    return cards.find((c) => c.id === id) ?? globalResults.find((c) => c.id === id)
+  }
+
   async function toggleHideCard(id: string) {
     setActionError(null)
     setActionSuccess(null)
-    const current = cards.find((c) => c.id === id)
+    const current = findDisplayedCard(id)
     if (!current) return
     const nextHidden = !current.isHidden
     // Optimistic: flip it in local state immediately so the row updates instantly and another
     // card can be hidden right away, instead of waiting on a full table reload every click.
+    // Applied to both lists — whichever one isn't currently rendered just stays in sync for
+    // when the admin switches back to it.
     setCards((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: nextHidden } : c)))
+    setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: nextHidden } : c)))
     try {
       await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { hidden: nextHidden, updatedAt: serverTimestamp() })
       await regenerateSnapshot(activeGame)
     } catch (err) {
       setCards((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: !nextHidden } : c)))
+      setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: !nextHidden } : c)))
       setActionError(`Hide/unhide failed: ${(err as Error).message}`)
     }
   }
@@ -163,13 +328,14 @@ function CatalogBrowser() {
   async function deleteCard(id: string) {
     setActionError(null)
     setActionSuccess(null)
-    const card = cards.find((c) => c.id === id)
+    const card = findDisplayedCard(id)
     if (!card) return
     if (!window.confirm(`Permanently delete "${card.name}" (#${card.number}) from the catalog? This cannot be undone.`)) return
     try {
       await deleteDoc(doc(db, 'catalog', activeGame, 'cards', id))
       await regenerateSnapshot(activeGame)
       setCards((prev) => prev.filter((c) => c.id !== id))
+      setGlobalResults((prev) => prev.filter((c) => c.id !== id))
       setActionSuccess(`Deleted "${card.name}" from the catalog.`)
     } catch (err) {
       setActionError(`Delete failed: ${(err as Error).message}`)
@@ -193,6 +359,7 @@ function CatalogBrowser() {
     }
     setEditingCard(null)
     setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c)))
+    setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c)))
 
     const matches = inventoryCards.filter((c) => c.apiId === id)
     const cascadeFields = ['number', 'name', 'imageUrl'] as const
@@ -273,6 +440,38 @@ function CatalogBrowser() {
     return true
   }
 
+  // Resolves an "Open this card in its own set" jump (see handleJumpToSet below) once the
+  // target set's cards have actually loaded (switching activeSet re-triggers loadCards()
+  // asynchronously — the row doesn't exist to scroll to until that fetch resolves and this
+  // table re-renders).
+  useEffect(() => {
+    if (pendingJumpId && cards.some((c) => c.id === pendingJumpId)) {
+      jumpToRow(pendingJumpId)
+      setPendingJumpId(null)
+    }
+  }, [cards, pendingJumpId])
+
+  // "Open set" on a search-result row: exit search mode and switch to that card's set so it can
+  // be seen in context (surrounding cards, etc.) — the effect above finishes the jump once that
+  // set's cards finish loading.
+  function handleJumpToSet(setName: string, cardId: string) {
+    setGlobalQuery('')
+    const targetSet = sets.find((s) => s.name === setName)
+    if (!targetSet) return
+    setPendingJumpId(cardId)
+    setActiveSet(targetSet)
+  }
+
+  // A set-level fix (e.g. release date) from SetInfoBar — update it everywhere it's cached
+  // locally so the UI reflects it immediately without a full sets/cards reload.
+  function handleSetInfoUpdated(patch: { releaseDate?: string }) {
+    if (!activeSet) return
+    const updated = { ...activeSet, ...patch }
+    setActiveSet(updated)
+    setSets((prev) => prev.map((s) => (s.name === updated.name ? updated : s)))
+    setCards((prev) => prev.map((c) => ({ ...c, releaseDate: updated.releaseDate })))
+  }
+
   function handleJumpName(query: string) {
     setJumpName(query)
     if (!query.trim()) { setJumpNameMissed(false); return }
@@ -281,26 +480,67 @@ function CatalogBrowser() {
     setJumpNameMissed(!jumpToRow(match?.id))
   }
 
+  // Matches the literal number string first (handles non-numeric collector numbers like "R01"
+  // or a typed suffix like "21b"), then falls back to a leading-zero-normalized numeric match —
+  // catalog numbers are frequently zero-padded ("031") while an admin naturally types the bare
+  // number ("31"), which a plain startsWith() would never match.
+  function findNumberMatch(query: string): CatalogCard | undefined {
+    const q = query.trim().toLowerCase()
+    if (!q) return undefined
+    const exact = cards.find((c) => c.number.toLowerCase() === q)
+    if (exact) return exact
+    if (/^\d+$/.test(q)) {
+      const qNorm = normNum(q)
+      const numMatch = cards.find((c) => /^\d+$/.test(c.number) && normNum(c.number) === qNorm)
+      if (numMatch) return numMatch
+    }
+    return cards.find((c) => c.number.toLowerCase().startsWith(q))
+  }
+
   function handleJumpNumber(query: string) {
     setJumpNumber(query)
     if (!query.trim()) { setJumpNumberMissed(false); return }
-    const q = query.toLowerCase()
-    const match =
-      cards.find((c) => c.number.toLowerCase() === q) ??
-      cards.find((c) => c.number.toLowerCase().startsWith(q))
-    setJumpNumberMissed(!jumpToRow(match?.id))
+    setJumpNumberMissed(!jumpToRow(findNumberMatch(query)?.id))
   }
 
   const gameColor = GAME_COLORS[activeGame]
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="relative mb-4 max-w-md">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input
+          value={globalQuery}
+          onChange={(e) => setGlobalQuery(e.target.value)}
+          placeholder={`Search the entire ${activeGame} catalog (e.g. "Pikachu")…`}
+          className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-8 py-2.5 text-sm text-white"
+        />
+        {globalQuery && (
+          <button
+            type="button"
+            onClick={() => setGlobalQuery('')}
+            title="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+
+      <div className={cn('flex items-center gap-2 mb-4 flex-wrap', isSearchMode && 'opacity-40 pointer-events-none')}>
         <div className="relative">
-          <LocateFixed size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <button
+            type="button"
+            onClick={() => handleJumpName(jumpName)}
+            title="Jump to this name"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+          >
+            <LocateFixed size={14} />
+          </button>
           <input
             value={jumpName}
             onChange={(e) => handleJumpName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleJumpName(jumpName) }}
             placeholder="Jump to name…"
             className={cn(
               'bg-slate-900 border rounded-lg pl-8 pr-3 py-2 text-sm text-white w-48',
@@ -309,10 +549,18 @@ function CatalogBrowser() {
           />
         </div>
         <div className="relative">
-          <LocateFixed size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <button
+            type="button"
+            onClick={() => handleJumpNumber(jumpNumber)}
+            title="Jump to this number"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+          >
+            <LocateFixed size={14} />
+          </button>
           <input
             value={jumpNumber}
             onChange={(e) => handleJumpNumber(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleJumpNumber(jumpNumber) }}
             placeholder="Jump to number…"
             className={cn(
               'bg-slate-900 border rounded-lg pl-8 pr-3 py-2 text-sm text-white w-40',
@@ -359,7 +607,7 @@ function CatalogBrowser() {
             <Plus size={14} /> Add Missing Card
           </button>
         )}
-        {isAdmin && activeGame !== 'pokemon' && (
+        {isAdmin && (
           <button
             onClick={() => setShowNewSetForm((v) => !v)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700"
@@ -432,6 +680,7 @@ function CatalogBrowser() {
           prefill={addFormPrefill}
           onSaved={() => { setShowAddForm(false); setAddFormPrefill(null); loadCards() }}
           onError={setActionError}
+          onSetInfoUpdated={handleSetInfoUpdated}
         />
       )}
 
@@ -444,29 +693,176 @@ function CatalogBrowser() {
         />
       )}
 
-      {loadingCards ? (
-        <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
-          <Loader2 size={20} className="animate-spin" style={{ color: gameColor }} />
-          <span className="text-sm">Loading cards…</span>
-        </div>
+      {isSearchMode ? (
+        <>
+          <div className="text-xs text-slate-500 mb-2">
+            {globalSearching
+              ? 'Searching the entire catalog…'
+              : `${globalResults.length} result${globalResults.length === 1 ? '' : 's'} across every ${activeGame} set, oldest release first.`}
+          </div>
+          {globalSearching ? (
+            <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
+              <Loader2 size={20} className="animate-spin" style={{ color: gameColor }} />
+              <span className="text-sm">Searching…</span>
+            </div>
+          ) : (
+            <CardTable
+              game={activeGame}
+              cards={globalResults}
+              isAdmin={isAdmin}
+              onToggleHide={toggleHideCard}
+              onEdit={setEditingCard}
+              onDelete={deleteCard}
+              rowRefs={rowRefs.current}
+              highlightedId={highlightedId}
+              showSetColumn
+              onJumpToSet={handleJumpToSet}
+              emptyMessage={`No matches for "${globalQuery.trim()}" across the entire ${activeGame} catalog.`}
+            />
+          )}
+        </>
       ) : (
-        <CardTable
-          game={activeGame}
-          cards={cards}
-          isAdmin={isAdmin}
-          onToggleHide={toggleHideCard}
-          onEdit={setEditingCard}
-          onDelete={deleteCard}
-          rowRefs={rowRefs.current}
-          highlightedId={highlightedId}
-        />
+        <>
+          {activeSet && (
+            <SetInfoBar
+              game={activeGame}
+              activeSet={activeSet}
+              isAdmin={isAdmin}
+              // Lorcana/Riftbound sets always have a registry entry (it's the
+              // source of truth for their whole set list, not just custom ones — see
+              // CLAUDE.md's set-registry section), so editing always works. Pokemon's official
+              // sets come live from api.pokemontcg.io with no registry entry to patch — only
+              // its own custom ("New Set") sets are registry-backed and thus editable.
+              editable={activeGame !== 'pokemon' || !!activeSet.isCustom}
+              onSaved={handleSetInfoUpdated}
+              onError={setActionError}
+            />
+          )}
+          {loadingCards ? (
+            <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
+              <Loader2 size={20} className="animate-spin" style={{ color: gameColor }} />
+              <span className="text-sm">Loading cards…</span>
+            </div>
+          ) : (
+            <CardTable
+              game={activeGame}
+              cards={cards}
+              isAdmin={isAdmin}
+              onToggleHide={toggleHideCard}
+              onEdit={setEditingCard}
+              onDelete={deleteCard}
+              rowRefs={rowRefs.current}
+              highlightedId={highlightedId}
+            />
+          )}
+        </>
       )}
+    </div>
+  )
+}
+
+// One-line set metadata bar above the per-set browse table: name, release date, card count,
+// code. Release date is the one field worth fixing in place (upstream sources are occasionally
+// wrong or a custom set was created without one) — patches the registry's entry for
+// this set via PUT /api/set-registry, which every Lorcana/Riftbound set always has (it's the
+// registry-driven source of truth for their entire set list) but only custom Pokemon sets do
+// (official Pokemon sets come live from api.pokemontcg.io with nothing local to patch).
+function SetInfoBar({
+  game, activeSet, isAdmin, editable, onSaved, onError,
+}: {
+  game: Game
+  activeSet: SetOption
+  isAdmin: boolean
+  editable: boolean
+  onSaved: (patch: { releaseDate?: string }) => void
+  onError: (msg: string | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [releaseDate, setReleaseDate] = useState(activeSet.releaseDate || '')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setReleaseDate(activeSet.releaseDate || ''); setEditing(false) }, [activeSet.name, activeSet.releaseDate])
+
+  async function save() {
+    setSaving(true)
+    onError(null)
+    try {
+      const res = await fetch('/api/set-registry', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game, setName: activeSet.name, patch: { releaseDate: releaseDate.trim() || null } }),
+      })
+      const data = await res.json()
+      if (!res.ok) { onError(data.error ?? 'Failed to update set.'); return }
+      onSaved({ releaseDate: releaseDate.trim() })
+      setEditing(false)
+    } catch (err) {
+      onError(`Failed to update set: ${(err as Error).message}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="card-glass px-4 py-2.5 mb-3 flex items-center gap-2.5 flex-wrap text-xs">
+      <span className="text-white font-medium">{activeSet.name}</span>
+      <span className="text-slate-700">·</span>
+
+      {editing ? (
+        <>
+          <input
+            value={releaseDate}
+            onChange={(e) => setReleaseDate(e.target.value)}
+            placeholder="YYYY-MM-DD"
+            autoFocus
+            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 w-32"
+          />
+          <button onClick={save} disabled={saving} className="text-cyan-400 hover:text-cyan-300 font-medium disabled:opacity-50 flex items-center gap-1">
+            {saving && <Loader2 size={11} className="animate-spin" />} Save
+          </button>
+          <button onClick={() => { setEditing(false); setReleaseDate(activeSet.releaseDate || '') }} className="text-slate-500 hover:text-white">
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <span className="text-slate-400">Released {activeSet.releaseDate || 'unknown'}</span>
+          {isAdmin && editable && (
+            <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-slate-500 hover:text-white" title="Fix this set's release date">
+              <Pencil size={11} /> Edit
+            </button>
+          )}
+          {isAdmin && !editable && (
+            <span className="text-slate-600 text-[11px]">(sourced live from the official Pokémon TCG API, not editable here)</span>
+          )}
+        </>
+      )}
+
+      <span className="text-slate-700">·</span>
+      <span className="text-slate-500">{activeSet.cardCount ?? '?'} cards</span>
+      <span className="text-slate-700">·</span>
+      <span className="text-slate-500">Code: {activeSet.code}</span>
+      {activeSet.isCustom && (
+        <span className="text-[10px] font-bold uppercase text-violet-400 border border-violet-800 rounded px-1 py-0.5">custom</span>
+      )}
+    </div>
+  )
+}
+
+function DetailField({ label, value, mono, truncate }: { label: string; value: string; mono?: boolean; truncate?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-slate-600 uppercase tracking-wide text-[10px]">{label}</div>
+      <div className={cn('text-slate-300', mono && 'font-mono', truncate && 'truncate')} title={truncate ? value : undefined}>
+        {value}
+      </div>
     </div>
   )
 }
 
 function CardTable({
   game, cards, isAdmin, onToggleHide, onEdit, onDelete, rowRefs, highlightedId,
+  showSetColumn, onJumpToSet, emptyMessage,
 }: {
   game: Game
   cards: CatalogCard[]
@@ -476,19 +872,37 @@ function CardTable({
   onDelete: (id: string) => void
   rowRefs: Map<string, HTMLTableRowElement>
   highlightedId: string | null
+  showSetColumn?: boolean
+  onJumpToSet?: (setName: string, cardId: string) => void
+  emptyMessage?: string
 }) {
-  if (cards.length === 0) {
-    return <div className="card-glass py-12 text-center text-slate-500 text-sm">No cards found for this set.</div>
+  const [hoverPreviewUrl, setHoverPreviewUrl] = useState<string | null>(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
   }
+
+  if (cards.length === 0) {
+    return <div className="card-glass py-12 text-center text-slate-500 text-sm">{emptyMessage ?? 'No cards found for this set.'}</div>
+  }
+
+  const colSpan = showSetColumn ? 8 : 7
 
   return (
     <div className="card-glass overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-slate-500 text-xs uppercase tracking-wide border-b border-slate-800">
+            <th className="px-2 py-2 font-medium"></th>
             <th className="px-3 py-2 font-medium">#</th>
             <th className="px-3 py-2 font-medium">Image</th>
             <th className="px-3 py-2 font-medium">Name</th>
+            {showSetColumn && <th className="px-3 py-2 font-medium">Set / Released</th>}
             <th className="px-3 py-2 font-medium">Rarity</th>
             <th className="px-3 py-2 font-medium">Price</th>
             <th className="px-3 py-2 font-medium"></th>
@@ -496,18 +910,31 @@ function CardTable({
         </thead>
         <tbody>
           {cards.map((c, i) => {
-            const numberChanged = i === 0 || cards[i - 1].number !== c.number
+            // In whole-catalog search mode, rows span multiple sets sorted oldest->newest, so
+            // group dividers make more sense on a set change than a number change.
+            const groupChanged = showSetColumn
+              ? (i === 0 || cards[i - 1].setName !== c.setName)
+              : (i === 0 || cards[i - 1].number !== c.number)
             return (
+              <Fragment key={c.id}>
               <tr
-                key={c.id}
                 ref={(el) => { if (el) rowRefs.set(c.id, el); else rowRefs.delete(c.id) }}
                 className={cn(
                   'border-b border-slate-900 transition-colors duration-500',
-                  numberChanged && i > 0 && 'border-t border-slate-700',
+                  groupChanged && i > 0 && 'border-t border-slate-700',
                   highlightedId === c.id && 'bg-violet-500/20',
                   c.isHidden && 'opacity-40',
                 )}
               >
+                <td className="pl-3 py-2">
+                  <button
+                    onClick={() => toggleExpanded(c.id)}
+                    className="text-slate-600 hover:text-white"
+                    title={expandedIds.has(c.id) ? 'Hide details' : 'Show details (release date, IDs, and more)'}
+                  >
+                    {expandedIds.has(c.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+                </td>
                 <td className="px-3 py-2 text-slate-400 font-mono text-xs">
                   {c.number}
                   {/* Raw publicCode surfaces the "a" (alt-art)/"*" (signature) markers the bare
@@ -518,13 +945,34 @@ function CardTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {c.imageUrl ? <img src={c.imageUrl} alt="" className="w-8 h-11 object-cover rounded" /> : <div className="w-8 h-11 bg-slate-800 rounded" />}
+                  {c.imageUrl ? (
+                    <img
+                      src={c.imageUrl}
+                      alt=""
+                      className="w-8 h-11 object-cover rounded cursor-zoom-in"
+                      onMouseEnter={() => setHoverPreviewUrl(c.imageUrl)}
+                      onMouseLeave={() => setHoverPreviewUrl(null)}
+                    />
+                  ) : <div className="w-8 h-11 bg-slate-800 rounded" />}
                 </td>
                 <td className="px-3 py-2 text-white">
                   {c.name}
                   {c.isCustom && <span className="ml-2 text-[10px] font-bold uppercase text-violet-400 border border-violet-800 rounded px-1 py-0.5">custom</span>}
                   {c.isHidden && <span className="ml-2 text-[10px] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}
+                  {c.notes && <StickyNote size={11} className="inline ml-2 text-amber-500 align-text-top" aria-label="Has notes" />}
                 </td>
+                {showSetColumn && (
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => onJumpToSet?.(c.setName, c.id)}
+                      className="block text-slate-400 hover:text-white hover:underline text-left"
+                      title="Open this card in its own set"
+                    >
+                      {c.setName}
+                    </button>
+                    <span className="text-[10px] text-slate-600">{c.releaseDate || 'release date unknown'}</span>
+                  </td>
+                )}
                 <td className="px-3 py-2 text-slate-400">{c.rarity ?? '—'}</td>
                 <td className="px-3 py-2 text-slate-300">
                   {c.marketPrice ? `$${c.marketPrice.toFixed(2)}` : '—'}
@@ -563,10 +1011,55 @@ function CardTable({
                   ) : null}
                 </td>
               </tr>
+              {expandedIds.has(c.id) && (
+                <tr className="border-b border-slate-900 bg-slate-950/40">
+                  <td colSpan={colSpan} className="px-6 py-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+                      <DetailField label="Release date" value={c.releaseDate || 'unknown'} />
+                      <DetailField label="Set" value={c.setName} />
+                      <DetailField label="Set code" value={(c.setCode ?? c.set) || '—'} />
+                      <DetailField label="Catalog ID" value={c.id} mono />
+                      <DetailField label="Rarity" value={c.rarity || '—'} />
+                      <DetailField label="Source" value={c.isCustom ? 'Custom (added manually)' : 'Scraped from upstream'} />
+                      <DetailField label="Hidden" value={c.isHidden ? 'Yes' : 'No'} />
+                      {c.publicCode && <DetailField label="Public code" value={c.publicCode} mono />}
+                      {c.cardType && <DetailField label="Card type" value={c.cardType} />}
+                      {c.tags && c.tags.length > 0 && <DetailField label="Tags" value={c.tags.join(', ')} />}
+                      <DetailField label="Market price" value={c.marketPrice ? `$${c.marketPrice.toFixed(2)}` : '—'} />
+                      <DetailField label="Foil price" value={c.marketPriceFoil ? `$${c.marketPriceFoil.toFixed(2)}` : '—'} />
+                      {typeof c.lowPriceNM === 'number' && c.lowPriceNM > 0 && <DetailField label="Low price" value={`$${c.lowPriceNM.toFixed(2)}`} />}
+                      {typeof c.lowPriceNMFoil === 'number' && c.lowPriceNMFoil > 0 && <DetailField label="Low price (foil)" value={`$${c.lowPriceNMFoil.toFixed(2)}`} />}
+                      <DetailField label="Image URL" value={c.imageUrl || '—'} mono truncate />
+                    </div>
+                    {c.notes && (
+                      <div className="mt-3 pt-3 border-t border-slate-800">
+                        <div className="text-slate-600 uppercase tracking-wide text-[10px] mb-1">Notes / Keywords</div>
+                        <div className="text-slate-300 text-xs whitespace-pre-wrap">{c.notes}</div>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             )
           })}
         </tbody>
       </table>
+      {hoverPreviewUrl && typeof document !== 'undefined' && createPortal(
+        // Rendered via portal straight to <body>, not inline here: this table's ancestor
+        // (.card-glass) uses backdrop-blur-sm, and per the CSS spec a `backdrop-filter` on an
+        // ancestor creates a new containing block for `position: fixed` descendants — so a
+        // fixed element left inside this tree centers on that (possibly off-screen, scrolled)
+        // container instead of the actual viewport. Escaping to <body> sidesteps that entirely.
+        <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
+          <img
+            src={hoverPreviewUrl}
+            alt=""
+            className="w-[380px] max-w-[80vw] max-h-[80vh] h-auto object-contain rounded-lg shadow-2xl border border-slate-700"
+          />
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
@@ -699,8 +1192,15 @@ function synthesizeId(game: Game, card: Record<string, unknown>, variant?: strin
 }
 
 function AddCardForm({
-  game, activeSet, prefill, onSaved, onError,
-}: { game: Game; activeSet: SetOption; prefill?: Partial<CatalogCard> | null; onSaved: () => void; onError: (msg: string | null) => void }) {
+  game, activeSet, prefill, onSaved, onError, onSetInfoUpdated,
+}: {
+  game: Game
+  activeSet: SetOption
+  prefill?: Partial<CatalogCard> | null
+  onSaved: () => void
+  onError: (msg: string | null) => void
+  onSetInfoUpdated: (patch: { releaseDate?: string }) => void
+}) {
   // Only needs to be unique for the lifetime of this in-progress upload — the card's real
   // catalog id gets synthesized server-side on Save, independent of this filename.
   const [uploadId] = useState(() => `new-${Math.random().toString(36).slice(2)}`)
@@ -712,9 +1212,21 @@ function AddCardForm({
   const [imageUrl, setImageUrl] = useState(prefill?.imageUrl ?? '')
   const [marketPrice, setMarketPrice] = useState(prefill?.marketPrice ? String(prefill.marketPrice) : '')
   const [marketPriceFoil, setMarketPriceFoil] = useState('')
+  const [notes, setNotes] = useState('')
+  // Release date is a SET fact, not a per-card one (see CLAUDE.md's set-registry section) — this
+  // input exists here purely as a convenience so filling in a brand-new set's date doesn't
+  // require a separate trip to the "Edit" button on the info bar above the table while you're
+  // already here adding its first card. Saving a changed value patches the set's registry entry
+  // (Firestore registry/main doc), not the card doc.
+  const [releaseDate, setReleaseDate] = useState(activeSet.releaseDate || '')
   const [candidates, setCandidates] = useState<LookupCandidate[]>([])
   const [looking, setLooking] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // Lorcana/Riftbound sets always have a registry entry (it's the source of truth for their
+  // whole set list); Pokemon's official sets come live from api.pokemontcg.io with nothing local
+  // to patch — only Pokemon's own custom ("New Set") sets are registry-backed.
+  const setDateEditable = game !== 'pokemon' || !!activeSet.isCustom
 
   async function runLookup() {
     setLooking(true)
@@ -750,10 +1262,11 @@ function AddCardForm({
       name,
       number,
       setName: activeSet.name,
-      rarity: rarity || undefined,
+      rarity: rarity || '',
       imageUrl: imageUrl || '',
       marketPrice: parseFloat(marketPrice) || 0,
       marketPriceFoil: parseFloat(marketPriceFoil) || 0,
+      notes: notes.trim() || '',
       ...(game === 'riftbound' ? { setCode: activeSet.code } : { set: activeSet.code }),
       // Reuse the real official id when we have one (e.g. Pokemon's apiId) so the card
       // behaves identically to a normally-scraped one; otherwise the add route synthesizes one.
@@ -769,6 +1282,19 @@ function AddCardForm({
 
       await setDoc(cardRef, { ...card, id, hidden: false, source: 'manual', updatedAt: serverTimestamp() })
       await regenerateSnapshot(game)
+
+      const trimmedDate = releaseDate.trim()
+      if (setDateEditable && trimmedDate !== (activeSet.releaseDate || '')) {
+        const res = await fetch('/api/set-registry', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game, setName: activeSet.name, patch: { releaseDate: trimmedDate || null } }),
+        })
+        if (res.ok) onSetInfoUpdated({ releaseDate: trimmedDate })
+        // A failure here shouldn't block the card save that already succeeded — the set's
+        // release date can still be fixed separately via the info bar's Edit button.
+      }
+
       onSaved()
     } catch (err) {
       onError(`Save failed: ${(err as Error).message}`)
@@ -803,6 +1329,22 @@ function AddCardForm({
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
         <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
+        {setDateEditable ? (
+          <input placeholder="Set release date (YYYY-MM-DD)" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)}
+            title="This set's release date — saved to the set itself, not just this card"
+            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
+        ) : (
+          <div className="flex items-center px-2 py-1.5 text-slate-600" title="Sourced live from the official Pokémon TCG API, not editable here">
+            Released {activeSet.releaseDate || 'unknown'}
+          </div>
+        )}
+        <textarea
+          placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2 sm:col-span-4 resize-y"
+        />
       </div>
 
       <div className="flex items-center gap-2">
@@ -855,6 +1397,7 @@ function EditCardForm({
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? '')
   const [marketPrice, setMarketPrice] = useState(card.marketPrice ? String(card.marketPrice) : '')
   const [marketPriceFoil, setMarketPriceFoil] = useState(card.marketPriceFoil ? String(card.marketPriceFoil) : '')
+  const [notes, setNotes] = useState(card.notes ?? '')
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -863,10 +1406,11 @@ function EditCardForm({
     const patch: Record<string, unknown> = {
       number,
       name,
-      rarity: rarity || undefined,
+      rarity: rarity || '',
       imageUrl: imageUrl || '',
       marketPrice: parseFloat(marketPrice) || 0,
       marketPriceFoil: parseFloat(marketPriceFoil) || 0,
+      notes: notes.trim() || '',
     }
     try {
       onSave(patch)
@@ -896,6 +1440,13 @@ function EditCardForm({
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
         <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
+        <textarea
+          placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={2}
+          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2 sm:col-span-4 resize-y"
+        />
       </div>
 
       <div className="flex items-center gap-2">
@@ -918,7 +1469,7 @@ function EditCardForm({
   )
 }
 
-// ── New Set — registers a set in data/set-registry.json ─────────────────────────
+// ── New Set — registers a set in the registry (Firestore registry/main doc) ─────
 // Covers two cases: a real upstream set the sync hasn't auto-detected/matched yet, and a
 // wholly custom/curated set that will never come from any scraper. Either way it's created
 // with tcgcsvGroupId/lorcastId left null, so a future sync never mistakes it for something it
@@ -927,19 +1478,26 @@ function EditCardForm({
 function NewSetForm({
   game, onSaved, onCancel, onError,
 }: { game: Game; onSaved: (setName: string) => void; onCancel: () => void; onError: (msg: string | null) => void }) {
+  // Pokemon has no Cardex/Pack Analysis integration at all (too many cards/sets — see
+  // CLAUDE.md quirk #9), so a custom Pokemon set has no cardexGroup to pick; it only needs a
+  // name (and optionally a code/release date) to become addable/searchable in the catalog.
+  const needsCardexGroup = game !== 'pokemon'
   const [groupOrder, setGroupOrder] = useState<string[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(true)
+  const [loadingGroups, setLoadingGroups] = useState(needsCardexGroup)
   const [setName, setSetName] = useState('')
   const [code, setCode] = useState('')
+  const [releaseDate, setReleaseDate] = useState('')
   const [cardexGroup, setCardexGroup] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (!needsCardexGroup) { setLoadingGroups(false); return }
     let stale = false
+    setLoadingGroups(true)
     fetch('/api/set-registry')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (stale || !data || (game !== 'lorcana' && game !== 'riftbound')) return
+        if (stale || !data) return
         const order: string[] = data[game]?.groupOrder ?? []
         setGroupOrder(order)
         setCardexGroup((prev) => prev || order[0] || '')
@@ -947,18 +1505,21 @@ function NewSetForm({
       .catch(() => {})
       .finally(() => { if (!stale) setLoadingGroups(false) })
     return () => { stale = true }
-  }, [game])
+  }, [game, needsCardexGroup])
 
   async function save() {
     if (!setName.trim()) { onError('Set name is required.'); return }
-    if (!cardexGroup) { onError('Pick a Cardex group.'); return }
+    if (needsCardexGroup && !cardexGroup) { onError('Pick a Cardex group.'); return }
     setSaving(true)
     onError(null)
     try {
       const res = await fetch('/api/set-registry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game, setName: setName.trim(), code: code.trim(), cardexGroup }),
+        body: JSON.stringify({
+          game, setName: setName.trim(), code: code.trim(), releaseDate: releaseDate.trim(),
+          ...(needsCardexGroup ? { cardexGroup } : {}),
+        }),
       })
       const data = await res.json()
       if (!res.ok) { onError(data.error ?? 'Failed to create set.'); return }
@@ -982,16 +1543,20 @@ function NewSetForm({
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2" />
         <input placeholder={game === 'riftbound' ? 'Set code (e.g. T1C)' : 'Code (optional)'} value={code} onChange={(e) => setCode(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        {loadingGroups ? (
-          <div className="flex items-center gap-1.5 text-slate-500"><Loader2 size={12} className="animate-spin" /> Loading groups…</div>
-        ) : (
-          <select
-            value={cardexGroup}
-            onChange={(e) => setCardexGroup(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200"
-          >
-            {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
+        <input placeholder="Release date (YYYY-MM-DD, optional)" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)}
+          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
+        {needsCardexGroup && (
+          loadingGroups ? (
+            <div className="flex items-center gap-1.5 text-slate-500"><Loader2 size={12} className="animate-spin" /> Loading groups…</div>
+          ) : (
+            <select
+              value={cardexGroup}
+              onChange={(e) => setCardexGroup(e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200"
+            >
+              {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          )
         )}
       </div>
       <div className="flex items-center gap-2">

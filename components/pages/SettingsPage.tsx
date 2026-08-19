@@ -1,32 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { editCard } from '@/lib/firebase/db'
 import { cn, riftboundDisplayNumber, riftboundInherentFoil } from '@/lib/utils'
 
-// ── Types (mirror app/api/sync/status and lib/api/registry.ts shapes) ─────────
-
-interface SyncPhaseInfo { status: 'pending' | 'running' | 'done' | 'failed'; reason?: string; groupsFetched?: boolean }
-
-interface SyncStatus {
-  phase: string
-  runId?: string
-  startedAt?: string
-  updatedAt?: string
-  phases?: Record<string, SyncPhaseInfo>
-  summary?: {
-    newSets: { pokemon: number; lorcana: string[]; riftbound: string[] }
-    riftboundGroupMatches: { setName: string; matched: boolean; groupId: number | null; confidence: number | null }[]
-    registryUpdates: { game: string; setName: string; needsReview: boolean }[]
-    build: { success: boolean | null; durationMs: number | null; errorTail: string | null }
-    restart: { attempted: boolean; success: boolean | null; oldPid: number | null; newPid: number | null }
-  }
-  error?: string | null
-}
+// ── Types (mirror lib/api/registry.ts shapes) ─────────
 
 interface LorcanaRegistrySet {
   setName: string
@@ -55,25 +37,6 @@ interface SetRegistryResponse {
   riftbound: { groupOrder: string[]; sets: RiftboundRegistrySet[] }
 }
 
-const RUNNING_PHASES = new Set([
-  'downloading', 'diffing', 'matching-riftbound-groups', 'updating-registry',
-  'repricing', 'building', 'restarting',
-])
-
-const PHASE_LABELS: Record<string, string> = {
-  idle: 'Idle',
-  backup: 'Backing up current catalogs…',
-  downloading: 'Downloading catalogs…',
-  diffing: 'Checking for new sets…',
-  'matching-riftbound-groups': 'Matching new Riftbound sets to TCGPlayer…',
-  'updating-registry': 'Registering new sets…',
-  repricing: 'Fetching prices for newly-matched sets…',
-  building: 'Rebuilding the app…',
-  restarting: 'Restarting the server…',
-  done: 'Done',
-  failed: 'Failed',
-}
-
 export default function SettingsPage() {
   return (
     <AuthGuard>
@@ -85,188 +48,10 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <SyncCard />
         <InventoryNumberRepairCard />
         <NeedsReviewCard />
       </div>
     </AuthGuard>
-  )
-}
-
-// ── Sync Card Data ──────────────────────────────────────────────────────────
-
-function SyncCard() {
-  const [status, setStatus] = useState<SyncStatus>({ phase: 'idle' })
-  const [triggering, setTriggering] = useState(false)
-  const [triggerError, setTriggerError] = useState<string | null>(null)
-  const [isProd, setIsProd] = useState<boolean | null>(null)
-  const failuresRef = useRef(0)
-
-  useEffect(() => {
-    let stale = false
-    function poll() {
-      fetch('/api/sync/status', { cache: 'no-store' })
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((data: SyncStatus) => {
-          if (stale) return
-          failuresRef.current = 0
-          setStatus(data)
-        })
-        .catch(() => {
-          if (stale) return
-          failuresRef.current += 1
-          // Mid-restart the server is briefly unreachable — don't treat that as an error.
-        })
-    }
-    poll()
-    const interval = setInterval(poll, 2000)
-    return () => { stale = true; clearInterval(interval) }
-  }, [])
-
-  const isRunning = RUNNING_PHASES.has(status.phase)
-
-  async function handleSync() {
-    setTriggerError(null)
-    setTriggering(true)
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setTriggerError(data.error ?? `Request failed (${res.status})`)
-        if (res.status === 400) setIsProd(false)
-        return
-      }
-      setStatus({ phase: 'backup' })
-    } catch {
-      setTriggerError('Could not reach the server.')
-    } finally {
-      setTriggering(false)
-    }
-  }
-
-  const disabled = triggering || isRunning || isProd === false
-
-  return (
-    <div className="card-glass p-5 mb-6">
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div>
-          <h2 className="text-white font-semibold">Sync Card Data</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            Re-downloads all three catalogs, tries to auto-discover new Riftbound sets&apos; TCGPlayer
-            prices, registers any newly-found sets, then rebuilds and restarts the app. If the rebuild
-            fails, the currently running app is left untouched.
-          </p>
-        </div>
-        <button
-          onClick={handleSync}
-          disabled={disabled}
-          className={cn(
-            'shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
-            disabled
-              ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-              : 'bg-violet-600 text-white hover:bg-violet-500',
-          )}
-        >
-          {isRunning || triggering ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          Sync Card Data
-        </button>
-      </div>
-
-      {isProd === false && (
-        <div className="flex items-start gap-2 text-amber-400 text-xs bg-amber-950/30 border border-amber-900/50 rounded-lg px-3 py-2 mb-3">
-          <AlertCircle size={14} className="shrink-0 mt-0.5" />
-          <span>
-            Sync only runs against the production server (<code>npm run build && npm run start</code>).
-            You&apos;re on <code>npm run dev</code> right now — this would kill your dev server, so the button is disabled.
-          </span>
-        </div>
-      )}
-
-      {triggerError && isProd !== false && (
-        <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2 mb-3">
-          <AlertCircle size={14} className="shrink-0 mt-0.5" />
-          <span>{triggerError}</span>
-        </div>
-      )}
-
-      {status.phase !== 'idle' && (
-        <div className="border-t border-slate-800 pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            {status.phase === 'failed' ? (
-              <AlertCircle size={16} className="text-red-400" />
-            ) : status.phase === 'done' ? (
-              <CheckCircle2 size={16} className="text-emerald-400" />
-            ) : (
-              <Loader2 size={16} className="animate-spin text-violet-400" />
-            )}
-            <span className="text-sm font-medium text-white">
-              {PHASE_LABELS[status.phase] ?? status.phase}
-            </span>
-            {failuresRef.current > 3 && isRunning && (
-              <span className="text-xs text-slate-500">(server restarting, reconnecting…)</span>
-            )}
-          </div>
-
-          {status.phase === 'failed' && status.error && (
-            <p className="text-xs text-red-400 mb-2">{status.error}</p>
-          )}
-
-          {status.summary && (status.phase === 'done' || status.phase === 'failed') && (
-            <SyncSummary summary={status.summary} />
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SyncSummary({ summary }: { summary: NonNullable<SyncStatus['summary']> }) {
-  const hasNewSets =
-    summary.newSets.pokemon > 0 || summary.newSets.lorcana.length > 0 || summary.newSets.riftbound.length > 0
-
-  return (
-    <div className="space-y-2 text-xs text-slate-400">
-      <div>
-        New sets found — Pokémon: {summary.newSets.pokemon}, Lorcana: {summary.newSets.lorcana.length || 0}
-        {summary.newSets.lorcana.length > 0 && ` (${summary.newSets.lorcana.join(', ')})`}, Riftbound:{' '}
-        {summary.newSets.riftbound.length || 0}
-        {summary.newSets.riftbound.length > 0 && ` (${summary.newSets.riftbound.join(', ')})`}
-        {!hasNewSets && ' — nothing new since last sync'}
-      </div>
-
-      {summary.riftboundGroupMatches.length > 0 && (
-        <div>
-          Riftbound TCGPlayer matches:{' '}
-          {summary.riftboundGroupMatches.map((m) => (
-            <span key={m.setName} className="inline-block mr-2">
-              {m.setName}: {m.matched ? `matched (${Math.round((m.confidence ?? 0) * 100)}%)` : 'no confident match — needs manual group ID'}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {summary.build.success !== null && (
-        <div>
-          Build: {summary.build.success ? 'succeeded' : 'failed'}
-          {summary.build.durationMs != null && ` in ${Math.round(summary.build.durationMs / 1000)}s`}
-        </div>
-      )}
-      {summary.build.errorTail && (
-        <pre className="bg-slate-950 border border-slate-800 rounded-lg p-2 overflow-x-auto max-h-40 text-[10px] text-red-400">
-          {summary.build.errorTail}
-        </pre>
-      )}
-
-      {summary.restart.attempted && (
-        <div>Server restart: {summary.restart.success ? `succeeded (pid ${summary.restart.newPid})` : 'failed'}</div>
-      )}
-
-      {(summary.registryUpdates.length > 0) && (
-        <div className="text-amber-400">
-          {summary.registryUpdates.length} new set{summary.registryUpdates.length !== 1 ? 's' : ''} need review below.
-        </div>
-      )}
-    </div>
   )
 }
 

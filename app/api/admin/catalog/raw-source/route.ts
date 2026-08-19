@@ -108,7 +108,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'setCode is required' }, { status: 400 })
   }
 
-  const registrySet = getRiftboundRegistrySets().find((s) => s.setCode === setCode)
+  const registrySet = (await getRiftboundRegistrySets()).find((s) => s.setCode === setCode)
   if (!registrySet) {
     return NextResponse.json({ error: `No registered Riftbound set with code "${setCode}"` }, { status: 404 })
   }

@@ -76,7 +76,7 @@ export async function searchCards(game: Game, query: string): Promise<CardSearch
         set: c.set?.code ?? '',
         setName: c.set?.name ?? '',
         number: c.collector_number,
-        imageUrl: c.image_uris?.digital?.small ?? c.image_uris?.digital?.normal ?? '',
+        imageUrl: c.image_uris?.digital?.large ?? c.image_uris?.digital?.normal ?? c.image_uris?.digital?.small ?? '',
         game: 'lorcana' as Game,
         rarity: c.rarity || undefined,
       }
@@ -176,6 +176,7 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
         releaseDate: s.releaseDate,
         cardCount: s.total,
         symbolUrl: s.images?.symbol,
+        isCustom: s.source === 'manual',
       }))
       .reverse() // newest first
   }
@@ -194,7 +195,7 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
   }
 
   if (game === 'riftbound') {
-    sets = getRiftboundSets().map((s) => ({
+    sets = (await getRiftboundSets()).map((s) => ({
       code: s.code,
       name: s.name,
       releaseDate: s.releaseDate,
@@ -209,7 +210,7 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
 }
 
 /** Drops the cached set list for a game (or all games) — called after registering a new set
- * in data/set-registry.json so it shows up without waiting for server restart. */
+ * in the registry so it shows up without waiting for server restart. */
 export function invalidateSetsCache(game?: Game) {
   if (game) delete setsCache[game]
   else for (const g of Object.keys(setsCache) as Game[]) delete setsCache[g]

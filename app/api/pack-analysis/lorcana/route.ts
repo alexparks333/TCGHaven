@@ -77,7 +77,8 @@ export async function GET() {
     }
   })
 
-  const results = getLorcanaBoosterSets().map((setConfig) => {
+  const boosterSets = await getLorcanaBoosterSets()
+  const results = boosterSets.map((setConfig) => {
     const sc = enriched.filter((c) => c.setName === setConfig.name)
 
     const commons   = sc.filter((c) => c.rarity === 'Common')

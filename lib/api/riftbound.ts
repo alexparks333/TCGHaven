@@ -27,8 +27,8 @@ export interface RiftboundSet {
   source?: string
 }
 
-// Fallback used only if data/set-registry.json is missing (e.g. first run before
-// the registry migration lands) — mirrors LORCANA_SETS_FALLBACK's existing pattern.
+// Fallback used only if the registry (Firestore registry/main doc) is missing or empty —
+// mirrors LORCANA_SETS_FALLBACK's existing pattern.
 const RIFTBOUND_SETS_FALLBACK: RiftboundSet[] = [
   { code: 'OGN', name: 'Origins', releaseDate: '2025-10-31', cardCount: 298 },
   { code: 'SFD', name: 'Spiritforged', releaseDate: '2026-02-13', cardCount: 221 },
@@ -37,8 +37,8 @@ const RIFTBOUND_SETS_FALLBACK: RiftboundSet[] = [
   { code: 'RAD', name: 'Radiance', releaseDate: '2026-10-01', cardCount: 0 },
 ]
 
-export function getRiftboundSets(): RiftboundSet[] {
-  const registrySets = getRiftboundRegistrySets()
+export async function getRiftboundSets(): Promise<RiftboundSet[]> {
+  const registrySets = await getRiftboundRegistrySets()
   if (registrySets.length === 0) return RIFTBOUND_SETS_FALLBACK
   return registrySets.map((s) => ({
     code: s.setCode,

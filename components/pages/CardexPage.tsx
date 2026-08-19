@@ -34,8 +34,8 @@ interface SetGroup {
 }
 
 // ── Set catalog (fetched from /api/set-registry — see lib/api/registry.ts) ────
-// Groups/known-sets used to be hardcoded here; they're now derived from
-// data/set-registry.json so the Settings "Sync Card Data" feature can register
+// Groups/known-sets used to be hardcoded here; they're now derived from the registry
+// (Firestore registry/main doc) so Admin Catalog's "Sync Card Data" feature can register
 // newly-discovered sets without editing this file.
 
 interface RegistrySet {

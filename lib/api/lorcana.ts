@@ -90,19 +90,19 @@ export async function getLorcanaSets(): Promise<LorcanaSet[]> {
   let sets: LorcanaSet[]
   try {
     const res = await fetch(`${BASE}/sets`)
-    if (!res.ok) sets = getRegistryLorcanaSets()
+    if (!res.ok) sets = await getRegistryLorcanaSets()
     else {
       const data = await res.json()
       const results = data.results ?? data ?? []
-      sets = results.length > 0 ? results : getRegistryLorcanaSets()
+      sets = results.length > 0 ? results : await getRegistryLorcanaSets()
     }
   } catch {
-    sets = getRegistryLorcanaSets()
+    sets = await getRegistryLorcanaSets()
   }
-  // Sets created via the Admin Catalog page ("source": "manual" in set-registry.json) don't
+  // Sets created via the Admin Catalog page ("source": "manual" in the registry) don't
   // exist on lorcast at all, so the live /sets call above will never include them — merge them
   // in here regardless of which branch above ran, or they'd never appear in the set picker.
-  const manualOnly = getLorcanaRegistrySets().filter(
+  const manualOnly = (await getLorcanaRegistrySets()).filter(
     (s) => s.source === 'manual' && !sets.some((x) => x.name === s.setName),
   )
   if (manualOnly.length > 0) {
@@ -113,12 +113,12 @@ export async function getLorcanaSets(): Promise<LorcanaSet[]> {
   return sets
 }
 
-// Fallback when the live lorcast /sets API is unreachable — sourced from
-// data/set-registry.json (kept up to date by the Settings "Sync Card Data" feature)
+// Fallback when the live lorcast /sets API is unreachable — sourced from the registry
+// (Firestore registry/main doc, kept up to date by Admin Catalog's "Sync Card Data" feature)
 // instead of a hardcoded array. LORCANA_SETS_MINIMAL_FALLBACK only covers the
 // extremely unlikely case where the registry file itself is missing.
-function getRegistryLorcanaSets(): LorcanaSet[] {
-  const sets = getLorcanaRegistrySets()
+async function getRegistryLorcanaSets(): Promise<LorcanaSet[]> {
+  const sets = await getLorcanaRegistrySets()
   if (sets.length === 0) return LORCANA_SETS_MINIMAL_FALLBACK
   return sets.map((s) => ({
     id: s.lorcastId ?? '',

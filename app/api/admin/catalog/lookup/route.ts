@@ -54,8 +54,8 @@ function normalizeRiftboundNumber(raw: string): { num: number; suffix: string } 
 }
 
 async function lookupRiftbound(setCode: string, number: string): Promise<LookupCandidate[]> {
-  const set = getRiftboundRegistrySets().find((s) => s.setCode === setCode)
-  if (!set) return [{ source: 'tcgcsv', note: `No registered Riftbound set with code "${setCode}" — check data/set-registry.json` }]
+  const set = (await getRiftboundRegistrySets()).find((s) => s.setCode === setCode)
+  if (!set) return [{ source: 'tcgcsv', note: `No registered Riftbound set with code "${setCode}" — check the registry (Admin Catalog "New Set")` }]
   if (typeof set.tcgcsvGroupId !== 'number') {
     return [{ source: 'tcgcsv', note: `"${set.setName}" has no known TCGPlayer group id yet — run a sync first, or set one manually in Settings.` }]
   }
@@ -115,10 +115,10 @@ async function lookupLorcana(setCode: string, number: string, name?: string): Pr
     if (matches.length === 0) return [{ source: 'lorcast', note: `No lorcast match for "${name}" #${number} in set ${setCode || '(any)'}` }]
     return matches.map((c: Record<string, unknown>) => {
       const prices = c.prices as { usd?: number; usd_foil?: number } | undefined
-      const images = c.image_uris as { digital?: { small?: string } } | undefined
+      const images = c.image_uris as { digital?: { small?: string; normal?: string; large?: string } } | undefined
       return {
         name: c.version ? `${c.name} - ${c.version}` : (c.name as string),
-        imageUrl: images?.digital?.small,
+        imageUrl: images?.digital?.large ?? images?.digital?.normal ?? images?.digital?.small,
         marketPrice: prices?.usd,
         marketPriceFoil: prices?.usd_foil,
         rarity: c.rarity as string | undefined,

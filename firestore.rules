@@ -42,6 +42,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Set registry (Lorcana/Riftbound set metadata, Cardex/Pack Analysis wiring) — formerly
+    // data/set-registry.json. Moved to Firestore so the Admin Catalog sync routes can write it
+    // from a Vercel serverless function, which has no writable local filesystem.
+    match /registry/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Per-user inventory data — unchanged from before this migration. A user may only
     // read/write their own subtree.
     match /users/{uid}/{document=**} {
