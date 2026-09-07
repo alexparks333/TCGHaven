@@ -4,7 +4,7 @@ import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 interface CatalogCard {
   id: string
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   const setName = searchParams.get('set')
 
   if (!game || !GAMES.includes(game)) {
-    return NextResponse.json({ error: 'game must be pokemon, lorcana, or riftbound' }, { status: 400 })
+    return NextResponse.json({ error: 'game must be pokemon, lorcana, riftbound, onepiece, or mtg' }, { status: 400 })
   }
 
   const catalog = await loadCatalog<CatalogCard>(game)

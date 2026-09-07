@@ -36,6 +36,7 @@ interface TCGStore {
   setActiveGame: (game: Game) => void
   updateCardPrice: (id: string, price: number) => void
   addPriceHistoryPoint: (cardId: string, price: number, date: string) => void
+  applyPriceUpdates: (updates: { cardId: string; price: number; date: string }[]) => void
   setLastPriceRefresh: (date: string) => void
   updatePackSet: (id: string, updates: Partial<PackSet>) => void
   setPackPriceOverride: (id: string, price: number) => void
@@ -145,7 +146,7 @@ export const useStore = create<TCGStore>()(
   purchases: [],
   calcFloor: 0,
   showFilters: false,
-  activeGames: ['pokemon', 'lorcana', 'riftbound'] as Game[],
+  activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg'] as Game[],
   timeFrame: 'entry' as const,
   priceMode: 'market' as const,
   hiddenGroups: [] as string[],
@@ -199,6 +200,34 @@ export const useStore = create<TCGStore>()(
       return {
         priceHistory: [...state.priceHistory, { cardId, points: [newPoint] }],
       }
+    }),
+
+  // Batched form of updateCardPrice + addPriceHistoryPoint — a price refresh applies one update
+  // per priced card, and each of those two single-card actions does a full O(n) map/find over
+  // `cards`/`priceHistory`. Calling them once per card in a loop is O(n²) and, for a collection
+  // in the thousands, synchronously blocks the main thread for seconds (including starving any
+  // pending route navigation waiting to commit). This does the whole batch in one O(n) pass.
+  applyPriceUpdates: (updates) =>
+    set((state) => {
+      if (updates.length === 0) return state
+      const byCard = new Map(updates.map((u) => [u.cardId, u]))
+      const cards = state.cards.map((c) => {
+        const u = byCard.get(c.id)
+        return u ? { ...c, currentPrice: u.price, priceUpdatedAt: u.date } : c
+      })
+      const historyByCard = new Map(state.priceHistory.map((h) => [h.cardId, h]))
+      for (const u of updates) {
+        const day = u.date.slice(0, 10)
+        const newPoint = { date: u.date, price: u.price }
+        const existing = historyByCard.get(u.cardId)
+        if (existing) {
+          const deduped = existing.points.filter((p) => p.date.slice(0, 10) !== day)
+          historyByCard.set(u.cardId, { ...existing, points: [...deduped, newPoint] })
+        } else {
+          historyByCard.set(u.cardId, { cardId: u.cardId, points: [newPoint] })
+        }
+      }
+      return { cards, priceHistory: Array.from(historyByCard.values()) }
     }),
 
   setLastPriceRefresh: (date) => set({ lastPriceRefresh: date }),

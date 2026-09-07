@@ -6,7 +6,7 @@ import { useStore } from '@/lib/store'
 import { formatCurrency, cn } from '@/lib/utils'
 import { GAME_LABELS, type Game } from '@/lib/types'
 
-const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 const TIME_OPTIONS = [
   { value: 'entry', label: 'Since Entry' },

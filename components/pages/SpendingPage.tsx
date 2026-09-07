@@ -21,7 +21,7 @@ import {
   deletePurchase as deletePurchaseInFirestore,
 } from '@/lib/firebase/spending'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)

@@ -154,9 +154,85 @@ async function lookupPokemon(apiId?: string): Promise<LookupCandidate[]> {
   }
 }
 
+// One Piece needs no registered tcgcsvGroupId the way Riftbound does — tcgcsv's `abbreviation`
+// field on each group already matches a set code directly (e.g. "OP01", "ST-31" for group name
+// "Starter Deck 31: RED Monkey.D.Luffy"), so this just finds the group live each call rather
+// than reading anything from the registry. See catalog-sync.mjs's downloadOnePiece() header
+// comment for why One Piece's price-matching needs no per-set bootstrap at all.
+async function lookupOnePiece(setCode: string, number: string): Promise<LookupCandidate[]> {
+  if (!setCode) return [{ source: 'tcgcsv', note: 'One Piece lookup needs a set code (e.g. "OP01") to find the right TCGPlayer group.' }]
+  const targetNum = parseInt(number, 10)
+  if (isNaN(targetNum)) return [{ source: 'tcgcsv', note: `Couldn't parse "${number}" as a card number` }]
+
+  try {
+    const groupsRes = await fetch('https://tcgcsv.com/tcgplayer/68/groups', { headers: TCGCSV_HEADERS })
+    if (!groupsRes.ok) return [{ source: 'tcgcsv', note: `tcgcsv groups request failed: ${groupsRes.status}` }]
+    const groupsData = await groupsRes.json()
+    const groups = (groupsData.results ?? []) as Array<{ groupId: number; abbreviation?: string }>
+    const normTarget = setCode.replace(/[\s-]/g, '').toUpperCase()
+    const group = groups.find((g) => (g.abbreviation ?? '').replace(/[\s-]/g, '').toUpperCase() === normTarget)
+    if (!group) return [{ source: 'tcgcsv', note: `No TCGPlayer group found for set code "${setCode}"` }]
+
+    const res = await fetch(`https://tcgcsv.com/tcgplayer/68/${group.groupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
+    if (!res.ok) return [{ source: 'tcgcsv', note: `tcgcsv request failed: ${res.status}` }]
+    const lines = (await res.text()).split('\n')
+    const candidates: LookupCandidate[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      const f = parseCSVLine(line)
+      const name = f[1] ?? ''
+      const imageUrl = f[3] ?? ''
+      const marketPrice = parseFloat(f[12]) || 0
+      const rarity = f[15] ?? ''
+      const extNumber = f[16] ?? ''
+      if (!extNumber) continue
+      // extNumber is the full card code (e.g. "OP01-024") — pull just the numeric suffix so an
+      // admin-typed "24" matches the zero-padded "024" the same way normNum() does elsewhere.
+      const numMatch = extNumber.match(/-(\d+)$/)
+      if (!numMatch || parseInt(numMatch[1], 10) !== targetNum) continue
+      candidates.push({ name, imageUrl, marketPrice: marketPrice || undefined, rarity: rarity || undefined, source: 'tcgcsv' })
+    }
+    if (candidates.length === 0) {
+      return [{ source: 'tcgcsv', note: `No TCGPlayer row found for ${setCode} #${number} in group ${group.groupId}` }]
+    }
+    return candidates
+  } catch (err) {
+    return [{ source: 'tcgcsv', note: `Lookup failed: ${(err as Error).message}` }]
+  }
+}
+
+// Scryfall's own exact set+collector-number endpoint does exactly what this route needs in one
+// call — no group-ID bootstrap, no fuzzy set matching, no CSV parsing at all (unlike every other
+// game's lookup here). Collector numbers can carry letter suffixes (e.g. "150a") which Scryfall's
+// endpoint accepts verbatim, so no normalization is needed the way Riftbound/One Piece need.
+async function lookupMtg(setCode: string, number: string): Promise<LookupCandidate[]> {
+  if (!setCode) return [{ source: 'scryfall', note: 'MTG lookup needs a Scryfall set code (e.g. "khm").' }]
+  try {
+    // Scryfall rejects any request missing BOTH a User-Agent and an Accept header with a plain 400.
+    const res = await fetch(`https://api.scryfall.com/cards/${encodeURIComponent(setCode.toLowerCase())}/${encodeURIComponent(number)}`, {
+      headers: { 'User-Agent': 'TCGHaven/1.0', Accept: 'application/json' },
+    })
+    if (res.status === 404) return [{ source: 'scryfall', note: `No Scryfall card found for ${setCode} #${number}` }]
+    if (!res.ok) return [{ source: 'scryfall', note: `Scryfall request failed: ${res.status}` }]
+    const c = await res.json()
+    const imageUrl = c.image_uris?.normal ?? c.image_uris?.large ?? c.card_faces?.[0]?.image_uris?.normal ?? c.card_faces?.[0]?.image_uris?.large
+    return [{
+      name: c.name,
+      imageUrl,
+      marketPrice: parseFloat(c.prices?.usd) || undefined,
+      marketPriceFoil: parseFloat(c.prices?.usd_foil) || parseFloat(c.prices?.usd_etched) || undefined,
+      rarity: c.rarity,
+      source: 'scryfall',
+    }]
+  } catch (err) {
+    return [{ source: 'scryfall', note: `Lookup failed: ${(err as Error).message}` }]
+  }
+}
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null)
-  const game = body?.game as 'pokemon' | 'lorcana' | 'riftbound' | undefined
+  const game = body?.game as 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | undefined
   const setCode = (body?.setCode ?? '') as string
   const number = (body?.number ?? '') as string
   const name = body?.name as string | undefined
@@ -169,6 +245,8 @@ export async function POST(request: Request) {
   const candidates =
     game === 'riftbound' ? await lookupRiftbound(setCode, number) :
     game === 'lorcana' ? await lookupLorcana(setCode, number, name) :
+    game === 'onepiece' ? await lookupOnePiece(setCode, number) :
+    game === 'mtg' ? await lookupMtg(setCode, number) :
     await lookupPokemon(apiId)
 
   return NextResponse.json({ candidates })

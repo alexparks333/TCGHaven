@@ -1,8 +1,21 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import type { Card } from './types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+// Unique identity key — same card from different purchase sessions (different Firestore
+// documents/"lots") shares this key, so InventoryPage and PortfolioPage can both group separate
+// additions of the same card into one displayed row without merging the underlying documents
+// (each lot keeps its own purchase date/price/condition). A Nexus-flagged card shares its
+// name/number/apiId with the regular printing it's a promo variant of, so it gets its own key
+// segment here — otherwise it'd silently merge into the same group as regular copies.
+export function cardIdentityKey(card: Card): string {
+  const nexusPart = card.nexus ? '::nexus' : ''
+  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
+  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
 }
 
 // Constructing Intl.NumberFormat is expensive — build it once, reuse everywhere
@@ -57,20 +70,25 @@ export function riftboundDisplayNumber(number: string, publicCode?: string): str
 
 /**
  * Classifies a Riftbound card's variant type from its catalog `rarity` + `publicCode`.
- * "Showcase" rarity covers two structurally different prints: a genuine same-number alt-art
- * (foil-only) and an "Overnumbered" chase variant (collector number exceeds the set's total
- * card count, e.g. "189/166") — which prints as a regular card, not foil-only. Both get
- * flattened to the same `rarity: 'Showcase'` value on the catalog card, so the two are told
- * apart here by comparing the card's own number against the set-size denominator in
- * publicCode — the same signal the download script uses to assign that rarity in the first
- * place. Shared by lib/api/search.ts (new-card display) and the Settings repair tool
- * (fixing already-owned cards), so both agree on what "correct" looks like.
+ * A same-number alt-art print (foil-only) is stored as `rarity: 'Alt Art'`; a chase variant
+ * whose collector number exceeds the set's total card count (e.g. "189/166", prints as a
+ * regular card, not foil-only) is stored as `rarity: 'Overnumbered'`. Both flags are re-derived
+ * from `publicCode` (the "a" suffix / the number exceeding the set-size denominator) rather
+ * than trusting the rarity string alone — some sets (UNL, VEN) keep the base card's real rarity
+ * (Rare, Epic, etc.) on their alt-art prints instead of ever reporting a distinct one, so
+ * publicCode is the only reliable signal; this is the same rule
+ * scripts/lib/catalog-sync.mjs uses to assign `rarity` in the first place, and it also keeps
+ * this correct for an older doc that still has the pre-rename literal `'Showcase'` value.
+ * Shared by lib/api/search.ts (new-card display) and the Settings repair tool (fixing
+ * already-owned cards), so both agree on what "correct" looks like.
  */
 export function riftboundVariantFlags(rarity: string | undefined, publicCode?: string) {
   const isStar = rarity === 'Star'
+  const isSameNumAltCode = !isStar && (publicCode ?? '').includes('a/')
   const pubNums = (publicCode ?? '').match(/-(\d+)[a-zA-Z]?\*?\/(\d+)/)
-  const isOvernumber = !!pubNums && parseInt(pubNums[1], 10) > parseInt(pubNums[2], 10)
-  const isAltArtShowcase = rarity === 'Showcase' && !isOvernumber
+  const isOvernumber = !isStar && !isSameNumAltCode
+    && (rarity === 'Overnumbered' || (!!pubNums && parseInt(pubNums[1], 10) > parseInt(pubNums[2], 10)))
+  const isAltArtShowcase = !isStar && !isOvernumber && (isSameNumAltCode || rarity === 'Alt Art' || rarity === 'Showcase')
   return { isStar, isOvernumber, isAltArtShowcase }
 }
 

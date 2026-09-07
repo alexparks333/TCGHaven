@@ -16,15 +16,18 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 7. [Pokémon — Data Source, Schema, Add-a-Set Guide](#pokemon--data-source-schema-add-a-set-guide)
 8. [Lorcana — Data Source, Schema, Add-a-Set Guide](#lorcana--data-source-schema-add-a-set-guide)
 9. [Riftbound — Data Source, Schema, Add-a-Set Guide](#riftbound--data-source-schema-add-a-set-guide)
-10. [Card Search Flow](#card-search-flow)
-11. [Price Data](#price-data)
-12. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
-13. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
-14. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
-15. [Firestore / User Data](#firestore--user-data)
-16. [Zustand Store](#zustand-store)
-17. [Full File Map](#full-file-map)
-18. [Key Quirks & Gotchas](#key-quirks--gotchas)
+10. [One Piece — Data Source, Schema, Add-a-Set Guide](#one-piece--data-source-schema-add-a-set-guide)
+11. [Magic: The Gathering — Data Source, Schema, Add-a-Set Guide](#magic-the-gathering--data-source-schema-add-a-set-guide)
+12. [Card Search Flow](#card-search-flow)
+13. [Price Data](#price-data)
+14. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
+15. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
+16. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
+17. [Cron-Driven Price Sync](#cron-driven-price-sync)
+18. [Firestore / User Data](#firestore--user-data)
+19. [Zustand Store](#zustand-store)
+20. [Full File Map](#full-file-map)
+21. [Key Quirks & Gotchas](#key-quirks--gotchas)
 
 ---
 
@@ -78,7 +81,7 @@ build. `npm run build && npm run start` is still required for actual **code** ch
 Catalog page.
 
 All of the above download+registry-sync workflow is also available as one click: Admin Catalog →
-"Sync Card Data" (see [§14](#automated-sync--admin-catalog)) — a plain per-game API request with
+"Sync Card Data" (see [§16](#automated-sync--admin-catalog)) — a plain per-game API request with
 no build/restart step, so it works identically against `npm run dev`, `npm run start`, and the
 deployed Vercel app. Pokémon's sync can take several minutes (170+ sets, 20k+ cards) and may time
 out on a shorter Vercel function limit — `npm run download-cards` locally has no such limit and
@@ -109,10 +112,13 @@ cache, not a live Firestore read per keystroke) and returns matches. No external
 API call happens during a normal search.
 
 `npm run download-cards` (`scripts/download-card-catalog.mjs`) is what keeps this catalog in
-sync with the three upstream sources (Pokémon TCG data, lorcast, the Riftbound gallery/TCGCSV)
-— it scrapes fresh data and **writes it into Firestore**, never clobbering an admin edit made
-since the last sync (see [§4](#card-catalog-system--deep-dive-firestore-backed)). It's for
-picking up new upstream cards/sets, not a prerequisite for the catalog to work at all.
+sync with the five upstream sources (Pokémon TCG data, lorcast, the Riftbound gallery/TCGCSV,
+apitcg's One Piece dataset, Scryfall) — it scrapes fresh data and **writes it into Firestore**,
+never clobbering an admin edit made since the last sync (see
+[§4](#card-catalog-system--deep-dive-firestore-backed)). It's for picking up new upstream
+cards/sets, not a prerequisite for the catalog to work at all. **MTG is the one exception** —
+its first sync is deliberately not yet run; see [§11](#magic-the-gathering--data-source-schema-add-a-set-guide)
+and "MTG Integration.md" at the repo root.
 
 ### 2. User Collection (Inventory)
 When Alex adds a card, the card data is written to **Firestore** under
@@ -231,7 +237,7 @@ anyone can browse the table read-only; only the admin sees the write controls.
   `tcgcsvGroupId`/`lorcastId` left `null` and `source: "manual"`, so a future sync never mistakes
   it for something it should be overwriting or re-scraping — cards get added to it one at a time
   via "Add Missing Card" afterward. Requires picking an existing `cardexGroup` label from that
-  game's `groupOrder` (see [§12](#cardex-feature--how-sets-register)) so the new set actually
+  game's `groupOrder` (see [§14](#cardex-feature--how-sets-register)) so the new set actually
   shows up in the Cardex set picker once it has cards.
   - **Cache gotcha, same shape as the one in §4:** `getSetsForGame()` (`lib/api/search.ts`)
     caches the set picker's contents in a module-level `setsCache` that, unlike the catalog
@@ -257,13 +263,13 @@ anyone can browse the table read-only; only the admin sees the write controls.
     matching local `id` is a card the scrape flow is missing entirely.
   - **TCGCSV rows vs. local catalog**, matched by collector number — **must** compare against
     both a card's bare `number` *and* the number+suffix embedded in its `publicCode`,
-    not `number` alone. Showcase/Overnumber/Signature variants share their base card's bare
+    not `number` alone. Alt Art/Overnumbered/Signature variants share their base card's bare
     `number` (the `a`/`*` suffix only ever lives in `publicCode` — see
     [§9](#riftbound--data-source-schema-add-a-set-guide)'s variant table), while TCGCSV's
     `extNumber` column always carries that suffix (e.g. `"007a/298"`). Matching only against
-    `number` produces a wall of false-positive "unmatched" Showcase rows — this was caught and
+    `number` produces a wall of false-positive "unmatched" Alt Art rows — this was caught and
     fixed the same session this tool was built; if you touch this matching logic again, test it
-    against a set with Showcase cards (e.g. Origins) before trusting the output.
+    against a set with Alt Art cards (e.g. Origins) before trusting the output.
   - Each finding has an "Add" button that opens Add Missing Card prefilled from the raw source
     entry (name/number/rarity/image — price is left for the admin to fill in, since the exact
     row that matched isn't surfaced through this button, only through the separate TCGCSV-only
@@ -274,7 +280,7 @@ anyone can browse the table read-only; only the admin sees the write controls.
 
 ### Key files
 
-- `components/pages/AdminCatalogPage.tsx` — the whole page: `SyncPanel` (§14), `CatalogBrowser`,
+- `components/pages/AdminCatalogPage.tsx` — the whole page: `SyncPanel` (§16), `CatalogBrowser`,
   `CardTable`, `AddCardForm`, `EditCardForm`, `NewSetForm`, `RawSourceCheckPanel`, `ImageUploadField`.
 - `app/api/admin/catalog/route.ts` — `GET`, read-only listing (includes hidden cards, unlike
   every other catalog consumer — the admin table needs to show and un-hide them).
@@ -462,7 +468,7 @@ The `setName` string is the canonical match key used everywhere in this app.
 1. **Admin Catalog → "New Set"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics)) —
    fastest for a set that isn't fully synced yet or a curated/custom one. Registers the set in
    the registry (Firestore `registry/main`) directly from the UI with no group-metadata guessing.
-2. **Admin Catalog → "Sync Card Data"** (see [§14](#automated-sync--admin-catalog)) — the steps below
+2. **Admin Catalog → "Sync Card Data"** (see [§16](#automated-sync--admin-catalog)) — the steps below
    run automatically for real, newly-detected upstream sets, with conservative review-required
    defaults.
 3. **Manual**, described below — what both of the above actually do under the hood, and the
@@ -479,7 +485,7 @@ No `npm run build`/restart needed for the card data itself (see
 makes a set show up in the Cardex/Pack Analysis, and that's a plain Firestore write too.
 
 Then register the set in **the registry** (Firestore `registry/main` — this one doc replaced the
-three hardcoded arrays that used to need separate edits — see [§14](#automated-sync--admin-catalog)):
+three hardcoded arrays that used to need separate edits — see [§16](#automated-sync--admin-catalog)):
 
 ```json
 { "setName": "New Set Name", "code": "XYZ", "lorcastId": "14", "releaseDate": "2026-08-01",
@@ -547,12 +553,12 @@ Each card doc:
   "setCode": "OGN",            // set code: OGN, SFD, UNL, OGS, VEN, RAD
   "setName": "Origins",        // human-readable set name
   "rarity": "Common",          // Common, Uncommon, Rare, Epic (called "Champion" by Riot),
-                               //   Showcase, Star (Signature = "Star" in catalog)
+                               //   Alt Art, Overnumbered, Star (Signature = "Star" in catalog)
   "cardType": "Unit",          // Unit, Spell, Item, etc.
   "tags": ["Ahri"],            // champion tags — "Deceiver" is tagged ["LeBlanc"] etc.
   "imageUrl": "https://cmsassets.rgpub.io/...",  // Riot CDN, JPEG format
   "marketPrice": 1.25,         // TCGPlayer normal market price (0 if unpriced)
-  "marketPriceFoil": 0         // TCGPlayer foil market price (Showcase/Star only have foil)
+  "marketPriceFoil": 0         // TCGPlayer foil market price (Alt Art/Star only have foil)
 }
 ```
 
@@ -561,17 +567,25 @@ Each card doc:
 Riftbound has multiple "alt-art" variants for the same card, all sharing the same collector
 number. This is why a simple number-based lookup causes false positives in the Cardex.
 
+Alt Art and Overnumbered used to be flattened into a single `rarity: "Showcase"` value (both
+are visually "showcase-style" prints upstream on Riot's own gallery) — the catalog now splits
+them into their own distinct rarity strings so the app calls each variant what collectors
+actually call it. `lib/utils.ts`'s `riftboundVariantFlags()` is the shared classifier every
+consumer (search, Cardex, pricing) goes through; it still re-derives the Overnumbered signal
+from `publicCode` (not just the rarity string) as a defensive fallback for any doc a resync
+hasn't touched yet.
+
 | Variant | Rarity | publicCode | Description |
 |---------|--------|-----------|-------------|
 | Base | Common/Uncommon/Rare/Epic | `OGN-001/298` | Normal card |
-| Showcase | Showcase | `OGN-007a/298` | Alt art (same number, "a" suffix in publicCode) |
-| Overnumber | Showcase | `OGN-227/221` | Collector number exceeds set size |
+| Alt Art | Alt Art | `OGN-007a/298` | Same-number alt art (foil-only, "a" suffix in publicCode) |
+| Overnumbered | Overnumbered | `OGN-227/221` | Collector number exceeds set size (prints like a regular card, not foil-only) |
 | Signature | Star | `OGN-227*/221` | Signed variant, `*` suffix in publicCode |
 
 The `RARITY_ORDER` in the Cardex API sorts these:
-- Common=0, Uncommon=1, Rare=2, Epic=3 (Champion), Showcase=90, Star=91
+- Common=0, Uncommon=1, Rare=2, Epic=3 (Champion), Alt Art=90, Overnumbered=90, Star=91
 
-Showcase and Star always appear after the base card with the same number.
+Alt Art, Overnumbered, and Star always appear after the base card with the same number.
 
 ### Price Matching Logic (Riftbound)
 
@@ -580,13 +594,13 @@ to catalog cards:
 
 ```
 catalogKey(card) → "OGN:7:regular"  (base Ahri card #7)
-catalogKey(card) → "OGN:7:altart"   (Showcase with publicCode "007a/298")
-catalogKey(card) → "OGN:227:over"   (Overnumber)
+catalogKey(card) → "OGN:7:altart"   (Alt Art with publicCode "007a/298")
+catalogKey(card) → "OGN:227:over"   (Overnumbered)
 catalogKey(card) → "OGN:227:star"   (Signature)
 ```
 
-Showcase and Star cards only have foil prices. The script assigns `marketPrice` as the foil
-price for these variants.
+Alt Art and Star cards only have foil prices. The script assigns `marketPrice` as the foil
+price for these variants. Overnumbered prints like a regular card (not foil-only).
 
 ### Known Riftbound Sets (as of July 2026)
 
@@ -609,7 +623,7 @@ price for these variants.
 2. **Admin Catalog → "Check Raw Source"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics))
    — once a set exists (via either path here), use this to catch individual cards the scrape
    silently skipped, independent of whether the set-level sync worked.
-3. **Admin Catalog → "Sync Card Data"** (see [§14](#automated-sync--admin-catalog)) — this whole flow,
+3. **Admin Catalog → "Sync Card Data"** (see [§16](#automated-sync--admin-catalog)) — this whole flow,
    including the group-ID lookup, runs automatically for real newly-detected sets.
 4. **Manual**, described below — what the automated paths actually do under the hood, and the
    fallback if you'd rather not use either UI. Card data (names, images, sets) is already fully
@@ -665,6 +679,325 @@ No rebuild/restart needed for the card data itself — only actual code changes 
 
 ---
 
+## One Piece — Data Source, Schema, Add-a-Set Guide
+
+The fourth game (added after Pokémon/Lorcana/Riftbound). Architecturally it's a hybrid of the
+other three: card data comes from a GitHub-hosted JSON dataset like Pokémon's, but — like
+Riftbound — there's no live external "sets" API, so the registry itself is the authoritative set
+list. Price-matching, though, needs **none** of Riftbound's per-set TCGPlayer group-ID bootstrap
+or fuzzy name-matching — see below for why. Cardex integration works like Pokémon's: sets are
+grouped automatically (by set-code prefix here, not a `series` field), no per-set registry
+curation.
+
+### Data Sources
+
+**Card data:** `github.com/apitcg/one-piece-tcg-data` (community-maintained, MIT-shaped exactly
+like `PokemonTCG/pokemon-tcg-data` — one JSON file per set/bucket under `cards/en/`, no API key,
+no rate limit beyond plain GitHub raw-content serving). Every print variant is already a separate
+array entry: a base card `"OP01-024"` and its "Parallel" alt-art reprint(s) `"OP01-024_p1"`,
+`"OP01-024_p2"`, ... share the same `code` but have distinct `id`s. This is also where secret
+rares (`SEC`) and one-off promo cards live — e.g. a special "DODGERS ONE PIECE NIGHT" giveaway
+Leader card shows up here as its own tiny "set" with exactly one card in it, the same way Lorcana's
+tcgcsv-sourced promo groups do.
+
+**Price data:** `tcgcsv.com` category **68**. Unlike the other three games, price matching needs
+**no per-set group-ID bootstrap and no fuzzy set-name matching at all** — tcgcsv's `extNumber`
+column is *literally* the same card code apitcg uses (`"OP01-024"`), so cards match across the
+two sources by an exact string compare, with zero normalization. `downloadOnePiece()`
+(`scripts/lib/catalog-sync.mjs`) just fetches *every* tcgcsv group (there are ~90) and builds one
+global `code -> prices` map, rather than needing to know in advance which TCGPlayer group
+corresponds to which set.
+
+**Phase 3 — synthesizing cards for sets apitcg hasn't scraped yet:** apitcg's GitHub dataset can
+lag real TCGPlayer releases by weeks. When this app first synced One Piece, apitcg's `cards/en/`
+topped out at `op12.json` while OP13 through OP17 (five whole sets, hundreds of cards, including
+one of the game's most famous chase cards — OP13-118's "Red Super Alternate Art" secret-rare
+Luffy) were already selling on TCGPlayer with real prices. Rather than have those sets be
+invisible until apitcg catches up, `downloadOnePiece()` builds minimal card entries directly from
+tcgcsv's own CSV columns (`name`, `extRarity`, `imageUrl`) for any code with priced rows but no
+matching apitcg card — mirroring apitcg's own `id` scheme (base = the bare code, Parallels =
+`_p1`/`_p2`/...) so a synthesized card is indistinguishable from a real one to the rest of the
+app. Same "build catalog cards straight from TCGPlayer data when the primary source doesn't have
+them" pattern `downloadLorcana()`'s own Phase 3 already uses for its TCGPlayer-only promo groups.
+This also needs a set *name* for each synthesized set, which comes from the tcgcsv group's own
+`name` field — matched to a card's code prefix via that group's `abbreviation`, which turned out
+to need real parsing: some groups combine two sets under one abbreviation ("OP15-EB04" — one
+prefix per segment, e.g. `"Adventure on Kami's Island"` for **both** "OP15" and "EB04") or split
+one prefix's number across segments ("ST-31" → "ST31", "EB-03-04" → "EB03" **and** "EB04"). See
+the `groupNameByPrefix` parsing loop in `downloadOnePiece()` for the resulting rule (a pure-letters
+segment sets the "current" prefix for any pure-digits segment that follows it; a segment that's
+already letters+digits registers immediately and becomes the new current prefix).
+
+Synthesized sets still need a registry `code` for Cardex's Main-Sets-vs-Special-Sets bucketing
+(see below) — every synthesized card exists only because tcgcsv has a real numbered product group
+for it, which is the functional equivalent of apitcg's official bracket, so `downloadOnePiece()`
+registers each synthesized setName's prefix into the same `setBracketCodes` map real
+bracket-derived sets use (see Set Code Parsing below), letting a genuine OP13-17 set land in Main
+Sets the same as OP01-12 rather than getting stuck in Special Sets for lacking an apitcg bracket
+it was never going to have.
+
+### Catalog Schema (`catalog/onepiece/cards/{id}` Firestore doc)
+
+Each card doc:
+```json
+{
+  "id": "OP01-024",           // apitcg's own id — "OP01-024_p1" for a Parallel print, "_p2" etc.
+  "name": "Monkey.D.Luffy",    // same for every print variant — see Print Variants below
+  "set": "OP01",               // print-numbering prefix (always present, never empty) — NOT
+                                // the same thing as the registry's set-level `code` (see Cardex
+                                // Grouping below); this is a per-card display field
+  "setName": "Romance Dawn",   // human-readable set name
+  "number": "024",             // bare collector number, no set-size denominator
+  "rarity": "SR",              // L, C, UC, R, SR, SEC, "SP CARD" — unlike Pokemon, always present
+  "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/453508_200w.jpg", // TCGPlayer's own
+                                // product photo, NOT the official gallery — see Image Hosting below
+  "marketPrice": 2.34          // no marketPriceFoil — see Print Variants below
+}
+```
+
+### Image Hosting — TCGPlayer CDN, not the official gallery
+
+apitcg's own `images.large`/`images.small` fields are `en.onepiece-cardgame.com` URLs (the
+official Bandai site never rehosts images anywhere else). Those URLs return `200 OK` to a plain
+`curl` or a server-side `fetch` — but they **never render in a browser `<img>` tag, from any
+origin, in dev or in production**, because that domain sends
+`Cross-Origin-Resource-Policy: same-site` on every image response, which every browser enforces
+regardless of how the resource itself responds to a non-browser client. A raw HTTP 200 check on
+one of these URLs is not evidence it'll actually display — this shipped broken once (silently:
+every card tile just showed no artwork, no error in the console) before being caught by comparing
+what `curl` saw against what actually rendered.
+
+The fix: during the Phase 2 price-merge (see below), `downloadOnePiece()` also captures each
+tcgcsv row's own `imageUrl` column (TCGPlayer's CDN sends no such CORP header) and overwrites
+`card.imageUrl` with it whenever a price-matching row exists for that card — using the exact same
+positional base/`_p1`/`_p2`/... pairing already established for price, so a Parallel print gets
+its own distinct TCGPlayer product photo, not the base card's. This is the same "prefer a
+TCGPlayer product image" pattern `downloadRiftbound()` already uses for its synthesized
+Star/Signature stubs (`imageUrl: p.img || baseCard.imageUrl`), just applied unconditionally here
+rather than only to synthesized cards, since the underlying problem (official-site images never
+render for *any* card) isn't specific to those. The ~1% of cards with no tcgcsv price match at
+all (see Print Variants below) keep the official gallery URL as a last resort — still broken in a
+browser, but there's no better source to fall back to for those.
+
+### Print Variants (Parallels, Secret Rares) — no foil/non-foil duality
+
+Unlike Pokémon (holo vs. normal) or Lorcana/Riftbound (a foil toggle on the *same* printing), a
+One Piece "Parallel" is a **fully separate physical print** with its own alternate art — apitcg
+already models it as its own catalog `id`, so it's synced as its own independent catalog doc with
+its own `marketPrice`, not as a second price field on the base card. Consequences:
+
+- **No `marketPriceFoil` field** — there's nothing to put in it. `app/api/prices/onepiece/route.ts`
+  is a plain `id -> marketPrice` lookup, no `isFoil`/`priceMode` branching at all.
+- **`AddCardDialog`'s Foil toggle is hidden for One Piece** (`form.game !== 'onepiece'` guard) —
+  selecting a Parallel print from the search dropdown (labeled e.g. `"Shanks (Parallel)"`, or
+  `"Shanks (Parallel 2)"` for a rarer 2nd/3rd art) is how a Parallel gets added, not a checkbox.
+- **Cardex ownership fallback** (no `apiId`, i.e. a manually-typed card) matches by
+  `set === setName && number === number`, same shape as Lorcana's — safe for the same reason it's
+  safe for Lorcana but not Riftbound: a catalog number here never has more than one *base* variant
+  sharing it (the base/Parallel split lives entirely in separate `id`s, not in `number`).
+
+**The one genuine approximation in this whole integration:** TCGPlayer doesn't tag which product
+row is the "regular" print vs. which numbered Parallel it is — only the product *name* contains
+`"(Parallel)"` (sometimes with more descriptive suffixes like `"(Parallel) (Manga) (Alternate
+Art)"`). `downloadOnePiece()` sorts tcgcsv rows for a given code by `productId` ascending (a
+reasonable proxy for catalog/release order) and matches them **positionally** against apitcg's own
+base/`_p1`/`_p2`/... ordering. Rows with no market data are filtered out first (`price === 0` skip)
+so an unpriced listing can't silently displace a real variant's slot — but this is still an
+approximation, not a verified pairing. If a Parallel's price ever looks applied to the wrong art,
+this positional matching is the place to look.
+
+### How New One Piece Sets Are Added
+
+There's no manual registry step needed the way Riftbound needs a TCGPlayer group ID — because
+price-matching is fully code-keyed (see above), a set becomes fully priced the moment
+`npm run download-cards` (or Admin Catalog's "Sync Card Data") next runs, automatically:
+
+1. `scripts/lib/catalog-sync.mjs`'s `downloadOnePiece()` scrapes every `cards/en/*.json` file from
+   the GitHub dataset — new sets appear there as soon as apitcg's own scraper picks them up from
+   `en.onepiece-cardgame.com/cardlist/`, no code change needed on this app's side.
+2. `app/api/sync/onepiece/route.ts` (what both the CLI script and Admin Catalog's "Sync Card
+   Data" button call into) diffs the freshly-scraped `setName`s against the registry
+   (`registry/main`'s `onepiece.sets`, Firestore) and backfills any new one with
+   `{ setName, code, releaseDate: null, cardCount, source: 'auto-detected' }` — mirroring exactly
+   how Riftbound's sync route backfills its own registry (Riftbound has no live sets API either),
+   minus everything group-ID-related, which One Piece doesn't need.
+3. That's it — no group-ID lookup, no fuzzy matching, no `needsReview` flag, nothing for
+   Settings' "Needs Review" editor to ever show for this game (same as Pokémon).
+
+A **custom/curated** set can still be registered manually via Admin Catalog's "New Set" form (no
+`cardexGroup` needed, same as Pokémon) — it lands in Cardex's own "Special Sets" group (see
+below) rather than a real numbered set, since it has no upstream product code to bucket by.
+
+### Set Code Parsing (`parseOnePieceSetName()` in `catalog-sync.mjs`)
+
+apitcg's raw `set.name` field looks like `"-ROMANCE DAWN- [OP01]"` (a real numbered booster) or
+`"DODGERS ONE PIECE NIGHT"` (a one-off promo with no official bracketed code at all). The bracket,
+when present, gives the real set code; its absence means the "set" is really just an event/promo
+grouping, not a genuine product. **This distinction is tracked in two separate places for two
+separate purposes, and conflating them was a real bug caught during this feature's own build:**
+
+- A synced **card's own `set` field** is never empty — a bracket-less promo falls back to the
+  card's own print-numbering prefix (e.g. `"EB02"` for a card sold at a special event but printed
+  as part of Extra Booster 02's card pool). This is a reasonable per-card display value (it really
+  does say which print run the card belongs to).
+- The **registry's set-level `code` field** (what Cardex grouping actually keys on — see below)
+  is bracket-only: `null`/empty for anything without a real bracket, *even if* its cards' own
+  `set` fields resolved to something that looks like a real prefix via the fallback above.
+  `downloadOnePiece()` tracks this separately as a `setName -> bracketCode|null` map
+  (`setBracketCodes`, returned as `setCodesBySetName` alongside the usual sync result) precisely
+  so `app/api/sync/onepiece/route.ts` can populate the registry from the *bracket-only* signal.
+  Using the per-card fallback value instead (i.e. `cards[0].set`) — which is what the first version
+  of this route did — miscategorized dozens of one-off tournament/event "sets" into the Cardex's
+  Main Sets group, since a "Treasure Cup" promo printed from OP09's card pool would resolve to
+  `code: "OP09"` under the fallback and look indistinguishable from the real OP09 booster set.
+
+### Cardex Grouping — two groups, not a registry `cardexGroup`
+
+Like Pokémon, One Piece doesn't get a hand-curated `cardexGroup` per set — hand-curating one for
+~110 sets (most of them tiny one-off tournament/event promos, not real products) isn't worth it,
+and splitting all of those into their own per-prefix sections (Starter Decks, Extra Boosters,
+Premium Boosters, ...) just recreates the "too many sections to scan" clutter this scheme exists
+to avoid. `CardexPage.tsx`'s `buildOnePieceGroups()` instead makes exactly two catalog-backed
+groups, keyed on the registry's bracket-only `code` (see above, not a card's own `set` field):
+
+- **Main Sets** — only real numbered boosters (`code` matches `/^OP(\d+)$/`, e.g. `OP01`..`OP12`
+  as of this writing — apitcg's dataset lags Bandai's actual releases, so a just-released set may
+  not appear here immediately even after a sync). Sorted newest-first by that number and labeled
+  with it, e.g. `"Romance Dawn : OP-01"`, so the set's real product code is visible at a glance
+  without opening it.
+- **Special Sets** — everything else in one group: starter decks, extra/premium boosters, every
+  tournament/event promo apitcg tracks, and any custom/manual set. This deliberately does not
+  distinguish "a real Starter Deck box" from "a single-card giveaway" — both are equally
+  legitimate things to want to browse, and splitting them apart again would just be re-introducing
+  the clutter that having two groups instead of one-per-prefix was meant to fix.
+
+See CLAUDE.md quirk #9 for the same "why not a registry" reasoning applied to Pokémon, and quirk
+#22 for the fallback-vs-bracket bug this two-group design's `code` signal had to be fixed to avoid.
+
+---
+
+## Magic: The Gathering — Data Source, Schema, Add-a-Set Guide
+
+The 5th game. Architecturally closest to Pokémon: a live external "sets" API means no registry
+`cardexGroup` curation is needed (see quirk #9), and no per-set price-matching bootstrap the way
+Riftbound needs — but unlike every other game here, its bulk data source returns **prices and
+images directly on the card object itself**, so there's no separate TCGCSV/lorcast-style
+price-merge pass at all; one bulk-data fetch is the whole sync.
+
+**Read `MTG Integration.md` at the repo root before touching anything MTG-related** — it has the
+full story on why the first real sync hasn't been run yet (Firestore write-quota risk) and the
+exact steps to turn it on. Short version: the code below is fully built and wired everywhere
+every other game is, but `app/api/cron/sync-prices/route.ts` (the 4x/day automatic price refresh)
+and the default `npm run download-cards` (no flag) both deliberately skip MTG — only a manual
+Admin Catalog "Sync Card Data" click, or `npm run download-cards -- --include-mtg`, actually
+pulls it. Until a first sync runs, `catalog/mtg/cards` doesn't exist yet and every MTG search/
+Cardex/Portfolio-price call just returns empty, same as any other game before its first sync.
+
+### Data Source
+
+**API:** `api.scryfall.com` — a free, no-key-required public API maintained independently of
+Wizards of the Coast, generally considered the most complete and reliable Magic card database
+available. **Every request must carry a `User-Agent` and `Accept` header or Scryfall returns a
+plain 400** — this is handled by `SCRYFALL_HEADERS` in `lib/api/mtg.ts` (duplicated in
+`scripts/lib/catalog-sync.mjs` and the Admin Catalog lookup route, same "duplicated across the
+runtime boundary on purpose" pattern as this app's other external-source header constants).
+
+**Bulk card data:** `GET https://api.scryfall.com/bulk-data` returns a listing of pre-built
+dataset files; `downloadMTG()` (`scripts/lib/catalog-sync.mjs`) uses the `default_cards` entry —
+one object per distinct **printing** (every reprint/set/finish counted separately, the same "one
+catalog row per physical card" model every other game here uses), as opposed to `oracle_cards`
+(one row per unique card, no reprint granularity — rejected, since that would lose per-printing
+pricing/images) or `all_cards` (every language variant too — unnecessarily huge). As of this
+writing that file is a **~75MB gzip-compressed `.jsonl`** (newline-delimited JSON, one card per
+line — exposed as the listing's `jsonl_download_uri` field, not a plain `download_uri`)
+decompressing to ~100k+ card objects, more text than fits in a single JS string (V8's ~512MB max
+string length) — `downloadMTG()` therefore streams it (gunzip → `readline`, one JSON object per
+line) rather than buffering the whole thing. **Scryfall has changed this bulk-data shape before —
+re-verify `GET /bulk-data`'s response shape if this code ever needs touching again.**
+
+**Set list:** `GET https://api.scryfall.com/sets` — used live by `lib/api/mtg.ts`'s
+`getMtgSets()`, exactly the same "live external sets API, no registry entry needed for real sets"
+shape as `lib/api/pokemon.ts`'s `getPokemonSets()` (see quirk #9). Cached in-process for an hour
+(Scryfall adds new sets only a few times a year, far less often than the 2-minute catalog
+staleness window everything else uses).
+
+### Filtering — what's excluded from the catalog
+
+Two independent filters, applied identically in `downloadMTG()` and `getMtgSets()` (the latter
+via the same `MTG_EXCLUDED_SET_TYPES` blocklist, exported from `lib/api/mtg.ts`, so the set
+picker never offers a set with zero cataloged cards in it):
+
+- **`games.includes('paper')`** — excludes any printing only available on Magic Arena or MTGO.
+  This alone already excludes every purely-digital "Alchemy" set, since none of its cards are
+  ever in `games` alongside `'paper'`.
+- **`set_type` blocklist** (`token`, `memorabilia`, `art_series`, `minigame`) — real paper
+  products, but not "cards" in the collecting sense a physical binder would contain. This was a
+  deliberate scope decision (every printing IS tracked, per-set/per-printing pricing and all —
+  see the schema below — but these four set types specifically are not).
+
+### Catalog Schema (`catalog/mtg/cards/{id}` Firestore doc)
+
+Each card doc:
+```json
+{
+  "id": "0000419b-0bba-4488-8f7a-6194544ce91e",  // Scryfall's own UUID for this exact printing —
+                                                   // already globally unique, no set-prefixing
+  "name": "Forest",                 // Scryfall already combines multi-faced cards as "Front // Back"
+  "set": "blb",                     // Scryfall's lowercase set code
+  "setName": "Bloomburrow",
+  "number": "280",                  // collector_number as-is — can contain letters/suffixes
+                                     // ("150a", "★") the way Riftbound's publicCode suffixes do
+  "rarity": "common",               // common, uncommon, rare, mythic, special, bonus — always
+                                     // lowercase, always present (unlike Pokemon's schema)
+  "imageUrl": "https://cards.scryfall.io/normal/front/...",
+  "marketPrice": 0.37,              // usd — 0 if Scryfall has no listing data
+  "marketPriceFoil": 0.60           // usd_foil, falling back to usd_etched for etched-only
+                                     // treatments that have no usd_foil price at all
+}
+```
+
+Double-faced/split/adventure cards (`layout: "transform"` etc.) carry their images per-face
+(`card_faces[0].image_uris...`) instead of top-level `image_uris` — `downloadMTG()` falls back to
+the front face's image in that case. `prices` itself is always top-level regardless of layout, so
+no equivalent fallback is needed there.
+
+### Print Variants — closer to Pokemon/Lorcana than Riftbound/One Piece
+
+Unlike Riftbound (Alt Art/Overnumbered/Signature sharing a bare collector number) or One Piece (a
+Parallel print as a separate id sharing a bare number with its base card), a different art/border/
+frame treatment of the same Magic card is virtually always given its **own distinct collector
+number** as a fully separate Scryfall object — there's no same-number variant-sharing scheme to
+worry about. Foil vs. nonfoil, meanwhile, is a **finish of one printing**, not a second catalog
+id — `marketPrice`/`marketPriceFoil` on the same doc, exactly like Pokemon/Lorcana/Riftbound's
+foil handling, not like One Piece's separate-id Parallels. This is why the Cardex ownership
+fallback (no `apiId`, i.e. a manually-typed card) uses the same safe `set === setName && number
+=== number` shape Pokemon/Lorcana already use — see quirk #9's reasoning, which applies here for
+the same reason.
+
+### How New MTG Sets Are Added
+
+New sets appear on Scryfall's live `/sets` endpoint automatically, same day Wizards spoils them —
+nothing to register anywhere for a *real* set to become searchable/addable; the next
+`downloadMTG()` sync picks up its cards. A **custom/curated** set still needs Admin Catalog's
+"New Set" form the same way Pokemon's does (no `cardexGroup` needed — see Cardex Grouping below),
+registered in the registry (Firestore `registry/main`'s `mtg.sets`) with `source: "manual"` so
+`getMtgSets()` merges it into the live Scryfall list the same way `getPokemonSets()` merges in
+Pokemon's manual sets.
+
+### Cardex Grouping — automatic, keyed on Scryfall's own `set_type`
+
+Like Pokemon (by `series`) and One Piece (by set-code prefix), MTG doesn't get a hand-curated
+`cardexGroup` per set — Scryfall tracks 650+ sets, most of them niche box sets/reprint products,
+so hand-curating one per set isn't worth it (see quirk #9). `buildMtgGroups()`
+(`CardexPage.tsx`) instead groups by Scryfall's own `set_type` field, with the handful of types a
+collector actually thinks of as "a Magic set" getting their own labeled group (Expansions, Core
+Sets, Masters & Reprint Sets, Commander, Draft Innovation, Un-Sets, Promos) and everything else
+(duel decks, premium decks, From the Vault, Spellbook Series, Archenemy/Planechase/Vanguard
+oversized-card products, starter sets, etc.) collapsing into one "Special Sets" catch-all — same
+shape as One Piece's Main Sets/Special Sets split.
+
+---
+
 ## Card Search Flow
 
 When Alex types a name in the AddCardDialog search box:
@@ -700,34 +1033,95 @@ themed card).
 
 ## Price Data
 
+**As of the price-refresh redesign (see [§17](#cron-driven-price-sync)), live external price
+fetches for all four games happen in exactly one place: the 6-hourly cron-driven catalog sync.**
+Nothing else — not Portfolio's "Refresh Prices" button, not Pack Analysis — ever calls
+tcgcsv.com/lorcast/pokemontcg.io directly anymore. Both instead read whatever the catalog
+currently has (`loadCatalog()`/`loadVisibleCatalog()`, [§4](#card-catalog-system--deep-dive-firestore-backed)),
+which is therefore at most ~6 hours stale. This was a deliberate trade (see [§17](#cron-driven-price-sync)
+for the full rationale): dramatically fewer outbound API calls — no more re-fetching a full
+tcgcsv CSV or hitting lorcast once per card on every user's every portfolio visit — at the cost of
+prices only being as fresh as the last cron run rather than truly live-on-click.
+
+`AddCardDialog`'s search dropdown is the one exception — see [Card Search
+Flow](#card-search-flow): selecting a Pokémon card there still shows whatever price
+`searchPokemonCards()` got from that live `api.pokemontcg.io` search call, since that's a single
+lightweight request already happening anyway for the search itself, not a bulk refresh.
+
 ### Pokémon
 
-- **Source:** `api.pokemontcg.io/v2` (official API)
-- **When fetched:** Live, per-card, when Alex selects a card in AddCardDialog
-- **API key:** Set `NEXT_PUBLIC_POKEMON_TCG_API_KEY` in `.env.local` for higher rate limits
-  (5000/day with key vs 250/day without). Without a key, the app still works.
-- **Price refresh:** Portfolio page → "Refresh Prices" button calls `getPokemonCardPrice(apiId, isFoil)`
-  which hits `api.pokemontcg.io/v2/cards/{id}` and reads `tcgplayer.prices`
+- **Source:** `tcgcsv.com` (TCGPlayer mirror, category 3), synced into each card's Firestore doc.
+  (`api.pokemontcg.io` is used live only by the AddCardDialog search box, see above — never by a
+  bulk price refresh.)
+- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`
+- **Fields in catalog:** `marketPrice`/`marketPriceFoil` (normal/holofoil) and
+  `lowPriceNM`/`lowPriceNMFoil` (lowest normal/holofoil listing — powers the "Lowest NM" price mode)
+- **Price refresh:** Portfolio page → "Refresh Prices" reads `catalog/pokemon/cards/*` for just
+  the apiIds in Alex's own inventory (`app/api/prices/pokemon/route.ts`) — an in-memory catalog
+  lookup, no network call to pokemontcg.io
 - **Foil logic:** `isFoil=true` → holofoil market price; `isFoil=false` → normal market price
 - **Stored on Card:** `currentPrice` field updated by refresh; `purchasePrice` set when card added
 
 ### Lorcana
 
 - **Source:** `api.lorcast.com`, synced into each card's Firestore doc
-- **When fetched:** At `npm run download-cards` time (no live fetch during a normal search) —
-  Pack Analysis is the one exception, see [§13](#pack-analysis-feature--how-sets-register)
-- **To update prices:** `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
-- **Fields in catalog:** `marketPrice` (non-foil) and `marketPriceFoil` (foil/cold foil)
+- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`.
+  There is no live per-request lorcast call anywhere anymore — Portfolio's refresh used to fetch
+  `api.lorcast.com/v0/cards/{id}` one card at a time (8-way concurrency) since lorcast has no bulk
+  price endpoint, which made it by far the slowest of the three games to refresh; it now just
+  reads the catalog like the other two games.
+- **To update prices:** the cron sync, or `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
+- **Fields in catalog:** `marketPrice` (non-foil) and `marketPriceFoil` (foil/cold foil) — lorcast
+  has no separate "lowest listing" price, so `priceMode: 'lowestNM'` just falls back to `marketPrice`
 - **Note:** Enchanted and Epic cards may have `marketPrice: 0` because they are foil-only;
   their price is in `marketPriceFoil`
 
 ### Riftbound
 
-- **Source:** `tcgcsv.com` (TCGPlayer mirror), synced into each card's Firestore doc
-- **When fetched:** At `npm run download-cards` time
-- **Showcase/Star cards:** These are foil-only; `marketPrice` is set to the foil price,
+- **Source:** `tcgcsv.com` (TCGPlayer mirror, category 89), synced into each card's Firestore doc
+- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`.
+  Portfolio's refresh and Pack Analysis used to each independently re-download and re-parse every
+  set's full `ProductsAndPrices.csv` live, on every single call — the single most expensive thing
+  in the app before this redesign, since it scaled with every set ever added, on every user's
+  every refresh/page view. Both now just read the catalog.
+- **Alt Art/Star cards:** These are foil-only; `marketPrice` is set to the foil price,
   `marketPriceFoil` is 0 (they don't have separate foil vs non-foil listing)
-- **To update prices:** `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
+- **To update prices:** the cron sync, or `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
+
+### One Piece
+
+- **Source:** `tcgcsv.com` (TCGPlayer mirror, category 68), synced into each card's Firestore doc.
+  Matched by exact card code (`extNumber` == apitcg's `code`) — no group-ID bootstrap or fuzzy
+  set-name matching needed at all, unlike Riftbound (see
+  [§10](#one-piece--data-source-schema-add-a-set-guide) for why).
+- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`
+- **Fields in catalog:** `marketPrice` only — **no `marketPriceFoil`**. A "Parallel" print is a
+  fully separate catalog card (its own `id`, its own `marketPrice`), not a foil toggle of the base
+  card the way the other three games' foil variants are — see
+  [§10](#one-piece--data-source-schema-add-a-set-guide)'s Print Variants section.
+- **Price refresh:** Portfolio page → "Refresh Prices" reads `catalog/onepiece/cards/*` for just
+  the apiIds in Alex's own inventory (`app/api/prices/onepiece/route.ts`) — plain `id ->
+  marketPrice` lookup, no `isFoil`/`priceMode` branching (nothing to branch on)
+- **To update prices:** the cron sync, or `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
+
+### Magic: The Gathering
+
+- **Source:** `api.scryfall.com`, prices included directly on each card object — no separate
+  price-matching/merge pass at all, unlike the TCGCSV-based games (see
+  [§11](#magic-the-gathering--data-source-schema-add-a-set-guide) for why).
+- **When fetched:** **Not yet on the cron sync** — MTG is deliberately excluded from
+  `app/api/cron/sync-prices/route.ts` until its Firestore write-quota impact is confirmed
+  acceptable (its first sync alone is ~99,000 document writes). Only a manual Admin Catalog
+  "Sync Card Data" click, or `npm run download-cards -- --include-mtg`, actually syncs it right
+  now. See "MTG Integration.md" at the repo root for the full writeup and how to turn it on.
+- **Fields in catalog:** `marketPrice` (usd) and `marketPriceFoil` (usd_foil, falling back to
+  usd_etched) — same shape as Lorcana/Riftbound's foil handling, not One Piece's separate-id
+  Parallels.
+- **Price refresh:** Portfolio page → "Refresh Prices" reads `catalog/mtg/cards/*` for just the
+  apiIds in Alex's own inventory (`app/api/prices/mtg/route.ts`) — same `isFoil`-branching shape
+  as `app/api/prices/lorcana/route.ts`.
+- **To update prices:** a manual Admin Catalog sync or `npm run download-cards -- --include-mtg`
+  only, for now (no rebuild needed once run — see [§4](#card-catalog-system--deep-dive-firestore-backed)).
 
 ---
 
@@ -750,27 +1144,50 @@ for why that's a fundamentally different feature sharing a page, not another set
 ### The Two Matching Strategies
 
 **Primary (apiId):** If `card.apiId` exists, it must exactly equal `catalogCard.id`.
-This is the only reliable match for Riftbound Showcase/Overnumber/Signature cards that
+This is the only reliable match for Riftbound Alt Art/Overnumbered/Signature cards that
 share collector numbers with their base card.
 
 **Fallback (set + number):** Used when `card.apiId` is absent (manually added cards).
 - Lorcana: `card.set === catalogCard.setName && card.number === catalogCard.number`
 - Riftbound: `card.setCode === catalogCard.setCode && card.number === catalogCard.number`
+- Pokemon: `card.set === catalogCard.setName && card.number === catalogCard.number` — same shape
+  as Lorcana's, and safe for the same reason: a Pokemon catalog number never has more than one
+  card doc sharing it (no alt-art/overnumbered variant scheme), so unlike Riftbound there's no
+  false-positive risk from the fallback alone.
+- One Piece: `card.set === catalogCard.setName && card.number === catalogCard.number` — same
+  shape and same safety reasoning as Pokemon's: a base card and its Parallel print(s) are
+  distinct `id`s, not a shared `number` with a rarity/suffix distinguishing them, so this
+  fallback can't collapse two real variants onto one slot the way Riftbound's can.
 
-**Warning:** The fallback can cause false positives for Riftbound Showcase cards. If Alex
-owns an Overnumber card but added it without selecting from the search dropdown (so no
-`apiId`), both the Overnumber and Showcase slot will show as owned. The fix is to always
-select cards from the dropdown so `apiId` is set.
+**Warning:** The fallback can cause false positives for Riftbound Alt Art/Overnumbered cards.
+If Alex owns an Overnumbered card but added it without selecting from the search dropdown (so
+no `apiId`), both the Overnumbered and Alt Art slot will show as owned. The fix is to always
+select cards from the dropdown so `apiId` is set. This warning doesn't apply to Lorcana,
+Pokemon, or One Piece — see above.
 
 ### Set Registration
 
-To appear in the Cardex set picker, a set must have a `cardexGroup` value in its
-**registry** entry (Firestore `registry/main`, see [§14](#automated-sync--admin-catalog)) matching one of
-that game's `groupOrder` labels. `CardexPage.tsx` fetches `GET /api/set-registry` once on mount
-and derives the equivalent of the old hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS` client-side
-via `buildGroupsByGame()`. The `setName` field must exactly match the `setName` field on the
-catalog's Firestore card docs — this is also exactly what Admin Catalog's "New Set" form
+**Lorcana/Riftbound:** To appear in the Cardex set picker, a set must have a `cardexGroup` value
+in its **registry** entry (Firestore `registry/main`, see [§16](#automated-sync--admin-catalog))
+matching one of that game's `groupOrder` labels. `CardexPage.tsx` fetches `GET /api/set-registry`
+once on mount and derives the equivalent of the old hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS`
+client-side via `buildGroupsByGame()`. The `setName` field must exactly match the `setName` field
+on the catalog's Firestore card docs — this is also exactly what Admin Catalog's "New Set" form
 registers (see [§5](#admin-catalog-page--architecture-caching--diagnostics)).
+
+**Pokemon:** No registry entry or `cardexGroup` needed — every set `GET /api/sets?game=pokemon`
+returns (see [§7](#pokemon--data-source-schema-add-a-set-guide)) is automatically groupable, since
+`CardexPage.tsx`'s `buildPokemonGroups()` derives groups from the live API's `series` field
+instead. A custom/manual Pokemon set (Admin Catalog "New Set") still shows up too — it just lands
+in its own trailing "Custom Sets" group rather than a real era, since it has no upstream `series`.
+See quirk #9 for the full reasoning.
+
+**One Piece:** Also no `cardexGroup` needed, for the same "too many sets to hand-curate" reason —
+but unlike Pokemon there's no live external `series` field either, so `buildOnePieceGroups()`
+derives the grouping from the set-code *prefix* it already parsed while syncing (`OP##` → Booster
+Sets, `ST##` → Starter Decks, `EB##` → Extra Boosters, `PRB##` → Premium Boosters, anything else →
+Promos & Events). See [§10](#one-piece--data-source-schema-add-a-set-guide) for the full table and
+reasoning.
 
 A set is automatically "known" (excluded from the "Special" catch-all below) simply by being
 present in the registry with a non-null `cardexGroup` — there's no separate known-sets list to
@@ -782,9 +1199,9 @@ Sets with `fromInventory: true` in the group config skip the API call entirely. 
 the component shows inventory cards (`game === activeGame`) whose `card.set` does NOT match
 any registered set name for that game. These cards are grouped by their `card.set` value.
 
-This is the catch-all for: D23 cards, Disney Cruise cards, Metal Riftbound cards, promotional
-items, or any card Alex adds manually with a custom set name. No catalog is needed — anything
-in inventory with an unrecognized set name appears here automatically.
+This is the catch-all for: D23 cards, Disney Cruise cards, Metal Riftbound cards, McDonald's/One
+Piece tournament promos, or any card Alex adds manually with a custom set name. No catalog is
+needed — anything in inventory with an unrecognized set name appears here automatically.
 
 ---
 
@@ -800,13 +1217,14 @@ Lorcana set based on current market prices.
 3. `app/api/pack-analysis/lorcana/route.ts` (`export const dynamic = 'force-dynamic'`, so Next
    never pre-renders/caches this route at build time):
    - Reads the catalog via `loadVisibleCatalog('lorcana')` (`lib/api/catalog.ts` — same
-     Firestore-backed, in-memory-cached read every other consumer uses, see [§4](#card-catalog-system--deep-dive-firestore-backed))
-   - Additionally does its own **live** lorcast fetch for current prices on top of the catalog's
-     cached prices (`fetchLivePrices()` in that route) — any card lorcast doesn't return for
-     falls back to its catalog price
+     Firestore-backed, in-memory-cached read every other consumer uses, see [§4](#card-catalog-system--deep-dive-firestore-backed)).
+     Prices come from whatever the catalog has, kept fresh by the cron sync
+     ([§17](#cron-driven-price-sync)) — this route no longer does its own live lorcast fetch on
+     top (it used to; `app/api/pack-analysis/riftbound/route.ts` had the equivalent live tcgcsv
+     CSV fetch, also removed — see [Price Data](#price-data))
    - Calls `getLorcanaBoosterSets()` (`lib/api/registry.ts`), which reads the registry (Firestore
      `registry/main`) and returns every set with `packAnalysis.included: true` — this replaced the old hardcoded
-     `BOOSTER_SETS` array (see [§14](#automated-sync--admin-catalog))
+     `BOOSTER_SETS` array (see [§16](#automated-sync--admin-catalog))
    - Groups by rarity, computes average prices, applies pull rates, returns EV breakdown
 
 ### Pull Rates Used
@@ -841,7 +1259,7 @@ booster sets.
 ## Automated Sync — Admin Catalog
 
 `/admin` has a **"Sync Card Data"** panel (admin-gated, same as the rest of the page) with one
-button per game — Pokémon, Lorcana, Riftbound. Each is a plain, synchronous `POST` to its own API
+button per game — Pokémon, Lorcana, Riftbound, One Piece, Magic: The Gathering. Each is a plain, synchronous `POST` to its own API
 route that runs the download/diff/registry-update logic directly against Firestore and returns a
 JSON result when done; there's no build, no server restart, and no local file writes, so this
 works identically whether you're on `npm run dev`, `npm run start`, or the deployed Vercel app.
@@ -875,6 +1293,23 @@ slowest of the three (170+ sets, 20k+ cards, a full existing-catalog read to dif
 can take several minutes and may exceed a Vercel function's time limit depending on your plan;
 `npm run download-cards` locally has no such limit and remains the reliable way to sync Pokémon.
 
+**One Piece** does steps 1–2 (download + diff) but skips step 3 entirely — there's no group
+matching to do, since `downloadOnePiece()` prices every card by exact code match against *every*
+tcgcsv group up front, not by knowing which group belongs to which set (see
+[§10](#one-piece--data-source-schema-add-a-set-guide)). `app/api/sync/onepiece/route.ts` just
+backfills the registry with `{ setName, code, releaseDate: null, cardCount, source:
+'auto-detected' }` for any newly-discovered `setName` — no `needsReview` flag, nothing for
+Settings' "Needs Review" editor to ever show for this game (same as Pokémon).
+
+**MTG** has no registry involvement at all either, exactly like Pokémon (its set list comes live
+from `api.scryfall.com/sets`) — but it's by far the biggest sync here (~99,000 cards vs.
+Pokémon's ~20k), and unlike every other game, it isn't wired into the automatic 4x/day cron at
+all yet (see [§17](#cron-driven-price-sync)). Clicking this button IS still the one live way to
+sync it — a deliberate one-off admin action rather than a recurring background one — but read
+"MTG Integration.md" at the repo root before clicking it for the first time: that first click
+writes ~99,000 Firestore documents in one run, which can exceed a Firebase Spark (free) plan's
+daily write quota.
+
 ### Key files
 
 - **Firestore `registry/main`** — the single source of truth this whole feature reads/writes
@@ -887,20 +1322,23 @@ can take several minutes and may exceed a Vercel function's time limit depending
   isn't free the way a local fs read was) with a short in-process staleness cache, mirroring
   `lib/api/catalog.ts`'s shape just without the chunked-snapshot machinery (this doc is tiny).
 - `scripts/lib/catalog-sync.mjs` — the actual per-game scraping + Firestore-sync logic
-  (`downloadPokemon`/`downloadLorcana`/`downloadRiftbound`/`syncToFirestore`/`ensureSignedIn`),
-  shared verbatim by `scripts/download-card-catalog.mjs` (the CLI entry point) and
-  `app/api/sync/{pokemon,lorcana,riftbound}/route.ts`. Deliberately plain ESM, not TypeScript, so
-  a bare `node` process can still run it directly — it does its own Firebase init/sign-in rather
-  than importing `lib/firebase/config.ts` (same "duplicated on purpose across the runtime
-  boundary" reasoning as `app/api/admin/catalog/lookup/route.ts`'s CSV parser).
+  (`downloadPokemon`/`downloadLorcana`/`downloadRiftbound`/`downloadOnePiece`/`downloadMTG`/
+  `syncToFirestore`/`ensureSignedIn`), shared verbatim by `scripts/download-card-catalog.mjs`
+  (the CLI entry point, which skips `downloadMTG` unless run with `--include-mtg` — see "MTG
+  Integration.md") and `app/api/sync/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts`.
+  Deliberately plain ESM, not TypeScript, so a bare `node` process can still run it directly — it
+  does its own Firebase init/sign-in rather than importing `lib/firebase/config.ts` (same
+  "duplicated on purpose across the runtime boundary" reasoning as
+  `app/api/admin/catalog/lookup/route.ts`'s CSV parser).
 - `lib/firebase/adminAuth.ts` — `ensureAdminAuth()`, a small helper the plain `set-registry`
   route (writes that don't need the scraping module) signs in with before writing; the sync
   routes instead call `catalog-sync.mjs`'s own `ensureSignedIn()`, which authenticates the same
   underlying Firebase Auth singleton (both resolve to the same app instance within one process —
   see that file's header comment) so either path leaves the process equally signed in.
-- `app/api/sync/{pokemon,lorcana,riftbound}/route.ts` — one route per game, `export const
-  maxDuration` set generously (see Vercel's function-timeout docs for what your plan allows).
-  Each returns `{ ok, setCount, newSets?, groupMatches? }` directly — no polling, no status file.
+- `app/api/sync/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts` — one route per game, `export
+  const maxDuration` set generously (see Vercel's function-timeout docs for what your plan
+  allows). Each returns `{ ok, setCount, newSets?, groupMatches? }` directly — no polling, no
+  status file.
 - `app/api/set-registry/route.ts` — `GET` returns the full registry; `PUT` does a structured
   patch of one set entry (used by the "Needs Review" editor, still on the Settings page); `POST`
   registers a brand new set (Admin Catalog "New Set"). All three read/write the Firestore doc via
@@ -921,6 +1359,63 @@ can take several minutes and may exceed a Vercel function's time limit depending
 
 ---
 
+## Cron-Driven Price Sync
+
+Before this, live price fetches happened on-demand, per user, every time anyone hit "Refresh
+Prices" on Portfolio, plus a 30-minute auto-refresh that fired on every Portfolio page load. For
+Riftbound that meant re-downloading and re-parsing every set's full `ProductsAndPrices.csv` live
+on every single one of those calls (the single biggest external-API cost in the app, scaling with
+every set ever added); for Lorcana it meant a live `api.lorcast.com` request per unique card (no
+bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh by far.
+
+**The redesign:** live price fetches now happen in exactly one place — a scheduled sync, 4x/day
+(intended as roughly 6am/12pm/6pm/12am) — instead of on every user's every page visit/click.
+
+- **`app/api/cron/sync-prices/route.ts`** — `GET`/`POST`, protected by a shared secret
+  (`CRON_SECRET` env var, checked against an `x-cron-secret` header or a `?secret=` query param —
+  the query-param form exists because some free external schedulers can't set custom headers).
+  Calls the exact same `app/api/sync/{pokemon,lorcana,riftbound,onepiece}/route.ts` handlers the
+  Admin Catalog "Sync Card Data" button already uses (imported and invoked directly in-process,
+  not over HTTP — all four take no arguments) via `Promise.allSettled`, so one game failing/timing
+  out doesn't block the others. `maxDuration = 300`, same headroom as the standalone Pokémon sync
+  route, for the same reason (170+ sets, 20k+ cards).
+- **MTG is deliberately NOT included here.** Its first sync alone writes ~99,000 Firestore
+  documents — far more than this cron route's other four games combined — which risks exceeding
+  a Firebase Spark (free) plan's daily write quota in one automatic run. It only syncs via a
+  manual Admin Catalog button click today. See [§11](#magic-the-gathering--data-source-schema-add-a-set-guide)
+  and "MTG Integration.md" at the repo root for exactly how to wire it in once that's no longer a
+  concern.
+- **Not a Vercel Cron job** — deliberately, so this works on Vercel plans that don't support
+  sub-daily cron schedules. It's triggered by **`.github/workflows/sync-prices.yml`**, a scheduled
+  GitHub Actions workflow checked into this repo (4x/day, `x-cron-secret` header sourced from a
+  `CRON_SECRET` repository secret) — visible/runnable/auditable from the repo's Actions tab,
+  including a manual "Run workflow" button for on-demand triggers. **Needs a one-time setup**
+  before it actually fires: the workflow file has a placeholder Vercel URL that must be edited to
+  your real deployment, and a `CRON_SECRET` GitHub repository secret matching the one in your
+  Vercel project's env vars — see the comment block at the top of that file. (An external
+  scheduler like cron-job.org would work exactly as well if you'd rather not use GitHub Actions —
+  the route itself doesn't care who calls it, only that the secret matches.)
+- **Portfolio's "Refresh Prices" button** (`components/pages/PortfolioPage.tsx`) no longer
+  triggers any live external fetch, and the 30-minute auto-refresh-on-page-load is gone entirely
+  — refresh only ever happens on an explicit click (or a price-mode toggle, which reuses the same
+  function). It reads prices for just the apiIds already in Alex's own inventory from the catalog
+  (`app/api/prices/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts`, all now plain in-memory
+  `loadCatalog()` lookups, no network calls) and writes them into `currentPrice` + `priceHistory` exactly as
+  before — this part (record a history point on every refresh) didn't change, see
+  `applyPriceUpdatesBatch` in [Firestore / User Data](#firestore--user-data) below. Practically:
+  price *history* granularity is now driven by how often Alex clicks Refresh, not a fixed timer —
+  the catalog's own price data updates 4x/day regardless of whether anyone visits Portfolio at all.
+- **Known gap:** `app/api/sync/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts` themselves have
+  no request-level auth check of their own (they only sign *themselves* in as the Firestore admin
+  account internally) — anyone who knows the URL could already POST to them directly and trigger
+  a full resync (for MTG, that means anyone who knows the URL could trigger the ~99,000-write
+  sync this doc keeps warning about, entirely outside the deliberate manual-only gate described
+  above). This predates the cron work and wasn't introduced by it; the cron route is the only one
+  of these that actually requires a secret. Worth locking down the per-game sync routes the same
+  way if this is ever a concern — MTG's especially, given the cost of an unexpected trigger.
+
+---
+
 ## Firestore / User Data
 
 ### Collections — the full picture
@@ -937,7 +1432,7 @@ users/{uid}/
   collections/{id}      — Personal Collections (§6) — { game, name, cards: [...], createdAt }
 ```
 
-`game` throughout is `pokemon` | `lorcana` | `riftbound`. The `catalog*` collections are public
+`game` throughout is `pokemon` | `lorcana` | `riftbound` | `onepiece` | `mtg`. The `catalog*` collections are public
 read / admin write; everything under `users/{uid}/**` is readable/writable only by that same
 uid — see `firestore.rules` for the actual enforcement (the app-level `isAdmin`/`ADMIN_UID`
 checks are UX only, never the real gate).
@@ -947,7 +1442,7 @@ checks are UX only, never the real gate).
 ```typescript
 {
   id: string           // Firestore document ID (generated client-side)
-  game: 'pokemon' | 'lorcana' | 'riftbound'
+  game: 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg'
   name: string         // Card name (Lorcana includes version: "Mickey - Bob Cratchit")
   set: string          // Human-readable set name (e.g. "Shimmering Skies")
   setCode: string      // Short set code (e.g. "5" for Lorcana, "OGN" for Riftbound)
@@ -1029,7 +1524,7 @@ All three must succeed before `dataLoading` is set to false. If any fails,
 TCGHaven/
 ├── firestore.rules                ← Firestore security rules — public read/admin write on
 │                                     catalog/*, catalog_snapshot/*, catalog_meta/*, registry/*;
-│                                     per-user read/write on users/{uid}/** (§5, §14, §15)
+│                                     per-user read/write on users/{uid}/** (§5, §16, §17)
 ├── storage.rules                  ← Firebase Storage rules — catalog image uploads (Admin
 │                                     Catalog's ImageUploadField)
 ├── firebase.json, .firebaserc     ← Just enough config for `firebase deploy --only
@@ -1043,9 +1538,10 @@ TCGHaven/
 │   └── lib/
 │       ├── catalog-sync.mjs       ← The actual per-game scraping + Firestore-sync logic
 │       │                             (downloadPokemon/downloadLorcana/downloadRiftbound/
-│       │                             syncToFirestore/ensureSignedIn), shared by both the CLI
-│       │                             script and app/api/sync/{game}/route.ts (§14)
-│       └── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set matching
+│       │                             downloadOnePiece/syncToFirestore/ensureSignedIn), shared by
+│       │                             both the CLI script and app/api/sync/{game}/route.ts (§16)
+│       └── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set
+│                                     matching (Riftbound only — One Piece needs none, §10)
 │
 ├── lib/
 │   ├── types.ts                   ← Card, Game, Condition, GAME_COLORS, etc.
@@ -1055,7 +1551,7 @@ TCGHaven/
 │   │   ├── config.ts              ← Firebase app init, auth, db, storage instances, ADMIN_UID
 │   │   ├── adminAuth.ts           ← ensureAdminAuth() — signs the server-process auth instance
 │   │   │                             in as the ADMIN_EMAIL/PASSWORD sync account, once per
-│   │   │                             process, for server-side admin Firestore writes (§14)
+│   │   │                             process, for server-side admin Firestore writes (§16)
 │   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, newCardRef
 │   │   ├── spending.ts            ← loadPurchases, savePurchase, removePurchase
 │   │   └── collections.ts         ← Personal Collections CRUD (§6) — users/{uid}/collections/*
@@ -1063,15 +1559,19 @@ TCGHaven/
 │   ├── api/
 │   │   ├── catalog.ts             ← loadCatalog()/loadVisibleCatalog()/regenerateSnapshot()/
 │   │   │                             invalidateCatalogCache() + scoreMatch() — Firestore-backed
-│   │   │                             catalog read/write core shared by all 3 games (§4)
+│   │   │                             catalog read/write core shared by all 5 games (§4)
 │   │   ├── registry.ts            ← loadSetRegistry()/saveSetRegistry() etc. — Firestore
-│   │                             registry/main doc, short in-process staleness cache (§14)
+│   │                             registry/main doc, short in-process staleness cache (§16)
 │   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
 │   │   │                             unified entry point (§5's New Set cache note)
 │   │   ├── pokemon.ts             ← searchPokemonCards(), getPokemonCardPrice()
 │   │   ├── lorcana.ts             ← searchLorcanaCards(), getLorcanaSets() (merges in manual/
 │   │   │                             registry-only sets — §5)
-│   │   └── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()
+│   │   ├── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()
+│   │   ├── onepiece.ts            ← searchOnePieceCards(), getOnePieceSets() (registry-backed,
+│   │   │                             no live sets API — mirrors riftbound.ts's shape, §10)
+│   │   └── mtg.ts                 ← searchMtgCards(), getMtgSets() (live api.scryfall.com/sets +
+│   │                             manual-registry merge — mirrors pokemon.ts's shape, §11)
 │   └── pack-analysis/
 │       └── lorcana-ev.ts          ← TypeScript interfaces for Lorcana EV data
 │
@@ -1082,7 +1582,7 @@ TCGHaven/
 │   ├── cardex/page.tsx            ← Cardex page wrapper (includes Personal Collections tab, §6)
 │   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
 │   ├── settings/page.tsx          ← Settings page wrapper — Needs Review editor + inventory
-│   │                                 number repair; "Sync Card Data" moved to /admin, see §14
+│   │                                 number repair; "Sync Card Data" moved to /admin, see §16
 │   ├── portfolio/
 │   │   └── [cardId]/page.tsx      ← Individual card detail page
 │   ├── spending/page.tsx          ← Pack spending tracker
@@ -1095,22 +1595,43 @@ TCGHaven/
 │       ├── sets/route.ts          ← Set list for AddCardDialog autocomplete (?game=)
 │       ├── set-registry/route.ts  ← GET full registry; PUT a structured patch to one set
 │       │                             (Needs Review editor); POST registers a brand new set
-│       │                             (Admin Catalog "New Set", §5, §14)
+│       │                             (Admin Catalog "New Set", §5, §16)
 │       ├── admin/catalog/
 │       │   ├── route.ts           ← GET read-only listing incl. hidden cards (§5)
-│       │   ├── lookup/route.ts    ← POST exact-match external price/image lookup (§5)
+│       │   ├── lookup/route.ts    ← POST exact-match external price/image lookup (§5) — One
+│       │                             Piece's case needs a live tcgcsv group lookup by
+│       │                             `abbreviation` first (no registry group-id to read, §10)
 │       │   ├── invalidate/route.ts← POST — drops the server's catalog cache for a game (§4, §5)
 │       │   └── raw-source/route.ts← GET — Raw Source Check diff, Riftbound-only (§5)
 │       ├── sync/
-│       │   ├── pokemon/route.ts   ← POST — syncs Pokémon via scripts/lib/catalog-sync.mjs (§14)
-│       │   ├── lorcana/route.ts   ← POST — syncs Lorcana + registers any new sets (§14)
-│       │   └── riftbound/route.ts ← POST — syncs Riftbound + TCGPlayer group-matching (§14)
+│       │   ├── pokemon/route.ts   ← POST — syncs Pokémon via scripts/lib/catalog-sync.mjs (§16)
+│       │   ├── lorcana/route.ts   ← POST — syncs Lorcana + registers any new sets (§16)
+│       │   ├── riftbound/route.ts ← POST — syncs Riftbound + TCGPlayer group-matching (§16)
+│       │   ├── onepiece/route.ts  ← POST — syncs One Piece + registers any new sets, no
+│       │   │                         group-matching needed (§10, §16)
+│       │   └── mtg/route.ts       ← POST — syncs MTG (§11, §16). NOT on the automatic cron below
+│       │                             yet — manual-click-only until Firestore write-quota impact
+│       │                             is confirmed OK (~99k writes on first run). See "MTG
+│       │                             Integration.md" at the repo root.
+│       ├── cron/
+│       │   └── sync-prices/route.ts ← GET/POST, secret-protected — calls the pokemon/lorcana/
+│       │                             riftbound/onepiece sync routes above 4x/day (MTG excluded
+│       │                             on purpose, see sync/mtg/route.ts above), triggered by an
+│       │                             external scheduler outside this repo (§17)
 │       ├── pack-analysis/
-│       │   └── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic)
+│       │   ├── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic), reads catalog only
+│       │   └── riftbound/route.ts ← Riftbound EV calculator (force-dynamic), reads catalog only
+│       │                             (Pokemon/One Piece/MTG aren't in Pack Analysis — no
+│       │                             pull-rate data for any of them; see quirk #9 and CLAUDE.md's
+│       │                             One Piece §10)
 │       └── prices/
-│           ├── pokemon/route.ts   ← Batch Pokémon price lookup (Portfolio refresh)
-│           ├── lorcana/route.ts   ← Batch Lorcana price lookup (lorcast proxy)
-│           ├── riftbound/route.ts ← Batch Riftbound price lookup (TCGCSV proxy)
+│           ├── pokemon/route.ts   ← Batch Pokémon price lookup (Portfolio refresh) — catalog-only
+│           ├── lorcana/route.ts   ← Batch Lorcana price lookup — catalog-only
+│           ├── riftbound/route.ts ← Batch Riftbound price lookup — catalog-only
+│           ├── onepiece/route.ts  ← Batch One Piece price lookup — catalog-only, no isFoil
+│           │                         branching (no foil/non-foil duality — §10)
+│           ├── mtg/route.ts       ← Batch MTG price lookup — catalog-only, isFoil-branching
+│           │                         (same shape as lorcana/route.ts — §11)
 │           └── ebay/route.ts      ← eBay price lookup proxy
 │
 └── components/
@@ -1124,15 +1645,15 @@ TCGHaven/
     ├── pages/
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
     │   ├── PortfolioPage.tsx       ← P&L tracking, price refresh, sort/filter
-    │   ├── CardexPage.tsx          ← Pokédex-style collection tracker (Lorcana + Riftbound +
-    │   │                             the Personal Collections tab, §6)
+    │   ├── CardexPage.tsx          ← Pokédex-style collection tracker (Pokemon + One Piece + MTG +
+    │   │                             Lorcana + Riftbound + the Personal Collections tab, §6)
     │   ├── PersonalCollectionsView.tsx ← Per-user custom collections UI (§6) — rendered inside
     │   │                             CardexPage's "Personalized Collections" tab
-    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§14), CatalogBrowser,
+    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§16), CatalogBrowser,
     │   │                             CardTable, AddCardForm, EditCardForm, NewSetForm, RawSourceCheckPanel
     │   ├── SpendingPage.tsx        ← Pack purchase logging
     │   ├── PackAnalysisPage.tsx    ← Expected value analysis per set
-    │   └── SettingsPage.tsx        ← Needs Review editor + inventory number repair (§14)
+    │   └── SettingsPage.tsx        ← Needs Review editor + inventory number repair (§16)
     └── portfolio/
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
         └── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
@@ -1170,8 +1691,8 @@ valuable Lorcana cards entirely. (Iconic itself was missing from Phase 2's query
 stretch — any rarity tier introduced in a future set needs to be added here explicitly; lorcast
 doesn't return an "all rarities" query that would catch new ones automatically.)
 
-### 5. Riftbound Showcase/Overnumber/Signature share collector numbers
-Cards #227 (Overnumber), #227 (Signature), and the base card #227 all have the same
+### 5. Riftbound Alt Art/Overnumbered/Signature share collector numbers
+Cards #227 (Overnumbered), #227 (Signature), and the base card #227 all have the same
 collector number. The `apiId` field (catalog `id`) is the only reliable unique key.
 Always add cards via the search dropdown so `apiId` gets populated — fallback matching
 by number alone will match all variants of a number.
@@ -1181,12 +1702,13 @@ by number alone will match all variants of a number.
 pre-Chrome 85, pre-Firefox 93). No workaround without changing image source.
 
 ### 7. Pack Analysis route is force-dynamic
-`app/api/pack-analysis/lorcana/route.ts` has `export const dynamic = 'force-dynamic'`
-to prevent Next.js from pre-rendering it at build time. Without this, prices would be
-baked in at build time and never update. The route reads the catalog via
-`loadVisibleCatalog()` on each request (plus its own live lorcast price fetch layered on top —
-see [§13](#pack-analysis-feature--how-sets-register)), same Firestore-backed cache as everywhere
-else described in [§4](#card-catalog-system--deep-dive-firestore-backed).
+Both `app/api/pack-analysis/{lorcana,riftbound}/route.ts` have `export const dynamic =
+'force-dynamic'` to prevent Next.js from pre-rendering them at build time. Without this, prices
+would be baked in at build time and never update. Each route reads the catalog via
+`loadVisibleCatalog()` on every request, same Firestore-backed cache as everywhere else described
+in [§4](#card-catalog-system--deep-dive-firestore-backed) — neither does its own live price fetch
+anymore (both used to; see [§17](#cron-driven-price-sync)). Freshness now comes entirely from how
+recently the cron sync last ran, not from this route.
 
 ### 8. `apiId` is the catalog's `id` field
 When Alex selects a card from the search dropdown in AddCardDialog, the `id` field from
@@ -1194,10 +1716,66 @@ the catalog card object is stored as `card.apiId` in the Card record. This is wh
 Cardex uses for exact-match ownership detection. For Pokémon it looks like `"sv7-1"`,
 for Lorcana like `"5-100"`, for Riftbound like `"origins-001-regular"`.
 
-### 9. Cardex only works for Lorcana and Riftbound
-Pokémon is not in the Cardex because the Pokémon catalog has 20,000+ cards across 170+
-sets — rendering a full grid would be extremely slow. The Cardex is designed for games
-with smaller, bounded set sizes.
+### 9. Cardex covers all five games — Pokémon/One Piece/MTG use automatic grouping, not a registry
+Pokémon *is* in the Cardex (added after initially being excluded — see the history note below).
+The "20,000+ cards across 170+ sets" concern this quirk used to describe was never actually a
+per-request cost: `/api/cardex` (like Lorcana/Riftbound) only ever renders **one set at a time**,
+and a single Pokémon set (60–250 cards) is the same order of magnitude as a Riftbound/Lorcana
+set — `loadVisibleCatalog('pokemon')` is already loaded into the in-memory catalog cache for
+search regardless (see [§4](#card-catalog-system--deep-dive-firestore-backed)), so filtering it
+by `setName` per Cardex request is cheap.
+
+The real obstacle was the **set picker**, not the grid: Lorcana/Riftbound group their sets via a
+hand-curated `cardexGroup` field on each registry entry (see
+[§16](#automated-sync--admin-catalog)), and hand-curating that for 170+ Pokémon sets one at a
+time isn't worth it. The fix: Pokémon's groups are derived **automatically** from the `series`
+field the live `api.pokemontcg.io` set list already carries (e.g. `"Scarlet & Violet"`,
+`"Sword & Shield"`, `"Base"`) — `buildPokemonGroups()` in `CardexPage.tsx` groups by `series` and
+relies on `Map` insertion order to get newest-era-first grouping for free, since
+`getSetsForGame('pokemon')` already returns sets newest-first (see `lib/api/search.ts`). No
+registry entry or `cardexGroup` value is needed per Pokémon set — this is a genuinely different
+(and simpler) mechanism from Lorcana/Riftbound's, not a lesser version of it. Custom/manual
+Pokémon sets (Admin Catalog "New Set") get their own trailing "Custom Sets" group instead of a
+real era, since they have no upstream `series`.
+
+One consequence of Pokémon having no `rarity` field in its catalog schema (see
+[§7](#pokemon--data-source-schema-add-a-set-guide)): `/api/cardex` defaults it to `''` for
+Pokémon cards, and `CardexPage.tsx`'s card-hover tooltip conditionally skips the rarity chip
+(`{card.rarity && (...)}`) rather than rendering it empty — if you touch that tooltip again, keep
+that guard, since Lorcana/Riftbound cards can rely on `rarity` always being a non-empty string but
+Pokémon cards can't.
+
+Ownership matching's fallback (no `apiId`, i.e. a manually-typed inventory card) works the same
+way as Lorcana's — `card.set === catalogCard.setName && card.number === catalogCard.number` — and
+is safe for Pokémon the same reason it's safe for Lorcana but *not* safe for Riftbound: a Pokémon
+catalog number never has more than one card doc sharing it (no alt-art/overnumbered variant
+scheme the way Riftbound has — see quirk #5), so there's no false-positive risk from the fallback
+alone matching multiple variants at once.
+
+One Piece (added after Pokémon) follows the exact same "too many sets, group automatically"
+pattern, just with a different grouping signal: no `series` field exists in its data, so
+`buildOnePieceGroups()` groups by the set-code *prefix* (`OP##`/`ST##`/`EB##`/`PRB##`, else
+"Promos & Events") that `catalog-sync.mjs`'s `downloadOnePiece()` already derived while syncing —
+see [§10](#one-piece--data-source-schema-add-a-set-guide) for the full table. Unlike Pokémon, One
+Piece cards *do* always carry a `rarity` (`L`/`C`/`UC`/`R`/`SR`/`SEC`/`"SP CARD"`), so the
+rarity-chip guard above doesn't matter for this game — but the *ownership-matching fallback* and
+*apiId* story is closer to Lorcana's than Riftbound's, for a related but distinct reason: a One
+Piece base card and its Parallel print(s) are separate catalog `id`s (not a shared number with a
+rarity/suffix the way Riftbound's Alt Art/Overnumbered are), so the plain `setName`+`number`
+fallback can't collapse two real variants onto one Cardex slot the way Riftbound's can.
+
+MTG (added after One Piece) is the third game to follow this "too many sets, group
+automatically" pattern — closest to Pokémon's shape (a live external sets API, so no registry
+`cardexGroup` at all), but with a different grouping signal since Scryfall has nothing like
+Pokémon's `series` field: `buildMtgGroups()` groups by Scryfall's own `set_type` (Expansions,
+Core Sets, Masters & Reprint Sets, Commander, Draft Innovation, Un-Sets, Promos each get their
+own group; everything else collapses into "Special Sets" — see
+[§11](#magic-the-gathering--data-source-schema-add-a-set-guide) for the full table). Ownership
+matching's fallback is the Pokémon/Lorcana shape too, for the same reason: a different
+art/printing of an MTG card always gets its own distinct collector number as a separate Scryfall
+object (finish — foil vs. nonfoil — is a price field on that one object, not a second catalog id
+the way Riftbound's variants or One Piece's Parallels are), so there's no false-positive risk
+from a plain `setName`+`number` fallback.
 
 ### 10. `diagnosFirestore()` — RESOLVED
 `diagnosFirestore()` has been removed from `InventoryPage.tsx` and `db.ts` entirely.
@@ -1250,13 +1828,25 @@ executes in the same process as the cache. If you add another way to write the r
 to invalidate this cache too, or new sets won't appear in `/api/sets` until server restart.
 
 ### 16. Riftbound raw-source/TCGCSV number matching must check `publicCode`, not just `number`
-Showcase/Overnumber/Signature variants share their base card's bare `number` field — the `a`/`*`
+Alt Art/Overnumbered/Signature variants share their base card's bare `number` field — the `a`/`*`
 suffix only ever lives in `publicCode` (see [§9](#riftbound--data-source-schema-add-a-set-guide)'s
 variant table). TCGCSV's `extNumber` column, however, always carries that suffix (e.g.
 `"007a/298"`). Any tool that diffs/matches Riftbound cards by collector number against an
 external feed (like Admin Catalog's Raw Source Check, [§5](#admin-catalog-page--architecture-caching--diagnostics))
 must normalize and check *both* a card's `number` and the number+suffix parsed out of its
-`publicCode`, or every Showcase card in the set shows up as a false-positive mismatch.
+`publicCode`, or every Alt Art card in the set shows up as a false-positive mismatch.
+
+### 18. Riftbound rarity naming: "Alt Art" and "Overnumbered", not "Showcase"
+These two variant types used to share a single flattened `rarity: "Showcase"` catalog value
+(see [§9](#riftbound--data-source-schema-add-a-set-guide)'s variant table) — they're now stored
+as distinct `"Alt Art"` and `"Overnumbered"` values so the app calls each variant what
+collectors actually call it. `scripts/lib/catalog-sync.mjs`'s `downloadRiftbound()` assigns the
+correct one going forward; `scripts/migrate-riftbound-rarity.mjs` is a one-off migration for
+cards already in Firestore under the old `"Showcase"` value (run `node
+scripts/migrate-riftbound-rarity.mjs` for a dry run, `--apply` to actually write — it also
+rebuilds `catalog_snapshot/riftbound`). `lib/utils.ts`'s `riftboundVariantFlags()` still treats
+a `"Showcase"` rarity as a fallback (re-deriving Overnumbered from `publicCode`) so any doc the
+migration hasn't reached yet still displays and prices correctly.
 
 ### 17. Admin Catalog vs. Personal Collections — don't conflate them
 See [§6](#personal-collections-vs-the-admin-catalog) for the full comparison table. Short
@@ -1265,3 +1855,113 @@ reads from; Personal Collections (a tab inside `/cardex`) is a private, per-user
 that can only reference cards already in that shared catalog. A request to add a whole new
 *set* other users would see, or to add a card that doesn't exist anywhere in the catalog yet,
 belongs in Admin Catalog — not Personal Collections, which has no way to do either.
+
+### 19. Portfolio price refresh is manual-only and never hits a live external API
+See [§17](#cron-driven-price-sync) for the full writeup. Short version: there is no more
+30-minute (or any) auto-refresh on Portfolio page load — prices only change when Alex clicks
+"Refresh Prices" (or toggles price mode), and that click only ever reads the catalog
+(`loadCatalog()`, already in-memory-cached per [§4](#card-catalog-system--deep-dive-firestore-backed)) —
+it never calls tcgcsv.com/lorcast/pokemontcg.io directly. The catalog itself is what stays live,
+via a 4x/day cron hitting `app/api/cron/sync-prices/route.ts`. If prices look stale, check when
+that cron last actually ran (it's triggered by an external scheduler outside this repo, not
+anything in-app) before assuming a code bug — worst case, `npm run download-cards` or the Admin
+Catalog "Sync Card Data" button both still work exactly as before for a manual catch-up.
+
+### 20. Adding a new game means updating every `GAMES`/`ALL_GAMES` array — TS won't catch all of them
+`Game` (`lib/types.ts`) is a plain string union, not something with a single source-of-truth
+array — every page/route that iterates "all games" keeps its own `const GAMES: Game[] = [...]`
+(or `ALL_GAMES`, `SYNC_GAMES`, etc.), so adding One Piece meant grepping for every one of them
+individually (`app/api/admin/catalog/{route,invalidate,search}.ts`, `app/api/set-registry/route.ts`,
+`components/layout/FilterPanel.tsx`, `components/inventory/AddCardDialog.tsx`,
+`components/pages/{InventoryPage,SoldPage,SpendingPage,AdminCatalogPage}.tsx`) — `tsc` only
+catches a missing game where the array itself is typed `Game[]` or assigned to a
+`Record<Game, X>`-typed variable *without* an `as Record<Game, X>` cast in between; a cast (`{
+pokemon: 0, lorcana: 0, riftbound: 0 } as Record<Game, number>`) defeats that check entirely,
+since TS doesn't verify a literal matches the *target* of an `as` the way it would a direct
+assignment. Two real instances of exactly this shipped broken during the One Piece build before
+being caught by hand: `InventoryPage.tsx` and `SoldPage.tsx` both had a `gameCounts` initializer
+shaped `{ pokemon: 0, lorcana: 0, riftbound: 0 } as Record<Game, number>` — the One Piece tab's
+count badge silently rendered blank (not even `"0"`) because `counts.onepiece` was `undefined`,
+not `0`, and React renders `undefined` as nothing. If you add a new game, grep for
+`pokemon:.*lorcana:.*riftbound:` (or `onepiece:` once that's part of the pattern) across
+`.ts`/`.tsx` first, and treat every hit as a checklist — don't rely on `tsc --noEmit` alone to
+find them all. This is exactly the grep MTG's own addition used — `grep -rln "onepiece"` across
+the repo (One Piece being the most recently added game at the time) turned up every file that
+needed an `mtg` counterpart, `gameCounts` casts included, with zero missed on the first pass.
+
+### 21. The Cardex catalog-fetch effect must reset `loading` on every early-return path, not just its own
+`CardexPage.tsx`'s catalog-fetch `useEffect` bails early (no fetch) for the Personalized
+Collections tab, a not-yet-loaded `activeSet`, and any `fromInventory` "Special" bucket set — but
+only the real-fetch path used to reset `loading` (in its `finally`). Switching from a still-loading
+real set straight to a `fromInventory` set left `loading` stuck `true` forever: the in-flight
+fetch's own cleanup marks itself `stale` (correctly suppressing its now-unwanted
+`setCatalogCards`), which *also* suppresses its `finally`'s `setLoading(false)` — and the
+early-return branch that fires instead never called `setLoading` at all, so nothing ever unstuck
+it. The loading spinner and the real content (`SpecialBucket`) aren't mutually exclusive in the
+JSX (`{loading && ...}` and `{isSpecial && <SpecialBucket .../>}` are independent conditions), so
+this didn't crash anything — it just left a spinner floating uselessly above correct content
+forever, until the next full page reload. Reproduces trivially for any game whose *only* Cardex
+group is "Special" (true for One Piece before its first successful sync populates the registry —
+every single set click lands on the fromInventory branch), which is how this was caught; it was
+already latent for Lorcana/Riftbound/Pokémon, just far less likely to be hit by a normal click.
+Fixed by having the early-return branch explicitly call `setLoading(false)` itself rather than
+assuming whatever the flag last was is fine. If you touch this effect again, every early-return
+path needs to leave `loading` in a *known* state, not just avoid setting it to `true`.
+
+### 22. `registry/main` must be merged over `EMPTY_REGISTRY`, not trusted as-is, when a new game key is added
+`loadSetRegistry()` (`lib/api/registry.ts`) used to do `snap.exists() ? (snap.data() as
+SetRegistry) : EMPTY_REGISTRY` — fine as long as the *real* Firestore document already has every
+key `SetRegistry` claims to have. It doesn't, for any game added after the registry's first ever
+write: the actual stored doc predates that game's key entirely, so `registry.onepiece` was
+genuinely `undefined` at runtime the first time anything read it, despite the `as SetRegistry`
+cast insisting otherwise to TypeScript. First symptom: `app/api/sync/onepiece/route.ts` threw
+`Cannot read properties of undefined (reading 'sets')` on `registry.onepiece.sets.map(...)` —
+`tsc` had nothing to say about it, since the cast suppresses exactly this kind of check. Fixed by
+merging over `EMPTY_REGISTRY` instead of falling back to it only when the whole document is
+missing: `{ ...EMPTY_REGISTRY, ...(snap.data() as Partial<SetRegistry>) }`. If a 5th game is ever
+added, its registry key needs nothing further done for this specific problem — the merge already
+covers it — but it's worth remembering this class of bug exists (a stored document can lag the
+type that describes it) if `SetRegistry`'s shape changes in some other way later.
+
+### 23. A `$` in `ADMIN_PASSWORD` silently breaks Next.js's own env loading (but not a raw file read)
+`ensureSignedIn()` (`scripts/lib/catalog-sync.mjs`) failed with Firebase's `auth/invalid-credential`
+when called from a Next.js API route, while the *exact same* email/password — read directly off
+disk by a plain Node script, or sent straight to Firebase's REST `accounts:signInWithPassword`
+endpoint — worked every time. The cause: Next.js's env loader (`@next/env`) runs `dotenv-expand`
+over every `.env*` file, which treats an unescaped `$something` in a value as a reference to
+*another* environment variable to interpolate. `ADMIN_PASSWORD` happened to contain a `$` (a
+17-character password); since no env var named after whatever followed it existed, `dotenv-expand`
+silently truncated `process.env.ADMIN_PASSWORD` down to 11 characters *inside the running Next.js
+process only* — a naive `fs.readFileSync('.env.local')` (or curl, or a standalone script that
+parses the file itself rather than relying on Next's loader) never goes through this expansion at
+all, which is exactly why every diagnostic that didn't route through Next.js's own env loading
+kept reporting the credential as fine. **Restarting the dev server, and even fully deleting
+`.next`, does not fix this** — the mangling happens at env-load time on every process start, not
+from a stale build cache; wasted time here checking those first. The fix is to escape the `$` as
+`\$` in the `.env.local` value itself (both `dotenv` and `dotenv-expand` respect this). If a
+future secret (API key, password, etc.) ever contains `$`, `` ` ``, or a bare (unquoted) `#`,
+assume the same class of silent mismatch until proven otherwise — compare `.length` of the raw
+file value against `process.env.X.length` as read by an actual Next.js route (not a standalone
+script) before trusting that "the .env file looks right" means "Next.js is using what's in it."
+
+**Part 2 — the fix above (escaping `$` as `\$`) broke the OTHER loader.** `scripts/
+download-card-catalog.mjs` used to run via `node --env-file=.env.local` (see `package.json`'s
+"download-cards" script). Node's built-in `--env-file` flag does **not** implement dotenv-expand's
+escape semantics — it left the literal backslash IN the value (`\$` read as two characters, not
+unescaped to `$`), so `npm run download-cards` sent Firebase an 18-character password with a
+stray backslash instead of the real 17-character one, failing every sign-in with the same
+`auth/invalid-credential` — silently, since the script's own error output doesn't call out *why*
+credentials would be wrong when the `.env.local` file "looks right." This one was caught while
+diagnosing why Portfolio's "Refresh Prices" looked stale for Riftbound: the catalog's
+`lastBulkSyncAt` was over a week old because the CLI fallback for manually re-syncing had been
+broken this whole time (the web Admin Catalog page was unaffected — it goes through Next.js's own
+env loading, the thing Part 1 above already fixed correctly). **The fix:** `download-card-catalog.mjs`
+no longer relies on `--env-file` at all — it parses `.env.local` itself (`loadEnvLocal()`, top of
+the file) and unescapes `\$` the same way `dotenv-expand` does, via a **dynamic** `import()` of
+`./lib/catalog-sync.mjs` *after* that parsing runs (a static top-level `import` would execute
+`catalog-sync.mjs`'s module-level `initializeApp()` — which reads `process.env.NEXT_PUBLIC_FIREBASE_*`
+— before `loadEnvLocal()` ever got a chance to set those vars). If you ever add a third way to run
+this scraping code outside of Next.js's request lifecycle, re-derive its env loading from this
+script's `loadEnvLocal()`, not from a fresh `--env-file`/`dotenv` call — every generic env loader
+you reach for has its own opinion about backslash escapes, and this secret's `$` will keep
+finding the ones that guess wrong.

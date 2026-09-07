@@ -11,7 +11,7 @@ import { cn, localDateString } from '@/lib/utils'
 
 type MarketSource = 'catalog' | 'ebay' | 'manual'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
 
 interface Props {
@@ -637,21 +637,25 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
             </div>
           </div>
 
-          {/* Foil toggle */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={form.isFoil}
-              onChange={(e) => setField('isFoil', e.target.checked)}
-              className="w-4 h-4 rounded accent-violet-500"
-            />
-            <span className="text-sm text-slate-300">
-              Foil / Holo variant
-              {marketPrices.foil > 0 && marketPrices.foil !== marketPrices.regular && (
-                <span className="ml-1.5 text-slate-500">(foil: ${marketPrices.foil.toFixed(2)})</span>
-              )}
-            </span>
-          </label>
+          {/* Foil toggle — not shown for One Piece: a "Parallel" print is its own catalog entry
+              (selected from the search dropdown, e.g. "Shanks (Parallel)"), not a foil toggle of
+              the same card the way Pokemon holo/Lorcana foil/Riftbound foil are. */}
+          {form.game !== 'onepiece' && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.isFoil}
+                onChange={(e) => setField('isFoil', e.target.checked)}
+                className="w-4 h-4 rounded accent-violet-500"
+              />
+              <span className="text-sm text-slate-300">
+                Foil / Holo variant
+                {marketPrices.foil > 0 && marketPrices.foil !== marketPrices.regular && (
+                  <span className="ml-1.5 text-slate-500">(foil: ${marketPrices.foil.toFixed(2)})</span>
+                )}
+              </span>
+            </label>
+          )}
 
           {/* Nexus Night promo variant (Riftbound only) */}
           {form.game === 'riftbound' && (

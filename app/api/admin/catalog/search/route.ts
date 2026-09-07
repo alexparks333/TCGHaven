@@ -5,14 +5,14 @@ import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 const MAX_RESULTS = 300
 
 interface CatalogCard {
   id: string
   name: string
   number: string
-  set?: string        // Pokemon: set id
+  set?: string        // Pokemon: set id; One Piece: set code
   setCode?: string     // Riftbound: set code
   setName: string
   rarity?: string
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   const q = searchParams.get('q') ?? ''
 
   if (!game || !GAMES.includes(game)) {
-    return NextResponse.json({ error: 'game must be pokemon, lorcana, or riftbound' }, { status: 400 })
+    return NextResponse.json({ error: 'game must be pokemon, lorcana, riftbound, onepiece, or mtg' }, { status: 400 })
   }
   if (q.trim().length < 2) return NextResponse.json([])
 
@@ -50,8 +50,8 @@ export async function GET(request: Request) {
 
   // Sets are keyed differently per game depending on what each game's own card docs carry:
   // Lorcana cards only carry the human setName (see CLAUDE.md quirk #12 — lorcast's numeric set
-  // id isn't what anything else matches on either); Pokemon/Riftbound cards carry a real set
-  // code that lines up with SetOption.code.
+  // id isn't what anything else matches on either); Pokemon/Riftbound/One Piece cards carry a
+  // real set code that lines up with SetOption.code.
   const releaseDateBySetKey = new Map<string, string>()
   for (const s of sets) releaseDateBySetKey.set(game === 'lorcana' ? s.name : s.code, s.releaseDate || '')
   function releaseDateFor(c: CatalogCard): string {

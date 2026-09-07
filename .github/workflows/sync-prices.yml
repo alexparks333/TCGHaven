@@ -1,0 +1,44 @@
+name: Sync card prices
+
+# Calls the deployed app's /api/cron/sync-prices route 4x/day so the shared Firestore catalog
+# (names/images/set data AND prices — see CLAUDE.md "Cron-Driven Price Sync") stays fresh without
+# anyone needing to click Admin Catalog -> "Sync Card Data" by hand. This replaces relying on an
+# external scheduler (cron-job.org, etc.) with a scheduled workflow checked into this repo, so it's
+# visible/auditable in the Actions tab and versioned alongside the code it's calling.
+#
+# MTG is deliberately NOT synced here — see "MTG Integration.md" at the repo root. The route this
+# calls (app/api/cron/sync-prices/route.ts) only ever syncs pokemon/lorcana/riftbound/onepiece.
+#
+# Setup (one-time):
+#   1. Add a repository secret named CRON_SECRET with the same value as CRON_SECRET in your
+#      Vercel project's environment variables (Settings -> Secrets and variables -> Actions ->
+#      New repository secret, in this GitHub repo).
+#   2. That's it — no further code changes needed. Use the "Run workflow" button on this
+#      workflow's Actions page to trigger one manually and confirm it works before waiting for
+#      the schedule.
+
+on:
+  schedule:
+    # Roughly 6am / 12pm / 6pm / 12am UTC — adjust to your timezone/preference if you like.
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch: {} # adds a manual "Run workflow" button in the Actions tab, for testing
+
+env:
+  PROD_URL: https://tcg-haven.vercel.app
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sync-prices endpoint
+        run: |
+          http_code=$(curl -sS -o response.json -w "%{http_code}" \
+            -X POST "$PROD_URL/api/cron/sync-prices" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            --max-time 280)
+          echo "HTTP status: $http_code"
+          cat response.json
+          if [ "$http_code" != "200" ]; then
+            echo "::error::sync-prices returned $http_code"
+            exit 1
+          fi

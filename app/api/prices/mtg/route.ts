@@ -15,16 +15,14 @@ interface CatalogCard {
   marketPriceFoil: number
 }
 
-// Reads prices straight from the catalog (kept fresh by the 6-hourly cron —
-// app/api/cron/sync-prices/route.ts — rather than live-fetching lorcast.com one card at a time
-// on every Portfolio refresh, which used to be the slowest of the three games by far; see
-// CLAUDE.md "Price Data" for the full rationale). lorcast only ever provides a single market
-// price per print, so `priceMode: 'lowestNM'` falls back to marketPrice same as before.
+// Reads prices straight from the catalog (kept fresh by the 6-hourly cron — see CLAUDE.md "Price
+// Data") rather than hitting api.scryfall.com live on every Portfolio refresh. Same shape as
+// Lorcana's price route: one market price per printing per finish, no per-set group-ID bootstrap.
 export async function POST(req: NextRequest) {
-  const { cards }: { cards: CardInput[]; priceMode?: string } = await req.json()
+  const { cards }: { cards: CardInput[] } = await req.json()
   if (!cards.length) return NextResponse.json({})
 
-  const catalog = await loadCatalog<CatalogCard>('lorcana')
+  const catalog = await loadCatalog<CatalogCard>('mtg')
   const byId = new Map(catalog.map((c) => [c.id, c]))
 
   const results: Record<string, number> = {}

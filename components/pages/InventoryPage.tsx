@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw, Filter } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { formatCurrency, openEbaySearch, localDateString } from '@/lib/utils'
+import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
@@ -13,7 +13,11 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { removeCard, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
 import { cn } from '@/lib/utils'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+
+// Module-level (not component-local) so it survives InventoryPage unmounting/remounting as the
+// user switches tabs — see the backfill effect below for why a component-local ref isn't enough.
+let backfillRanThisSession = false
 
 function todayISO() {
   return localDateString()
@@ -27,16 +31,6 @@ function cardDate(card: Card): string {
   // boundary. purchaseDate is already a bare local YYYY-MM-DD from the date picker, so it's
   // safe to slice as-is.
   return raw.length > 10 ? localDateString(new Date(raw)) : raw.slice(0, 10)
-}
-
-// Unique identity key — same card from different purchase sessions shares this key.
-// A Nexus-flagged card shares its name/number/apiId with the regular printing it's a promo
-// variant of, so it gets its own key segment here — otherwise it'd silently merge into the
-// same group/row as your regular copies instead of standing as its own entry.
-function cardIdentityKey(card: Card): string {
-  const nexusPart = card.nexus ? '::nexus' : ''
-  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
-  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
 }
 
 interface CardGroup {
@@ -74,19 +68,31 @@ export default function InventoryPage() {
   const holdStartRef = useRef<number | null>(null)
   const holdFiredRef = useRef(false)
 
-  // Background: fill in missing market prices AND missing rarity (used by the rarity filter
-  // below) for cards that don't have them yet, from the same catalog lookup. Rarity was never
-  // captured before AddCardDialog started storing it, so this is what makes the rarity filter
-  // actually work on cards added before that — same shape as the price backfill it's merged
-  // into. Runs once per visit, after the Firestore load finishes — running earlier would see an
-  // empty store and never retry.
-  const backfillRan = useRef(false)
+  // Background: fill in missing (or stale) market prices AND rarity (used by the rarity filter
+  // below) for cards that need them, from the same catalog lookup. Rarity was never captured
+  // before AddCardDialog started storing it, so this is what makes the rarity filter actually
+  // work on cards added before that — same shape as the price backfill it's merged into. Also
+  // re-syncs a card still carrying the stale pre-rename 'Showcase' rarity value (Alt
+  // Art/Overnumbered used to be flattened into it). Runs once per browser session, after the
+  // Firestore load finishes — running earlier would see an empty store and never retry.
+  //
+  // The "once" guard MUST live outside the component (see `backfillRanThisSession` above), not
+  // in a useRef: cards whose catalog price is genuinely $0, or that have no catalog match at
+  // all, never leave `needsBackfill` (nothing to write, so `updateCard` never fires to shrink
+  // it). A component-local ref resets every time InventoryPage remounts — i.e. every time you
+  // navigate away and back — so on a large collection with any such cards, simply revisiting
+  // this tab re-fired the *entire* unresolved batch as one uncapped `Promise.all`, hundreds of
+  // parallel fetches deep, saturating the dev server and freezing the tab for anyone navigating
+  // elsewhere while it ran. Concurrency is also now capped for the same reason in miniature.
   useEffect(() => {
-    if (!user || dataLoading || backfillRan.current) return
+    if (!user || dataLoading || backfillRanThisSession) return
     const uid = user.uid
-    const needsBackfill = cards.filter((c) => c.name && ((!((c.currentPrice ?? 0) > 0) && !c.priceLocked) || !c.rarity))
+    // 'Showcase' is a stale pre-rename rarity value (Alt Art/Overnumbered used to be flattened
+    // into it) — treat it the same as missing so a card still carrying it self-heals here too,
+    // not just via the Settings repair tool.
+    const needsBackfill = cards.filter((c) => c.name && ((!((c.currentPrice ?? 0) > 0) && !c.priceLocked) || !c.rarity || c.rarity === 'Showcase'))
     if (!needsBackfill.length) return
-    backfillRan.current = true
+    backfillRanThisSession = true
     let cancelled = false
     const now = new Date().toISOString()
     async function backfill(card: Card) {
@@ -105,14 +111,28 @@ export default function InventoryPage() {
           const price = card.isFoil && match.marketPriceFoil > 0 ? match.marketPriceFoil : match.marketPrice
           if (price > 0) { updates.currentPrice = price; updates.priceUpdatedAt = now }
         }
-        if (!card.rarity && match.rarity) updates.rarity = match.rarity
+        if ((!card.rarity || card.rarity === 'Showcase') && match.rarity && match.rarity !== card.rarity) updates.rarity = match.rarity
         if (Object.keys(updates).length > 0 && !cancelled) {
           updateCard(card.id, updates)
           editCardInFirestore(uid, card.id, updates).catch(() => {})
         }
       } catch { /* ignore individual failures */ }
     }
-    Promise.all(needsBackfill.map(backfill))
+    // Bounded worker pool instead of Promise.all(needsBackfill.map(...)) — a large collection
+    // (thousands of cards) would otherwise fire that many concurrent requests in one burst.
+    // Kept below the browser's per-host connection limit (6 in Chrome) so this background sweep
+    // never fully occupies the connection pool — otherwise every other tab's own page-load fetch
+    // (Cardex, Pack Analysis, Admin, Settings, Sold all fetch their own data on mount) queues
+    // behind it and that tab looks frozen until a connection frees up.
+    const CONCURRENCY = 3
+    let idx = 0
+    async function worker() {
+      while (idx < needsBackfill.length) {
+        if (cancelled) return
+        await backfill(needsBackfill[idx++])
+      }
+    }
+    Promise.all(Array.from({ length: Math.min(CONCURRENCY, needsBackfill.length) }, worker))
     return () => { cancelled = true }
   // `cards` deliberately excluded: this only needs the snapshot present once dataLoading flips
   // false (by then AuthProvider's initial Firestore load has already populated it). Depending on
@@ -301,7 +321,7 @@ export default function InventoryPage() {
   }), [filtered, grouped])
 
   const gameCounts = useMemo(() => {
-    const counts = { pokemon: 0, lorcana: 0, riftbound: 0 } as Record<Game, number>
+    const counts = { pokemon: 0, lorcana: 0, riftbound: 0, onepiece: 0, mtg: 0 } as Record<Game, number>
     for (const c of cards) counts[c.game] = (counts[c.game] || 0) + 1
     return counts
   }, [cards])

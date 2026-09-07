@@ -1,4 +1,4 @@
-export type Game = 'pokemon' | 'lorcana' | 'riftbound'
+export type Game = 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg'
 
 export type Condition = 'mint' | 'near_mint' | 'lightly_played' | 'moderately_played' | 'heavily_played'
 
@@ -86,12 +86,16 @@ export const GAME_LABELS: Record<Game, string> = {
   pokemon: 'Pokémon',
   lorcana: 'Lorcana',
   riftbound: 'Riftbound',
+  onepiece: 'One Piece',
+  mtg: 'Magic: The Gathering',
 }
 
 export const GAME_COLORS: Record<Game, string> = {
   pokemon: '#FFCB05',
   lorcana: '#7B61FF',
   riftbound: '#E8472A',
+  onepiece: '#2F6FED',
+  mtg: '#FF6B35',
 }
 
 export const CONDITION_MULTIPLIER: Record<Condition, number> = {

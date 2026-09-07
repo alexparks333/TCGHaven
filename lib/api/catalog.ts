@@ -136,7 +136,13 @@ export async function getLastBulkSyncAt(game: Game): Promise<Date | null> {
 // keep both in sync with a single comparator rather than duplicating it.
 export const CARDEX_RARITY_ORDER: Record<string, number> = {
   Common: 0, Uncommon: 1, Rare: 2, Super_rare: 3, Legendary: 4, Enchanted: 5, Epic: 6, Iconic: 7, Promo: 8,
-  Showcase: 90, Star: 91,
+  // Riftbound: 'Alt Art' (same-number foil-only print) and 'Overnumbered' (collector number
+  // exceeds the set's card count) — both formerly flattened to a single 'Showcase' rarity
+  // value; that key is kept as a fallback for any doc a resync hasn't touched yet.
+  'Alt Art': 90, Overnumbered: 90, Showcase: 90, Star: 91,
+  // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), SEC(ret rare) — "SP CARD"
+  // is a further-out special/promo print tier, sorted last like Riftbound's Star.
+  L: 0, C: 1, UC: 2, R: 3, SR: 4, SEC: 90, 'SP CARD': 91,
 }
 
 /** Sorts catalog cards by collector number, then rarity, matching Cardex's display order. */

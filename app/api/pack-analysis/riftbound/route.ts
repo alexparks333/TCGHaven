@@ -17,14 +17,7 @@ const SET_META: Record<string, { setName: string; releaseDate: string; packPrice
   OGS: { setName: 'Proving Grounds',  releaseDate: '2026-01-01', packPrice: 0,    cardsPerPack: 0  },
 }
 
-const TCGCSV_GROUPS: Record<string, number> = { OGN: 24344, SFD: 24519, UNL: 24560, OGS: 24439 }
 const BOOSTER_SET_CODES = ['OGN', 'SFD', 'UNL']
-
-const TCGCSV_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-  'Referer': 'https://tcgcsv.com/',
-  'Accept': 'text/csv,*/*',
-}
 
 interface CatalogCard {
   id: string
@@ -40,44 +33,6 @@ interface CatalogCard {
   hidden?: boolean
 }
 
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = []
-  let cur = ''
-  let inQ = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
-      else inQ = !inQ
-    } else if (ch === ',' && !inQ) { fields.push(cur); cur = '' }
-    else cur += ch
-  }
-  fields.push(cur)
-  return fields
-}
-
-function tcgKey(setCode: string, extNumber: string, name: string): string | null {
-  const m = extNumber.match(/^(\d+)([a*]?)\//)
-  if (!m) return null
-  const num = String(parseInt(m[1], 10))
-  const suffix = m[2]
-  if (suffix === '*' || name.includes('(Signature)')) return `${setCode}:${num}:star`
-  if (suffix === 'a' || name.includes('(Alternate Art)')) return `${setCode}:${num}:altart`
-  if (name.includes('(Overnumbered)')) return `${setCode}:${num}:over`
-  return `${setCode}:${num}:regular`
-}
-
-function catalogKey(card: CatalogCard): string {
-  const isStar = card.id.includes('-star-') || card.rarity === 'Star'
-  const isShowcase = card.rarity === 'Showcase'
-  const isSameNumAlt = isShowcase && (card.publicCode ?? '').includes('a/')
-  const num = String(parseInt(card.number, 10))
-  if (isStar) return `${card.setCode}:${num}:star`
-  if (isSameNumAlt) return `${card.setCode}:${num}:altart`
-  if (isShowcase) return `${card.setCode}:${num}:over`
-  return `${card.setCode}:${num}:regular`
-}
-
 function avgOf(cards: CatalogCard[], key: 'marketPrice' | 'marketPriceFoil'): number {
   const priced = cards.filter((c) => c[key] > 0)
   if (!priced.length) return 0
@@ -89,61 +44,11 @@ function top5(cards: CatalogCard[], key: 'marketPrice' | 'marketPriceFoil') {
     .map((c) => ({ name: c.name, price: c[key], imageUrl: c.imageUrl }))
 }
 
+// Prices come straight from the catalog (kept fresh by the 6-hourly cron —
+// app/api/cron/sync-prices/route.ts) instead of this route re-downloading every set's full
+// tcgcsv CSV on every page load — see CLAUDE.md "Price Data" for the full rationale.
 export async function GET() {
-  const catalog = await loadVisibleCatalog<CatalogCard>('riftbound')
-  const byId = new Map(catalog.map((c) => [c.id, c]))
-
-  // Fetch live prices from tcgcsv for all booster sets in parallel
-  const livePrices = new Map<string, { normal: number; foil: number }>()
-
-  await Promise.all(
-    Object.keys(TCGCSV_GROUPS).map(async (setCode) => {
-      const groupId = TCGCSV_GROUPS[setCode]
-      try {
-        const res = await fetch(
-          `https://tcgcsv.com/tcgplayer/89/${groupId}/ProductsAndPrices.csv`,
-          { headers: TCGCSV_HEADERS, signal: AbortSignal.timeout(15000) }
-        )
-        if (!res.ok) return
-        const lines = (await res.text()).split('\n')
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim()
-          if (!line) continue
-          const f = parseCSVLine(line)
-          const name = f[1] ?? ''
-          const marketPrice = parseFloat(f[12]) || 0
-          const subType = f[14] ?? ''
-          const extNumber = f[16] ?? ''
-          if (!extNumber || !name || marketPrice === 0) continue
-          const key = tcgKey(setCode, extNumber, name)
-          if (!key) continue
-          const entry = livePrices.get(key) ?? { normal: 0, foil: 0 }
-          if (subType === 'Foil') entry.foil = marketPrice
-          else entry.normal = marketPrice
-          livePrices.set(key, entry)
-        }
-      } catch {
-        // tcgcsv unreachable for this set — catalog prices used as fallback
-      }
-    })
-  )
-
-  // Apply live prices to catalog cards
-  const enriched = catalog.map((card) => {
-    const key = catalogKey(card)
-    const liveP = livePrices.get(key)
-    if (!liveP) return card
-    const isShowcaseOrStar = card.rarity === 'Showcase' || card.id.includes('-star-') || card.rarity === 'Star'
-    return {
-      ...card,
-      marketPrice: isShowcaseOrStar
-        ? (liveP.foil || liveP.normal || card.marketPrice)
-        : (liveP.normal || card.marketPrice),
-      marketPriceFoil: isShowcaseOrStar
-        ? 0
-        : (liveP.foil || card.marketPriceFoil),
-    }
-  })
+  const enriched = await loadVisibleCatalog<CatalogCard>('riftbound')
 
   // Build per-set EV data for each booster set
   const results = BOOSTER_SET_CODES.map((setCode) => {
@@ -155,8 +60,8 @@ export async function GET() {
     const rares      = setCards.filter((c) => c.rarity === 'Rare')
     const epics      = setCards.filter((c) => c.rarity === 'Epic')
     const signatures = setCards.filter((c) => c.id.includes('-star-') || c.rarity === 'Star')
-    const altArts    = setCards.filter((c) => c.rarity === 'Showcase' && (c.publicCode ?? '').includes('a/') && !c.id.includes('-star-'))
-    const overnums   = setCards.filter((c) => c.rarity === 'Showcase' && !(c.publicCode ?? '').includes('a/') && !c.id.includes('-star-'))
+    const altArts    = setCards.filter((c) => (c.rarity === 'Alt Art' || (c.publicCode ?? '').includes('a/')) && !c.id.includes('-star-'))
+    const overnums   = setCards.filter((c) => (c.rarity === 'Overnumbered' || c.rarity === 'Showcase') && !(c.publicCode ?? '').includes('a/') && !c.id.includes('-star-'))
 
     const avgCommon       = avgOf(commons,    'marketPrice')
     const avgUncommon     = avgOf(uncommons,  'marketPrice')

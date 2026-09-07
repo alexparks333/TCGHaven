@@ -72,6 +72,8 @@ interface CardMismatch {
   newNumber?: string
   oldFoil?: boolean
   newFoil?: boolean
+  oldRarity?: string
+  newRarity?: string
 }
 
 function InventoryNumberRepairCard() {
@@ -120,6 +122,16 @@ function InventoryNumberRepairCard() {
           hasMismatch = true
         }
 
+        // Alt Art/Overnumbered used to be flattened into a single "Showcase" catalog rarity
+        // value (some sets even kept the base rarity — Rare, Epic, etc. — on top of that); an
+        // inventory card added back then still has whatever stale value it was given at add
+        // time. The catalog is always the source of truth, so any drift gets synced here.
+        if (catalogCard.rarity && catalogCard.rarity !== card.rarity) {
+          m.oldRarity = card.rarity
+          m.newRarity = catalogCard.rarity
+          hasMismatch = true
+        }
+
         if (hasMismatch) found.push(m)
       }
       setMismatches(found)
@@ -137,9 +149,10 @@ function InventoryNumberRepairCard() {
     let fixed = 0
     try {
       for (const m of mismatches) {
-        const patch: { number?: string; isFoil?: boolean } = {}
+        const patch: { number?: string; isFoil?: boolean; rarity?: string } = {}
         if (m.newNumber !== undefined) patch.number = m.newNumber
         if (m.newFoil !== undefined) patch.isFoil = m.newFoil
+        if (m.newRarity !== undefined) patch.rarity = m.newRarity
         await editCard(user.uid, m.cardId, patch)
         updateCard(m.cardId, patch)
         fixed++
@@ -155,14 +168,16 @@ function InventoryNumberRepairCard() {
 
   return (
     <div className="card-glass p-5 mb-6">
-      <h2 className="text-white font-semibold mb-1">Fix Riftbound Numbers &amp; Foil Status</h2>
+      <h2 className="text-white font-semibold mb-1">Fix Riftbound Numbers, Foil Status &amp; Rarity</h2>
       <p className="text-slate-400 text-sm mb-4">
         Alt-art Riftbound cards (e.g. an alt-art printed as &quot;92a&quot;) were sometimes saved with
         just the bare number (&quot;92&quot;), missing the letter suffix printed on the card. Overnumbered
-        and Signature cards could also be saved with the wrong Foil status. This only ever
-        touches the card&apos;s number and foil fields — nothing else about the card (price,
-        quantity, condition) is changed. Only cards originally added via the search dropdown
-        (which carries a catalog link) can be checked.
+        and Signature cards could also be saved with the wrong Foil status. Alt Art/Overnumbered
+        cards added before the catalog split them out of a single &quot;Showcase&quot; rarity value may
+        also still say &quot;Showcase&quot; here — this re-syncs rarity from the catalog too. This only
+        ever touches the card&apos;s number, foil, and rarity fields — nothing else about the card
+        (price, quantity, condition) is changed. Only cards originally added via the search
+        dropdown (which carries a catalog link) can be checked.
       </p>
 
       <div className="flex items-center gap-2 mb-3">
@@ -195,7 +210,7 @@ function InventoryNumberRepairCard() {
 
       {mismatches && mismatches.length === 0 && fixedCount === null && (
         <div className="flex items-center gap-2 text-sm text-emerald-400">
-          <CheckCircle2 size={14} /> No mismatches found — your Riftbound numbers and foil status already look correct.
+          <CheckCircle2 size={14} /> No mismatches found — your Riftbound numbers, foil status, and rarities already look correct.
         </div>
       )}
 
@@ -219,6 +234,9 @@ function InventoryNumberRepairCard() {
                     {m.oldFoil ? '✨ Foil' : 'Normal'} →{' '}
                     <span className="text-violet-300 font-medium">{m.newFoil ? '✨ Foil' : 'Normal'}</span>
                   </span>
+                )}
+                {m.newRarity !== undefined && (
+                  <span>{m.oldRarity || '(none)'} → <span className="text-violet-300 font-medium">{m.newRarity}</span></span>
                 )}
               </span>
             </div>

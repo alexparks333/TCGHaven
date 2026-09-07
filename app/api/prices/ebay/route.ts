@@ -48,6 +48,8 @@ function buildQuery(cardName: string, game: string): string {
     pokemon: 'pokemon tcg',
     lorcana: 'lorcana',
     riftbound: 'riftbound',
+    onepiece: 'one piece tcg',
+    mtg: 'mtg magic the gathering',
   }
   // Strip foil/holo suffix that we add in our catalog
   const name = cardName.replace(/ ✦ (Holo|Foil)$/, '').trim()

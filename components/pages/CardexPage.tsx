@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { Loader2, Package, FolderHeart } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Loader2, Package, FolderHeart, ChevronDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
@@ -21,9 +21,11 @@ interface CatalogCard {
   marketPrice: number
 }
 
+type CatalogGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
+
 interface SetMeta {
   name: string           // catalog set name, or '__special__' for inventory-only bucket
-  game: 'lorcana' | 'riftbound'
+  game: CatalogGame
   label?: string         // display label when different from name
   fromInventory?: true   // skip API; show owned inventory cards not in any known set
 }
@@ -49,9 +51,47 @@ interface SetRegistryResponse {
   riftbound: { groupOrder: string[]; sets: RegistrySet[] }
 }
 
+// Pokemon has no registry-curated cardexGroup (170+ sets — hand-curating a group per set isn't
+// worth it). Instead its groups are derived automatically from the `series` field the live
+// api.pokemontcg.io set list already carries (e.g. "Scarlet & Violet", "Sword & Shield", "Base")
+// — see buildPokemonGroups() below. This is genuinely simpler than the Lorcana/Riftbound
+// registry-group approach, not a lesser version of it.
+interface PokemonSetOption {
+  code: string
+  name: string
+  releaseDate: string
+  series?: string
+  isCustom?: boolean
+}
+
+// One Piece has no live external "sets" API AND no registry-curated cardexGroup (see CLAUDE.md
+// quirk #9 and lib/api/registry.ts's OnePieceRegistrySet comment) — its set list comes from
+// /api/sets?game=onepiece (backed by the registry, which catalog-sync.mjs's downloadOnePiece()
+// itself populates), and its groups are derived automatically from `code`'s prefix instead of a
+// `series` field, since apitcg's data has nothing like Pokemon's series — see
+// buildOnePieceGroups() below.
+interface OnePieceSetOption {
+  code: string
+  name: string
+  releaseDate: string
+  isCustom?: boolean
+}
+
+// MTG has a live external "sets" API (api.scryfall.com/sets) like Pokemon, so it's registry-free
+// the same way — but Scryfall carries no `series`-equivalent field, so its Cardex grouping uses
+// `setType` (Scryfall's own `set_type`, e.g. "expansion", "core", "commander") instead — see
+// buildMtgGroups() below.
+interface MtgSetOption {
+  code: string
+  name: string
+  releaseDate: string
+  setType?: string
+  isCustom?: boolean
+}
+
 const PLACEHOLDER_SET: SetMeta = { name: '', game: 'lorcana' }
 
-const EMPTY_GROUPS_BY_GAME: Record<'lorcana' | 'riftbound', SetGroup[]> = { lorcana: [], riftbound: [] }
+const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], onepiece: [], mtg: [] }
 
 function buildGroups(
   registrySide: { groupOrder: string[]; sets: RegistrySet[] },
@@ -92,12 +132,141 @@ function buildGroupsByGame(registry: SetRegistryResponse): Record<'lorcana' | 'r
   }
 }
 
+// Builds Pokemon's Cardex groups from the live api.pokemontcg.io set list (already fetched
+// newest-first by getSetsForGame/getPokemonSets — see lib/api/pokemon.ts). Grouping by `series`
+// and relying on Map insertion order (first occurrence = each series' newest set, since the
+// input is newest-first) naturally produces newest-era-first groups with zero manual curation —
+// no registry entry is needed per set the way Lorcana/Riftbound need `cardexGroup`.
+function buildPokemonGroups(sets: PokemonSetOption[]): SetGroup[] {
+  const officialSets = sets.filter((s) => !s.isCustom)
+  const customSets = sets.filter((s) => s.isCustom)
+
+  const byGroup = new Map<string, SetMeta[]>()
+  for (const s of officialSets) {
+    const label = s.series || 'Other'
+    if (!byGroup.has(label)) byGroup.set(label, [])
+    byGroup.get(label)!.push({ name: s.name, game: 'pokemon' })
+  }
+
+  const groups: SetGroup[] = Array.from(byGroup.entries()).map(([label, sets]) => ({ label, sets }))
+
+  // Custom sets (Admin Catalog "New Set", source: "manual") get their own trailing group rather
+  // than being sorted into a real era — they aren't associated with any upstream series.
+  if (customSets.length > 0) {
+    groups.push({ label: 'Custom Sets', sets: customSets.map((s) => ({ name: s.name, game: 'pokemon' as const })) })
+  }
+
+  groups.push({
+    label: 'Special',
+    sets: [{ name: '__special__', game: 'pokemon', label: 'Promos & Other', fromInventory: true }],
+  })
+
+  return groups
+}
+
+// Builds One Piece's Cardex groups from the set-code `catalog-sync.mjs`'s downloadOnePiece()
+// already derived. Only the numbered main-story boosters (OP01, OP02, ... — the sets a collector
+// actually thinks of as "a One Piece set") get their own "Main Sets" group, sorted newest-first
+// by that number and labeled with it (e.g. "Romance Dawn : OP-01") so it reads at a glance.
+// Everything else — starter decks, extra/premium boosters, and the long tail of tournament/event
+// promo "sets" apitcg tracks — collapses into a single "Special Sets" group instead of being
+// split into its own per-prefix section; there are enough of these (dozens) that splitting them
+// out just re-creates the "170+ Pokemon sets" clutter problem this whole scheme exists to avoid.
+// Same "don't hand-curate every set" reasoning as Pokemon's series-based grouping either way —
+// see CLAUDE.md quirk #9.
+function buildOnePieceGroups(sets: OnePieceSetOption[]): SetGroup[] {
+  const officialSets = sets.filter((s) => !s.isCustom)
+  const customSets = sets.filter((s) => s.isCustom)
+
+  const mainSets: Array<{ meta: SetMeta; num: number }> = []
+  const specialSets: SetMeta[] = []
+
+  for (const s of officialSets) {
+    const opMatch = s.code.match(/^OP(\d+)$/)
+    if (opMatch) {
+      mainSets.push({
+        meta: { name: s.name, game: 'onepiece', label: `${s.name} : OP-${opMatch[1]}` },
+        num: parseInt(opMatch[1], 10),
+      })
+    } else {
+      specialSets.push({ name: s.name, game: 'onepiece' })
+    }
+  }
+  mainSets.sort((a, b) => b.num - a.num) // newest (highest OP number) first
+
+  // Custom/manual sets (Admin Catalog "New Set") have no upstream numbering to speak of, so they
+  // fold into Special Sets too rather than getting their own group.
+  for (const s of customSets) specialSets.push({ name: s.name, game: 'onepiece' })
+
+  const groups: SetGroup[] = []
+  if (mainSets.length > 0) groups.push({ label: 'Main Sets', sets: mainSets.map((m) => m.meta) })
+  if (specialSets.length > 0) groups.push({ label: 'Special Sets', sets: specialSets })
+
+  groups.push({
+    label: 'Unmatched',
+    sets: [{ name: '__special__', game: 'onepiece', label: 'Other / Unmatched', fromInventory: true }],
+  })
+
+  return groups
+}
+
+// Builds MTG's Cardex groups from Scryfall's own `set_type` field (already fetched newest-first
+// by getSetsForGame/getMtgSets — see lib/api/mtg.ts), the same "don't hand-curate hundreds of
+// sets" reasoning as Pokemon's series-based grouping (CLAUDE.md quirk #9). The handful of types a
+// collector actually thinks of as "a Magic set" (expansion, core, masters, commander, draft
+// innovation, funny/Un-sets, promo) get their own labeled group; everything else (duel decks,
+// premium decks, From the Vault, Spellbook Series, Archenemy/Planechase/Vanguard oversized-card
+// products, starter sets, etc.) collapses into one "Special Sets" catch-all, same shape as One
+// Piece's Main Sets/Special Sets split.
+const MTG_SET_TYPE_LABELS: Record<string, string> = {
+  expansion: 'Expansions',
+  core: 'Core Sets',
+  masters: 'Masters & Reprint Sets',
+  commander: 'Commander',
+  draft_innovation: 'Draft Innovation',
+  funny: 'Un-Sets',
+  promo: 'Promos',
+}
+
+function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
+  const officialSets = sets.filter((s) => !s.isCustom)
+  const customSets = sets.filter((s) => s.isCustom)
+
+  const byGroup = new Map<string, SetMeta[]>()
+  const special: SetMeta[] = []
+  for (const s of officialSets) {
+    const label = MTG_SET_TYPE_LABELS[s.setType ?? '']
+    if (!label) { special.push({ name: s.name, game: 'mtg' }); continue }
+    if (!byGroup.has(label)) byGroup.set(label, [])
+    byGroup.get(label)!.push({ name: s.name, game: 'mtg' })
+  }
+
+  const groups: SetGroup[] = Array.from(byGroup.entries()).map(([label, sets]) => ({ label, sets }))
+
+  if (customSets.length > 0) {
+    groups.push({ label: 'Custom Sets', sets: customSets.map((s) => ({ name: s.name, game: 'mtg' as const })) })
+  }
+  if (special.length > 0) groups.push({ label: 'Special Sets', sets: special })
+
+  groups.push({
+    label: 'Unmatched',
+    sets: [{ name: '__special__', game: 'mtg', label: 'Other / Unmatched', fromInventory: true }],
+  })
+
+  return groups
+}
+
 // ── Rarity colors ─────────────────────────────────────────────────────────────
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
   Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899',
-  Epic: '#06b6d4', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
+  Epic: '#06b6d4', 'Alt Art': '#fbbf24', Overnumbered: '#fbbf24', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
+  // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), SEC(ret rare) — "SP CARD"
+  // is a further-out special/promo print tier.
+  L: '#38bdf8', C: '#6b7280', UC: '#22c55e', R: '#3b82f6', SR: '#a855f7', SEC: '#f97316', 'SP CARD': '#fbbf24',
+  // MTG: Scryfall's `rarity` field is always lowercase.
+  common: '#6b7280', uncommon: '#22c55e', rare: '#3b82f6', mythic: '#f97316', special: '#a855f7', bonus: '#ec4899',
 }
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
@@ -111,30 +280,81 @@ function getOwnedInfo(
     if (c.apiId) return c.apiId === catalogCard.id
     if (game === 'riftbound') return c.setCode === catalogCard.setCode && c.number === catalogCard.number
     if (game === 'lorcana') return c.set === catalogCard.setName && c.number === catalogCard.number
+    // Pokemon: unlike Riftbound, a catalog number never has multiple docs sharing it (no
+    // alt-art/overnumbered variant scheme) — a plain setName+number fallback match is safe.
+    if (game === 'pokemon') return c.set === catalogCard.setName && c.number === catalogCard.number
+    // One Piece: same reasoning as Pokemon — each print variant (base, Parallel, a 2nd/3rd
+    // Parallel art) is a fully separate catalog id already (see catalog-sync.mjs's
+    // downloadOnePiece()), so a plain setName+number fallback can only ever land on one of them
+    // per number... except when a base card AND its Parallel share the same bare number, which
+    // they do. Card.number here is the same value the search dropdown fills in from result.number
+    // (also just the bare digits, no variant marker), so this fallback — only ever hit for a
+    // manually-typed card with no apiId — has the same "collapses onto the base card" limitation
+    // Riftbound's number-only fallback has; always add via the search dropdown to avoid it.
+    if (game === 'onepiece') return c.set === catalogCard.setName && c.number === catalogCard.number
+    // MTG: same reasoning as Pokemon/One Piece — a different art/printing of the same card
+    // always gets its own distinct collector number as a separate Scryfall object (finish
+    // — foil vs. nonfoil — is a price field on that one object, not a second catalog id the way
+    // Riftbound's variants are), so a bare setName+number fallback can't collapse two real
+    // printings onto one Cardex slot.
+    if (game === 'mtg') return c.set === catalogCard.setName && c.number === catalogCard.number
     return false
   })
   return { owned: matches.length > 0, quantity: matches.reduce((s, c) => s + c.quantity, 0) }
+}
+
+// ── Group collapsing ────────────────────────────────────────────────────────────
+
+// A catch-all group (label mentions "special", "promo", or "other") starts collapsed — these are
+// the ones that tend to accumulate dozens of one-off sets nobody's specifically browsing for
+// (One Piece's "Special Sets" alone can run 100+ entries). A curated era/product group (Main
+// Sets, Booster Sets, Scarlet & Violet, ...) starts open, matching the pre-existing behavior for
+// those.
+function defaultGroupCollapsed(label: string): boolean {
+  return /special|promo|other/i.test(label)
+}
+
+function isGroupCollapsed(key: string, label: string, toggled: Set<string>): boolean {
+  const isDefault = defaultGroupCollapsed(label)
+  return toggled.has(key) ? !isDefault : isDefault
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CardexPage() {
   const { cards } = useStore()
-  const [activeGame, setActiveGame] = useState<'lorcana' | 'riftbound' | 'personal'>('lorcana')
+  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>('pokemon')
   const [activeSet, setActiveSet] = useState<SetMeta>(PLACEHOLDER_SET)
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
   const [loading, setLoading] = useState(false)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [groupsByGame, setGroupsByGame] = useState(EMPTY_GROUPS_BY_GAME)
   const [registryLoading, setRegistryLoading] = useState(true)
+  const [pokemonSetsLoading, setPokemonSetsLoading] = useState(true)
+  const [onepieceSetsLoading, setOnepieceSetsLoading] = useState(true)
+  const [mtgSetsLoading, setMtgSetsLoading] = useState(true)
+
+  // Every group is collapsible; catch-all groups (Special/Promo/Other-labeled — One Piece's
+  // "Special Sets" alone can run 100+ entries) start collapsed since they're rarely what someone
+  // came to browse, while curated era/product groups (Main Sets, Booster Sets, Scarlet & Violet,
+  // ...) start open as before. A key in this set means "toggled away from its computed default,"
+  // not "collapsed" outright — see isGroupCollapsed() — so this only has to track user overrides,
+  // not the default itself, which can be computed fresh from each group's own label/size anytime.
+  const [toggledGroups, setToggledGroups] = useState<Set<string>>(new Set())
+
+  // Only the very first successful group fetch (whichever game it's for) gets to pick the
+  // initial active set — otherwise the lorcana/riftbound registry fetch and the Pokemon live-set
+  // fetch (which run independently, and can resolve in either order) would race to overwrite
+  // each other's default selection.
+  const initialSetPicked = useRef(false)
 
   // "Personalized Collections" isn't a catalog game — fall back to a safe key for the
   // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
   // rendered while that tab is active.
-  const catalogGame: 'lorcana' | 'riftbound' = activeGame === 'personal' ? 'lorcana' : activeGame
+  const catalogGame: CatalogGame = activeGame === 'personal' ? 'lorcana' : activeGame
   const gameColor = activeGame === 'personal' ? '#8b5cf6' : GAME_COLORS[catalogGame]
 
-  // Load set groups/known-sets from the registry once on mount.
+  // Load Lorcana/Riftbound set groups from the registry once on mount.
   useEffect(() => {
     let stale = false
     fetch('/api/set-registry')
@@ -142,12 +362,82 @@ export default function CardexPage() {
       .then((data: SetRegistryResponse | null) => {
         if (stale || !data) return
         const built = buildGroupsByGame(data)
-        setGroupsByGame(built)
-        setActiveSet(built.lorcana[0]?.sets[0] ?? PLACEHOLDER_SET)
+        setGroupsByGame((g) => ({ ...g, ...built }))
+        if (!initialSetPicked.current && (activeGame === 'lorcana' || activeGame === 'riftbound')) {
+          setActiveSet(built[activeGame][0]?.sets[0] ?? PLACEHOLDER_SET)
+          initialSetPicked.current = true
+        }
       })
       .catch(() => {})
       .finally(() => { if (!stale) setRegistryLoading(false) })
     return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load Pokemon's set list (live api.pokemontcg.io data, same endpoint AddCardDialog uses) once
+  // on mount and derive Cardex groups from it client-side — see buildPokemonGroups() above for
+  // why this doesn't need a registry entry per set the way Lorcana/Riftbound do.
+  useEffect(() => {
+    let stale = false
+    fetch('/api/sets?game=pokemon')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((sets: PokemonSetOption[]) => {
+        if (stale) return
+        const built = buildPokemonGroups(sets)
+        setGroupsByGame((g) => ({ ...g, pokemon: built }))
+        if (!initialSetPicked.current && activeGame === 'pokemon') {
+          setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          initialSetPicked.current = true
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!stale) setPokemonSetsLoading(false) })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load One Piece's set list (registry-backed — see /api/sets?game=onepiece via
+  // lib/api/onepiece.ts's getOnePieceSets()) once on mount and derive Cardex groups from it
+  // client-side — see buildOnePieceGroups() above.
+  useEffect(() => {
+    let stale = false
+    fetch('/api/sets?game=onepiece')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((sets: OnePieceSetOption[]) => {
+        if (stale) return
+        const built = buildOnePieceGroups(sets)
+        setGroupsByGame((g) => ({ ...g, onepiece: built }))
+        if (!initialSetPicked.current && activeGame === 'onepiece') {
+          setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          initialSetPicked.current = true
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!stale) setOnepieceSetsLoading(false) })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Load MTG's set list (live api.scryfall.com/sets data, same endpoint AddCardDialog uses) once
+  // on mount and derive Cardex groups from it client-side — see buildMtgGroups() above for why
+  // this doesn't need a registry entry per set the way Lorcana/Riftbound do.
+  useEffect(() => {
+    let stale = false
+    fetch('/api/sets?game=mtg')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((sets: MtgSetOption[]) => {
+        if (stale) return
+        const built = buildMtgGroups(sets)
+        setGroupsByGame((g) => ({ ...g, mtg: built }))
+        if (!initialSetPicked.current && activeGame === 'mtg') {
+          setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          initialSetPicked.current = true
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!stale) setMtgSetsLoading(false) })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const knownSets = useMemo(() => {
@@ -170,7 +460,18 @@ export default function CardexPage() {
   // Fetch catalog when set changes (skip for inventory-only buckets, the Personalized
   // Collections tab, or before sets have loaded)
   useEffect(() => {
-    if (activeGame === 'personal' || !activeSet.name || activeSet.fromInventory) { setCatalogCards([]); return }
+    if (activeGame === 'personal' || !activeSet.name || activeSet.fromInventory) {
+      // Explicit setLoading(false) here matters: switching to a fromInventory set while a
+      // previous real-set fetch is still in flight leaves `loading` stuck true forever
+      // otherwise — that fetch's own cleanup marks itself `stale` (correctly suppressing its
+      // stale setCatalogCards), which also suppresses its `finally`'s setLoading(false), and
+      // this branch never sets it itself. Reproduces trivially for any game whose only group is
+      // "Special" (e.g. One Piece before its first sync populates the registry) — every set
+      // click lands here, so a slow prior request's dangling `loading=true` never gets undone.
+      setCatalogCards([])
+      setLoading(false)
+      return
+    }
     let stale = false // rapid set switching: ignore responses for a set we've left
     setLoading(true)
     setCatalogCards([])
@@ -182,9 +483,18 @@ export default function CardexPage() {
     return () => { stale = true }
   }, [activeGame, activeSet])
 
-  function switchGame(game: 'lorcana' | 'riftbound' | 'personal') {
+  function switchGame(game: CatalogGame | 'personal') {
     setActiveGame(game)
     if (game !== 'personal') setActiveSet(groupsByGame[game][0]?.sets[0] ?? PLACEHOLDER_SET)
+  }
+
+  function toggleGroup(key: string) {
+    setToggledGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
 
   // Enrich catalog cards with owned status
@@ -211,7 +521,7 @@ export default function CardexPage() {
 
         {/* Game tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {(['lorcana', 'riftbound', 'personal'] as const).map((game) => (
+          {(['pokemon', 'onepiece', 'lorcana', 'riftbound', 'mtg', 'personal'] as const).map((game) => (
             <button
               key={game}
               onClick={() => switchGame(game)}
@@ -226,7 +536,7 @@ export default function CardexPage() {
                 : {}}
             >
               {game === 'personal' && <FolderHeart size={14} />}
-              {game === 'lorcana' ? 'Lorcana' : game === 'riftbound' ? 'Riftbound' : 'Personalized Collections'}
+              {game === 'pokemon' ? 'Pokémon' : game === 'onepiece' ? 'One Piece' : game === 'lorcana' ? 'Lorcana' : game === 'riftbound' ? 'Riftbound' : game === 'mtg' ? 'Magic' : 'Personalized Collections'}
             </button>
           ))}
         </div>
@@ -236,41 +546,52 @@ export default function CardexPage() {
         ) : (
           <>
             {/* Grouped set selector */}
-            {registryLoading && (
+            {(catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading) && (
               <div className="flex items-center gap-2 text-slate-500 text-sm mb-6">
                 <Loader2 size={14} className="animate-spin" />
                 Loading sets…
               </div>
             )}
             <div className="space-y-3 mb-6">
-              {groupsByGame[catalogGame].map((group) => (
-                <div key={group.label}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1.5 px-0.5">
-                    {group.label}
+              {groupsByGame[catalogGame].map((group) => {
+                const key = `${catalogGame}:${group.label}`
+                const collapsed = isGroupCollapsed(key, group.label, toggledGroups)
+                return (
+                  <div key={group.label}>
+                    <button
+                      onClick={() => toggleGroup(key)}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 mb-1.5 px-0.5"
+                    >
+                      <ChevronDown size={12} className={cn('transition-transform', collapsed && '-rotate-90')} />
+                      {group.label}
+                      <span className="text-slate-700 normal-case font-normal">({group.sets.length})</span>
+                    </button>
+                    {!collapsed && (
+                      <div className="flex gap-2 flex-wrap">
+                        {group.sets.map((set) => {
+                          const isActive = activeSet.name === set.name
+                          return (
+                            <button
+                              key={set.name}
+                              onClick={() => setActiveSet(set)}
+                              className={cn(
+                                'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+                                isActive
+                                  ? 'text-white border-transparent'
+                                  : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
+                                set.fromInventory && !isActive && 'border-dashed',
+                              )}
+                              style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
+                            >
+                              {set.label ?? set.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    {group.sets.map((set) => {
-                      const isActive = activeSet.name === set.name
-                      return (
-                        <button
-                          key={set.name}
-                          onClick={() => setActiveSet(set)}
-                          className={cn(
-                            'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-                            isActive
-                              ? 'text-white border-transparent'
-                              : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
-                            set.fromInventory && !isActive && 'border-dashed',
-                          )}
-                          style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
-                        >
-                          {set.label ?? set.name}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {/* Progress bar (catalog-backed sets only) */}
@@ -342,7 +663,10 @@ function SpecialBucket({ cards, gameColor, game }: { cards: Card[]; gameColor: s
         <div className="text-slate-400 font-medium">No special cards yet</div>
         <div className="text-slate-600 text-sm max-w-xs">
           Cards added to your inventory with a set name not from the main catalog will appear here —
-          D23, Disney Cruise, Metal cards, etc.
+          {game === 'pokemon' ? " McDonald's promos, custom sets, etc."
+            : game === 'onepiece' ? ' one-off tournament promos, custom sets, etc.'
+            : game === 'mtg' ? ' Secret Lairs, oddly-named promos, custom sets, etc.'
+            : ' D23, Disney Cruise, Metal cards, etc.'}
         </div>
       </div>
     )
@@ -436,7 +760,8 @@ function CardTile({ card, gameColor, isHovered, onHover, onLeave }: CardTileProp
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
             <div className="text-xs font-semibold text-white leading-tight max-w-[140px] truncate">{card.name}</div>
-            <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{card.rarity.replace('_', ' ')}</div>
+            {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
+            {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{card.rarity.replace('_', ' ')}</div>}
             {card.marketPrice > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice.toFixed(2)}</div>}
             {card.owned
               ? <div className="text-[10px] text-emerald-400 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>

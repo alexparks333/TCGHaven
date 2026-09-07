@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils'
 const RARITY_COLORS: Record<string, string> = {
   Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
   Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899',
-  Epic: '#06b6d4', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
+  Epic: '#06b6d4', 'Alt Art': '#fbbf24', Overnumbered: '#fbbf24', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
 }
 
 function isOwned(card: PersonalCollectionCard, ownedCards: Card[]): { owned: boolean; quantity: number } {

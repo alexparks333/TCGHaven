@@ -65,7 +65,7 @@ interface LookupCandidate {
   note?: string
 }
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 export default function AdminCatalogPage() {
   return (
@@ -106,13 +106,15 @@ const SYNC_GAMES: { game: Game; label: string }[] = [
   { game: 'pokemon', label: 'Pokémon' },
   { game: 'lorcana', label: 'Lorcana' },
   { game: 'riftbound', label: 'Riftbound' },
+  { game: 'onepiece', label: 'One Piece' },
+  { game: 'mtg', label: 'Magic: The Gathering' },
 ]
 
 function SyncPanel() {
   const { user } = useAuth()
   const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
   const [state, setState] = useState<Record<Game, GameSyncState>>({
-    pokemon: { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' },
+    pokemon: { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' },
   })
 
   if (!isAdmin) return null
@@ -730,10 +732,11 @@ function CatalogBrowser() {
               isAdmin={isAdmin}
               // Lorcana/Riftbound sets always have a registry entry (it's the
               // source of truth for their whole set list, not just custom ones — see
-              // CLAUDE.md's set-registry section), so editing always works. Pokemon's official
-              // sets come live from api.pokemontcg.io with no registry entry to patch — only
-              // its own custom ("New Set") sets are registry-backed and thus editable.
-              editable={activeGame !== 'pokemon' || !!activeSet.isCustom}
+              // CLAUDE.md's set-registry section), so editing always works. Pokemon's and MTG's
+              // official sets come live from an external API (api.pokemontcg.io / Scryfall) with
+              // no registry entry to patch — only their own custom ("New Set") sets are
+              // registry-backed and thus editable.
+              editable={(activeGame !== 'pokemon' && activeGame !== 'mtg') || !!activeSet.isCustom}
               onSaved={handleSetInfoUpdated}
               onError={setActionError}
             />
@@ -1224,9 +1227,10 @@ function AddCardForm({
   const [saving, setSaving] = useState(false)
 
   // Lorcana/Riftbound sets always have a registry entry (it's the source of truth for their
-  // whole set list); Pokemon's official sets come live from api.pokemontcg.io with nothing local
-  // to patch — only Pokemon's own custom ("New Set") sets are registry-backed.
-  const setDateEditable = game !== 'pokemon' || !!activeSet.isCustom
+  // whole set list); Pokemon's and MTG's official sets come live from an external API
+  // (api.pokemontcg.io / Scryfall) with nothing local to patch — only their own custom
+  // ("New Set") sets are registry-backed.
+  const setDateEditable = (game !== 'pokemon' && game !== 'mtg') || !!activeSet.isCustom
 
   async function runLookup() {
     setLooking(true)
@@ -1268,12 +1272,13 @@ function AddCardForm({
       marketPriceFoil: parseFloat(marketPriceFoil) || 0,
       notes: notes.trim() || '',
       ...(game === 'riftbound' ? { setCode: activeSet.code } : { set: activeSet.code }),
-      // Reuse the real official id when we have one (e.g. Pokemon's apiId) so the card
-      // behaves identically to a normally-scraped one; otherwise the add route synthesizes one.
-      ...(game === 'pokemon' && apiId ? { id: apiId } : {}),
+      // Reuse the real official id when we have one (e.g. Pokemon's apiId, or MTG's Scryfall
+      // UUID) so the card behaves identically to a normally-scraped one; otherwise the add route
+      // synthesizes one.
+      ...((game === 'pokemon' || game === 'mtg') && apiId ? { id: apiId } : {}),
     }
     try {
-      // Reuse a real external id when we have one (e.g. a genuine Pokemon apiId) so the card
+      // Reuse a real external id when we have one (e.g. a genuine Pokemon/MTG apiId) so the card
       // behaves identically to a normally-scraped one; otherwise synthesize a placeholder.
       const id = typeof card.id === 'string' && card.id ? card.id : synthesizeId(game, card, variant)
       const cardRef = doc(db, 'catalog', game, 'cards', id)
@@ -1320,8 +1325,10 @@ function AddCardForm({
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
         <input placeholder="Variant (e.g. showcase)" value={variant} onChange={(e) => setVariant(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        {game === 'pokemon' && (
-          <input placeholder="Official apiId (e.g. sv7-1)" value={apiId} onChange={(e) => setApiId(e.target.value)}
+        {(game === 'pokemon' || game === 'mtg') && (
+          <input
+            placeholder={game === 'mtg' ? 'Official Scryfall id (UUID, optional)' : 'Official apiId (e.g. sv7-1)'}
+            value={apiId} onChange={(e) => setApiId(e.target.value)}
             className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2" />
         )}
         <ImageUploadField game={game} uploadId={uploadId} imageUrl={imageUrl} onChange={setImageUrl} />
@@ -1478,10 +1485,11 @@ function EditCardForm({
 function NewSetForm({
   game, onSaved, onCancel, onError,
 }: { game: Game; onSaved: (setName: string) => void; onCancel: () => void; onError: (msg: string | null) => void }) {
-  // Pokemon has no Cardex/Pack Analysis integration at all (too many cards/sets — see
-  // CLAUDE.md quirk #9), so a custom Pokemon set has no cardexGroup to pick; it only needs a
-  // name (and optionally a code/release date) to become addable/searchable in the catalog.
-  const needsCardexGroup = game !== 'pokemon'
+  // Pokemon, One Piece, and MTG all derive their Cardex groups automatically (Pokemon: live
+  // `series` field; One Piece: set-code prefix; MTG: Scryfall's `set_type` — see CLAUDE.md quirk
+  // #9), so a custom set in any of them has no cardexGroup to pick; it only needs a name (and
+  // optionally a code/release date) to become addable/searchable in the catalog.
+  const needsCardexGroup = game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg'
   const [groupOrder, setGroupOrder] = useState<string[]>([])
   const [loadingGroups, setLoadingGroups] = useState(needsCardexGroup)
   const [setName, setSetName] = useState('')
@@ -1541,7 +1549,7 @@ function NewSetForm({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
         <input placeholder="Set name (e.g. T1 Champion Set)" value={setName} onChange={(e) => setSetName(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2" />
-        <input placeholder={game === 'riftbound' ? 'Set code (e.g. T1C)' : 'Code (optional)'} value={code} onChange={(e) => setCode(e.target.value)}
+        <input placeholder={game === 'riftbound' ? 'Set code (e.g. T1C)' : game === 'onepiece' ? 'Code (e.g. OP01, optional)' : game === 'mtg' ? 'Scryfall set code (e.g. khm, optional)' : 'Code (optional)'} value={code} onChange={(e) => setCode(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
         <input placeholder="Release date (YYYY-MM-DD, optional)" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)}
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />

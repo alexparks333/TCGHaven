@@ -3,6 +3,7 @@ import { loadSetRegistry, saveSetRegistry } from '@/lib/api/registry'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { invalidateSetsCache } from '@/lib/api/search'
 import { invalidatePokemonSetsCache } from '@/lib/api/pokemon'
+import { invalidateMtgSetsCache } from '@/lib/api/mtg'
 import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -13,7 +14,7 @@ export async function GET() {
 
 // Structured patch of a single set entry — used by the Settings "Needs Review" editor.
 // Only ever reads/writes the registry/main Firestore doc, never TypeScript source.
-const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 export async function PUT(request: Request) {
   const body = await request.json().catch(() => null)
@@ -22,7 +23,7 @@ export async function PUT(request: Request) {
   const patch = body?.patch
 
   if (!REGISTRY_GAMES.includes(gameRaw) || typeof setName !== 'string' || typeof patch !== 'object' || patch === null) {
-    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound", setName: string, patch: object }' }, { status: 400 })
+    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound"|"onepiece"|"mtg", setName: string, patch: object }' }, { status: 400 })
   }
   const game: Game = gameRaw
 
@@ -53,22 +54,27 @@ export async function POST(request: Request) {
   const setName = typeof body?.setName === 'string' ? body.setName.trim() : ''
   const code = typeof body?.code === 'string' ? body.code.trim() : ''
   const releaseDate = typeof body?.releaseDate === 'string' && body.releaseDate.trim() ? body.releaseDate.trim() : null
-  // Pokemon has no Cardex/Pack Analysis integration at all (too many cards/sets for a
-  // Pokedex-style grid — see CLAUDE.md quirk #9), so a custom Pokemon set has nowhere to plug
-  // into a cardexGroup; it only needs to become addable/searchable in the catalog.
+  // Pokemon's Cardex groups are derived automatically from the live api.pokemontcg.io `series`
+  // field (see CLAUDE.md quirk #9), not from a registry cardexGroup — so a custom Pokemon set has
+  // nowhere to plug one into (it lands in Cardex's own "Custom Sets" bucket instead). It also
+  // isn't part of Pack Analysis. One Piece works the same way, grouping by set-code prefix
+  // instead of `series` — a custom One Piece set lands in its own "Promos & Special" group. MTG
+  // follows the same pattern as Pokemon (live external sets API, grouped by Scryfall's own
+  // `set_type` — see buildMtgGroups() in CardexPage.tsx) — a custom MTG set lands in its own
+  // trailing "Custom Sets" group too.
   const cardexGroup = typeof body?.cardexGroup === 'string' ? body.cardexGroup : null
 
   if (!REGISTRY_GAMES.includes(gameRaw) || !setName) {
-    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound", setName: string, code?: string, releaseDate?: string, cardexGroup?: string }' }, { status: 400 })
+    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound"|"onepiece"|"mtg", setName: string, code?: string, releaseDate?: string, cardexGroup?: string }' }, { status: 400 })
   }
   const game: Game = gameRaw
-  if (game !== 'pokemon' && !cardexGroup) {
+  if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && !cardexGroup) {
     return NextResponse.json({ error: 'cardexGroup is required for lorcana/riftbound sets' }, { status: 400 })
   }
 
   const registry = await loadSetRegistry()
 
-  if (game !== 'pokemon' && cardexGroup) {
+  if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && cardexGroup) {
     const groupOrder = registry[game].groupOrder
     if (!groupOrder.includes(cardexGroup)) {
       return NextResponse.json({ error: `"${cardexGroup}" isn't a known Cardex group for ${game} (expected one of: ${groupOrder.join(', ')})` }, { status: 400 })
@@ -103,6 +109,17 @@ export async function POST(request: Request) {
         needsReview: false,
         source: 'manual',
       }
+    : game === 'onepiece'
+    ? {
+        // No code -> falls outside the OP/ST/EB/PRB prefixes buildOnePieceGroups() looks for,
+        // landing this set in the "Promos & Special" bucket — a reasonable default for a custom
+        // set that (unlike a real upstream one) has no official print-numbering prefix anyway.
+        setName,
+        code: code || '',
+        releaseDate,
+        cardCount: 0,
+        source: 'manual',
+      }
     : {
         setName,
         code: code || null,
@@ -121,6 +138,7 @@ export async function POST(request: Request) {
   // separate cache one layer down (lib/api/pokemon.ts's getPokemonSets()) that also needs it.
   invalidateSetsCache(game)
   if (game === 'pokemon') invalidatePokemonSetsCache()
+  if (game === 'mtg') invalidateMtgSetsCache()
 
   return NextResponse.json({ ok: true, set: newSet })
 }
@@ -137,7 +155,7 @@ export async function DELETE(request: Request) {
   const setName = body?.setName
 
   if (!REGISTRY_GAMES.includes(gameRaw) || typeof setName !== 'string' || !setName) {
-    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound", setName: string }' }, { status: 400 })
+    return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound"|"onepiece"|"mtg", setName: string }' }, { status: 400 })
   }
   const game: Game = gameRaw
 
@@ -158,6 +176,7 @@ export async function DELETE(request: Request) {
 
   invalidateSetsCache(game)
   if (game === 'pokemon') invalidatePokemonSetsCache()
+  if (game === 'mtg') invalidateMtgSetsCache()
 
   return NextResponse.json({ ok: true })
 }

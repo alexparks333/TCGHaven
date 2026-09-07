@@ -10,7 +10,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { saveSoldCard, deleteSoldCard, saveCard } from '@/lib/firebase/db'
 import { cn } from '@/lib/utils'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 type TimeFilter = 'today' | 'week' | 'month' | 'year' | 'all'
 
@@ -67,7 +67,7 @@ export default function SoldPage() {
   }, [soldCards, timeFilter])
 
   const gameCounts = useMemo(() => {
-    const counts = { pokemon: 0, lorcana: 0, riftbound: 0 } as Record<Game, number>
+    const counts = { pokemon: 0, lorcana: 0, riftbound: 0, onepiece: 0, mtg: 0 } as Record<Game, number>
     for (const c of soldCards) counts[c.game] = (counts[c.game] || 0) + 1
     return counts
   }, [soldCards])
