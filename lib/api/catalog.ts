@@ -155,6 +155,16 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   'Illustration Rare': 35, 'Special Illustration Rare': 36, 'Ultra Rare': 37, 'Shiny Rare': 38, 'Shiny Ultra Rare': 39,
   'ACE SPEC Rare': 40, 'Black White Rare': 41, 'Mega Hyper Rare': 42, MEGA_ATTACK_RARE: 43, 'Futuristic Rare': 44,
   'Holo Rare V': 45, 'Holo Rare VMAX': 46, 'Holo Rare VSTAR': 47, 'Pikachu Rare': 48, 'Rare Holo ex': 49,
+  // Not one of the 44 pokemontcg.io API values above — an app-local correction for a real
+  // upstream data gap. The 30th Celebration set's 3 "RGB Mew" cards (me55-R/G/B, outside the
+  // set's official /103 numbering) are unofficial, unacknowledged secret pulls trading for
+  // $1,800-$3,700+ that the official API defaults to "Common" (it has no real classification for
+  // them at all yet — Pokémon hasn't formally acknowledged these cards exist). Corrected via
+  // Admin Catalog edit (admin-edit-wins-over-resync protection keeps a future Pokémon sync from
+  // reverting it back to "Common") rather than in the sync script itself, since this is a
+  // one-off exception for 3 specific cards, not a systematic mapping rule. Sorts above every
+  // real API-provided tier, matching its real-world status as the set's actual chase cards.
+  'Secret Anniversary Rare': 50,
   // Riftbound: 'Alt Art' (same-number foil-only print) and 'Overnumbered' (collector number
   // exceeds the set's card count) — both formerly flattened to a single 'Showcase' rarity
   // value; that key is kept as a fallback for any doc a resync hasn't touched yet.

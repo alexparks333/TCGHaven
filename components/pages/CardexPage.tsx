@@ -296,6 +296,9 @@ const RARITY_COLORS: Record<string, string> = {
   'Shiny Rare': '#f97316', 'Shiny Ultra Rare': '#f97316', 'Black White Rare': '#f97316',
   'Futuristic Rare': '#f97316', 'Pikachu Rare': '#f97316',
   'Special Illustration Rare': '#ec4899', 'Hyper Rare': '#ec4899', 'Mega Hyper Rare': '#ec4899', MEGA_ATTACK_RARE: '#ec4899',
+  // App-local correction, not a real pokemontcg.io value — see CARDEX_RARITY_ORDER's comment
+  // (lib/api/catalog.ts) for why. Same top-tier pink as the rest of the modern chase tier.
+  'Secret Anniversary Rare': '#ec4899',
 }
 
 // Games whose rarity toggle filter is wired up in the Cardex — the filter/toggle-list logic
