@@ -72,6 +72,14 @@ npm run start
 # Firestore, no rebuild needed (see §4). Only still useful for actually picking up
 # new upstream sets/cards; it is NOT how Admin Catalog edits get applied — see §5.
 npm run download-cards
+
+# Type-check only, no build output (fast — this is what CI-equivalent verification
+# should run before trusting a change; `next build` also re-runs lint/type-checks
+# as part of the real build, and only `next build` catches an invalid Next.js
+# route-handler export/signature — see quirk #24). ESLint (next/core-web-vitals)
+# also now runs as part of `npm run build`.
+npm run typecheck
+npm run lint
 ```
 
 **Card catalog data no longer requires a rebuild to pick up changes** — as of the Firestore
@@ -1330,6 +1338,12 @@ Rare-or-better slots + 1 foil wildcard slot + 1 token, per pack):
 | Overnumbered (foil wildcard slot) | 1.4% (~1 in 72) | Community |
 | Signature (foil wildcard slot) | 0.14% (~1 in 720) | Community |
 
+Sorting cards into Common/Uncommon/Rare/Epic/Alt Art/Overnumbered/Signature buckets for the EV
+math goes through the shared `riftboundVariantFlags()` helper (`lib/utils.ts`, see quirk #5's
+variant table) — this route used to have its own drifted copy of that classification logic
+(string-matching `id.includes('-star-')`, a leftover `rarity === 'Showcase'` check, etc.), the
+same duplication already fixed once in the Portfolio price route and search.
+
 `lib/pack-analysis/riftbound-ev.ts` exports this same `PULL_RATES` constant for the frontend to
 read directly — it used to also carry a large parallel EV implementation (`RIFTBOUND_EV_SETS`,
 `computeEV()`, `RIFTBOUND_EV`) with per-set data frozen at authoring time, entirely unused by
@@ -1715,24 +1729,24 @@ unlock. Clicking the toast deep-links to that card's Cardex set.
 
 ### Data Loading on Login
 
-`AuthProvider.tsx` runs a `Promise.all` on sign-in:
+`AuthProvider.tsx` runs a `Promise.all` on sign-in, with all four reads isolated by their own
+`.catch`:
 ```typescript
 Promise.all([
-  loadCards(firebaseUser.uid),
-  loadPriceHistory(firebaseUser.uid),
-  loadPurchases(firebaseUser.uid),
-  loadSoldCards(firebaseUser.uid).catch(() => []),  // isolated — a sold-cards read failure
-                                                      // alone doesn't block the other three
+  loadCards(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
+  loadPriceHistory(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
+  loadPurchases(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
+  loadSoldCards(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
 ])
 ```
-All four must resolve (loadSoldCards can't reject — its own `.catch` swallows to `[]`) before
-`dataLoading` is set to `false`; the outer `.catch` also sets `dataLoading` false on failure now
-(this used to leave it `true` forever — fixed), but if `loadCards`/`loadPriceHistory`/
-`loadPurchases` themselves reject, **none** of `loadUserCards`/`loadUserPriceHistory`/
-`storePurchases` fire — the user lands on a fully empty Inventory/Portfolio/Spending with only a
-`console.error`, which looks exactly like data loss with no retry/error UI. Worth fixing if this
-becomes a real-world pain point; noted here since it's easy to mistake "spinner never resolves"
-(the old, now-fixed bug) for "silently shows nothing" (the remaining one) when debugging.
+`dataLoading` is set `false` once this resolves (which it now always does, since none of the four
+can reject anymore) or in the outer `.catch` for anything outside those four reads (this used to
+leave `dataLoading` `true` forever on failure — fixed earlier). This used to be a plain
+`Promise.all` with only `loadSoldCards` individually isolated — if any of the other three
+(`loadCards`/`loadPriceHistory`/`loadPurchases`) rejected, **none** of the four store-population
+calls ran at all, landing the user on a fully empty Inventory/Portfolio/Spending with only a
+`console.error`, indistinguishable from real data loss. Each read failing now independently falls
+back to `[]` and logs its own specific error, so one flaky read no longer blanks the other three.
 
 ---
 
@@ -1785,8 +1799,9 @@ TCGHaven/
 │   │   │                             check every admin-only write route now runs first (§5)
 │   │   ├── authFetch.ts           ← adminFetch() — client-side fetch wrapper that attaches the
 │   │   │                             caller's Firebase ID token for the above (§5)
-│   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, newCardRef,
-│   │   │                             loadSoldCards/saveSoldCard/deleteSoldCard (§19),
+│   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, removeCards
+│   │   │                             (writeBatch'd multi-delete — Inventory's "delete all lots"),
+│   │   │                             newCardRef, loadSoldCards/saveSoldCard/deleteSoldCard (§19),
 │   │   │                             addPricePoint/applyPriceUpdatesBatch (dedupe to one
 │   │   │                             price-history point per day — §13, §18)
 │   │   ├── spending.ts            ← loadPurchases, savePurchase, updatePurchase, deletePurchase
