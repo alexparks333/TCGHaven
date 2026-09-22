@@ -859,7 +859,14 @@ Each card doc:
                                 // Grouping below); this is a per-card display field
   "setName": "Romance Dawn",   // human-readable set name
   "number": "024",             // bare collector number, no set-size denominator
-  "rarity": "SR",              // L, C, UC, R, SR, SEC, "SP CARD" — unlike Pokemon, always present
+  "rarity": "SR",              // L, C, UC, R, SR, TR, SEC, "SP CARD", P, PR — unlike Pokemon,
+                                // always present. TR = Treasure Rare, a genuine premium chase
+                                // tier (~1 per booster box, OP-06+, EN/CN/FR-exclusive) missing
+                                // from this doc until the Cardex rarity toggle work found it by
+                                // aggregating real live data instead of trusting this list. P/PR
+                                // are both promo-card codes from two different scrape paths
+                                // (apitcg's own vs. a tcgcsv-synthesized promo group), not a real
+                                // collector-value distinction — see §14's rarity toggle note.
   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/453508_200w.jpg", // TCGPlayer's own
                                 // product photo, NOT the official gallery — see Image Hosting below
   "marketPrice": 2.34          // no marketPriceFoil — see Print Variants below
@@ -1324,11 +1331,18 @@ needed — anything in inventory with an unrecognized set name appears here auto
 
 Inside a set, `CardexPage.tsx` can render a row of rarity pills (e.g. "Common", "Illustration
 Rare", "Overnumbered Signature") that hide/show cards of that rarity — currently wired up for
-**Riftbound, Pokémon, and Lorcana** (`RARITY_TOGGLE_GAMES`), added incrementally on request; Lorcana
-needed zero mechanism changes, just adding it to the set (its 9 rarities — Common, Uncommon, Rare,
-Super_rare, Legendary, Enchanted, Epic, Iconic, Promo — were already in `CARDEX_RARITY_ORDER` from
-before this feature existed) plus one missing `RARITY_COLORS` entry (`Iconic`). Extending it to
-One Piece/MTG is the same shape but not yet done.
+**Riftbound, Pokémon, Lorcana, and One Piece** (`RARITY_TOGGLE_GAMES`), added incrementally on
+request. Lorcana needed zero mechanism changes, just adding it to the set (its 9 rarities were
+already in `CARDEX_RARITY_ORDER` from before this feature existed) plus one missing
+`RARITY_COLORS` entry (`Iconic`). **One Piece is the one game where enabling this actually found a
+real doc/data gap**: aggregating real rarity values across all 128 live sets turned up `TR`
+(Treasure Rare — a genuine premium chase tier CLAUDE.md's own §10 catalog schema had never
+documented) plus `P`/`PR` (two promo-card codes from different scrape paths, not a real
+collector-value distinction — both labeled "Promo"-ish so the toggles are distinguishable without
+asserting a difference that isn't really there). `ONEPIECE_RARITY_LABELS` (`lib/utils.ts`) spells
+out all 10 real values, since One Piece's rarity field is always a bare abbreviation (unlike
+Pokemon/Riftbound, where only a handful of oddities needed relabeling). Extending this to MTG is
+the same shape but not yet done.
 
 - **The list is always computed from what's actually in the active set, never hardcoded.** An
   earlier Riftbound-only version used a fixed array of the "real" rarities — which meant any
