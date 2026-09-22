@@ -240,6 +240,11 @@ export async function downloadPokemon() {
             set: setId,
             setName: setNameById[setId] ?? setId,
             number: String(c.number ?? ''),
+            // Not every card has one (mostly Basic Energy, plus a handful of promo-only sets
+            // like McDonald's Collections) — '' rather than omitting the field entirely, so
+            // syncToFirestore()'s field-level diffing (comparing JSON.stringify per key) always
+            // has something to compare and this can't silently vanish on a later resync.
+            rarity: c.rarity ?? '',
             imageUrl: c.images.large ?? c.images.small,
             marketPrice: 0,
             marketPriceFoil: 0,

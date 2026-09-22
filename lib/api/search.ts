@@ -65,6 +65,7 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
         set: c.set.id,
         setName: c.set.name,
         number: c.number,
+        rarity: c.rarity || undefined,
         imageUrl: c.images.small,
         game: 'pokemon' as Game,
         lowPriceNM: lowNM,

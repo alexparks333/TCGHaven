@@ -6,7 +6,8 @@ import { Loader2, Package, FolderHeart, ChevronDown, Search } from 'lucide-react
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
-import { cn, RIFTBOUND_RARITY_LABELS } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME } from '@/lib/utils'
+import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -273,18 +274,36 @@ const RARITY_COLORS: Record<string, string> = {
   L: '#38bdf8', C: '#6b7280', UC: '#22c55e', R: '#3b82f6', SR: '#a855f7', SEC: '#f97316', 'SP CARD': '#fbbf24',
   // MTG: Scryfall's `rarity` field is always lowercase.
   common: '#6b7280', uncommon: '#22c55e', rare: '#3b82f6', mythic: '#f97316', special: '#a855f7', bonus: '#ec4899',
+  // Pokemon — 44 real values (verified against api.pokemontcg.io/v2/rarities and the full
+  // 176-set GitHub dataset), too many for a bespoke color each, so bucketed into 4 value tiers
+  // instead: blue (the plain "Rare Holo" baseline, same as Rare) -> purple (the broad "holo
+  // rare"-era mechanic tier: EX/GX/V/VMAX/VSTAR/ex, Prime, LEGEND, BREAK, Ultra, Double Rare,
+  // ACE SPEC, ...) -> orange (harder pulls: Secret/Rainbow/Shiny/Amazing/Radiant/Illustration
+  // Rare/regional exclusives) -> pink (the modern top chase tier: Special Illustration Rare,
+  // Hyper Rare, Mega Hyper Rare, Mega Attack Rare). Common/Uncommon/Rare already share the
+  // generic keys above. See CARDEX_RARITY_ORDER (lib/api/catalog.ts) for the same 44 values'
+  // canonical sort order — that map is the source of truth for what counts as "known" at all;
+  // this is purely a display color, unrelated to whether a value is safe to filter by.
+  'Rare Holo': '#3b82f6',
+  'Rare Holo EX': '#a855f7', 'Rare Holo Star': '#a855f7', 'Rare Holo LV.X': '#a855f7', LEGEND: '#a855f7',
+  'Rare Prime': '#a855f7', 'Rare Ultra': '#a855f7', 'Rare ACE': '#a855f7', 'Rare BREAK': '#a855f7',
+  'Rare Holo GX': '#a855f7', 'Rare Prism Star': '#a855f7', 'Rare Holo V': '#a855f7', 'Rare Holo VMAX': '#a855f7',
+  'Classic Collection': '#a855f7', 'Rare Holo VSTAR': '#a855f7', 'Trainer Gallery Rare Holo': '#a855f7',
+  'Double Rare': '#a855f7', 'Ultra Rare': '#a855f7', 'ACE SPEC Rare': '#a855f7',
+  'Holo Rare V': '#a855f7', 'Holo Rare VMAX': '#a855f7', 'Holo Rare VSTAR': '#a855f7', 'Rare Holo ex': '#a855f7',
+  'Rare Secret': '#f97316', 'Rare Shining': '#f97316', 'Rare Rainbow': '#f97316', 'Rare Shiny': '#f97316',
+  'Rare Shiny GX': '#f97316', 'Amazing Rare': '#f97316', 'Radiant Rare': '#f97316', 'Illustration Rare': '#f97316',
+  'Shiny Rare': '#f97316', 'Shiny Ultra Rare': '#f97316', 'Black White Rare': '#f97316',
+  'Futuristic Rare': '#f97316', 'Pikachu Rare': '#f97316',
+  'Special Illustration Rare': '#ec4899', 'Hyper Rare': '#ec4899', 'Mega Hyper Rare': '#ec4899', MEGA_ATTACK_RARE: '#ec4899',
 }
 
-// Riftbound-only rarity toggle filter — canonical display order for the 7 real Riftbound
-// rarities. The toggle list itself is computed per-set (see riftboundRarityFilters below), not
-// this fixed array, because a hardcoded list silently let anything outside it become permanently
-// un-hideable: real catalog data also has Rune cards (cardType: 'Rune') whose print-variant
-// rarity comes straight from TCGPlayer's own product listing ("Showcase" for one Rune print,
-// "Promo" for another — nothing to do with champion-card Alt Art/Overnumbered despite the name
-// overlap) — those two values were never in this list, so no toggle could ever hide them, and a
-// user trying to isolate "just Alt Art" would still see stray Rune cards no matter what they
-// clicked. This order array is now only used to sort the real, present values consistently.
-const RIFTBOUND_RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Epic', 'Alt Art', 'Overnumbered', 'Star'] as const
+// Games whose rarity toggle filter is wired up in the Cardex — the filter/toggle-list logic
+// below (rarityFilters, hiddenRarities) is fully generic per-game, driven by CARDEX_RARITY_ORDER
+// (lib/api/catalog.ts) and RARITY_LABELS_BY_GAME (lib/utils.ts), so enabling it for another game
+// is just adding it here plus, if its raw rarity strings need friendlier display text or new
+// CARDEX_RARITY_ORDER/RARITY_COLORS entries, filling those in — no filtering-logic changes.
+const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon'])
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
@@ -600,24 +619,28 @@ export default function CardexPage() {
   const totalCount = enriched.length
   const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0
 
-  // Every distinct rarity actually present in the active Riftbound set, not a fixed list — see
-  // RIFTBOUND_RARITY_ORDER's comment above for why a hardcoded list left some real cards (Star,
-  // and any Rune print-variant rarity like "Showcase"/"Promo") permanently un-hideable. The 7
-  // canonical rarities sort first in their usual order; anything else present (Rune variants,
-  // or any future TCGPlayer label this app hasn't seen yet) sorts after, alphabetically, so a
-  // new/unexpected value shows up as a toggle instead of silently bypassing the filter.
-  const riftboundRarityFilters = useMemo(() => {
-    if (catalogGame !== 'riftbound') return []
+  // Every distinct rarity actually present in the active set, not a fixed list — a hardcoded
+  // list silently lets anything outside it become permanently un-hideable (this shipped broken
+  // once for Riftbound: Rune cards carry TCGPlayer-sourced "Showcase"/"Promo" rarity values that
+  // were never in the original fixed toggle array, so no toggle could ever hide them). Known
+  // values sort first by CARDEX_RARITY_ORDER's shared priority map (lib/api/catalog.ts);
+  // anything else present sorts after, alphabetically, so a genuinely new/unexpected rarity (a
+  // future set's new tier before this app has been updated for it) shows up as a toggle instead
+  // of silently bypassing the filter.
+  const rarityFilters = useMemo(() => {
+    if (!RARITY_TOGGLE_GAMES.has(catalogGame)) return []
     const present = new Set(enriched.map((c) => c.rarity).filter((r): r is string => !!r))
-    const known = RIFTBOUND_RARITY_ORDER.filter((r) => present.has(r))
-    const other = Array.from(present).filter((r) => !(RIFTBOUND_RARITY_ORDER as readonly string[]).includes(r)).sort()
-    return [...known, ...other]
+    return Array.from(present).sort((a, b) => {
+      const pa = CARDEX_RARITY_ORDER[a] ?? 9999
+      const pb = CARDEX_RARITY_ORDER[b] ?? 9999
+      return pa !== pb ? pa - pb : a.localeCompare(b)
+    })
   }, [catalogGame, enriched])
 
   const filteredEnriched = useMemo(() => {
     let list = enriched
     if (searchQuery.trim()) list = list.filter((c) => matchesSearch(searchQuery, c.name, c.number))
-    if (catalogGame === 'riftbound' && hiddenRarities.size > 0) list = list.filter((c) => !hiddenRarities.has(c.rarity))
+    if (RARITY_TOGGLE_GAMES.has(catalogGame) && hiddenRarities.size > 0) list = list.filter((c) => !hiddenRarities.has(c.rarity))
     return list
   }, [enriched, searchQuery, catalogGame, hiddenRarities])
 
@@ -722,12 +745,14 @@ export default function CardexPage() {
               </div>
             )}
 
-            {/* Riftbound rarity filter */}
-            {catalogGame === 'riftbound' && activeSet.name && riftboundRarityFilters.length > 0 && (
+            {/* Rarity filter — currently wired up for Riftbound and Pokemon, see
+                RARITY_TOGGLE_GAMES above */}
+            {RARITY_TOGGLE_GAMES.has(catalogGame) && activeSet.name && rarityFilters.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap mb-4">
-                {riftboundRarityFilters.map((r) => {
+                {rarityFilters.map((r) => {
                   const active = !hiddenRarities.has(r)
                   const color = RARITY_COLORS[r] ?? '#6b7280'
+                  const label = RARITY_LABELS_BY_GAME[catalogGame]?.[r] ?? r
                   return (
                     <button
                       key={r}
@@ -738,7 +763,7 @@ export default function CardexPage() {
                       )}
                       style={active ? { backgroundColor: color + '22', borderColor: color + '55', color } : {}}
                     >
-                      {RIFTBOUND_RARITY_LABELS[r] ?? r}
+                      {label}
                     </button>
                   )
                 })}
@@ -798,7 +823,7 @@ export default function CardexPage() {
                 gameColor={gameColor}
                 game={catalogGame}
                 searchQuery={searchQuery}
-                hiddenRarities={catalogGame === 'riftbound' ? hiddenRarities : EMPTY_SET}
+                hiddenRarities={RARITY_TOGGLE_GAMES.has(catalogGame) ? hiddenRarities : EMPTY_SET}
               />
             )}
 
@@ -909,10 +934,10 @@ interface CardTileProps {
 
 function CardTile({ card, gameColor, game, isHovered, onHover, onLeave }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#6b7280'
-  // RIFTBOUND_RARITY_LABELS' keys ('Star', 'Promo', ...) aren't unique to Riftbound — Lorcana has
-  // its own real 'Promo' rarity, for instance — so only apply the relabel for the game it's
-  // actually meant for; every other game keeps showing its rarity string as-is.
-  const rarityLabel = game === 'riftbound' ? (RIFTBOUND_RARITY_LABELS[card.rarity] ?? card.rarity) : card.rarity
+  // RARITY_LABELS_BY_GAME is keyed per-game (lib/utils.ts) — the same raw string can mean
+  // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
+  // "Promo" tier), so relabeling must only ever use the current game's own map.
+  const rarityLabel = RARITY_LABELS_BY_GAME[game]?.[card.rarity] ?? card.rarity
 
   return (
     <div className="relative group cursor-default" onMouseEnter={onHover} onMouseLeave={onLeave}>

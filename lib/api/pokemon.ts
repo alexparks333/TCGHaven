@@ -12,6 +12,7 @@ export interface PokemonCard {
   name: string
   set: { id: string; name: string }
   number: string
+  rarity?: string
   images: { small: string; large: string }
   tcgplayer?: {
     prices?: {
@@ -41,6 +42,7 @@ interface CatalogCard {
   set: string
   setName: string
   number: string
+  rarity?: string
   imageUrl: string
   marketPrice: number
   marketPriceFoil: number
@@ -65,6 +67,7 @@ export async function searchPokemonCards(query: string): Promise<PokemonCard[]> 
         name: c.name,
         set: { id: c.set, name: c.setName },
         number: c.number,
+        rarity: c.rarity,
         images: { small: c.imageUrl, large: c.imageUrl },
         // Carry prices from the catalog into the search result
         tcgplayer: {

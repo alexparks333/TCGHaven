@@ -137,6 +137,24 @@ export async function getLastBulkSyncAt(game: Game): Promise<Date | null> {
 // keep both in sync with a single comparator rather than duplicating it.
 export const CARDEX_RARITY_ORDER: Record<string, number> = {
   Common: 0, Uncommon: 1, Rare: 2, Super_rare: 3, Legendary: 4, Enchanted: 5, Epic: 6, Iconic: 7, Promo: 8,
+  // Pokemon — all 44 rarity values the official pokemontcg.io API has ever returned, verified
+  // against api.pokemontcg.io/v2/rarities and the full 176-set GitHub dataset (1999–2026) during
+  // research for the Cardex's per-game rarity toggle. Ordered by first real-world appearance
+  // (an objective, reproducible criterion — there's no single universal "value" ranking across
+  // 25+ years of wildly different rarity systems) rather than a subjective rarity/value guess.
+  // Common/Uncommon/Rare/Promo above are already shared with Lorcana's own same-named tiers.
+  // A rarity not in this map (a new one from a future set) still shows up — sortCatalogCards'
+  // `?? 50` fallback and the Cardex's dynamic-toggle-list computation both treat "unknown" as
+  // "exists, sorts last" rather than silently disappearing — see quirk about the Riftbound
+  // rarity-filter leak this same design fixed.
+  'Rare Holo': 10, 'Rare Secret': 11, 'Rare Shining': 12, 'Rare Holo EX': 13, 'Rare Holo Star': 14,
+  'Rare Holo LV.X': 15, LEGEND: 16, 'Rare Prime': 17, 'Rare Ultra': 18, 'Rare ACE': 19,
+  'Rare BREAK': 20, 'Rare Holo GX': 21, 'Rare Rainbow': 22, 'Rare Prism Star': 23, 'Rare Shiny': 24,
+  'Rare Shiny GX': 25, 'Rare Holo V': 26, 'Rare Holo VMAX': 27, 'Amazing Rare': 28, 'Classic Collection': 29,
+  'Rare Holo VSTAR': 30, 'Trainer Gallery Rare Holo': 31, 'Radiant Rare': 32, 'Double Rare': 33, 'Hyper Rare': 34,
+  'Illustration Rare': 35, 'Special Illustration Rare': 36, 'Ultra Rare': 37, 'Shiny Rare': 38, 'Shiny Ultra Rare': 39,
+  'ACE SPEC Rare': 40, 'Black White Rare': 41, 'Mega Hyper Rare': 42, MEGA_ATTACK_RARE: 43, 'Futuristic Rare': 44,
+  'Holo Rare V': 45, 'Holo Rare VMAX': 46, 'Holo Rare VSTAR': 47, 'Pikachu Rare': 48, 'Rare Holo ex': 49,
   // Riftbound: 'Alt Art' (same-number foil-only print) and 'Overnumbered' (collector number
   // exceeds the set's card count) — both formerly flattened to a single 'Showcase' rarity
   // value; that key is kept as a fallback for any doc a resync hasn't touched yet.

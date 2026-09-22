@@ -148,6 +148,7 @@ async function lookupPokemon(apiId?: string): Promise<LookupCandidate[]> {
       imageUrl: card.images?.large ?? card.images?.small,
       marketPrice: prices?.normal?.market ?? prices?.holofoil?.market,
       marketPriceFoil: prices?.holofoil?.market ?? prices?.reverseHolofoil?.market,
+      rarity: card.rarity,
       source: 'pokemontcg',
     }]
   } catch (err) {
