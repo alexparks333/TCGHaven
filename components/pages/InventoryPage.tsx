@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw, Filter } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey } from '@/lib/utils'
+import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RIFTBOUND_RARITY_LABELS } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
@@ -468,7 +468,7 @@ export default function InventoryPage() {
                           })}
                           className="accent-violet-500"
                         />
-                        {r.replace('_', ' ')}
+                        {activeGame === 'riftbound' ? (RIFTBOUND_RARITY_LABELS[r] ?? r) : r.replace('_', ' ')}
                       </label>
                     ))}
                     {selectedRarities.size > 0 && (

@@ -6,7 +6,7 @@ import { Loader2, Package, FolderHeart, ChevronDown, Search } from 'lucide-react
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, RIFTBOUND_RARITY_LABELS } from '@/lib/utils'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -275,9 +275,16 @@ const RARITY_COLORS: Record<string, string> = {
   common: '#6b7280', uncommon: '#22c55e', rare: '#3b82f6', mythic: '#f97316', special: '#a855f7', bonus: '#ec4899',
 }
 
-// Riftbound-only rarity toggle filter — Star (Signature) is deliberately left out, matching what
-// was actually asked for; Star cards are never hidden by this filter regardless of toggle state.
-const RIFTBOUND_RARITY_FILTERS = ['Common', 'Uncommon', 'Rare', 'Epic', 'Alt Art', 'Overnumbered'] as const
+// Riftbound-only rarity toggle filter — canonical display order for the 7 real Riftbound
+// rarities. The toggle list itself is computed per-set (see riftboundRarityFilters below), not
+// this fixed array, because a hardcoded list silently let anything outside it become permanently
+// un-hideable: real catalog data also has Rune cards (cardType: 'Rune') whose print-variant
+// rarity comes straight from TCGPlayer's own product listing ("Showcase" for one Rune print,
+// "Promo" for another — nothing to do with champion-card Alt Art/Overnumbered despite the name
+// overlap) — those two values were never in this list, so no toggle could ever hide them, and a
+// user trying to isolate "just Alt Art" would still see stray Rune cards no matter what they
+// clicked. This order array is now only used to sort the real, present values consistently.
+const RIFTBOUND_RARITY_ORDER = ['Common', 'Uncommon', 'Rare', 'Epic', 'Alt Art', 'Overnumbered', 'Star'] as const
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
@@ -593,6 +600,20 @@ export default function CardexPage() {
   const totalCount = enriched.length
   const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0
 
+  // Every distinct rarity actually present in the active Riftbound set, not a fixed list — see
+  // RIFTBOUND_RARITY_ORDER's comment above for why a hardcoded list left some real cards (Star,
+  // and any Rune print-variant rarity like "Showcase"/"Promo") permanently un-hideable. The 7
+  // canonical rarities sort first in their usual order; anything else present (Rune variants,
+  // or any future TCGPlayer label this app hasn't seen yet) sorts after, alphabetically, so a
+  // new/unexpected value shows up as a toggle instead of silently bypassing the filter.
+  const riftboundRarityFilters = useMemo(() => {
+    if (catalogGame !== 'riftbound') return []
+    const present = new Set(enriched.map((c) => c.rarity).filter((r): r is string => !!r))
+    const known = RIFTBOUND_RARITY_ORDER.filter((r) => present.has(r))
+    const other = Array.from(present).filter((r) => !(RIFTBOUND_RARITY_ORDER as readonly string[]).includes(r)).sort()
+    return [...known, ...other]
+  }, [catalogGame, enriched])
+
   const filteredEnriched = useMemo(() => {
     let list = enriched
     if (searchQuery.trim()) list = list.filter((c) => matchesSearch(searchQuery, c.name, c.number))
@@ -702,9 +723,9 @@ export default function CardexPage() {
             )}
 
             {/* Riftbound rarity filter */}
-            {catalogGame === 'riftbound' && activeSet.name && (
+            {catalogGame === 'riftbound' && activeSet.name && riftboundRarityFilters.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap mb-4">
-                {RIFTBOUND_RARITY_FILTERS.map((r) => {
+                {riftboundRarityFilters.map((r) => {
                   const active = !hiddenRarities.has(r)
                   const color = RARITY_COLORS[r] ?? '#6b7280'
                   return (
@@ -717,7 +738,7 @@ export default function CardexPage() {
                       )}
                       style={active ? { backgroundColor: color + '22', borderColor: color + '55', color } : {}}
                     >
-                      {r}
+                      {RIFTBOUND_RARITY_LABELS[r] ?? r}
                     </button>
                   )
                 })}
@@ -761,6 +782,7 @@ export default function CardexPage() {
                     key={card.id}
                     card={card}
                     gameColor={gameColor}
+                    game={catalogGame}
                     isHovered={hoveredId === card.id}
                     onHover={() => setHoveredId(card.id)}
                     onLeave={() => setHoveredId(null)}
@@ -879,13 +901,18 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities }: 
 interface CardTileProps {
   card: CatalogCard & { owned: boolean; quantity: number }
   gameColor: string
+  game: CatalogGame
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
 }
 
-function CardTile({ card, gameColor, isHovered, onHover, onLeave }: CardTileProps) {
+function CardTile({ card, gameColor, game, isHovered, onHover, onLeave }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#6b7280'
+  // RIFTBOUND_RARITY_LABELS' keys ('Star', 'Promo', ...) aren't unique to Riftbound — Lorcana has
+  // its own real 'Promo' rarity, for instance — so only apply the relabel for the game it's
+  // actually meant for; every other game keeps showing its rarity string as-is.
+  const rarityLabel = game === 'riftbound' ? (RIFTBOUND_RARITY_LABELS[card.rarity] ?? card.rarity) : card.rarity
 
   return (
     <div className="relative group cursor-default" onMouseEnter={onHover} onMouseLeave={onLeave}>
@@ -930,7 +957,7 @@ function CardTile({ card, gameColor, isHovered, onHover, onLeave }: CardTileProp
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
             <div className="text-xs font-semibold text-white leading-tight max-w-[140px] truncate">{card.name}</div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
-            {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{card.rarity.replace('_', ' ')}</div>}
+            {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
             {card.marketPrice > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice.toFixed(2)}</div>}
             {card.owned
               ? <div className="text-[10px] text-emerald-400 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
