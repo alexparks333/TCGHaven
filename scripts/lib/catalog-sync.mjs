@@ -83,33 +83,56 @@ async function writeSnapshot(game, finalCards) {
  * that need to backfill registry fields (e.g. a new Riftbound set's cardCount/setCode) can use
  * the card list directly instead of issuing a second Firestore read.
  */
-// HEAD-checks a list of {id, imageUrl} pairs and returns the ids whose image doesn't actually
-// resolve — a broken imageUrl looks completely valid as a string (it's a real, well-formed CDN
-// URL) but 403s/404s because the upstream source hasn't uploaded that specific product photo yet.
-// This is the exact failure mode that first surfaced the need for this check: Vendetta's Alt Rune
-// cards synced with a real-looking tcgplayer-cdn.tcgplayer.com URL that 403'd (an XML "access
-// denied" body, not an image) until TCGPlayer got around to uploading the photo — nothing in the
-// synced data itself looks wrong, so only an actual HTTP check catches it. HEAD (not GET) keeps
-// this cheap — no image bytes downloaded, just a status + content-type check.
-async function findBrokenImageUrls(candidates, { concurrency = 25, timeoutMs = 6000 } = {}) {
+// HEAD-checks a list of {id, imageUrl} pairs and returns { broken, suspicious }. A broken
+// imageUrl looks completely valid as a string (it's a real, well-formed CDN URL) but 403s/404s
+// because the upstream source hasn't uploaded that specific product photo yet. This is the exact
+// failure mode that first surfaced the need for this check: Vendetta's Alt Rune cards synced with
+// a real-looking tcgplayer-cdn.tcgplayer.com URL that 403'd (an XML "access denied" body, not an
+// image) until TCGPlayer got around to uploading the photo — nothing in the synced data itself
+// looks wrong, so only an actual HTTP check catches it. HEAD (not GET) keeps this cheap — no image
+// bytes downloaded, just a status + content-type check.
+//
+// Shipped a real bug the first time this ran against MTG's ~100k-card catalog: sustained
+// high-volume concurrent HEAD requests tripped the upstream CDN's rate limiting partway through,
+// and every subsequent request failed for the rest of the run — the code at the time treated any
+// failure as "broken" with no retry, so it reported essentially the entire catalog as broken
+// (confirmed false: the sample included cards like Forest/Swamp/Birds of Paradise, whose images
+// definitely work). That result then blew past Firestore's 1MiB document size limit trying to
+// store it, crashing the run entirely. Two independent defenses against this now: a single retry
+// after a short delay before declaring any one URL broken (survives a transient blip), and an
+// overall `suspicious` flag — if the broken rate across the whole run is implausibly high, that's
+// a signal something upstream/systemic happened, not that every card is genuinely broken. Callers
+// must check `suspicious` and skip trusting/persisting the result if it's true, same as they'd
+// treat a network error partway through — this is what actually prevents the Firestore-size crash
+// from recurring, not just what caused it that one time.
+export async function findBrokenImageUrls(candidates, { concurrency = 20, timeoutMs = 6000, retryDelayMs = 500, suspiciousRate = 0.25 } = {}) {
   const broken = []
+  async function checkOnce(imageUrl) {
+    const res = await fetch(imageUrl, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) })
+    const contentType = res.headers.get('content-type') || ''
+    if (!res.ok || !contentType.startsWith('image/')) throw new Error(`bad response: ${res.status} ${contentType}`)
+  }
   for (let i = 0; i < candidates.length; i += concurrency) {
     const batch = candidates.slice(i, i + concurrency)
     await Promise.all(batch.map(async ({ id, imageUrl }) => {
       if (!imageUrl) { broken.push(id); return }
       try {
-        const res = await fetch(imageUrl, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) })
-        const contentType = res.headers.get('content-type') || ''
-        if (!res.ok || !contentType.startsWith('image/')) broken.push(id)
+        await checkOnce(imageUrl)
       } catch {
-        broken.push(id) // timeout/network error — treat as broken, next sync will retry it anyway
+        await new Promise((r) => setTimeout(r, retryDelayMs))
+        try {
+          await checkOnce(imageUrl)
+        } catch {
+          broken.push(id) // failed twice — genuinely broken, or a sustained outage either way
+        }
       }
     }))
   }
-  return broken
+  const suspicious = candidates.length >= 20 && broken.length / candidates.length > suspiciousRate
+  return { broken, suspicious }
 }
 
-async function syncToFirestore(game, freshCards) {
+async function syncToFirestore(game, freshCards, { hideIds = [] } = {}) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
   const meta = metaSnap.exists() ? metaSnap.data() : {}
@@ -155,6 +178,23 @@ async function syncToFirestore(game, freshCards) {
     writes.push({ id: card.id, data: { ...changed, updatedAt: serverTimestamp() } })
   }
 
+  // Explicit hide list — currently only Riftbound's supersededStubIds (a TCGCSV-synthesized
+  // Signature stub the gallery has since provided a real, differently-id'd card for — see
+  // downloadRiftbound()'s comment). `hidden` is otherwise never touched by this module (only
+  // Admin Catalog's Hide/Unhide toggle changes it) — this is a narrow, deliberate exception for
+  // a specific, provable "this exact card is a stale duplicate of a real one" condition, not a
+  // general "sync can hide things" policy. Still respects the same admin-edit-wins protection as
+  // everything else, so an admin who's already dealt with one of these manually isn't overridden.
+  for (const id of hideIds) {
+    const existing = existingMap.get(id)
+    if (!existing || existing.hidden) continue
+    const editedSinceLastSync =
+      lastBulkSyncAt && existing.updatedAt && existing.updatedAt.toMillis() > lastBulkSyncAt.toMillis()
+    if (editedSinceLastSync) continue
+    finalMap.set(id, { ...existing, hidden: true })
+    writes.push({ id, data: { hidden: true, updatedAt: serverTimestamp() } })
+  }
+
   if (writes.length > 0) {
     for (const batchOps of chunk(writes, 450)) { // headroom under Firestore's 500-op batch cap
       const batch = writeBatch(db)
@@ -174,13 +214,34 @@ async function syncToFirestore(game, freshCards) {
   // already work fine and essentially never stop working once they do.
   const toCheckIds = new Set([...previouslyBrokenImageIds.filter((id) => finalMap.has(id)), ...newCardIds])
   const checkCandidates = [...toCheckIds].map((id) => ({ id, imageUrl: finalMap.get(id)?.imageUrl }))
-  const brokenImageIds = checkCandidates.length > 0 ? await findBrokenImageUrls(checkCandidates) : []
-  const previouslyBrokenSet = new Set(previouslyBrokenImageIds)
-  const brokenSet = new Set(brokenImageIds)
-  const newlyBrokenImages = brokenImageIds.filter((id) => !previouslyBrokenSet.has(id))
-  const newlyFixedImages = previouslyBrokenImageIds.filter((id) => finalMap.has(id) && !brokenSet.has(id))
+  let brokenImageIds = previouslyBrokenImageIds.filter((id) => finalMap.has(id)) // default: unchanged
+  let newlyBrokenImages = []
+  let newlyFixedImages = []
   if (checkCandidates.length > 0) {
-    console.log(`   Image check (${game}): ${checkCandidates.length} checked, ${brokenImageIds.length} broken (${newlyBrokenImages.length} new, ${newlyFixedImages.length} fixed)`)
+    const { broken, suspicious } = await findBrokenImageUrls(checkCandidates)
+    if (suspicious) {
+      // Don't trust this run's result — an implausibly high failure rate means something
+      // upstream/systemic happened (rate limiting, an outage), not that this many cards are
+      // genuinely broken. Keep whatever was already recorded; next sync gets another chance.
+      console.warn(`   ⚠️  Image check (${game}): ${broken.length}/${checkCandidates.length} failed — suspiciously high, likely a rate limit or outage, not trusting this result`)
+    } else {
+      const previouslyBrokenSet = new Set(previouslyBrokenImageIds)
+      const brokenSet = new Set(broken)
+      newlyBrokenImages = broken.filter((id) => !previouslyBrokenSet.has(id))
+      newlyFixedImages = previouslyBrokenImageIds.filter((id) => finalMap.has(id) && !brokenSet.has(id))
+      brokenImageIds = broken
+      console.log(`   Image check (${game}): ${checkCandidates.length} checked, ${broken.length} broken (${newlyBrokenImages.length} new, ${newlyFixedImages.length} fixed)`)
+    }
+  }
+  // Hard backstop regardless of the above — Firestore's 1MiB/doc limit means an unbounded array
+  // here is a real crash risk (this is exactly how the MTG bug above wrote invalid data in the
+  // first place), not just a cosmetic concern. 3000 ids is comfortably under that ceiling even
+  // for long ids, and losing visibility into anything past the first 3000 broken images in one
+  // game is an acceptable tradeoff for "never crash the sync."
+  const MAX_TRACKED_BROKEN = 3000
+  if (brokenImageIds.length > MAX_TRACKED_BROKEN) {
+    console.warn(`   ⚠️  Image check (${game}): ${brokenImageIds.length} broken exceeds the ${MAX_TRACKED_BROKEN} tracking cap — truncating`)
+    brokenImageIds = brokenImageIds.slice(0, MAX_TRACKED_BROKEN)
   }
 
   const newSetNames = [...new Set(finalCards.map((c) => c.setName).filter(Boolean))].filter((n) => !existingSetNames.has(n))
@@ -964,16 +1025,30 @@ export async function downloadRiftbound() {
   // clone it with a new id, Star rarity, and the foil price.
   const allById = new Map(all.map((c) => [c.id, c]))
   let starCount = 0
+  // Ids of TCGCSV-synthesized stubs from a PAST run that the gallery has since caught up on —
+  // see the `hasGalleryStar` branch below. Reported to syncToFirestore() to hide, not just left
+  // to silently accumulate as stale, permanently-orphaned duplicates (see that call's comment).
+  const supersededStubIds = []
   for (const [key, p] of prices.entries()) {
     if (!key.endsWith(':star')) continue
     const [setCode, num] = key.split(':')
     const starId = `${setCode.toLowerCase()}-${num}-star`
     if (allById.has(starId)) continue
-    // Skip if gallery already has a star card for this set+number (publicCode contains */)
+    // Skip if gallery already has a star card for this set+number (publicCode contains */).
+    // Real bug this guards against, caught in production: Vendetta's Signature cards weren't on
+    // the gallery yet during VEN's first few syncs, so this loop synthesized stubs for them
+    // (id like "ven-189-star"). Once Riot's gallery caught up, it started providing REAL
+    // Signature cards under Riot's own id ("ven-189-star-166" — a different id, since it's the
+    // gallery's own scheme, not this synthetic one) — this guard correctly stopped creating NEW
+    // stubs at that point, but the OLD stub id was already in Firestore and nothing here ever
+    // touched it again (it's simply absent from every subsequent run's freshly-scraped `all`, so
+    // syncToFirestore()'s diff loop has nothing to compare it against) — a permanently stale,
+    // duplicate-priced card sitting right next to the real one forever. `supersededStubIds` is
+    // how this is now actually fixed instead of just not made worse.
     const hasGalleryStar = all.some(
       (c) => c.setCode === setCode && String(parseInt(c.number, 10)) === num && (c.publicCode ?? '').includes('*/')
     )
-    if (hasGalleryStar) continue
+    if (hasGalleryStar) { supersededStubIds.push(starId); continue }
     // Prefer a plain (non-Alt Art/Overnumbered) sibling at this number as the clone template,
     // but some "Legend" champions (e.g. Renekton - Butcher of the Sands) only ever appear at
     // this exact number as the Alt Art/Overnumbered printing — their Signature is a signed
@@ -1020,7 +1095,7 @@ export async function downloadRiftbound() {
 
   const priced = all.filter(c => c.marketPrice > 0).length
   console.log(`   Priced ${priced}/${all.length} cards from TCGCSV`)
-  return syncToFirestore('riftbound', all)
+  return syncToFirestore('riftbound', all, { hideIds: supersededStubIds })
 }
 
 // ── One Piece ─────────────────────────────────────────────────────────────────

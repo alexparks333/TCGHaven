@@ -54,7 +54,12 @@ loadEnvLocal()
 // call time (fine with a static import too), but catalog-sync.mjs's own module-level
 // initializeApp() reads NEXT_PUBLIC_FIREBASE_* at import time, so this has to come after
 // loadEnvLocal() the same way download-card-catalog.mjs's does.
-const { ensureSignedIn } = await import('./lib/catalog-sync.mjs')
+// findBrokenImageUrls is imported from catalog-sync.mjs (not duplicated here anymore) so this
+// script and the ongoing per-sync check share the same retry-once + suspicious-rate protection —
+// a from-scratch full-catalog scan is if anything MORE exposed to a transient rate limit/outage
+// producing a mass false-positive than the per-sync check is (it checks every card, not just new
+// + previously-flagged ones), which is exactly the failure mode that crashed the MTG backfill.
+const { ensureSignedIn, findBrokenImageUrls } = await import('./lib/catalog-sync.mjs')
 const { getFirestore, collection, getDocs, doc, setDoc } = await import('firebase/firestore')
 const { getApp } = await import('firebase/app')
 
@@ -62,40 +67,30 @@ await ensureSignedIn()
 console.log('Signed in as admin.\n')
 const db = getFirestore(getApp())
 
-async function findBrokenImageUrls(candidates, { concurrency = 25, timeoutMs = 6000 } = {}) {
-  const broken = []
-  let done = 0
-  for (let i = 0; i < candidates.length; i += concurrency) {
-    const batch = candidates.slice(i, i + concurrency)
-    await Promise.all(batch.map(async ({ id, imageUrl }) => {
-      if (!imageUrl) { broken.push(id); return }
-      try {
-        const res = await fetch(imageUrl, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) })
-        const contentType = res.headers.get('content-type') || ''
-        if (!res.ok || !contentType.startsWith('image/')) broken.push(id)
-      } catch {
-        broken.push(id) // timeout/network error — treat as broken, next scan/sync will retry it
-      }
-    }))
-    done += batch.length
-    process.stdout.write(`   ${done}/${candidates.length}\r`)
-  }
-  return broken
-}
+const MAX_TRACKED_BROKEN = 3000 // same hard backstop as syncToFirestore() — see its comment
 
 for (const game of games) {
   console.log(`=== ${game} ===`)
   const snap = await getDocs(collection(db, 'catalog', game, 'cards'))
   const cards = snap.docs.map((d) => ({ id: d.id, imageUrl: d.data().imageUrl, name: d.data().name }))
   console.log(`   ${cards.length} cards to check`)
-  const broken = await findBrokenImageUrls(cards)
+  const { broken, suspicious } = await findBrokenImageUrls(cards)
   console.log(`\n   ${broken.length} broken images found`)
+  if (suspicious) {
+    console.warn(`   ⚠️  ${broken.length}/${cards.length} failed — suspiciously high, likely a rate limit or outage. Not writing this result; re-run later.\n`)
+    continue
+  }
+  let toWrite = broken
   if (broken.length > 0) {
     const byId = new Map(cards.map((c) => [c.id, c]))
     for (const id of broken.slice(0, 30)) console.log(`     ${id} — ${byId.get(id)?.name}`)
     if (broken.length > 30) console.log(`     ...and ${broken.length - 30} more`)
   }
-  await setDoc(doc(db, 'catalog_meta', game), { brokenImageIds: broken }, { merge: true })
+  if (toWrite.length > MAX_TRACKED_BROKEN) {
+    console.warn(`   ⚠️  ${toWrite.length} broken exceeds the ${MAX_TRACKED_BROKEN} tracking cap — truncating`)
+    toWrite = toWrite.slice(0, MAX_TRACKED_BROKEN)
+  }
+  await setDoc(doc(db, 'catalog_meta', game), { brokenImageIds: toWrite }, { merge: true })
   console.log(`   Seeded catalog_meta/${game}.brokenImageIds — the next sync (or cron run) will keep rechecking these automatically.\n`)
 }
 process.exit(0)
