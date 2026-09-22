@@ -35,7 +35,20 @@ export interface SetOption {
 
 // ── Card Search ─────────────────────────────────────────────────────────────
 
+// AddCardDialog's dropdown only ever shows a handful of rows at a time (max-h-80,
+// overflow-y-auto) — a short query against a big catalog (MTG's ~100k printings, Pokemon's
+// ~20k+ cards) could otherwise score-match thousands of cards, all fully JSON-serialized and
+// shipped to the browser for a list nobody scrolls that far into. Each per-game search*Cards()
+// already returns its matches best-first (sorted by scoreMatch()'s score), so slicing here after
+// building the full result list keeps exactly the best matches.
+const MAX_SEARCH_RESULTS = 25
+
 export async function searchCards(game: Game, query: string): Promise<CardSearchResult[]> {
+  const results = await searchCardsUncapped(game, query)
+  return results.slice(0, MAX_SEARCH_RESULTS)
+}
+
+async function searchCardsUncapped(game: Game, query: string): Promise<CardSearchResult[]> {
   if (!query || query.length < 2) return []
 
   if (game === 'pokemon') {
