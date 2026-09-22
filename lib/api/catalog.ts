@@ -178,6 +178,13 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   // tag them differently — see catalog-sync.mjs's downloadOnePiece() Phase 3 — not a meaningful
   // collector-value distinction), sorted alongside the other promo/special tiers.
   L: 0, C: 1, UC: 2, R: 3, SR: 4, TR: 5, SEC: 90, 'SP CARD': 91, P: 92, PR: 93,
+  // MTG: Scryfall's `rarity` field is always lowercase, distinct keys from every other game's
+  // capitalized ones (no collision risk). `bonus` (Power 9 reprints, e.g. Vintage Masters) is a
+  // real Scryfall value but will never actually appear in this app's synced catalog — those are
+  // MTGO-only digital cards, already excluded by downloadMTG()'s `games.includes('paper')` filter
+  // (verified live against api.scryfall.com — only 9 `bonus` cards exist and all are digital-only
+  // as of this writing) — kept here anyway in case Scryfall ever prints a paper one.
+  common: 0, uncommon: 1, rare: 2, mythic: 3, special: 4, bonus: 5,
 }
 
 /** Sorts catalog cards by collector number, then rarity, matching Cardex's display order. */

@@ -160,6 +160,13 @@ export const ONEPIECE_RARITY_LABELS: Record<string, string> = {
   P: 'Promo', PR: 'Promo (PR)',
 }
 
+// Scryfall's `rarity` field is always lowercase ("common", "mythic", ...) — perfectly readable
+// as-is, but every other game's rarity strings are Title Case, so a lowercase toggle pill would
+// be the odd one out. Purely cosmetic capitalization, not a meaning change like the other maps.
+export const MTG_RARITY_LABELS: Record<string, string> = {
+  common: 'Common', uncommon: 'Uncommon', rare: 'Rare', mythic: 'Mythic', special: 'Special', bonus: 'Bonus',
+}
+
 // Per-game rarity label overrides for the Cardex rarity toggle/tooltip and Inventory's rarity
 // filter popover — keyed separately per game (not one flat merged map) because the same raw
 // string can mean something different in two games' catalogs: Riftbound's Rune cards and
@@ -169,6 +176,7 @@ export const RARITY_LABELS_BY_GAME: Partial<Record<Card['game'], Record<string, 
   riftbound: RIFTBOUND_RARITY_LABELS,
   pokemon: POKEMON_RARITY_LABELS,
   onepiece: ONEPIECE_RARITY_LABELS,
+  mtg: MTG_RARITY_LABELS,
 }
 
 // Build an eBay sold-listings search URL for a card.

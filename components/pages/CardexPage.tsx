@@ -308,7 +308,7 @@ const RARITY_COLORS: Record<string, string> = {
 // (lib/api/catalog.ts) and RARITY_LABELS_BY_GAME (lib/utils.ts), so enabling it for another game
 // is just adding it here plus, if its raw rarity strings need friendlier display text or new
 // CARDEX_RARITY_ORDER/RARITY_COLORS entries, filling those in — no filtering-logic changes.
-const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece'])
+const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg'])
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
