@@ -401,6 +401,9 @@ parallel using their raw CDN URLs (no rate limiting, no API key required).
 Set metadata (names) comes from:
 `https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json`
 
+**Prices:** `tcgcsv.com` category 3 (TCGPlayer mirror) — same "download script fetches this at
+sync time and stores it on the card doc" shape every other game uses, see below.
+
 ### Catalog Schema (`catalog/pokemon/cards/{id}` Firestore doc)
 
 Each card doc:
@@ -411,13 +414,49 @@ Each card doc:
   "set": "sv7",            // set ID (matches GitHub file name without .json)
   "setName": "Stellar Crown",  // human-readable set name
   "number": "1",           // collector number as string
-  "imageUrl": "https://images.pokemontcg.io/sv7/1_hires.png"
+  "rarity": "Rare Holo",   // straight from the GitHub source's own `rarity` field — see the
+                            // rarity guide below for the full 44-value taxonomy. '' for the
+                            // small number of cards with none at all (mostly Basic Energy).
+  "imageUrl": "https://images.pokemontcg.io/sv7/1_hires.png",
+  "marketPrice": 4.21,     // from tcgcsv (normal print)
+  "marketPriceFoil": 6.80, // from tcgcsv (holofoil)
+  "lowPriceNM": 3.10,
+  "lowPriceNMFoil": 5.25
 }
 ```
 
-Note: Pokémon catalog cards do NOT include price. Prices are fetched live from
-`api.pokemontcg.io` individually when a card is selected in AddCardDialog, or when
-"Refresh Prices" is clicked in the Portfolio view.
+Prices and rarity are both fetched/synced the same way every other game's are — the "Pokémon
+catalog cards do NOT include price" design this doc used to describe predates the tcgcsv
+price-merge phase `downloadPokemon()` now has (Phase 2, right after the GitHub card-data fetch);
+this section was stale on that point until corrected. `rarity` was added later still (see the
+Pokémon rarity toggle note under [§14](#cardex-feature--how-sets-register)) — before that, the
+field was silently dropped at sync time despite always being present in the source data.
+
+### Pokémon Rarity — Full Taxonomy (researched, verified current)
+
+Cross-checked the entire 176-set GitHub dataset (1999–2026) against the live
+`api.pokemontcg.io/v2/rarities` endpoint — they match exactly, **44 distinct values** as of this
+writing (the newest 4 came from a set released days before this research). There is no fixed
+enum anywhere upstream; new sets add new tiers regularly (2 more sets after the research above
+already needed a 3rd). This is why the Cardex's rarity toggle (below) derives its list from
+whatever's actually present in a set rather than a hardcoded array — the same lesson the
+Riftbound rarity-filter fix already established, now generalized.
+
+| Era | Values (oldest → newest within era) |
+|---|---|
+| Base/Jungle/Fossil (1999) | Common, Uncommon, Rare, Rare Holo, Promo |
+| 2000–2010 | Rare Secret, Rare Shining, Rare Holo EX, Rare Holo Star, Rare Holo LV.X, LEGEND, Rare Prime |
+| Black & White–XY (2011–2016) | Rare Ultra, Rare ACE, Rare BREAK |
+| Sun & Moon (2017–2019) | Rare Holo GX, Rare Rainbow, Rare Prism Star, Rare Shiny, Rare Shiny GX |
+| Sword & Shield (2020–2022) | Rare Holo V, Rare Holo VMAX, Amazing Rare, Classic Collection, Rare Holo VSTAR, Trainer Gallery Rare Holo, Radiant Rare |
+| Scarlet & Violet (2023–2025) | Double Rare, Ultra Rare, Illustration Rare, Special Illustration Rare, Hyper Rare, ACE SPEC Rare, Shiny Rare, Shiny Ultra Rare, Black White Rare |
+| Mega Evolution (2025–present) | Mega Hyper Rare, MEGA_ATTACK_RARE (displayed as "Mega Attack Rare" — the one value the API returns SCREAMING_SNAKE_CASE), Futuristic Rare, Pikachu Rare, Holo Rare V/VMAX/VSTAR, Rare Holo ex |
+
+`CARDEX_RARITY_ORDER` (`lib/api/catalog.ts`) has all 44 with a priority number each, assigned by
+first real-world appearance (an objective, reproducible ordering — there's no single "value"
+hierarchy that makes sense across 25+ years of different rarity systems). A rarity not yet in
+this map (a genuinely new one from a future set) still works — it just sorts after every known
+value instead of being silently invisible to sorting/filtering.
 
 ### How New Pokémon Sets Are Added
 
@@ -437,13 +476,19 @@ the registry) — for Pokémon, individual missing cards can still be added via
 
 ### AddCardDialog behavior for Pokémon
 
-When a Pokémon card is selected from the dropdown, `AddCardDialog` calls
-`getPokemonCardMarketPrice(card, isFoil)` which reads prices directly from the
-`card.tcgplayer.prices` object returned by the API. This price is stored as
-`purchasePrice` if Alex leaves it blank.
+`searchPokemonCards()` (`lib/api/pokemon.ts`) is catalog-first, not live-API-first as this section
+used to say: it reads `loadVisibleCatalog<CatalogCard>('pokemon')` (same Firestore-backed,
+in-memory-cached read every other game's search goes through, [§4](#card-catalog-system--deep-dive-firestore-backed))
+and only falls back to a live `api.pokemontcg.io` call if the catalog is completely empty (i.e.
+before any sync has ever run). When a Pokémon card is selected from the dropdown, `AddCardDialog`
+calls `getPokemonCardMarketPrice(card, isFoil)` which reads prices directly from the
+`card.tcgplayer.prices` object `searchPokemonCards()` built from the catalog doc's own
+`marketPrice`/`marketPriceFoil`. This price is stored as `purchasePrice` if Alex leaves it blank.
 
-The `apiId` stored on the Card is the catalog's `id` field (e.g. `"sv7-1"`). This is
-later used by `getPokemonCardPrice(apiId, isFoil)` in the Portfolio price refresh.
+The `apiId` stored on the Card is the catalog's `id` field (e.g. `"sv7-1"`). `getPokemonCardPrice(apiId,
+isFoil)` (`lib/api/pokemon.ts`) is dead code with zero callers — Portfolio's price refresh reads the
+catalog directly via `app/api/prices/pokemon/route.ts`, same catalog-only shape as every other
+game (see [Price Data](#price-data)), not this function.
 
 ---
 
@@ -1073,17 +1118,22 @@ User types query
   → AddCardDialog debounces 300ms
   → fetch("/api/cards/search?game=lorcana&q=mickey")
   → app/api/cards/search/route.ts (server-side)
-  → searchCards(game, query) in lib/api/search.ts
-  → calls searchLorcanaCards(query) / searchPokemonCards(query) / searchRiftboundCards(query)
+  → searchCards(game, query) in lib/api/search.ts — caps the final result list at 25
+    (searchCardsUncapped() does the real per-game work; each per-game search*Cards()
+    already returns matches best-first, so slicing after is a safe cut, not a re-ranking)
+  → calls searchLorcanaCards(query) / searchPokemonCards(query) / searchRiftboundCards(query) /
+    searchOnePieceCards(query) / searchMtgCards(query)
   → loadVisibleCatalog(game) in lib/api/catalog.ts — Firestore-backed, in-memory cached
-    per server process (see §4 for the caching/staleness mechanics)
+    per server process (see §4 for the caching/staleness mechanics). Pokémon's own
+    searchPokemonCards() only falls back to a live api.pokemontcg.io call if the catalog is
+    completely empty (i.e. before the first sync has ever run) — see §7's AddCardDialog note.
   → scoreMatch() ranks results by word-start prefix matching
-  → returns top 20 results as JSON
+  → returns up to 25 results as JSON
   → AddCardDialog renders dropdown with name, image, set, price
 ```
 
 **Why server-side?** The Pokémon TCG API blocks browser CORS requests. By routing all
-searches through Next.js API routes, we avoid CORS entirely for all three games.
+searches through Next.js API routes, we avoid CORS entirely for every game.
 
 **The `scoreMatch` algorithm:** Splits both name and query into word tokens at spaces,
 hyphens, and punctuation. Each query word must match the START of at least one name token
@@ -1109,16 +1159,17 @@ for the full rationale): dramatically fewer outbound API calls — no more re-fe
 tcgcsv CSV or hitting lorcast once per card on every user's every portfolio visit — at the cost of
 prices only being as fresh as the last cron run rather than truly live-on-click.
 
-`AddCardDialog`'s search dropdown is the one exception — see [Card Search
-Flow](#card-search-flow): selecting a Pokémon card there still shows whatever price
-`searchPokemonCards()` got from that live `api.pokemontcg.io` search call, since that's a single
-lightweight request already happening anyway for the search itself, not a bulk refresh.
+Pokémon search used to be the one documented exception here (a live `api.pokemontcg.io` call per
+search) — it no longer is: `searchPokemonCards()` is catalog-first now (see [Card Search
+Flow](#card-search-flow) and §7's AddCardDialog note), reading `loadVisibleCatalog('pokemon')`
+the same way every other game's search does, and only ever falling back to a live API call if the
+catalog is completely empty. The price shown in the dropdown is whatever the catalog has, same
+freshness as everywhere else (at most ~6 hours stale, per the cron above).
 
 ### Pokémon
 
-- **Source:** `tcgcsv.com` (TCGPlayer mirror, category 3), synced into each card's Firestore doc.
-  (`api.pokemontcg.io` is used live only by the AddCardDialog search box, see above — never by a
-  bulk price refresh.)
+- **Source:** `tcgcsv.com` (TCGPlayer mirror, category 3), synced into each card's Firestore doc
+  — same shape as every other game now, including the search dropdown (see above).
 - **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`
 - **Fields in catalog:** `marketPrice`/`marketPriceFoil` (normal/holofoil) and
   `lowPriceNM`/`lowPriceNMFoil` (lowest normal/holofoil listing — powers the "Lowest NM" price mode)
@@ -1268,6 +1319,41 @@ any registered set name for that game. These cards are grouped by their `card.se
 This is the catch-all for: D23 cards, Disney Cruise cards, Metal Riftbound cards, McDonald's/One
 Piece tournament promos, or any card Alex adds manually with a custom set name. No catalog is
 needed — anything in inventory with an unrecognized set name appears here automatically.
+
+### Per-Game Rarity Toggle Filter
+
+Inside a set, `CardexPage.tsx` can render a row of rarity pills (e.g. "Common", "Illustration
+Rare", "Overnumbered Signature") that hide/show cards of that rarity — currently wired up for
+**Riftbound and Pokémon** (`RARITY_TOGGLE_GAMES`), added incrementally on request; extending it
+to Lorcana/One Piece/MTG is mechanical (see below) but not yet done.
+
+- **The list is always computed from what's actually in the active set, never hardcoded.** An
+  earlier Riftbound-only version used a fixed array of the "real" rarities — which meant any
+  value outside it (Rune cards' TCGPlayer-sourced `Showcase`/`Promo` labels, unrelated to the
+  champion-card rarities of the same name) was permanently un-hideable no matter what was
+  toggled, since no button existed for it. `rarityFilters` (a `useMemo` over `enriched`) fixes
+  this generically: every distinct `rarity` string present in the set gets a toggle, full stop —
+  a genuinely new/unexpected value (a brand-new Pokémon set's brand-new tier, say) shows up as a
+  toggle automatically instead of silently bypassing the filter.
+- **Sort order** comes from `CARDEX_RARITY_ORDER` (`lib/api/catalog.ts`, shared with Inventory's
+  own rarity filter and `sortCatalogCards()`) — known values sort by their assigned priority
+  number, anything not in that map sorts after, alphabetically.
+- **Display labels** come from `RARITY_LABELS_BY_GAME` (`lib/utils.ts`) — a genuinely per-game
+  map, not one flat shared one, because the same raw string can mean different things in two
+  games' catalogs (Riftbound's Rune "Promo" vs. Pokémon's real "Promo" tier). Most rarity strings
+  are already human-readable as stored and need no entry here; only oddities get one (Riftbound's
+  `Star`/`Showcase`/`Promo`, Pokémon's SCREAMING_SNAKE_CASE `MEGA_ATTACK_RARE`).
+- **Colors** come from `RARITY_COLORS` (local to `CardexPage.tsx`). Pokémon's 44 values are
+  bucketed into 4 tiers (blue/purple/orange/pink, roughly low-to-high value) rather than 44
+  bespoke hex codes — see that constant's own comment for exactly which values land in which tier.
+- **To add another game:** add it to `RARITY_TOGGLE_GAMES`, then fill in `RARITY_COLORS` entries
+  for its rarity strings (falls back to gray if missing — functional, just visually flat) and a
+  `RARITY_LABELS_BY_GAME` entry only if any of its raw strings need friendlier text. No changes
+  needed to the filtering logic itself — it's already fully generic.
+- `hiddenRarities` (component state, a `Set<string>`) is shared across whichever game is active
+  and persists across set switches on purpose — toggling off "Overnumbered" on one Riftbound set
+  keeps it off when switching to another. It's irrelevant for a game not in `RARITY_TOGGLE_GAMES`
+  (never rendered, never populated for that game).
 
 ---
 
@@ -2039,12 +2125,14 @@ registry entry or `cardexGroup` value is needed per Pokémon set — this is a g
 Pokémon sets (Admin Catalog "New Set") get their own trailing "Custom Sets" group instead of a
 real era, since they have no upstream `series`.
 
-One consequence of Pokémon having no `rarity` field in its catalog schema (see
-[§7](#pokemon--data-source-schema-add-a-set-guide)): `/api/cardex` defaults it to `''` for
-Pokémon cards, and `CardexPage.tsx`'s card-hover tooltip conditionally skips the rarity chip
-(`{card.rarity && (...)}`) rather than rendering it empty — if you touch that tooltip again, keep
-that guard, since Lorcana/Riftbound cards can rely on `rarity` always being a non-empty string but
-Pokémon cards can't.
+Pokémon catalog cards now carry a real `rarity` field (see [§7](#pokemon--data-source-schema-add-a-set-guide)
+for the full 44-value taxonomy and the Cardex rarity toggle this enabled) — but a small number of
+cards (mostly Basic Energy, plus a handful of promo-only sets like McDonald's Collections) genuinely
+have none upstream, synced as `''`. `/api/cardex` passes that through as-is, and `CardexPage.tsx`'s
+card-hover tooltip conditionally skips the rarity chip (`{card.rarity && (...)}`) rather than
+rendering it empty — if you touch that tooltip again, keep that guard, since Lorcana/Riftbound
+cards can rely on `rarity` always being a non-empty string but a small fraction of Pokémon cards
+still can't.
 
 Ownership matching's fallback (no `apiId`, i.e. a manually-typed inventory card) works the same
 way as Lorcana's — `card.set === catalogCard.setName && card.number === catalogCard.number` — and
