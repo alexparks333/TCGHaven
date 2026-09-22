@@ -76,6 +76,22 @@ export async function removeCard(userId: string, cardId: string): Promise<void> 
   await deleteDoc(doc(db, 'users', userId, 'cards', cardId))
 }
 
+// Batched form of removeCard — deleting every lot in a grouped Inventory row (e.g. 9 separate
+// purchases of the same card) used to fire one deleteDoc call per lot via Promise.all, an
+// individual network round-trip each. writeBatch folds them into one commit, chunked to stay
+// under Firestore's 500-writes-per-batch limit (one delete = one write, so this can chunk larger
+// than applyPriceUpdatesBatch's 250, which pairs two writes per card).
+export async function removeCards(userId: string, cardIds: string[]): Promise<void> {
+  const CHUNK = 450
+  for (let i = 0; i < cardIds.length; i += CHUNK) {
+    const batch = writeBatch(db)
+    for (const id of cardIds.slice(i, i + CHUNK)) {
+      batch.delete(doc(db, 'users', userId, 'cards', id))
+    }
+    await batch.commit()
+  }
+}
+
 // ── Sold Cards ────────────────────────────────────────────────────────────
 
 export async function loadSoldCards(userId: string): Promise<SoldCard[]> {

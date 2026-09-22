@@ -1,10 +1,10 @@
 'use client'
 
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, Upload, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw } from 'lucide-react'
 import {
-  doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs,
+  doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -76,7 +76,7 @@ export default function AdminCatalogPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Admin Catalog</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Browse the full card catalog in display order. This is the shared catalog everyone's
+            Browse the full card catalog in display order. This is the shared catalog everyone&apos;s
             copy of the app reads from — edits here apply immediately for everyone.
           </p>
         </div>
@@ -325,7 +325,11 @@ function CatalogBrowser() {
       .finally(() => setLoadingSets(false))
   }
 
-  function loadCards() {
+  // useCallback (not a plain function) so the effect below can safely list it as a dependency —
+  // a plain function is a fresh reference every render, which would either need omitting from
+  // the deps array (the exhaustive-deps lint warning this used to have) or, if added naively,
+  // re-run the effect on every render since a new function reference never equals the last one.
+  const loadCards = useCallback(() => {
     if (!activeSet) return
     setLoadingCards(true)
     const setReleaseDate = activeSet.releaseDate
@@ -334,12 +338,12 @@ function CatalogBrowser() {
       .then((data: CatalogCard[]) => setCards(data.map((c) => ({ ...c, releaseDate: setReleaseDate }))))
       .catch(() => {})
       .finally(() => setLoadingCards(false))
-  }
+  }, [activeGame, activeSet])
 
   useEffect(() => {
     loadCards()
     setJumpName(''); setJumpNumber(''); setJumpNameMissed(false); setJumpNumberMissed(false)
-  }, [activeGame, activeSet])
+  }, [loadCards])
 
   // The card being acted on might currently be displayed via the per-set `cards` list or via
   // whole-catalog `globalResults` (search mode) — check both rather than assuming one.
@@ -456,7 +460,15 @@ function CatalogBrowser() {
     try {
       // Query fresh rather than trusting the currently-loaded `cards` state, in case it's stale.
       const snap = await getDocs(query(collection(db, 'catalog', activeGame, 'cards'), where('setName', '==', activeSet.name)))
-      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)))
+      // writeBatch instead of one deleteDoc per card via Promise.all — a single commit per 450
+      // cards instead of one network round-trip each (a large Pokemon set can be 250+ cards).
+      const refs = snap.docs.map((d) => d.ref)
+      const CHUNK = 450
+      for (let i = 0; i < refs.length; i += CHUNK) {
+        const batch = writeBatch(db)
+        for (const ref of refs.slice(i, i + CHUNK)) batch.delete(ref)
+        await batch.commit()
+      }
       await regenerateSnapshot(activeGame)
 
       const res = await adminFetch('/api/set-registry', {
@@ -1474,7 +1486,7 @@ function EditCardForm({
   return (
     <div className="card-glass p-4 mb-4 space-y-3 border-violet-800/50">
       <div className="text-sm font-semibold text-white">
-        Editing "{card.name}" · {card.publicCode ?? card.number}
+        Editing &quot;{card.name}&quot; · {card.publicCode ?? card.number}
       </div>
       <div className="text-xs text-slate-500">
         Changes apply immediately and cascade to any inventory entries with this apiId

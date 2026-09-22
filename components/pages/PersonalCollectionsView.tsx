@@ -144,7 +144,7 @@ export function PersonalCollectionsView() {
           <FolderHeart size={32} className="text-slate-700" />
           <div className="text-slate-400 font-medium">No personalized collections yet</div>
           <div className="text-slate-600 text-sm max-w-xs">
-            Make one for anything you want to track — a champion's cards across every set, a
+            Make one for anything you want to track — a champion&apos;s cards across every set, a
             theme, an alt-art wishlist, whatever you like.
           </div>
         </div>

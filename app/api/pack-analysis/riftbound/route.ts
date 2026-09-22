@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { loadVisibleCatalog } from '@/lib/api/catalog'
+import { riftboundVariantFlags } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,9 +60,14 @@ export async function GET() {
     const uncommons  = setCards.filter((c) => c.rarity === 'Uncommon')
     const rares      = setCards.filter((c) => c.rarity === 'Rare')
     const epics      = setCards.filter((c) => c.rarity === 'Epic')
-    const signatures = setCards.filter((c) => c.id.includes('-star-') || c.rarity === 'Star')
-    const altArts    = setCards.filter((c) => (c.rarity === 'Alt Art' || (c.publicCode ?? '').includes('a/')) && !c.id.includes('-star-'))
-    const overnums   = setCards.filter((c) => (c.rarity === 'Overnumbered' || c.rarity === 'Showcase') && !(c.publicCode ?? '').includes('a/') && !c.id.includes('-star-'))
+    // Shared classifier (lib/utils.ts) instead of this route's own ad-hoc string checks — those
+    // had drifted from the canonical rules (e.g. didn't handle a "Showcase" rarity left over from
+    // before the Alt Art/Overnumbered rename, quirk #18) and duplicated logic already fixed once
+    // in app/api/prices/riftbound/route.ts for the exact same reason.
+    const flagged = setCards.map((c) => ({ card: c, ...riftboundVariantFlags(c.rarity, c.publicCode) }))
+    const signatures = flagged.filter((f) => f.isStar).map((f) => f.card)
+    const altArts    = flagged.filter((f) => f.isAltArtShowcase).map((f) => f.card)
+    const overnums   = flagged.filter((f) => f.isOvernumber).map((f) => f.card)
 
     const avgCommon       = avgOf(commons,    'marketPrice')
     const avgUncommon     = avgOf(uncommons,  'marketPrice')

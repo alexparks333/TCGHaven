@@ -53,12 +53,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false)
         setDataLoading(true)
 
-        // Critical: load user's own data — isolated so API failures can't break this
+        // Each read is isolated with its own .catch so one failing Firestore read (e.g. a
+        // transient permission/network blip on just priceHistory) can't blank out the other
+        // three — this used to be a single Promise.all with no per-call fallback, so any one
+        // rejection meant loadUserCards/loadUserPriceHistory/storePurchases never ran at all,
+        // landing the user on a fully empty Inventory/Portfolio/Spending with only a
+        // console.error to explain it (easy to mistake for real data loss).
         Promise.all([
-          loadCards(firebaseUser.uid),
-          loadPriceHistory(firebaseUser.uid),
-          loadPurchases(firebaseUser.uid),
-          loadSoldCards(firebaseUser.uid).catch(() => [] as Awaited<ReturnType<typeof loadSoldCards>>),
+          loadCards(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return [] as Awaited<ReturnType<typeof loadCards>> }),
+          loadPriceHistory(firebaseUser.uid).catch((err) => { console.error('Failed to load price history:', err); return [] as Awaited<ReturnType<typeof loadPriceHistory>> }),
+          loadPurchases(firebaseUser.uid).catch((err) => { console.error('Failed to load purchases:', err); return [] as Awaited<ReturnType<typeof loadPurchases>> }),
+          loadSoldCards(firebaseUser.uid).catch((err) => { console.error('Failed to load sold cards:', err); return [] as Awaited<ReturnType<typeof loadSoldCards>> }),
         ]).then(([cards, priceHistory, purchases, soldCards]) => {
           if (activeUid !== firebaseUser.uid) return // signed out mid-load
           loadUserCards(cards)
@@ -67,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           storePurchases(purchases)
           setDataLoading(false)
         }).catch((err) => {
+          // Only reachable now for something outside the four reads above (e.g. a synchronous
+          // throw in one of the store setters) — each read's own rejection is already handled.
           console.error('Failed to load collection from Firestore:', err)
           if (activeUid === firebaseUser.uid) setDataLoading(false)
         })

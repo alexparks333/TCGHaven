@@ -10,7 +10,7 @@ import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
-import { removeCard, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
+import { removeCard, removeCards, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
 import { cn } from '@/lib/utils'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -343,7 +343,7 @@ export default function InventoryPage() {
     }
     const ids = lots.map((l) => l.id)
     ids.forEach((id) => deleteCard(id))
-    await Promise.all(ids.map((id) => removeCard(user.uid, id)))
+    await removeCards(user.uid, ids)
   }
 
   return (
