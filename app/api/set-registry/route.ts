@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { loadSetRegistry, saveSetRegistry } from '@/lib/api/registry'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
+import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 import { invalidateSetsCache } from '@/lib/api/search'
 import { invalidatePokemonSetsCache } from '@/lib/api/pokemon'
 import { invalidateMtgSetsCache } from '@/lib/api/mtg'
@@ -17,6 +18,9 @@ export async function GET() {
 const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 export async function PUT(request: Request) {
+  const unauthorized = await verifyAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   const body = await request.json().catch(() => null)
   const gameRaw = body?.game
   const setName = body?.setName
@@ -55,6 +59,9 @@ export async function PUT(request: Request) {
 // tcgcsvGroupId/lorcastId — those stay null so no future sync mistakes this for a real,
 // scrapable set; an admin (or a later manual set-registry edit) can wire that up separately.
 export async function POST(request: Request) {
+  const unauthorized = await verifyAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   const body = await request.json().catch(() => null)
   const gameRaw = body?.game
   const setName = typeof body?.setName === 'string' ? body.setName.trim() : ''
@@ -156,6 +163,9 @@ export async function POST(request: Request) {
 // every card doc for this set before calling this — this route only ever touches the registry,
 // never the catalog itself.
 export async function DELETE(request: Request) {
+  const unauthorized = await verifyAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   const body = await request.json().catch(() => null)
   const gameRaw = body?.game
   const setName = body?.setName

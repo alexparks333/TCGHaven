@@ -15,36 +15,6 @@ interface CatalogCard {
   hidden?: boolean
 }
 
-// Fetch current prices for all Lorcana cards from lorcast.com.
-// Uses same search strategy as download-cards (vowels + rarity queries) to cover all cards.
-// Falls back gracefully — any cards not returned by lorcast keep their catalog price.
-async function fetchLivePrices(): Promise<Map<string, { marketPrice: number; marketPriceFoil: number }>> {
-  const live = new Map<string, { marketPrice: number; marketPriceFoil: number }>()
-  const queries = ['a', 'e', 'i', 'o', 'u', 'y', 'th', 'rarity:enchanted', 'rarity:epic', 'rarity:iconic', 'rarity:mythic', 'rarity:special']
-
-  await Promise.all(queries.map(async (q) => {
-    try {
-      const res = await fetch(
-        `https://api.lorcast.com/v0/cards/search?q=${encodeURIComponent(q)}&page_size=500`,
-        { signal: AbortSignal.timeout(20000) }
-      )
-      if (!res.ok) return
-      const data = await res.json()
-      for (const c of (data.results ?? [])) {
-        if (!c?.id || live.has(c.id)) continue
-        live.set(c.id, {
-          marketPrice: typeof c.prices?.usd === 'number' ? c.prices.usd : 0,
-          marketPriceFoil: typeof c.prices?.usd_foil === 'number' ? c.prices.usd_foil : 0,
-        })
-      }
-    } catch {
-      // lorcast unreachable — catalog prices used as fallback
-    }
-  }))
-
-  return live
-}
-
 function avg(cards: CatalogCard[], key: 'marketPrice' | 'marketPriceFoil'): number {
   const priced = cards.filter((c) => c[key] > 0)
   if (!priced.length) return 0
@@ -61,25 +31,15 @@ function topN(cards: CatalogCard[], key: 'marketPrice' | 'marketPriceFoil', n: n
 
 export async function GET() {
   // Hidden cards must never factor into the EV math — loadVisibleCatalog already excludes them.
+  // Reads straight from the catalog (kept fresh by the 6-hourly cron), same as the Riftbound
+  // pack-analysis route — this used to also do its own live api.lorcast.com fetch on every
+  // request (12 concurrent queries), which both duplicated download-cards' own scrape and
+  // contradicted the documented "all live price fetches happen only in the cron" design.
   const catalog = await loadVisibleCatalog<CatalogCard>('lorcana')
-
-  // Fetch live prices — this is the primary source; catalog prices are the fallback
-  const live = await fetchLivePrices()
-
-  // Overlay live prices onto catalog cards
-  const enriched = catalog.map((card) => {
-    const p = live.get(card.id)
-    if (!p) return card
-    return {
-      ...card,
-      marketPrice: p.marketPrice > 0 ? p.marketPrice : card.marketPrice,
-      marketPriceFoil: p.marketPriceFoil > 0 ? p.marketPriceFoil : card.marketPriceFoil,
-    }
-  })
 
   const boosterSets = await getLorcanaBoosterSets()
   const results = boosterSets.map((setConfig) => {
-    const sc = enriched.filter((c) => c.setName === setConfig.name)
+    const sc = catalog.filter((c) => c.setName === setConfig.name)
 
     const commons   = sc.filter((c) => c.rarity === 'Common')
     const uncommons = sc.filter((c) => c.rarity === 'Uncommon')

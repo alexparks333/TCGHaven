@@ -1,6 +1,6 @@
 import {
   collection, doc, updateDoc, deleteDoc,
-  getDocs, setDoc, arrayUnion, writeBatch,
+  getDoc, getDocs, setDoc, writeBatch,
 } from 'firebase/firestore'
 import { db } from './config'
 import type { Card, PriceHistory, SoldCard } from '../types'
@@ -46,10 +46,27 @@ export async function applyPriceUpdatesBatch(
 ): Promise<void> {
   const CHUNK = 250
   for (let i = 0; i < updates.length; i += CHUNK) {
+    const slice = updates.slice(i, i + CHUNK)
+
+    // arrayUnion (the previous approach) can only ever append — it can't dedupe or replace an
+    // existing same-day point, so clicking "Refresh Prices" more than once in a day grew
+    // priceHistory.points unbounded instead of updating that day's point in place, silently
+    // diverging from the one-point-per-day rule the client-side store already enforces
+    // (addPriceHistoryPoint, lib/store.ts). Reading each card's current points first lets the
+    // write replace `points` outright with the deduped array instead.
+    const existingDocs = await Promise.all(
+      slice.map(({ cardId }) => getDoc(doc(db, 'users', userId, 'priceHistory', cardId)))
+    )
+    const existingPointsByCard = new Map(
+      slice.map(({ cardId }, idx) => [cardId, (existingDocs[idx].data()?.points ?? []) as { date: string; price: number }[]])
+    )
+
     const batch = writeBatch(db)
-    for (const { cardId, price, date } of updates.slice(i, i + CHUNK)) {
+    for (const { cardId, price, date } of slice) {
       batch.update(doc(db, 'users', userId, 'cards', cardId), clean({ currentPrice: price, priceUpdatedAt: date }))
-      batch.set(doc(db, 'users', userId, 'priceHistory', cardId), { cardId, points: arrayUnion({ date, price }) }, { merge: true })
+      const day = date.slice(0, 10)
+      const deduped = (existingPointsByCard.get(cardId) ?? []).filter((p) => p.date.slice(0, 10) !== day)
+      batch.set(doc(db, 'users', userId, 'priceHistory', cardId), { cardId, points: [...deduped, { date, price }] }, { merge: true })
     }
     await batch.commit()
   }
@@ -87,9 +104,11 @@ export async function addPricePoint(
   price: number,
   date: string,
 ): Promise<void> {
-  await setDoc(
-    doc(db, 'users', userId, 'priceHistory', cardId),
-    { cardId, points: arrayUnion({ date, price }) },
-    { merge: true }
-  )
+  // Full replace, not arrayUnion — see applyPriceUpdatesBatch's comment below for why arrayUnion
+  // can't enforce the same one-point-per-day rule the client-side store already does.
+  const ref = doc(db, 'users', userId, 'priceHistory', cardId)
+  const existing = (await getDoc(ref)).data()?.points ?? []
+  const day = date.slice(0, 10)
+  const deduped = (existing as { date: string; price: number }[]).filter((p) => p.date.slice(0, 10) !== day)
+  await setDoc(ref, { cardId, points: [...deduped, { date, price }] }, { merge: true })
 }

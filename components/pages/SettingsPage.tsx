@@ -6,6 +6,8 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { editCard } from '@/lib/firebase/db'
+import { ADMIN_UID } from '@/lib/firebase/config'
+import { adminFetch } from '@/lib/firebase/authFetch'
 import { cn, riftboundDisplayNumber, riftboundInherentFoil } from '@/lib/utils'
 
 // ── Types (mirror lib/api/registry.ts shapes) ─────────
@@ -38,6 +40,15 @@ interface SetRegistryResponse {
 }
 
 export default function SettingsPage() {
+  const { user } = useAuth()
+  // "Needs Review" writes to the shared set registry (PUT /api/set-registry) — the same
+  // admin-only action Admin Catalog's own registry editors perform, so it's gated the same way
+  // here rather than being reachable by any signed-in user just because this page isn't behind
+  // /admin. The route itself also verifies the caller server-side now (verifyAdminRequest) — this
+  // is UX only, matching the same "isAdmin is UX, firestore.rules/server checks are the real gate"
+  // pattern Admin Catalog uses.
+  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
+
   return (
     <AuthGuard>
       <div className="pb-20 md:pb-0 max-w-2xl">
@@ -49,7 +60,7 @@ export default function SettingsPage() {
         </div>
 
         <InventoryNumberRepairCard />
-        <NeedsReviewCard />
+        {isAdmin && <NeedsReviewCard />}
       </div>
     </AuthGuard>
   )
@@ -265,7 +276,7 @@ function NeedsReviewCard() {
   useEffect(() => { load() }, [])
 
   async function patch(game: 'lorcana' | 'riftbound', setName: string, p: Record<string, unknown>) {
-    await fetch('/api/set-registry', {
+    await adminFetch('/api/set-registry', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ game, setName, patch: p }),

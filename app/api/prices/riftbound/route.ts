@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
+import { riftboundVariantFlags } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
 interface CatalogCard {
   id: string
   rarity: string
+  publicCode?: string
   marketPrice: number
   marketPriceFoil: number
   lowPriceNM: number
@@ -37,13 +39,24 @@ export async function POST(req: NextRequest) {
     const cat = byId.get(apiId)
     if (!cat) continue
 
-    const isShowcaseOrStar = cat.rarity === 'Alt Art' || cat.rarity === 'Overnumbered' || cat.rarity === 'Showcase' || cat.id.includes('-star-')
+    // Use the shared classifier (lib/utils.ts) instead of reimplementing it here — this file used
+    // to have its own drifted copy that (a) lumped Overnumbered in with the foil-locked variants,
+    // which is wrong (Overnumbered prints like a regular card, see riftboundInherentFoil's own
+    // doc comment) and (b) detected Star via a fragile `id.includes('-star-')` string check
+    // instead of the `rarity`/`publicCode` fields every other consumer keys off of.
+    const { isStar, isOvernumber, isAltArtShowcase } = riftboundVariantFlags(cat.rarity, cat.publicCode)
+    // Star and Alt Art are foil-only — their one real price landed in marketPrice/lowPriceNM at
+    // sync time (see downloadRiftbound() in catalog-sync.mjs), not the *Foil fields. Overnumbered
+    // has just one real (non-foil) price point too. For all three, `isFoil` isn't a real choice —
+    // reading marketPrice first (falling back to marketPriceFoil only if empty) gets the right
+    // value regardless of which field it happened to land in.
+    const noFoilChoice = isStar || isOvernumber || isAltArtShowcase
 
     const price = useLowestNM
-      ? (isShowcaseOrStar
+      ? (noFoilChoice
           ? (cat.lowPriceNM || cat.lowPriceNMFoil)
           : (isFoil ? (cat.lowPriceNMFoil || cat.lowPriceNM) : (cat.lowPriceNM || cat.lowPriceNMFoil)))
-      : (isShowcaseOrStar
+      : (noFoilChoice
           ? (cat.marketPrice || cat.marketPriceFoil)
           : (isFoil ? (cat.marketPriceFoil || cat.marketPrice) : (cat.marketPrice || cat.marketPriceFoil)))
 

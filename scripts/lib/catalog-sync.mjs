@@ -178,22 +178,19 @@ async function fetchText(url, headers = {}) {
   return res.text()
 }
 
-// Parse a tcgcsv CSV text into row objects using the header row
+// Parse a tcgcsv CSV text into row objects using the header row. Delegates the actual field
+// splitting to parseCSVLine (defined below, hoisted — this is an .mjs file, function
+// declarations hoist the same as CommonJS) rather than its own copy of the same state machine:
+// this one used to just toggle on every `"`, which misaligns columns on any field containing an
+// escaped `""` (TCGPlayer product names occasionally have one) — parseCSVLine already handles
+// that correctly, so there's no reason for two parsers with different correctness here.
 function parseCsv(text) {
   const lines = text.split('\n').filter(Boolean)
   if (lines.length < 2) return []
-  const headers = lines[0].split(',')
+  const headers = parseCSVLine(lines[0])
   const rows = []
   for (let i = 1; i < lines.length; i++) {
-    // Handle quoted fields with embedded commas/newlines using a simple state machine
-    const cols = []
-    let cur = '', inQ = false
-    for (const ch of lines[i]) {
-      if (ch === '"') { inQ = !inQ }
-      else if (ch === ',' && !inQ) { cols.push(cur); cur = '' }
-      else { cur += ch }
-    }
-    cols.push(cur)
+    const cols = parseCSVLine(lines[i])
     const row = {}
     for (let j = 0; j < headers.length; j++) row[headers[j]] = (cols[j] ?? '').trim()
     rows.push(row)
@@ -852,7 +849,11 @@ export async function downloadRiftbound() {
         // even though Riot's own gallery still classifies their in-game rarity as e.g. Epic —
         // that's an expected mismatch between game-rules rarity and TCGPlayer's print tier, not
         // a bug, so treat them like Showcase/Star for price-slotting without touching `rarity`.
-        const isShowcaseOrStar = card.rarity === 'Alt Art' || card.rarity === 'Overnumbered' || card.id.includes('-star-') || key.includes(':sp')
+        // Overnumbered is deliberately NOT included here — unlike Alt Art/Star, it prints like a
+        // regular card (not foil-only; see lib/utils.ts's riftboundInherentFoil(), which returns
+        // false for Overnumbered specifically). Including it used to make a foil TCGPlayer
+        // listing silently win over the normal price for every Overnumbered card that had one.
+        const isShowcaseOrStar = card.rarity === 'Alt Art' || card.id.includes('-star-') || key.includes(':sp')
         card.marketPrice     = isShowcaseOrStar ? (p.foil    || p.normal)    : (p.normal    || p.foil)
         card.marketPriceFoil = isShowcaseOrStar ? 0           : p.foil
         card.lowPriceNM      = isShowcaseOrStar ? (p.lowFoil || p.lowNormal) : (p.lowNormal || p.lowFoil)
@@ -1287,15 +1288,31 @@ export async function downloadMTG() {
   // Stream it: gunzip -> readline, one JSON object per line, filtering/mapping as lines arrive
   // rather than materializing the full 100k+-entry array before touching any of it.
   const gunzip = zlib.createGunzip()
+  // An 'error' event with no listener is an uncaught exception in Node — a network interruption
+  // or a corrupt gzip chunk mid-stream would otherwise crash the whole process (not just reject
+  // a promise this function's own try/catch could handle), taking down a long-running Vercel
+  // function ungracefully instead of surfacing as this sync's ordinary failure response.
+  let streamError = null
+  gunzip.on('error', (err) => { streamError = err })
   Readable.fromWeb(gzipRes.body).pipe(gunzip)
   const rl = readline.createInterface({ input: gunzip, crlfDelay: Infinity })
 
   const all = []
   let total = 0
+  let skipped = 0
   for await (const line of rl) {
+    if (streamError) throw streamError
     if (!line) continue
     total++
-    const c = JSON.parse(line)
+    let c
+    try {
+      c = JSON.parse(line)
+    } catch {
+      // One malformed line out of 100k+ shouldn't abort a sync that already has tens of
+      // thousands of good cards parsed in memory — skip it and keep going.
+      skipped++
+      continue
+    }
     if (!c?.name || !c?.set || !c?.collector_number) continue
     if (!Array.isArray(c.games) || !c.games.includes('paper')) continue // Arena/MTGO-only printing
     if (MTG_EXCLUDED_SET_TYPES.has(c.set_type)) continue
@@ -1320,7 +1337,8 @@ export async function downloadMTG() {
       marketPriceFoil: parseFloat(c.prices?.usd_foil) || parseFloat(c.prices?.usd_etched) || 0,
     })
   }
-  console.log(`   ${total} total printings from Scryfall, ${all.length} kept after filtering (excluded digital-only/token/art/memorabilia)`)
+  if (streamError) throw streamError
+  console.log(`   ${total} total printings from Scryfall, ${all.length} kept after filtering (excluded digital-only/token/art/memorabilia)${skipped ? `, ${skipped} unparseable line(s) skipped` : ''}`)
 
   all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
   return syncToFirestore('mtg', all)

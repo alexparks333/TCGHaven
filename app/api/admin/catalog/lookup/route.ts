@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getRiftboundRegistrySets } from '@/lib/api/registry'
+import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 
 export const dynamic = 'force-dynamic'
 
@@ -231,6 +232,9 @@ async function lookupMtg(setCode: string, number: string): Promise<LookupCandida
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await verifyAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   const body = await request.json().catch(() => null)
   const game = body?.game as 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | undefined
   const setCode = (body?.setCode ?? '') as string

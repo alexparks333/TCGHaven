@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { invalidateCatalogCache } from '@/lib/api/catalog'
+import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +14,9 @@ const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 // server to drop its cache for a game so the next read picks up the change immediately instead
 // of waiting out the 2-minute staleness window.
 export async function POST(request: Request) {
+  const unauthorized = await verifyAdminRequest(request)
+  if (unauthorized) return unauthorized
+
   const { game } = await request.json().catch(() => ({}) as { game?: string })
 
   if (!game || !GAMES.includes(game as Game)) {

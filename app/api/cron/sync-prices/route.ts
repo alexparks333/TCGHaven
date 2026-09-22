@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { POST as syncPokemon } from '../../sync/pokemon/route'
-import { POST as syncLorcana } from '../../sync/lorcana/route'
-import { POST as syncRiftbound } from '../../sync/riftbound/route'
-import { POST as syncOnePiece } from '../../sync/onepiece/route'
+import { runPokemonSync as syncPokemon } from '../../sync/pokemon/sync'
+import { runLorcanaSync as syncLorcana } from '../../sync/lorcana/sync'
+import { runRiftboundSync as syncRiftbound } from '../../sync/riftbound/sync'
+import { runOnePieceSync as syncOnePiece } from '../../sync/onepiece/sync'
 import { checkForNewMtgSets } from '@/lib/api/mtg'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 
@@ -29,7 +29,7 @@ export const maxDuration = 300
 // other game here), which can blow through a Firebase Spark (free) plan's 20k writes/day quota
 // in one run and starve every other write that day, including this cron's own remaining games.
 // Once the Firebase plan/quota is confirmed to handle it, wire it in the same way the others are
-// below (`import { POST as syncMtg } from '../../sync/mtg/route'`, add to the Promise.allSettled
+// below (`import { runMtgSync as syncMtg } from '../../sync/mtg/sync'`, add to the Promise.allSettled
 // array and the summarize() calls) — see "MTG Integration.md" at the repo root for the full
 // writeup. Until then, the actual card/price sync only ever runs when an admin manually clicks
 // Admin Catalog → "Sync Card Data" → Magic: The Gathering.

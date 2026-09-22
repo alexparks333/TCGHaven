@@ -117,7 +117,8 @@ export async function regenerateSnapshot(game: Game): Promise<void> {
   // for every real request. The invalidateCatalogCache() call above only clears that unused
   // browser-side copy, so tell the actual server process to drop its cache too.
   if (typeof window !== 'undefined') {
-    await fetch('/api/admin/catalog/invalidate', {
+    const { adminFetch } = await import('@/lib/firebase/authFetch')
+    await adminFetch('/api/admin/catalog/invalidate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ game }),

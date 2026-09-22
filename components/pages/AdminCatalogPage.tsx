@@ -12,6 +12,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { db, storage, ADMIN_UID } from '@/lib/firebase/config'
+import { adminFetch } from '@/lib/firebase/authFetch'
 import { regenerateSnapshot, normNum } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
@@ -147,7 +148,7 @@ function SyncPanel() {
   async function runSync(game: Game) {
     setState((s) => ({ ...s, [game]: { status: 'running' } }))
     try {
-      const res = await fetch(`/api/sync/${game}`, { method: 'POST' })
+      const res = await adminFetch(`/api/sync/${game}`, { method: 'POST' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setState((s) => ({ ...s, [game]: { status: 'error', error: data.error ?? `Request failed (${res.status})` } }))
@@ -458,7 +459,7 @@ function CatalogBrowser() {
       await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)))
       await regenerateSnapshot(activeGame)
 
-      const res = await fetch('/api/set-registry', {
+      const res = await adminFetch('/api/set-registry', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game: activeGame, setName: activeSet.name }),
@@ -834,7 +835,7 @@ function SetInfoBar({
     setSaving(true)
     onError(null)
     try {
-      const res = await fetch('/api/set-registry', {
+      const res = await adminFetch('/api/set-registry', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game, setName: activeSet.name, patch: { releaseDate: releaseDate.trim() || null } }),
@@ -1280,7 +1281,7 @@ function AddCardForm({
     setLooking(true)
     onError(null)
     try {
-      const res = await fetch('/api/admin/catalog/lookup', {
+      const res = await adminFetch('/api/admin/catalog/lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game, setCode: activeSet.code, number, name: name || undefined, apiId: apiId || undefined }),
@@ -1334,7 +1335,7 @@ function AddCardForm({
 
       const trimmedDate = releaseDate.trim()
       if (setDateEditable && trimmedDate !== (activeSet.releaseDate || '')) {
-        const res = await fetch('/api/set-registry', {
+        const res = await adminFetch('/api/set-registry', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ game, setName: activeSet.name, patch: { releaseDate: trimmedDate || null } }),
@@ -1565,7 +1566,7 @@ function NewSetForm({
     setSaving(true)
     onError(null)
     try {
-      const res = await fetch('/api/set-registry', {
+      const res = await adminFetch('/api/set-registry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

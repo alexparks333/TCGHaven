@@ -14,8 +14,13 @@ export function cn(...inputs: ClassValue[]) {
 // segment here — otherwise it'd silently merge into the same group as regular copies.
 export function cardIdentityKey(card: Card): string {
   const nexusPart = card.nexus ? '::nexus' : ''
-  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
-  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
+  // A raw copy and a graded copy of the same print are economically distinct (a PSA 10 isn't
+  // interchangeable with a raw copy for cost-basis/market-value purposes) and must never merge
+  // into the same Inventory row — without this, grading info silently got dropped and both
+  // landed in one group with a shared "Total Paid"/"Market" sum and only one grade badge shown.
+  const gradePart = card.gradingCompany ? `::${card.gradingCompany}::${card.grade ?? ''}` : ''
+  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${gradePart}${nexusPart}`
+  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${gradePart}${nexusPart}`
 }
 
 // Whether `newCard` is the first copy of this exact print the user has ever added — same

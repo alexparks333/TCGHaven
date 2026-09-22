@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
+import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
 import { getMtgRegistrySets } from './registry'
 
@@ -115,6 +116,12 @@ export function isMtgSetsCacheReliable(): boolean {
  * status, so this never overwrites that history).
  */
 export async function checkForNewMtgSets(): Promise<{ newSets: string[] }> {
+  // Unlike the real per-game sync routes, this function is never guaranteed to run alongside one
+  // of ensureSignedIn()'s own calls — it used to only "work" by coincidence, racing against the
+  // other games' sign-ins inside the cron's Promise.allSettled. Sign in explicitly so this stays
+  // correct even if it's ever called on its own (a future admin button, a test, a reordering).
+  await ensureAdminAuth()
+
   const sets = await getMtgSets()
   const codes = sets.filter((s) => s.source !== 'manual').map((s) => s.code)
 
@@ -125,7 +132,10 @@ export async function checkForNewMtgSets(): Promise<{ newSets: string[] }> {
   const knownSet = new Set(known)
   const newCodes = codes.filter((c) => !knownSet.has(c))
 
-  await setDoc(ref, { codes, updatedAt: new Date().toISOString() })
+  // merge: true — recordSyncStatus() (lib/api/syncStatus.ts) writes its own ok/at/newSets/error
+  // fields to this exact same doc id right after this call returns. See that file's comment;
+  // the two writers' field sets are disjoint by design, so merging is safe.
+  await setDoc(ref, { codes, updatedAt: new Date().toISOString() }, { merge: true })
 
   // First-ever run has no real baseline — every set would otherwise report as "new", which is
   // noise, not a finding.

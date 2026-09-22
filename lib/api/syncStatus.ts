@@ -25,7 +25,12 @@ export interface SyncStatus {
 // doc (different shape, different meaning — see checkForNewMtgSets() in lib/api/mtg.ts).
 export async function recordSyncStatus(id: Game | string, status: SyncStatus): Promise<void> {
   try {
-    await setDoc(doc(db, 'sync_status', id), status)
+    // merge: true — checkForNewMtgSets() (lib/api/mtg.ts) writes its own `codes`/`updatedAt`
+    // baseline fields to this exact same doc id ("mtg-new-set-check"). A non-merged setDoc here
+    // used to silently wipe that baseline on every cron run (each write replaced the whole doc),
+    // making the MTG new-set check permanently report zero new sets. The two writers' field sets
+    // are disjoint, so merging is safe for every other id too.
+    await setDoc(doc(db, 'sync_status', id), status, { merge: true })
   } catch {
     // Never let a status-recording failure mask the sync's own real result — the route's
     // response body (and thrown error, if any) is still the source of truth for the caller.

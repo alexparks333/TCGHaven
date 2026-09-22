@@ -15,6 +15,11 @@ export interface PersonalCollectionCard {
   rarity?: string
   imageUrl: string
   marketPrice?: number
+  // Riftbound search can return two rows sharing the same catalog id — one non-foil, one foil —
+  // for a card priced both ways (see lib/api/search.ts). Without this, adding one variant made
+  // the OTHER permanently show as "already added" in the search modal (they collapsed onto the
+  // same id-only key) with no way to actually add both.
+  isFoil?: boolean
 }
 
 export interface PersonalCollection {

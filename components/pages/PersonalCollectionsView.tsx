@@ -31,6 +31,16 @@ function isOwned(card: PersonalCollectionCard, ownedCards: Card[]): { owned: boo
   return { owned: matches.length > 0, quantity: matches.reduce((s, c) => s + c.quantity, 0) }
 }
 
+// Composite identity for a personal-collection card / search result — plain catalog `id` isn't
+// unique on its own for Riftbound, where search can return two rows sharing the same id (one
+// non-foil, one foil) for a card priced both ways. Used everywhere a card needs a stable,
+// collision-free key: "already added" dedup, drag-reorder, removal, and list rendering — without
+// this, adding one variant made the OTHER permanently show as "already added" with no way to add
+// both, and both would have collapsed onto one drag-reorder slot.
+function cardKey(c: { id: string; isFoil?: boolean }): string {
+  return `${c.id}::${c.isFoil ? 'foil' : 'normal'}`
+}
+
 // Plain substring match against name and collector number — same shape as CardexPage's
 // matchesSearch(), filtering an already-small list rather than ranking a whole-catalog search.
 function matchesSearch(query: string, name: string, number: string): boolean {
@@ -281,38 +291,38 @@ function CollectionDetail({
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const color = GAME_COLORS[collection.game]
-  const cardIds = useMemo(() => new Set(collection.cards.map((c) => c.id)), [collection.cards])
+  const cardIds = useMemo(() => new Set(collection.cards.map(cardKey)), [collection.cards])
 
   // Drag-to-reorder — visual order lives here so dragging feels instant; only persisted to
   // Firestore once the drag actually ends, not on every intermediate swap. Resynced whenever
   // the collection's real card list changes (add/remove), not just on mount.
-  const [orderedIds, setOrderedIds] = useState<string[]>(() => collection.cards.map((c) => c.id))
+  const [orderedIds, setOrderedIds] = useState<string[]>(() => collection.cards.map(cardKey))
   useEffect(() => {
-    setOrderedIds(collection.cards.map((c) => c.id))
+    setOrderedIds(collection.cards.map(cardKey))
   }, [collection.cards])
 
   async function addCard(result: CardSearchResult) {
-    if (!user || cardIds.has(result.id)) return
+    if (!user || cardIds.has(cardKey(result))) return
     const newCard: PersonalCollectionCard = {
       id: result.id, name: result.name, number: result.number, setName: result.setName,
-      imageUrl: result.imageUrl, marketPrice: result.marketPrice,
+      imageUrl: result.imageUrl, marketPrice: result.marketPrice, isFoil: result.isFoil,
     }
     const updated = [...collection.cards, newCard]
     onCardsChanged(updated) // optimistic
     await setCollectionCards(user.uid, collection.id, updated).catch(() => setSaveError('Failed to save — try again.'))
   }
 
-  async function removeCard(cardId: string) {
+  async function removeCard(key: string) {
     if (!user) return
-    const updated = collection.cards.filter((c) => c.id !== cardId)
+    const updated = collection.cards.filter((c) => cardKey(c) !== key)
     onCardsChanged(updated) // optimistic
     await setCollectionCards(user.uid, collection.id, updated).catch(() => setSaveError('Failed to save — try again.'))
   }
 
-  async function persistOrder(newOrderIds: string[]) {
+  async function persistOrder(newOrderKeys: string[]) {
     if (!user) return
-    const cardsById = new Map(collection.cards.map((c) => [c.id, c]))
-    const reordered = newOrderIds.map((id) => cardsById.get(id)).filter((c): c is PersonalCollectionCard => !!c)
+    const cardsByKey = new Map(collection.cards.map((c) => [cardKey(c), c]))
+    const reordered = newOrderKeys.map((k) => cardsByKey.get(k)).filter((c): c is PersonalCollectionCard => !!c)
     onCardsChanged(reordered)
     await setCollectionCards(user.uid, collection.id, reordered).catch(() => setSaveError('Failed to save the new order — try again.'))
   }
@@ -332,9 +342,9 @@ function CollectionDetail({
     persistOrder(newOrder)
   }
 
-  const cardsById = useMemo(() => new Map(collection.cards.map((c) => [c.id, c])), [collection.cards])
+  const cardsByKey = useMemo(() => new Map(collection.cards.map((c) => [cardKey(c), c])), [collection.cards])
   const enriched = orderedIds
-    .map((id) => cardsById.get(id))
+    .map((k) => cardsByKey.get(k))
     .filter((c): c is PersonalCollectionCard => !!c)
     .map((c) => ({ ...c, ...isOwned(c, ownedCards) }))
   const ownedCount = enriched.filter((c) => c.owned).length
@@ -441,13 +451,13 @@ function CollectionDetail({
         <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
           {filteredEnriched.map((card) => (
             <PersonalCardTile
-              key={card.id}
+              key={cardKey(card)}
               card={card}
               gameColor={color}
-              isHovered={hoveredId === card.id}
-              onHover={() => setHoveredId(card.id)}
+              isHovered={hoveredId === cardKey(card)}
+              onHover={() => setHoveredId(cardKey(card))}
               onLeave={() => setHoveredId(null)}
-              onRemove={() => removeCard(card.id)}
+              onRemove={() => removeCard(cardKey(card))}
             />
           ))}
         </div>
@@ -457,13 +467,13 @@ function CollectionDetail({
             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
               {enriched.map((card) => (
                 <SortablePersonalCardTile
-                  key={card.id}
+                  key={cardKey(card)}
                   card={card}
                   gameColor={color}
-                  isHovered={hoveredId === card.id}
-                  onHover={() => setHoveredId(card.id)}
+                  isHovered={hoveredId === cardKey(card)}
+                  onHover={() => setHoveredId(cardKey(card))}
                   onLeave={() => setHoveredId(null)}
-                  onRemove={() => removeCard(card.id)}
+                  onRemove={() => removeCard(cardKey(card))}
                 />
               ))}
             </div>
@@ -525,7 +535,7 @@ function AddCardToCollectionModal({
 
   function handleAdd(result: CardSearchResult) {
     onAdd(result)
-    setJustAdded((prev) => new Set(prev).add(result.id))
+    setJustAdded((prev) => new Set(prev).add(cardKey(result)))
   }
 
   return (
@@ -559,7 +569,7 @@ function AddCardToCollectionModal({
             <div className="text-xs text-slate-500 px-1 py-3">No results for &quot;{query}&quot;.</div>
           )}
           {results.map((result) => {
-            const added = alreadyAddedIds.has(result.id) || justAdded.has(result.id)
+            const added = alreadyAddedIds.has(cardKey(result)) || justAdded.has(cardKey(result))
             return (
               <button
                 key={`${result.id}-${result.isFoil ? 'foil' : 'normal'}`}
@@ -610,7 +620,7 @@ function SortablePersonalCardTile(props: {
   onLeave: () => void
   onRemove: () => void
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: props.card.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cardKey(props.card) })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
