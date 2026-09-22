@@ -1324,8 +1324,11 @@ needed — anything in inventory with an unrecognized set name appears here auto
 
 Inside a set, `CardexPage.tsx` can render a row of rarity pills (e.g. "Common", "Illustration
 Rare", "Overnumbered Signature") that hide/show cards of that rarity — currently wired up for
-**Riftbound and Pokémon** (`RARITY_TOGGLE_GAMES`), added incrementally on request; extending it
-to Lorcana/One Piece/MTG is mechanical (see below) but not yet done.
+**Riftbound, Pokémon, and Lorcana** (`RARITY_TOGGLE_GAMES`), added incrementally on request; Lorcana
+needed zero mechanism changes, just adding it to the set (its 9 rarities — Common, Uncommon, Rare,
+Super_rare, Legendary, Enchanted, Epic, Iconic, Promo — were already in `CARDEX_RARITY_ORDER` from
+before this feature existed) plus one missing `RARITY_COLORS` entry (`Iconic`). Extending it to
+One Piece/MTG is the same shape but not yet done.
 
 - **The list is always computed from what's actually in the active set, never hardcoded.** An
   earlier Riftbound-only version used a fixed array of the "real" rarities — which meant any
@@ -2395,3 +2398,22 @@ time two independent pieces of code write to the same document id for different 
 to `merge: true` unless one of them is deliberately meant to be a full replace, and if you're
 debugging a "this write looks like it succeeded but the data isn't there next time" report, check
 whether something else writes the same doc path without merging.
+
+### 26. eBay Cmd+Click is a convention, applied by hand at each card-tile call site — not one component
+`openEbaySearch()` (`lib/utils.ts`) builds and opens an eBay sold-listings search URL for a card.
+Every place a card is clickable follows the same convention: `cursor-pointer`, an `onClick` that
+checks `e.ctrlKey || e.metaKey` before calling `openEbaySearch(card)` (falling through to whatever
+the plain click does, if anything — often nothing, for a pure browsing grid), and a
+`title="⌘/Ctrl+Click to search eBay sold listings"` hint. There's no shared `<ClickableCardTile>`
+wrapper component enforcing this — it's copy-pasted at each of the ~9 call sites across
+`InventoryPage.tsx`, `PortfolioPage.tsx`, `CardexPage.tsx` (both `CardTile` and
+`InventoryCardTile`), `PersonalCollectionsView.tsx`, `SoldPage.tsx`, and `CardDetailPage.tsx`. If
+you add a new place a card is rendered as a clickable tile/row, match this exact convention by
+hand rather than inventing a different gesture or wording — and if a card's shape doesn't
+naturally have `openEbaySearch`'s required fields (`name`, `number`, `set`, `game`, plus optional
+`gradingCompany`/`grade`/`isFoil`), construct a matching object rather than skipping the feature,
+the way `CardTile`'s catalog-backed card (no native `game` field) and `PersonalCardTile`'s
+collection card (no native `game` field either — comes from `collection.game`) both do.
+Deliberately NOT wired up on `AddCardDialog`'s search results or Admin Catalog's browser table —
+those are "picking a card to add" / "managing shared catalog data" contexts, not "viewing a card
+you already have," which is what this gesture is for everywhere else.
