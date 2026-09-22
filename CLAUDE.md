@@ -22,12 +22,13 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 13. [Price Data](#price-data)
 14. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
 15. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
-16. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
-17. [Cron-Driven Price Sync](#cron-driven-price-sync)
-18. [Firestore / User Data](#firestore--user-data)
-19. [Zustand Store](#zustand-store)
-20. [Full File Map](#full-file-map)
-21. [Key Quirks & Gotchas](#key-quirks--gotchas)
+16. [Spending — Hardcoded Product Catalog](#spending--hardcoded-product-catalog)
+17. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
+18. [Cron-Driven Price Sync](#cron-driven-price-sync)
+19. [Firestore / User Data](#firestore--user-data)
+20. [Zustand Store](#zustand-store)
+21. [Full File Map](#full-file-map)
+22. [Key Quirks & Gotchas](#key-quirks--gotchas)
 
 ---
 
@@ -37,7 +38,7 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 |-------|-----------|
 | Framework | Next.js 14 App Router (TypeScript) |
 | Styling | Tailwind CSS v3 |
-| State | Zustand v4 — in-memory client cache, no localStorage persist |
+| State | Zustand v4 — in-memory client cache; a small slice of filter/display prefs (not inventory data) persists to localStorage — see [§20](#zustand-store) |
 | Auth | Firebase Auth (Google OAuth + email/password) |
 | Database | Firebase Firestore (per-user subcollections) |
 | Dev server | `npm run dev` (port 3000, hot reload) |
@@ -81,7 +82,7 @@ build. `npm run build && npm run start` is still required for actual **code** ch
 Catalog page.
 
 All of the above download+registry-sync workflow is also available as one click: Admin Catalog →
-"Sync Card Data" (see [§16](#automated-sync--admin-catalog)) — a plain per-game API request with
+"Sync Card Data" (see [§17](#automated-sync--admin-catalog)) — a plain per-game API request with
 no build/restart step, so it works identically against `npm run dev`, `npm run start`, and the
 deployed Vercel app. Pokémon's sync can take several minutes (170+ sets, 20k+ cards) and may time
 out on a shorter Vercel function limit — `npm run download-cards` locally has no such limit and
@@ -278,25 +279,68 @@ anyone can browse the table read-only; only the admin sees the write controls.
     "Zed - Master of Shadows (Signature)" row that doesn't exist under any name in the local
     catalog at all — a genuinely missing card the normal sync silently skipped.
 
+- **Whole-catalog Search** (`GET /api/admin/catalog/search?game=&q=`) — the search box at the top
+  of `CatalogBrowser` that finds a card across every set for the active game at once (unlike the
+  set-scoped table below it), capped at `MAX_RESULTS = 300` with a `truncated` flag the UI can
+  check. Reads the in-memory catalog the same way every other search does (`scoreMatch`/
+  `parseSearchQuery` from `lib/api/catalog.ts`) — no separate index, no writes.
+
 ### Key files
 
-- `components/pages/AdminCatalogPage.tsx` — the whole page: `SyncPanel` (§16), `CatalogBrowser`,
+- `components/pages/AdminCatalogPage.tsx` — the whole page: `SyncPanel` (§17), `CatalogBrowser`,
   `CardTable`, `AddCardForm`, `EditCardForm`, `NewSetForm`, `RawSourceCheckPanel`, `ImageUploadField`.
 - `app/api/admin/catalog/route.ts` — `GET`, read-only listing (includes hidden cards, unlike
-  every other catalog consumer — the admin table needs to show and un-hide them).
+  every other catalog consumer — the admin table needs to show and un-hide them). No auth check
+  of its own — browsing is harmless, this route never writes.
+- `app/api/admin/catalog/search/route.ts` — the whole-catalog search above. Also unauthenticated
+  (read-only), capped at 300 results.
 - `app/api/admin/catalog/lookup/route.ts` — exact-match external price/image lookup, used by
-  "Auto-fetch price & image" in Add Missing Card. Never writes anything.
+  "Auto-fetch price & image" in Add Missing Card. Never writes anything, but does proxy live
+  requests to TCGCSV/lorcast/pokemontcg.io/Scryfall on the caller's behalf, so it's admin-gated
+  (`verifyAdminRequest()`, see below) to avoid becoming a free abuse vector against those quotas.
 - `app/api/admin/catalog/invalidate/route.ts` — `POST { game }`, drops the **server's** catalog
   cache for a game. See the cache-invalidation gotcha in [§4](#card-catalog-system--deep-dive-firestore-backed).
 - `app/api/admin/catalog/raw-source/route.ts` — the Raw Source Check diff, Riftbound-only today.
-- `app/api/set-registry/route.ts` — `GET` full registry; `PUT` a structured patch to one existing
-  set entry (Settings "Needs Review" editor); `POST` registers a brand new set entry (New Set
-  form). All three only ever touch the registry (Firestore `registry/main`), never TypeScript source.
+- `app/api/set-registry/route.ts` — `GET` full registry (public, no auth); `PUT` a structured
+  patch to one existing set entry (Settings "Needs Review" editor, itself gated behind `isAdmin`
+  — see below); `POST` registers a brand new set entry (New Set form); `DELETE` removes one,
+  restricted server-side to `source: "manual"` sets only (official/auto-detected sets would just
+  reappear on the next sync). All four only ever touch the registry (Firestore `registry/main`),
+  never TypeScript source.
 - `lib/api/catalog.ts` — `loadCatalog`/`loadVisibleCatalog`/`regenerateSnapshot`/
   `invalidateCatalogCache`, plus `sortCatalogCards`/`scoreMatch`/`parseSearchQuery` shared by all
-  three games' search.
+  five games' search.
 - `lib/firebase/config.ts` — exports `ADMIN_UID` (from `NEXT_PUBLIC_ADMIN_UID`), used by both
   this page's `isAdmin` check and (independently, for real enforcement) `firestore.rules`.
+- `lib/firebase/verifyAdminRequest.ts` / `lib/firebase/authFetch.ts` — the server-side check and
+  client-side fetch wrapper behind every admin-only write route's real auth gate (see the next
+  paragraph). Any route that writes shared/admin data — not just this page's own routes, but also
+  the 5 `sync/{game}` routes (§17) — goes through these.
+
+### Auth model — `isAdmin` is UX, but every write route now checks the caller too
+
+`isAdmin` (`user.uid === NEXT_PUBLIC_ADMIN_UID`) gates which controls the UI shows, and
+`firestore.rules` is the real enforcement for any write this page makes with the client Firestore
+SDK directly (hide/edit/add card, image upload) — this part was always correctly gated. What
+wasn't, until a later audit pass caught it: every write that instead goes through a **Next.js API
+route** (`set-registry`'s PUT/POST/DELETE, `admin/catalog/invalidate`, `admin/catalog/lookup`,
+and all 5 `sync/{game}` routes in §17) used to have no check of *who* was calling it — the route
+itself signs in as the admin bot account (`ensureAdminAuth()`/`ensureSignedIn()`) purely so the
+Firestore *write* is allowed, which is a completely different thing from verifying the *request*
+came from the admin. Any anonymous caller who found one of these URLs could already trigger it.
+
+**The fix:** every one of those routes' handlers now starts with
+`const unauthorized = await verifyAdminRequest(request); if (unauthorized) return unauthorized`.
+`verifyAdminRequest()` reads the caller's Firebase ID token from an `Authorization: Bearer <token>`
+header and checks it against Firebase's Identity Toolkit REST API (`accounts:lookup`), rejecting
+anyone whose uid isn't `ADMIN_UID` — no `firebase-admin` SDK/service account needed, matching this
+codebase's existing "lightweight REST calls over a heavier server SDK" pattern
+(`adminAuth.ts`). Every client-side call site that writes through one of these routes
+(`AdminCatalogPage.tsx`, `SettingsPage.tsx`'s Needs Review editor, `regenerateSnapshot()` in
+`catalog.ts`) uses `adminFetch()` instead of a plain `fetch()` to attach that token automatically.
+Settings' "Needs Review" card is also now gated behind `isAdmin` itself — it used to be reachable
+(and would attempt to write) for any signed-in user, not just the admin, even though the write
+would previously have silently succeeded regardless.
 
 ---
 
@@ -318,6 +362,20 @@ them before landing on the right design:
 If a request is "I want to track a themed group of cards I already own or want" → Personal
 Collections. If a request is "the catalog is missing/wrong about a real card, or I want a whole
 new *set* other users would see too" → Admin Catalog (§5).
+
+**Currently limited to Lorcana and Riftbound only** — `PersonalCollection['game']` is typed
+`Extract<Game, 'lorcana' | 'riftbound'>`, and the game picker/create form hardcode the same two.
+Pokémon/One Piece/MTG were all added to the rest of the app after this feature was built and
+never got a Personal Collections equivalent; there's no technical blocker to adding the other
+three games, just work not yet done.
+
+**Foil-aware identity:** a `PersonalCollectionCard` carries its own `isFoil` field, because
+Riftbound search can return two rows sharing the same catalog `id` (a non-foil and a foil
+listing, when a card is priced both ways) — every place a collection card needs a stable identity
+(the "already added" dedup check in the Add Card modal, drag-to-reorder, removal) keys on a
+composite `${id}::${isFoil ? 'foil' : 'normal'}` (`cardKey()` in `PersonalCollectionsView.tsx`),
+not the bare catalog id, so adding one variant doesn't collapse onto — or permanently block
+re-adding — the other.
 
 ---
 
@@ -468,7 +526,7 @@ The `setName` string is the canonical match key used everywhere in this app.
 1. **Admin Catalog → "New Set"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics)) —
    fastest for a set that isn't fully synced yet or a curated/custom one. Registers the set in
    the registry (Firestore `registry/main`) directly from the UI with no group-metadata guessing.
-2. **Admin Catalog → "Sync Card Data"** (see [§16](#automated-sync--admin-catalog)) — the steps below
+2. **Admin Catalog → "Sync Card Data"** (see [§17](#automated-sync--admin-catalog)) — the steps below
    run automatically for real, newly-detected upstream sets, with conservative review-required
    defaults.
 3. **Manual**, described below — what both of the above actually do under the hood, and the
@@ -485,7 +543,7 @@ No `npm run build`/restart needed for the card data itself (see
 makes a set show up in the Cardex/Pack Analysis, and that's a plain Firestore write too.
 
 Then register the set in **the registry** (Firestore `registry/main` — this one doc replaced the
-three hardcoded arrays that used to need separate edits — see [§16](#automated-sync--admin-catalog)):
+three hardcoded arrays that used to need separate edits — see [§17](#automated-sync--admin-catalog)):
 
 ```json
 { "setName": "New Set Name", "code": "XYZ", "lorcastId": "14", "releaseDate": "2026-08-01",
@@ -623,7 +681,7 @@ price for these variants. Overnumbered prints like a regular card (not foil-only
 2. **Admin Catalog → "Check Raw Source"** (see [§5](#admin-catalog-page--architecture-caching--diagnostics))
    — once a set exists (via either path here), use this to catch individual cards the scrape
    silently skipped, independent of whether the set-level sync worked.
-3. **Admin Catalog → "Sync Card Data"** (see [§16](#automated-sync--admin-catalog)) — this whole flow,
+3. **Admin Catalog → "Sync Card Data"** (see [§17](#automated-sync--admin-catalog)) — this whole flow,
    including the group-ID lookup, runs automatically for real newly-detected sets.
 4. **Manual**, described below — what the automated paths actually do under the hood, and the
    fallback if you'd rather not use either UI. Card data (names, images, sets) is already fully
@@ -1033,12 +1091,12 @@ themed card).
 
 ## Price Data
 
-**As of the price-refresh redesign (see [§17](#cron-driven-price-sync)), live external price
+**As of the price-refresh redesign (see [§18](#cron-driven-price-sync)), live external price
 fetches for all four games happen in exactly one place: the 6-hourly cron-driven catalog sync.**
 Nothing else — not Portfolio's "Refresh Prices" button, not Pack Analysis — ever calls
 tcgcsv.com/lorcast/pokemontcg.io directly anymore. Both instead read whatever the catalog
 currently has (`loadCatalog()`/`loadVisibleCatalog()`, [§4](#card-catalog-system--deep-dive-firestore-backed)),
-which is therefore at most ~6 hours stale. This was a deliberate trade (see [§17](#cron-driven-price-sync)
+which is therefore at most ~6 hours stale. This was a deliberate trade (see [§18](#cron-driven-price-sync)
 for the full rationale): dramatically fewer outbound API calls — no more re-fetching a full
 tcgcsv CSV or hitting lorcast once per card on every user's every portfolio visit — at the cost of
 prices only being as fresh as the last cron run rather than truly live-on-click.
@@ -1053,7 +1111,7 @@ lightweight request already happening anyway for the search itself, not a bulk r
 - **Source:** `tcgcsv.com` (TCGPlayer mirror, category 3), synced into each card's Firestore doc.
   (`api.pokemontcg.io` is used live only by the AddCardDialog search box, see above — never by a
   bulk price refresh.)
-- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`
+- **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`
 - **Fields in catalog:** `marketPrice`/`marketPriceFoil` (normal/holofoil) and
   `lowPriceNM`/`lowPriceNMFoil` (lowest normal/holofoil listing — powers the "Lowest NM" price mode)
 - **Price refresh:** Portfolio page → "Refresh Prices" reads `catalog/pokemon/cards/*` for just
@@ -1065,7 +1123,7 @@ lightweight request already happening anyway for the search itself, not a bulk r
 ### Lorcana
 
 - **Source:** `api.lorcast.com`, synced into each card's Firestore doc
-- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`.
+- **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`.
   There is no live per-request lorcast call anywhere anymore — Portfolio's refresh used to fetch
   `api.lorcast.com/v0/cards/{id}` one card at a time (8-way concurrency) since lorcast has no bulk
   price endpoint, which made it by far the slowest of the three games to refresh; it now just
@@ -1079,7 +1137,7 @@ lightweight request already happening anyway for the search itself, not a bulk r
 ### Riftbound
 
 - **Source:** `tcgcsv.com` (TCGPlayer mirror, category 89), synced into each card's Firestore doc
-- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`.
+- **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`.
   Portfolio's refresh and Pack Analysis used to each independently re-download and re-parse every
   set's full `ProductsAndPrices.csv` live, on every single call — the single most expensive thing
   in the app before this redesign, since it scaled with every set ever added, on every user's
@@ -1094,7 +1152,7 @@ lightweight request already happening anyway for the search itself, not a bulk r
   Matched by exact card code (`extNumber` == apitcg's `code`) — no group-ID bootstrap or fuzzy
   set-name matching needed at all, unlike Riftbound (see
   [§10](#one-piece--data-source-schema-add-a-set-guide) for why).
-- **When fetched:** By the cron sync ([§17](#cron-driven-price-sync)), or `npm run download-cards`
+- **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`
 - **Fields in catalog:** `marketPrice` only — **no `marketPriceFoil`**. A "Parallel" print is a
   fully separate catalog card (its own `id`, its own `marketPrice`), not a foil toggle of the base
   card the way the other three games' foil variants are — see
@@ -1168,7 +1226,7 @@ Pokemon, or One Piece — see above.
 ### Set Registration
 
 **Lorcana/Riftbound:** To appear in the Cardex set picker, a set must have a `cardexGroup` value
-in its **registry** entry (Firestore `registry/main`, see [§16](#automated-sync--admin-catalog))
+in its **registry** entry (Firestore `registry/main`, see [§17](#automated-sync--admin-catalog))
 matching one of that game's `groupOrder` labels. `CardexPage.tsx` fetches `GET /api/set-registry`
 once on mount and derives the equivalent of the old hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS`
 client-side via `buildGroupsByGame()`. The `setName` field must exactly match the `setName` field
@@ -1207,8 +1265,11 @@ needed — anything in inventory with an unrecognized set name appears here auto
 
 ## Pack Analysis Feature — How Sets Register
 
-The Pack Analysis (`/pack-analysis`) shows expected value (EV) per booster pack for each
-Lorcana set based on current market prices.
+The Pack Analysis (`/pack-analysis`) shows expected value (EV) per booster pack. It actually
+covers three games with three different implementations, not just Lorcana — `PackAnalysisPage.tsx`
+routes `lorcana`/`riftbound` to their own live, catalog-backed API routes (below) and `pokemon` to
+`StandardView`, driven by `store.packSets` (`lib/store.ts`'s `defaultPackSets`) instead. One Piece
+and MTG aren't in Pack Analysis at all — no pull-rate data exists for either.
 
 ### Architecture
 
@@ -1219,12 +1280,12 @@ Lorcana set based on current market prices.
    - Reads the catalog via `loadVisibleCatalog('lorcana')` (`lib/api/catalog.ts` — same
      Firestore-backed, in-memory-cached read every other consumer uses, see [§4](#card-catalog-system--deep-dive-firestore-backed)).
      Prices come from whatever the catalog has, kept fresh by the cron sync
-     ([§17](#cron-driven-price-sync)) — this route no longer does its own live lorcast fetch on
+     ([§18](#cron-driven-price-sync)) — this route no longer does its own live lorcast fetch on
      top (it used to; `app/api/pack-analysis/riftbound/route.ts` had the equivalent live tcgcsv
      CSV fetch, also removed — see [Price Data](#price-data))
    - Calls `getLorcanaBoosterSets()` (`lib/api/registry.ts`), which reads the registry (Firestore
      `registry/main`) and returns every set with `packAnalysis.included: true` — this replaced the old hardcoded
-     `BOOSTER_SETS` array (see [§16](#automated-sync--admin-catalog))
+     `BOOSTER_SETS` array (see [§17](#automated-sync--admin-catalog))
    - Groups by rarity, computes average prices, applies pull rates, returns EV breakdown
 
 ### Pull Rates Used
@@ -1253,6 +1314,53 @@ request, same as it always re-read the catalog fresh (`force-dynamic`).
 **Note:** Fabled and Attack of the Vine! have `packAnalysis.included: false` in the registry
 because they are not sold in standard booster packs. The Pack Analysis only covers traditional
 booster sets.
+
+### Riftbound Pack Analysis
+
+`app/api/pack-analysis/riftbound/route.ts` — same "read the catalog only, `force-dynamic`" shape
+as Lorcana's route, with its own hardcoded `SET_META`/`BOOSTER_SET_CODES` (Origins/Spiritforged/
+Unleashed only — Proving Grounds is a promo/event set, excluded) and its own `PULL_RATES`
+constant, independent of Lorcana's pack structure entirely (7 Commons + 3 Uncommons + 2 foil
+Rare-or-better slots + 1 foil wildcard slot + 1 token, per pack):
+
+| Slot | Rate | Source |
+|------|------|--------|
+| Epic (in the rare-or-better slots) | 25% | Official (playriftbound.com announcements) |
+| Alt Art (foil wildcard slot) | 8.33% (~2 per 24-pack box) | Official |
+| Overnumbered (foil wildcard slot) | 1.4% (~1 in 72) | Community |
+| Signature (foil wildcard slot) | 0.14% (~1 in 720) | Community |
+
+`lib/pack-analysis/riftbound-ev.ts` exports this same `PULL_RATES` constant for the frontend to
+read directly — it used to also carry a large parallel EV implementation (`RIFTBOUND_EV_SETS`,
+`computeEV()`, `RIFTBOUND_EV`) with per-set data frozen at authoring time, entirely unused by
+anything (`PackAnalysisPage.tsx` only ever imported `PULL_RATES`) and already diverged from the
+real, live-computed route above — removed as dead code.
+
+### Pokémon Pack Analysis — static, not catalog-backed
+
+Unlike Lorcana/Riftbound, Pokémon has no API route at all — `lib/store.ts`'s `defaultPackSets`
+hardcodes a handful of `PackSet` entries (prices, pull rates, `expectedValue`) frozen at whatever
+date they were authored (some carry an explicit "as of" date in a comment), and
+`StandardView`/`PackAnalysisPage.tsx` just renders them. There's no refresh mechanism — these
+numbers silently go stale forever unless someone manually edits `lib/store.ts`. If this becomes a
+real pain point, the fix is the same shape as Lorcana/Riftbound's: a `force-dynamic` route reading
+`loadVisibleCatalog('pokemon')` and computing EV live.
+
+---
+
+## Spending — Hardcoded Product Catalog
+
+`/spending` (`components/pages/SpendingPage.tsx`, backed by `lib/firebase/spending.ts`) logs pack
+purchases against a **hardcoded product catalog**, not the card catalog — `lib/spending/catalog.ts`'s
+`SPENDING_CATALOG` is a hand-maintained array of `SpendingProduct` (`{ id, game, setCode, setName,
+type, name, price, imageUrl, packsIncluded, releaseDate }`, `type` one of `pack` | `booster-box` |
+`etb` | `bundle` | `case` | `pre-rift` | `vault-box`), each with a frozen MSRP `price` and a
+product image sourced from each game's own CDN (see that file's header comments for the confirmed
+CDN URL patterns per game). A `Purchase` (`lib/spending/types.ts` — `{ id, productId, pricePaid,
+quantity, date }`, `users/{uid}/purchases/{id}` in Firestore) records what was actually paid for
+one of these products, separately from its frozen catalog `price`. Like Pokémon's Pack Analysis
+data above, `SPENDING_CATALOG`'s prices are a permanent snapshot with no update mechanism — real
+MSRPs/promos will silently drift from what's shown over time.
 
 ---
 
@@ -1304,7 +1412,7 @@ Settings' "Needs Review" editor to ever show for this game (same as Pokémon).
 **MTG** has no registry involvement at all either, exactly like Pokémon (its set list comes live
 from `api.scryfall.com/sets`) — but it's by far the biggest sync here (~99,000 cards vs.
 Pokémon's ~20k), and unlike every other game, it isn't wired into the automatic 4x/day cron at
-all yet (see [§17](#cron-driven-price-sync)). Clicking this button IS still the one live way to
+all yet (see [§18](#cron-driven-price-sync)). Clicking this button IS still the one live way to
 sync it — a deliberate one-off admin action rather than a recurring background one — but read
 "MTG Integration.md" at the repo root before clicking it for the first time: that first click
 writes ~99,000 Firestore documents in one run, which can exceed a Firebase Spark (free) plan's
@@ -1374,17 +1482,35 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
 - **`app/api/cron/sync-prices/route.ts`** — `GET`/`POST`, protected by a shared secret
   (`CRON_SECRET` env var, checked against an `x-cron-secret` header or a `?secret=` query param —
   the query-param form exists because some free external schedulers can't set custom headers).
-  Calls the exact same `app/api/sync/{pokemon,lorcana,riftbound,onepiece}/route.ts` handlers the
-  Admin Catalog "Sync Card Data" button already uses (imported and invoked directly in-process,
-  not over HTTP — all four take no arguments) via `Promise.allSettled`, so one game failing/timing
-  out doesn't block the others. `maxDuration = 300`, same headroom as the standalone Pokémon sync
-  route, for the same reason (170+ sets, 20k+ cards).
-- **MTG is deliberately NOT included here.** Its first sync alone writes ~99,000 Firestore
-  documents — far more than this cron route's other four games combined — which risks exceeding
-  a Firebase Spark (free) plan's daily write quota in one automatic run. It only syncs via a
-  manual Admin Catalog button click today. See [§11](#magic-the-gathering--data-source-schema-add-a-set-guide)
-  and "MTG Integration.md" at the repo root for exactly how to wire it in once that's no longer a
-  concern.
+  Calls `runPokemonSync`/`runLorcanaSync`/`runRiftboundSync`/`runOnePieceSync` — plain functions
+  exported from a sibling `sync.ts` module next to each game's `route.ts` (e.g.
+  `app/api/sync/pokemon/sync.ts`), imported and invoked directly in-process (not over HTTP, no
+  arguments) via `Promise.allSettled`, so one game failing/timing out doesn't block the others.
+  The logic lives in `sync.ts` rather than being exported from `route.ts` itself for a build-level
+  reason: Next.js's route-file export validator only allows a fixed allowlist of names
+  (`GET`/`POST`/`dynamic`/`maxDuration`/...) from a `route.ts`, so a route.ts can't also export an
+  arbitrary function the cron route could import — see [Firestore / User Data](#firestore--user-data)'s
+  admin-auth paragraph for why this split exists at all (route.ts's own `POST` is now the
+  auth-checked HTTP entry point; `sync.ts`'s function is the unauthenticated internal one the
+  already-CRON_SECRET-checked cron route calls). `maxDuration = 300`, same headroom as the
+  standalone Pokémon sync route, for the same reason (170+ sets, 20k+ cards).
+- **MTG's full catalog sync is deliberately NOT included here.** Its first sync alone writes
+  ~99,000 Firestore documents — far more than this cron route's other four games combined — which
+  risks exceeding a Firebase Spark (free) plan's daily write quota in one automatic run. It only
+  syncs via a manual Admin Catalog button click today. What *does* run automatically is
+  `checkForNewMtgSets()` (`lib/api/mtg.ts`) — a read-only, zero-catalog-write check that fetches
+  Scryfall's live set list and diffs it against a baseline stored in `sync_status/mtg-new-set-check`,
+  so a new MTG set doesn't sit unnoticed between manual syncs, without the write-quota risk of a
+  real sync. Both this check's own baseline write and `recordSyncStatus()`'s status write
+  (`lib/api/syncStatus.ts`) target that same document — they use disjoint field sets and both pass
+  `{ merge: true }`, which matters: an earlier version of this feature used a plain (non-merged)
+  `setDoc` in both places, so each write silently wiped the other's fields and the check
+  permanently reported zero new sets on every run after the first, with no error anywhere to
+  surface it. `checkForNewMtgSets()` also explicitly calls `ensureAdminAuth()` itself now rather
+  than relying on one of the other games' `ensureSignedIn()` calls happening to win the race
+  inside the same `Promise.allSettled` — see [§11](#magic-the-gathering--data-source-schema-add-a-set-guide)
+  and "MTG Integration.md" at the repo root for how to wire the real sync in once the write-quota
+  concern is resolved.
 - **Not a Vercel Cron job** — deliberately, so this works on Vercel plans that don't support
   sub-daily cron schedules. It's triggered by **`.github/workflows/sync-prices.yml`**, a scheduled
   GitHub Actions workflow checked into this repo (4x/day, `x-cron-secret` header sourced from a
@@ -1405,14 +1531,18 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
   `applyPriceUpdatesBatch` in [Firestore / User Data](#firestore--user-data) below. Practically:
   price *history* granularity is now driven by how often Alex clicks Refresh, not a fixed timer —
   the catalog's own price data updates 4x/day regardless of whether anyone visits Portfolio at all.
-- **Known gap:** `app/api/sync/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts` themselves have
-  no request-level auth check of their own (they only sign *themselves* in as the Firestore admin
-  account internally) — anyone who knows the URL could already POST to them directly and trigger
-  a full resync (for MTG, that means anyone who knows the URL could trigger the ~99,000-write
-  sync this doc keeps warning about, entirely outside the deliberate manual-only gate described
-  above). This predates the cron work and wasn't introduced by it; the cron route is the only one
-  of these that actually requires a secret. Worth locking down the per-game sync routes the same
-  way if this is ever a concern — MTG's especially, given the cost of an unexpected trigger.
+- **Previously-known gap, now fixed:** `app/api/sync/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts`
+  used to have no request-level auth check of their own — they only signed *themselves* in as the
+  Firestore admin account internally, so anyone who knew the URL could POST to them directly and
+  trigger a full resync (for MTG, that meant anyone who knew the URL could trigger the
+  ~99,000-write sync this doc keeps warning about, entirely outside the deliberate manual-only
+  gate described above). Every one of these routes' `POST` handlers now calls
+  `verifyAdminRequest()` before doing anything — see [Firestore / User Data](#firestore--user-data)'s
+  admin-auth paragraph for the mechanism. The cron route's own in-process calls (via each game's
+  `sync.ts`) are unaffected, since they never go through `route.ts`'s `POST` at all. The same fix
+  was applied to `/api/set-registry` (all three of PUT/POST/DELETE) and
+  `/api/admin/catalog/invalidate`/`lookup`, which had the identical gap and weren't even
+  documented as sharing it — see [§5](#admin-catalog-page--architecture-caching--diagnostics).
 
 ---
 
@@ -1424,18 +1554,35 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
 catalog/{game}/cards/{cardId}          — Shared catalog, admin-write-only (§4, §5)
 catalog_snapshot/{game}/chunks/{n}     — Pre-sharded catalog snapshot for cheap cold reads (§4)
 catalog_meta/{game}                    — { lastBulkSyncAt } — resync-vs-admin-edit bookkeeping (§4)
+registry/main                          — Set registry, admin-write-only (§17)
+sync_status/{game|"mtg-new-set-check"} — Last-run status per sync job, admin-write-only (§18)
 
 users/{uid}/
   cards/{cardId}        — Card objects (this user's inventory)
+  soldCards/{cardId}     — Sold-card records (see "Sold Cards" below) — same shape as Card plus
+                            soldDate/soldPrice/soldAt
   priceHistory/{cardId} — Price history points per card
-  purchases/{id}        — Pack purchase records (Spending page)
+  purchases/{id}        — Pack purchase records (Spending page — see [§16](#spending--hardcoded-product-catalog)
+                            for the current `{ id, productId, pricePaid, quantity, date }` shape)
   collections/{id}      — Personal Collections (§6) — { game, name, cards: [...], createdAt }
 ```
 
-`game` throughout is `pokemon` | `lorcana` | `riftbound` | `onepiece` | `mtg`. The `catalog*` collections are public
-read / admin write; everything under `users/{uid}/**` is readable/writable only by that same
-uid — see `firestore.rules` for the actual enforcement (the app-level `isAdmin`/`ADMIN_UID`
-checks are UX only, never the real gate).
+`game` throughout is `pokemon` | `lorcana` | `riftbound` | `onepiece` | `mtg`. The `catalog*`,
+`registry`, and `sync_status` collections are public read / admin write; everything under
+`users/{uid}/**` is readable/writable only by that same uid — see `firestore.rules` for the
+actual enforcement. The app-level `isAdmin`/`ADMIN_UID` check is UX only for direct Firestore
+writes (client SDK calls are still really gated by `firestore.rules`), but for the several
+Next.js API routes that write admin-only data server-side (`set-registry`, `admin/catalog/
+invalidate`, `admin/catalog/lookup`, `sync/{game}`), there previously was no real caller check at
+all — any request reaching the route succeeded, regardless of who sent it, because the route
+signed *itself* in as the admin bot account rather than verifying who was asking. This is now
+closed: every one of those routes calls `verifyAdminRequest()` (`lib/firebase/
+verifyAdminRequest.ts`), which checks the caller's own Firebase ID token (sent as `Authorization:
+Bearer <token>`, attached client-side via `lib/firebase/authFetch.ts`'s `adminFetch()`) against
+Firebase's Identity Toolkit REST API and rejects anyone whose uid isn't `ADMIN_UID`. The 5
+`sync/{game}` routes each split their real logic into a sibling `sync.ts` module (`runPokemonSync`
+etc.) precisely so the cron route can still call it in-process post-CRON_SECRET-check without a
+second, redundant verification — see [§18](#cron-driven-price-sync).
 
 ### Card Object (stored in Firestore)
 
@@ -1457,8 +1604,42 @@ checks are UX only, never the real gate).
   currentPrice?: number
   priceUpdatedAt?: string
   createdAt?: string
+  priceAtEntry?: number   // market price snapshotted when the card was first added — baseline
+                          // for Portfolio's "Since Entry" P&L timeframe
+  gradingCompany?: string // e.g. "PSA", "CGC", "BGS", "SGC" — see cardIdentityKey() below
+  grade?: string          // e.g. "10", "9.5", "Authentic"
+  group?: string          // user-defined group label (e.g. "Alex & Brother's Cards") — drives
+                          // Portfolio's hidden-groups filter feature
+  priceLocked?: boolean   // when true, "Refresh Prices" never overwrites currentPrice for this card
+  rarity?: string         // from the catalog at add time; Pokemon catalog cards don't carry one
+  nexus?: boolean         // Riftbound only — user-flagged Nexus Night promo-foil variant
 }
 ```
+
+`lib/utils.ts`'s `cardIdentityKey(card)` is what Inventory groups multiple lots of the "same"
+card under — it includes `apiId`/`game`/`isFoil` and, critically, `gradingCompany`+`grade`, so a
+raw copy and a graded copy of the same print are never merged into one row with a shared cost
+basis (they weren't originally — this was a real bug fixed during a later audit pass).
+
+### Sold Cards
+
+A card sold out of Inventory moves to `users/{uid}/soldCards/{cardId}` (`SoldPage.tsx`,
+`/sold` route) rather than being deleted — `SoldCard` (`lib/types.ts`) is a `Card` plus
+`soldDate`/`soldPrice`/`soldAt`, so P&L on a sale is still computable later. `lib/firebase/db.ts`
+exports `loadSoldCards`/`saveSoldCard`/`deleteSoldCard`; a sold card can be restored back into
+active inventory (calls the same `addCard` path AddCardDialog uses, deliberately *not* treated
+as a "new card unlock" — see the CardUnlockToast note under [§20](#zustand-store)).
+
+### Invite-Gated Signup
+
+New account creation is gated by a single shared passcode, not open signup — `app/signup/
+page.tsx` calls `verifyPasscode()` (`AuthProvider.tsx`), which posts to `POST /api/auth/
+verify-passcode`. That route compares the submitted code against `SIGNUP_PASSCODE` (a
+server-only env var, never `NEXT_PUBLIC_`) and returns only `{ ok: boolean }` — the real code
+never reaches the client. `signInWithGoogle()`'s Google-OAuth signup path enforces the same gate
+by deleting the freshly-created Firebase Auth account if the passcode step failed (falling back
+to a plain sign-out if the delete itself throws for a reason other than requiring a recent
+login).
 
 ### Key Firestore Rules
 
@@ -1478,30 +1659,59 @@ checks are UX only, never the real gate).
 
 ## Zustand Store
 
-`lib/store.ts` — in-memory only, no localStorage persistence.
+`lib/store.ts` — mostly in-memory (cards/priceHistory/purchases/soldCards are never persisted,
+always re-loaded from Firestore on login), but wrapped in Zustand's `persist` middleware with a
+`localStorage` backing (`createJSONStorage(() => localStorage)`, key `"tcghaven-filters"`) for a
+small, deliberately-scoped slice of display/filter preferences via `partialize`:
+`calcFloor`, `activeGames`, `timeFrame`, `packPriceOverrides`, `priceMode`, `hiddenGroups`,
+`lastPriceRefresh`. None of this is inventory data — it's UI state that's reasonable to survive a
+refresh/relaunch without waiting on Firestore, and none of it is per-account-sensitive enough to
+need clearing on sign-out (a shared/public-device sign-out concern worth being aware of but not
+yet addressed).
 
-### State Shape
+### State Shape (abridged — see `lib/store.ts` for the full shape)
 
 ```typescript
 {
   cards: Card[]              // all user's cards, loaded from Firestore on login
+  soldCards: SoldCard[]      // see "Sold Cards" in §19
   priceHistory: PriceHistory[]
-  purchases: Purchase[]      // pack purchase records from Spending page
+  purchases: Purchase[]      // pack purchase records from Spending page (§16)
+  packSets: PackSet[]        // Pokemon's hardcoded EV data — see §15's Pack Analysis note
   activeGame: Game           // selected game filter
   lastPriceRefresh: string | null
+  cardUnlocks: Array<{ id: string; card: Card }>  // queue for CardUnlockToast, below
 
-  // Actions
+  // Actions (non-exhaustive)
   loadUserCards(cards)
+  loadUserSoldCards(cards)
   loadUserPriceHistory(history)
   loadPurchases(purchases)
   addCard(card)
   updateCard(cardId, updates)
   removeCard(cardId)
   updateCardPrice(cardId, price)
+  addPriceHistoryPoint(cardId, price, date)   // dedupes to one point per calendar day
+  applyPriceUpdates(updates)                   // batched form of the above two, O(n) not O(n²)
   setLastPriceRefresh(date)
-  clearUserData()            // called on sign out
+  pushCardUnlock(card) / dismissCardUnlock(id)
+  clearUserData()            // called on sign out — clears cards/priceHistory/purchases/
+                              // soldCards but NOT the persisted filter/display prefs above
 }
 ```
+
+### "Card Unlocked" celebration
+
+`components/CardUnlockToast.tsx`, mounted once globally in `ClientWrapper.tsx`. When
+`AddCardDialog` adds a card, `isFirstCopyOfCard()` (`lib/utils.ts`) checks — against the
+in-memory inventory snapshot from *before* the add, so no race with the optimistic update —
+whether this is the very first copy of that exact print the user has ever owned (same
+apiId-then-set+number identity rules the Cardex uses; deliberately checked against inventory
+alone, not the catalog, so it fires for a manually-typed card in an unregistered set too). If so,
+`pushCardUnlock()` queues a celebration toast; the component renders only the front of that
+queue so a burst of adds during a big unboxing session shows one celebration at a time. Restoring
+a card from Sold (§19) reuses the same `addCard` path but is deliberately not treated as a new
+unlock. Clicking the toast deep-links to that card's Cardex set.
 
 ### Data Loading on Login
 
@@ -1511,10 +1721,18 @@ Promise.all([
   loadCards(firebaseUser.uid),
   loadPriceHistory(firebaseUser.uid),
   loadPurchases(firebaseUser.uid),
+  loadSoldCards(firebaseUser.uid).catch(() => []),  // isolated — a sold-cards read failure
+                                                      // alone doesn't block the other three
 ])
 ```
-All three must succeed before `dataLoading` is set to false. If any fails,
-`dataLoading` stays true and the user sees a loading state indefinitely.
+All four must resolve (loadSoldCards can't reject — its own `.catch` swallows to `[]`) before
+`dataLoading` is set to `false`; the outer `.catch` also sets `dataLoading` false on failure now
+(this used to leave it `true` forever — fixed), but if `loadCards`/`loadPriceHistory`/
+`loadPurchases` themselves reject, **none** of `loadUserCards`/`loadUserPriceHistory`/
+`storePurchases` fire — the user lands on a fully empty Inventory/Portfolio/Spending with only a
+`console.error`, which looks exactly like data loss with no retry/error UI. Worth fixing if this
+becomes a real-world pain point; noted here since it's easy to mistake "spinner never resolves"
+(the old, now-fixed bug) for "silently shows nothing" (the remaining one) when debugging.
 
 ---
 
@@ -1523,8 +1741,12 @@ All three must succeed before `dataLoading` is set to false. If any fails,
 ```
 TCGHaven/
 ├── firestore.rules                ← Firestore security rules — public read/admin write on
-│                                     catalog/*, catalog_snapshot/*, catalog_meta/*, registry/*;
-│                                     per-user read/write on users/{uid}/** (§5, §16, §17)
+│                                     catalog/*, catalog_snapshot/*, catalog_meta/*, registry/*,
+│                                     sync_status/*; per-user read/write on users/{uid}/**
+│                                     (§5, §17, §18) — this is the real write gate for the client
+│                                     SDK writes Admin Catalog makes directly; the several Next.js
+│                                     API routes that also need admin-only writes have their own
+│                                     separate caller check now too, see §5's "Auth model" note
 ├── storage.rules                  ← Firebase Storage rules — catalog image uploads (Admin
 │                                     Catalog's ImageUploadField)
 ├── firebase.json, .firebaserc     ← Just enough config for `firebase deploy --only
@@ -1538,30 +1760,51 @@ TCGHaven/
 │   └── lib/
 │       ├── catalog-sync.mjs       ← The actual per-game scraping + Firestore-sync logic
 │       │                             (downloadPokemon/downloadLorcana/downloadRiftbound/
-│       │                             downloadOnePiece/syncToFirestore/ensureSignedIn), shared by
-│       │                             both the CLI script and app/api/sync/{game}/route.ts (§16)
+│       │                             downloadOnePiece/downloadMTG/syncToFirestore/ensureSignedIn),
+│       │                             shared by both the CLI script and each
+│       │                             app/api/sync/{game}/sync.ts (§17 — not route.ts directly,
+│       │                             see §5's "Auth model" note for why that split exists)
 │       └── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set
 │                                     matching (Riftbound only — One Piece needs none, §10)
 │
 ├── lib/
-│   ├── types.ts                   ← Card, Game, Condition, GAME_COLORS, etc.
-│   ├── store.ts                   ← Zustand store (in-memory, no persist)
-│   ├── utils.ts                   ← cn(), formatCurrency(), formatPercent()
+│   ├── types.ts                   ← Card, SoldCard, Game, Condition, GAME_COLORS, etc. — §19 has
+│   │                                 the full current Card shape
+│   ├── store.ts                   ← Zustand store — mostly in-memory, persists a small
+│   │                                 filter/display-prefs slice to localStorage (§20)
+│   ├── utils.ts                   ← cn(), formatCurrency(), cardIdentityKey()/isFirstCopyOfCard()
+│   │                                 (inventory grouping + "Card Unlocked" detection — §19, §20),
+│   │                                 riftboundVariantFlags()/riftboundInherentFoil() (the shared
+│   │                                 Riftbound foil-classifier — §9), openEbaySearch()
 │   ├── firebase/
 │   │   ├── config.ts              ← Firebase app init, auth, db, storage instances, ADMIN_UID
 │   │   ├── adminAuth.ts           ← ensureAdminAuth() — signs the server-process auth instance
 │   │   │                             in as the ADMIN_EMAIL/PASSWORD sync account, once per
-│   │   │                             process, for server-side admin Firestore writes (§16)
-│   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, newCardRef
-│   │   ├── spending.ts            ← loadPurchases, savePurchase, removePurchase
+│   │   │                             process, for server-side admin Firestore writes (§17)
+│   │   ├── verifyAdminRequest.ts  ← verifyAdminRequest(request) — the real per-request caller
+│   │   │                             check every admin-only write route now runs first (§5)
+│   │   ├── authFetch.ts           ← adminFetch() — client-side fetch wrapper that attaches the
+│   │   │                             caller's Firebase ID token for the above (§5)
+│   │   ├── db.ts                  ← loadCards, saveCard, editCard, removeCard, newCardRef,
+│   │   │                             loadSoldCards/saveSoldCard/deleteSoldCard (§19),
+│   │   │                             addPricePoint/applyPriceUpdatesBatch (dedupe to one
+│   │   │                             price-history point per day — §13, §18)
+│   │   ├── spending.ts            ← loadPurchases, savePurchase, updatePurchase, deletePurchase
+│   │   │                             (§16 — Spending's actual product-catalog redesign)
 │   │   └── collections.ts         ← Personal Collections CRUD (§6) — users/{uid}/collections/*
 │   ├── auth-errors.ts             ← friendlyAuthError() — shared Firebase error messages
+│   ├── spending/
+│   │   ├── catalog.ts             ← SPENDING_CATALOG — hardcoded product list (§16)
+│   │   └── types.ts               ← Purchase, ProductType (§16)
 │   ├── api/
+│   │   ├── syncStatus.ts          ← recordSyncStatus()/getSyncStatus()/getAllSyncStatuses() —
+│   │   │                             durable per-job success/failure record at sync_status/{id},
+│   │   │                             read by Admin Catalog's Sync panel (§17, §18)
 │   │   ├── catalog.ts             ← loadCatalog()/loadVisibleCatalog()/regenerateSnapshot()/
 │   │   │                             invalidateCatalogCache() + scoreMatch() — Firestore-backed
 │   │   │                             catalog read/write core shared by all 5 games (§4)
 │   │   ├── registry.ts            ← loadSetRegistry()/saveSetRegistry() etc. — Firestore
-│   │                             registry/main doc, short in-process staleness cache (§16)
+│   │                             registry/main doc, short in-process staleness cache (§17)
 │   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
 │   │   │                             unified entry point (§5's New Set cache note)
 │   │   ├── pokemon.ts             ← searchPokemonCards(), getPokemonCardPrice()
@@ -1573,7 +1816,9 @@ TCGHaven/
 │   │   └── mtg.ts                 ← searchMtgCards(), getMtgSets() (live api.scryfall.com/sets +
 │   │                             manual-registry merge — mirrors pokemon.ts's shape, §11)
 │   └── pack-analysis/
-│       └── lorcana-ev.ts          ← TypeScript interfaces for Lorcana EV data
+│       ├── lorcana-ev.ts          ← TypeScript interfaces for Lorcana EV data
+│       └── riftbound-ev.ts        ← PULL_RATES only (§15) — used to also carry a large dead
+│                                     parallel EV implementation, removed
 │
 ├── app/
 │   ├── layout.tsx                 ← Root HTML layout, ClientWrapper (SSR disabled)
@@ -1581,49 +1826,73 @@ TCGHaven/
 │   ├── inventory/page.tsx         ← Inventory page wrapper
 │   ├── cardex/page.tsx            ← Cardex page wrapper (includes Personal Collections tab, §6)
 │   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
-│   ├── settings/page.tsx          ← Settings page wrapper — Needs Review editor + inventory
-│   │                                 number repair; "Sync Card Data" moved to /admin, see §16
+│   ├── settings/page.tsx          ← Settings page wrapper — inventory number repair (any signed-
+│   │                                 in user) + Needs Review editor (isAdmin-gated, §5); "Sync
+│   │                                 Card Data" itself lives at /admin, see §17
 │   ├── portfolio/
-│   │   └── [cardId]/page.tsx      ← Individual card detail page
-│   ├── spending/page.tsx          ← Pack spending tracker
-│   ├── pack-analysis/page.tsx     ← Pack EV analysis page
+│   │   ├── [cardId]/page.tsx      ← Individual card detail page → CardDetailPage.tsx
+│   │   └── analytics/page.tsx     ← Portfolio analytics (dynamic-imported, ssr:false) →
+│   │                                 components/portfolio/PortfolioAnalyticsPage.tsx — linked
+│   │                                 from every Portfolio stat tile, undocumented elsewhere
+│   ├── spending/page.tsx          ← Pack spending tracker (§16)
+│   ├── pack-analysis/page.tsx     ← Pack EV analysis page (§15)
+│   ├── sold/page.tsx              ← Sold cards tracker → components/pages/SoldPage.tsx (§19)
 │   ├── login/page.tsx
-│   ├── signup/page.tsx
+│   ├── signup/page.tsx            ← Invite-passcode-gated signup (§19)
 │   └── api/
-│       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS)
+│       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS), capped at 25
+│       │                             results (§12)
 │       ├── cardex/route.ts        ← Cardex grid data (?game=&set=)
 │       ├── sets/route.ts          ← Set list for AddCardDialog autocomplete (?game=)
-│       ├── set-registry/route.ts  ← GET full registry; PUT a structured patch to one set
+│       ├── auth/verify-passcode/route.ts ← POST — checks a submitted signup code against the
+│       │                             server-only SIGNUP_PASSCODE env var (§19); no auth of its
+│       │                             own (it IS the auth gate), never echoes the real code back
+│       ├── set-registry/route.ts  ← GET full registry (public); PUT a structured patch to one set
 │       │                             (Needs Review editor); POST registers a brand new set
-│       │                             (Admin Catalog "New Set", §5, §16)
+│       │                             (Admin Catalog "New Set"); DELETE removes a `source:
+│       │                             "manual"` set. PUT/POST/DELETE all admin-gated via
+│       │                             verifyAdminRequest() (§5, §17)
 │       ├── admin/catalog/
-│       │   ├── route.ts           ← GET read-only listing incl. hidden cards (§5)
+│       │   ├── route.ts           ← GET read-only listing incl. hidden cards (§5), no auth check
+│       │   ├── search/route.ts    ← GET whole-catalog cross-set search, capped at 300 results
+│       │   │                         (§5), no auth check (read-only)
 │       │   ├── lookup/route.ts    ← POST exact-match external price/image lookup (§5) — One
 │       │                             Piece's case needs a live tcgcsv group lookup by
-│       │                             `abbreviation` first (no registry group-id to read, §10)
-│       │   ├── invalidate/route.ts← POST — drops the server's catalog cache for a game (§4, §5)
+│       │                             `abbreviation` first (no registry group-id to read, §10).
+│       │                             Admin-gated (verifyAdminRequest()) since it proxies live
+│       │                             external requests on the caller's behalf.
+│       │   ├── invalidate/route.ts← POST — drops the server's catalog cache for a game (§4, §5).
+│       │   │                         Admin-gated.
 │       │   └── raw-source/route.ts← GET — Raw Source Check diff, Riftbound-only (§5)
 │       ├── sync/
-│       │   ├── pokemon/route.ts   ← POST — syncs Pokémon via scripts/lib/catalog-sync.mjs (§16)
-│       │   ├── lorcana/route.ts   ← POST — syncs Lorcana + registers any new sets (§16)
-│       │   ├── riftbound/route.ts ← POST — syncs Riftbound + TCGPlayer group-matching (§16)
-│       │   ├── onepiece/route.ts  ← POST — syncs One Piece + registers any new sets, no
-│       │   │                         group-matching needed (§10, §16)
-│       │   └── mtg/route.ts       ← POST — syncs MTG (§11, §16). NOT on the automatic cron below
+│       │   ├── pokemon/{route.ts,sync.ts} ← POST — syncs Pokémon via scripts/lib/catalog-sync.mjs.
+│       │   │                         route.ts's POST checks the caller (verifyAdminRequest) then
+│       │   │                         calls sync.ts's runPokemonSync(), which has no auth check of
+│       │   │                         its own — that's what the cron route imports directly (§17,
+│       │   │                         §18; see §5's "Auth model" note for why the split exists).
+│       │   │                         Every other game's sync route below follows this same
+│       │   │                         route.ts/sync.ts split.
+│       │   ├── lorcana/{route.ts,sync.ts} ← syncs Lorcana + registers any new sets (§17)
+│       │   ├── riftbound/{route.ts,sync.ts} ← syncs Riftbound + TCGPlayer group-matching (§17)
+│       │   ├── onepiece/{route.ts,sync.ts} ← syncs One Piece + registers any new sets, no
+│       │   │                         group-matching needed (§10, §17)
+│       │   └── mtg/{route.ts,sync.ts} ← syncs MTG (§11, §17). NOT on the automatic cron below
 │       │                             yet — manual-click-only until Firestore write-quota impact
 │       │                             is confirmed OK (~99k writes on first run). See "MTG
 │       │                             Integration.md" at the repo root.
 │       ├── cron/
 │       │   └── sync-prices/route.ts ← GET/POST, secret-protected — calls the pokemon/lorcana/
-│       │                             riftbound/onepiece sync routes above 4x/day (MTG excluded
-│       │                             on purpose, see sync/mtg/route.ts above), triggered by an
-│       │                             external scheduler outside this repo (§17)
+│       │                             riftbound/onepiece sync.ts functions above 4x/day (MTG's
+│       │                             full sync excluded on purpose, see sync/mtg above — but its
+│       │                             lightweight checkForNewMtgSets() runs here every time, see
+│       │                             §18), triggered by an external scheduler outside this repo
 │       ├── pack-analysis/
-│       │   ├── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic), reads catalog only
-│       │   └── riftbound/route.ts ← Riftbound EV calculator (force-dynamic), reads catalog only
-│       │                             (Pokemon/One Piece/MTG aren't in Pack Analysis — no
-│       │                             pull-rate data for any of them; see quirk #9 and CLAUDE.md's
-│       │                             One Piece §10)
+│       │   ├── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic), reads catalog only (§15)
+│       │   └── riftbound/route.ts ← Riftbound EV calculator (force-dynamic), reads catalog only,
+│       │                             its own PULL_RATES/SET_META (§15). Pokémon's own Pack
+│       │                             Analysis is NOT a route — it's lib/store.ts's hardcoded
+│       │                             defaultPackSets (§15). One Piece/MTG aren't in Pack Analysis
+│       │                             at all — no pull-rate data for either.
 │       └── prices/
 │           ├── pokemon/route.ts   ← Batch Pokémon price lookup (Portfolio refresh) — catalog-only
 │           ├── lorcana/route.ts   ← Batch Lorcana price lookup — catalog-only
@@ -1635,28 +1904,45 @@ TCGHaven/
 │           └── ebay/route.ts      ← eBay price lookup proxy
 │
 └── components/
+    ├── CardUnlockToast.tsx        ← "Card Unlocked" celebration toast, mounted once in
+    │                                 ClientWrapper.tsx — see §20's note
     ├── auth/
-    │   ├── AuthProvider.tsx        ← Firebase auth context + data loading on login
+    │   ├── AuthProvider.tsx        ← Firebase auth context + data loading on login +
+    │   │                             verifyPasscode() (§19's invite-gated signup)
     │   └── AuthGuard.tsx           ← Redirects unauthenticated users to /login
     ├── layout/
-    │   └── Sidebar.tsx             ← Desktop sidebar + mobile bottom nav
+    │   ├── Sidebar.tsx             ← Desktop sidebar + mobile bottom nav
+    │   └── ClientWrapper.tsx       ← Mounts CardUnlockToast globally
     ├── inventory/
-    │   └── AddCardDialog.tsx       ← Add/edit card modal with live search dropdown
+    │   └── AddCardDialog.tsx       ← Add/edit card modal with live search dropdown; fires the
+    │                                 "Card Unlocked" toast on a genuinely new print (§20)
     ├── pages/
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
     │   ├── PortfolioPage.tsx       ← P&L tracking, price refresh, sort/filter
+    │   ├── CardDetailPage.tsx      ← Individual card detail (app/portfolio/[cardId]/page.tsx)
+    │   ├── SoldPage.tsx            ← Sold-cards tracker (app/sold/page.tsx, §19) — sell a card
+    │   │                             out of Inventory into users/{uid}/soldCards, or restore one
+    │   │                             back (reuses AddCardDialog's addCard path, not a "new
+    │   │                             unlock" — see §20)
     │   ├── CardexPage.tsx          ← Pokédex-style collection tracker (Pokemon + One Piece + MTG +
     │   │                             Lorcana + Riftbound + the Personal Collections tab, §6)
-    │   ├── PersonalCollectionsView.tsx ← Per-user custom collections UI (§6) — rendered inside
-    │   │                             CardexPage's "Personalized Collections" tab
-    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§16), CatalogBrowser,
-    │   │                             CardTable, AddCardForm, EditCardForm, NewSetForm, RawSourceCheckPanel
-    │   ├── SpendingPage.tsx        ← Pack purchase logging
-    │   ├── PackAnalysisPage.tsx    ← Expected value analysis per set
-    │   └── SettingsPage.tsx        ← Needs Review editor + inventory number repair (§16)
+    │   ├── PersonalCollectionsView.tsx ← Per-user custom collections UI (§6, Lorcana/Riftbound
+    │   │                             only today) — rendered inside CardexPage's "Personalized
+    │   │                             Collections" tab
+    │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§17), CatalogBrowser
+    │   │                             (incl. whole-catalog search), CardTable, AddCardForm,
+    │   │                             EditCardForm, NewSetForm, RawSourceCheckPanel
+    │   ├── SpendingPage.tsx        ← Pack purchase logging against SPENDING_CATALOG (§16)
+    │   ├── PackAnalysisPage.tsx    ← Expected value analysis — routes per-game to StandardView
+    │   │                             (Pokemon) or a live catalog-backed view (Lorcana/Riftbound) (§15)
+    │   └── SettingsPage.tsx        ← Inventory number repair (any signed-in user) + Needs Review
+    │                                 editor (isAdmin-gated, §5, §17)
     └── portfolio/
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
-        └── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
+        ├── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
+        └── PortfolioAnalyticsPage.tsx ← app/portfolio/analytics/page.tsx's real component,
+                                      dynamic-imported with ssr:false — linked from every
+                                      Portfolio stat tile
 ```
 
 ---
@@ -1707,7 +1993,7 @@ Both `app/api/pack-analysis/{lorcana,riftbound}/route.ts` have `export const dyn
 would be baked in at build time and never update. Each route reads the catalog via
 `loadVisibleCatalog()` on every request, same Firestore-backed cache as everywhere else described
 in [§4](#card-catalog-system--deep-dive-firestore-backed) — neither does its own live price fetch
-anymore (both used to; see [§17](#cron-driven-price-sync)). Freshness now comes entirely from how
+anymore (both used to; see [§18](#cron-driven-price-sync)). Freshness now comes entirely from how
 recently the cron sync last ran, not from this route.
 
 ### 8. `apiId` is the catalog's `id` field
@@ -1727,7 +2013,7 @@ by `setName` per Cardex request is cheap.
 
 The real obstacle was the **set picker**, not the grid: Lorcana/Riftbound group their sets via a
 hand-curated `cardexGroup` field on each registry entry (see
-[§16](#automated-sync--admin-catalog)), and hand-curating that for 170+ Pokémon sets one at a
+[§17](#automated-sync--admin-catalog)), and hand-curating that for 170+ Pokémon sets one at a
 time isn't worth it. The fix: Pokémon's groups are derived **automatically** from the `series`
 field the live `api.pokemontcg.io` set list already carries (e.g. `"Scarlet & Violet"`,
 `"Sword & Shield"`, `"Base"`) — `buildPokemonGroups()` in `CardexPage.tsx` groups by `series` and
@@ -1857,7 +2143,7 @@ that can only reference cards already in that shared catalog. A request to add a
 belongs in Admin Catalog — not Personal Collections, which has no way to do either.
 
 ### 19. Portfolio price refresh is manual-only and never hits a live external API
-See [§17](#cron-driven-price-sync) for the full writeup. Short version: there is no more
+See [§18](#cron-driven-price-sync) for the full writeup. Short version: there is no more
 30-minute (or any) auto-refresh on Portfolio page load — prices only change when Alex clicks
 "Refresh Prices" (or toggles price mode), and that click only ever reads the catalog
 (`loadCatalog()`, already in-memory-cached per [§4](#card-catalog-system--deep-dive-firestore-backed)) —
@@ -1965,3 +2251,44 @@ this scraping code outside of Next.js's request lifecycle, re-derive its env loa
 script's `loadEnvLocal()`, not from a fresh `--env-file`/`dotenv` call — every generic env loader
 you reach for has its own opinion about backslash escapes, and this secret's `$` will keep
 finding the ones that guess wrong.
+
+### 24. A Next.js `route.ts` can't export an arbitrary function alongside its HTTP handlers
+The fix for quirk-class "any caller who knows a URL can trigger an admin-only sync" (see §5's
+"Auth model" and §18's now-fixed "Known gap") needed each `sync/{game}/route.ts`'s real logic
+reachable from two callers with different trust levels: the cron route (already authorized via
+`CRON_SECRET`, wants to call in-process with no further check) and a real HTTP `POST` (needs
+`verifyAdminRequest()` first). The first attempt made `request` an optional parameter on `POST`
+itself (`export async function POST(request?: Request)`, skipping the check when absent) — this
+passes `tsc --noEmit` cleanly but fails `next build`: Next's route-handler type checking rejects
+`Request | undefined` as an invalid first-argument type, and a second attempt (exporting a second
+named function like `runPokemonSync` alongside `POST` from the same `route.ts`) fails for a
+different reason — Next's route-file export validator only allows a fixed allowlist of names
+(`GET`/`POST`/`dynamic`/`maxDuration`/...) from any file Next treats as a route, and rejects the
+whole build the moment an unrecognized export appears. **Neither failure shows up in `tsc --noEmit`
+alone** — only `next build` catches them, so a bare typecheck is not sufficient verification for
+a change touching any `route.ts` file's exports or handler signatures; run a real `npm run build`
+too (see quirk #1's dev/build-conflict warning before doing so while `npm run dev` is running).
+The actual fix here: move the real logic into a sibling **non-route** file (`sync.ts`, not
+`route.ts`) that both `route.ts`'s `POST` and the cron route can import — a plain module has no
+export restrictions at all. If you ever need the same "authenticated HTTP entry point + trusted
+internal caller" shape for a new route, this sibling-module split is the pattern, not an optional
+argument or a second route.ts export.
+
+### 25. Two writers to the same Firestore doc need `merge: true`, or the second write silently erases the first's fields
+`checkForNewMtgSets()` (`lib/api/mtg.ts`) and `recordSyncStatus()` (`lib/api/syncStatus.ts`) both
+write to `sync_status/mtg-new-set-check` — the former stores its own `{ codes, updatedAt }`
+baseline for diffing against next time, the latter stores the generic `{ ok, at, newSets, error }`
+status shape every other sync job's `sync_status/{game}` doc uses. Both used to call `setDoc(ref,
+data)` with no options, which **replaces the whole document** rather than merging fields — so
+every cron run, `checkForNewMtgSets()` would write its baseline, and `recordSyncStatus()` would
+immediately overwrite the same doc and wipe that baseline back out. Next run, `checkForNewMtgSets()`
+would read back `codes: undefined`, treat it as a first-ever run (no real baseline to diff
+against), and unconditionally report zero new sets — forever, with `ok: true` on every run and
+nothing anywhere indicating the feature was inert. This is the kind of bug that's invisible from
+the outside (no error, a plausible-looking response) and only found by reading the actual
+Firestore document and noticing `codes` was never actually there. The fix — `setDoc(ref, data, {
+merge: true })` in both writers, since their field sets are disjoint by design — generalizes: any
+time two independent pieces of code write to the same document id for different reasons, default
+to `merge: true` unless one of them is deliberately meant to be a full replace, and if you're
+debugging a "this write looks like it succeeded but the data isn't there next time" report, check
+whether something else writes the same doc path without merging.
