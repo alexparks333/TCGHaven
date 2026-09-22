@@ -148,6 +148,18 @@ export const POKEMON_RARITY_LABELS: Record<string, string> = {
   MEGA_ATTACK_RARE: 'Mega Attack Rare',
 }
 
+// One Piece's rarity field is always a bare abbreviation (see CLAUDE.md's catalog schema) —
+// every value needs spelling out, unlike Pokemon/Riftbound where only a handful of oddities do.
+// P and PR are both promo-card codes from two different scrape paths (apitcg's own vs. a
+// tcgcsv-synthesized promo group — see catalog-sync.mjs's downloadOnePiece()), not a meaningfully
+// different collector tier, so they're labeled distinctly only so the two toggles are
+// distinguishable, not because "PR" means something more specific than "promo."
+export const ONEPIECE_RARITY_LABELS: Record<string, string> = {
+  L: 'Leader', C: 'Common', UC: 'Uncommon', R: 'Rare', SR: 'Super Rare',
+  TR: 'Treasure Rare', SEC: 'Secret Rare', 'SP CARD': 'Special Rare',
+  P: 'Promo', PR: 'Promo (PR)',
+}
+
 // Per-game rarity label overrides for the Cardex rarity toggle/tooltip and Inventory's rarity
 // filter popover — keyed separately per game (not one flat merged map) because the same raw
 // string can mean something different in two games' catalogs: Riftbound's Rune cards and
@@ -156,6 +168,7 @@ export const POKEMON_RARITY_LABELS: Record<string, string> = {
 export const RARITY_LABELS_BY_GAME: Partial<Record<Card['game'], Record<string, string>>> = {
   riftbound: RIFTBOUND_RARITY_LABELS,
   pokemon: POKEMON_RARITY_LABELS,
+  onepiece: ONEPIECE_RARITY_LABELS,
 }
 
 // Build an eBay sold-listings search URL for a card.

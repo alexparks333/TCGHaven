@@ -269,9 +269,11 @@ const RARITY_COLORS: Record<string, string> = {
   Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
   Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899', Iconic: '#eab308',
   Epic: '#06b6d4', 'Alt Art': '#fbbf24', Overnumbered: '#fbbf24', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
-  // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), SEC(ret rare) — "SP CARD"
-  // is a further-out special/promo print tier.
-  L: '#38bdf8', C: '#6b7280', UC: '#22c55e', R: '#3b82f6', SR: '#a855f7', SEC: '#f97316', 'SP CARD': '#fbbf24',
+  // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), T(reasure) R(are — a real
+  // premium chase tier, see CARDEX_RARITY_ORDER's comment), SEC(ret rare) — "SP CARD" is a
+  // further-out special/promo print tier, P/PR both promotional-card codes.
+  L: '#38bdf8', C: '#6b7280', UC: '#22c55e', R: '#3b82f6', SR: '#a855f7', TR: '#eab308',
+  SEC: '#f97316', 'SP CARD': '#fbbf24', P: '#84cc16', PR: '#84cc16',
   // MTG: Scryfall's `rarity` field is always lowercase.
   common: '#6b7280', uncommon: '#22c55e', rare: '#3b82f6', mythic: '#f97316', special: '#a855f7', bonus: '#ec4899',
   // Pokemon — 44 real values (verified against api.pokemontcg.io/v2/rarities and the full
@@ -306,7 +308,7 @@ const RARITY_COLORS: Record<string, string> = {
 // (lib/api/catalog.ts) and RARITY_LABELS_BY_GAME (lib/utils.ts), so enabling it for another game
 // is just adding it here plus, if its raw rarity strings need friendlier display text or new
 // CARDEX_RARITY_ORDER/RARITY_COLORS entries, filling those in — no filtering-logic changes.
-const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana'])
+const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece'])
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────

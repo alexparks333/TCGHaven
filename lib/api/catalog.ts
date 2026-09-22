@@ -170,8 +170,14 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   // value; that key is kept as a fallback for any doc a resync hasn't touched yet.
   'Alt Art': 90, Overnumbered: 90, Showcase: 90, Star: 91,
   // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), SEC(ret rare) — "SP CARD"
-  // is a further-out special/promo print tier, sorted last like Riftbound's Star.
-  L: 0, C: 1, UC: 2, R: 3, SR: 4, SEC: 90, 'SP CARD': 91,
+  // is a further-out special/promo print tier, sorted last like Riftbound's Star. TR (Treasure
+  // Rare — a genuine premium chase tier, ~1 per booster box, introduced OP-06 onward, English/
+  // Chinese/French exclusive) sits between SR and SEC per real-world pull-rate research, verified
+  // against live catalog data rather than just CLAUDE.md's older documented list, which predates
+  // it. P/PR are both promotional-card rarity codes (apitcg and tcgcsv-synthesized promo groups
+  // tag them differently — see catalog-sync.mjs's downloadOnePiece() Phase 3 — not a meaningful
+  // collector-value distinction), sorted alongside the other promo/special tiers.
+  L: 0, C: 1, UC: 2, R: 3, SR: 4, TR: 5, SEC: 90, 'SP CARD': 91, P: 92, PR: 93,
 }
 
 /** Sorts catalog cards by collector number, then rarity, matching Cardex's display order. */
