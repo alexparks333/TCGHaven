@@ -1330,19 +1330,28 @@ needed — anything in inventory with an unrecognized set name appears here auto
 ### Per-Game Rarity Toggle Filter
 
 Inside a set, `CardexPage.tsx` can render a row of rarity pills (e.g. "Common", "Illustration
-Rare", "Overnumbered Signature") that hide/show cards of that rarity — currently wired up for
-**Riftbound, Pokémon, Lorcana, and One Piece** (`RARITY_TOGGLE_GAMES`), added incrementally on
-request. Lorcana needed zero mechanism changes, just adding it to the set (its 9 rarities were
-already in `CARDEX_RARITY_ORDER` from before this feature existed) plus one missing
-`RARITY_COLORS` entry (`Iconic`). **One Piece is the one game where enabling this actually found a
-real doc/data gap**: aggregating real rarity values across all 128 live sets turned up `TR`
-(Treasure Rare — a genuine premium chase tier CLAUDE.md's own §10 catalog schema had never
-documented) plus `P`/`PR` (two promo-card codes from different scrape paths, not a real
-collector-value distinction — both labeled "Promo"-ish so the toggles are distinguishable without
-asserting a difference that isn't really there). `ONEPIECE_RARITY_LABELS` (`lib/utils.ts`) spells
-out all 10 real values, since One Piece's rarity field is always a bare abbreviation (unlike
-Pokemon/Riftbound, where only a handful of oddities needed relabeling). Extending this to MTG is
-the same shape but not yet done.
+Rare", "Overnumbered Signature") that hide/show cards of that rarity — **wired up for all 5
+games** (`RARITY_TOGGLE_GAMES`), added incrementally, one game per request, in this order:
+Riftbound → Pokémon → Lorcana → One Piece → MTG. Each addition doubled as a live-data research
+pass rather than trusting this doc's own older per-game rarity lists, which caught two real gaps:
+
+- **Lorcana** needed zero mechanism changes — its 9 rarities were already in
+  `CARDEX_RARITY_ORDER` from before this feature existed, just one missing `RARITY_COLORS` entry
+  (`Iconic`).
+- **One Piece** turned up `TR` (Treasure Rare — a genuine premium chase tier CLAUDE.md's own §10
+  catalog schema had never documented) plus `P`/`PR` (two promo-card codes from different scrape
+  paths, not a real collector-value distinction — both labeled "Promo"-ish so the toggles are
+  distinguishable without asserting a difference that isn't really there). `ONEPIECE_RARITY_LABELS`
+  (`lib/utils.ts`) spells out all 10 real values, since One Piece's rarity field is always a bare
+  abbreviation (unlike Pokemon/Riftbound, where only a handful of oddities needed relabeling).
+- **MTG** was the one game whose rarity strings had never been added to `CARDEX_RARITY_ORDER` at
+  all (only `RARITY_COLORS` had them) — without that fix all 5 values would've sorted
+  alphabetically among themselves instead of common→uncommon→rare→mythic→special→bonus. Verified
+  the 6th documented value, `bonus` (Power 9 reprints like Black Lotus, e.g. Vintage Masters),
+  correctly never appears in the synced catalog — confirmed live against Scryfall that those are
+  MTGO-only digital cards, already excluded by `downloadMTG()`'s `games.includes('paper')` filter,
+  not a gap. `MTG_RARITY_LABELS` just Title-Cases Scryfall's lowercase strings for visual
+  consistency with every other game's pills — a cosmetic map, not a meaning correction.
 
 - **The list is always computed from what's actually in the active set, never hardcoded.** An
   earlier Riftbound-only version used a fixed array of the "real" rarities — which meant any
