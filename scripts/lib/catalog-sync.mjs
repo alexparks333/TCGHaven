@@ -83,16 +83,53 @@ async function writeSnapshot(game, finalCards) {
  * that need to backfill registry fields (e.g. a new Riftbound set's cardCount/setCode) can use
  * the card list directly instead of issuing a second Firestore read.
  */
+// HEAD-checks a list of {id, imageUrl} pairs and returns the ids whose image doesn't actually
+// resolve — a broken imageUrl looks completely valid as a string (it's a real, well-formed CDN
+// URL) but 403s/404s because the upstream source hasn't uploaded that specific product photo yet.
+// This is the exact failure mode that first surfaced the need for this check: Vendetta's Alt Rune
+// cards synced with a real-looking tcgplayer-cdn.tcgplayer.com URL that 403'd (an XML "access
+// denied" body, not an image) until TCGPlayer got around to uploading the photo — nothing in the
+// synced data itself looks wrong, so only an actual HTTP check catches it. HEAD (not GET) keeps
+// this cheap — no image bytes downloaded, just a status + content-type check.
+async function findBrokenImageUrls(candidates, { concurrency = 25, timeoutMs = 6000 } = {}) {
+  const broken = []
+  for (let i = 0; i < candidates.length; i += concurrency) {
+    const batch = candidates.slice(i, i + concurrency)
+    await Promise.all(batch.map(async ({ id, imageUrl }) => {
+      if (!imageUrl) { broken.push(id); return }
+      try {
+        const res = await fetch(imageUrl, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) })
+        const contentType = res.headers.get('content-type') || ''
+        if (!res.ok || !contentType.startsWith('image/')) broken.push(id)
+      } catch {
+        broken.push(id) // timeout/network error — treat as broken, next sync will retry it anyway
+      }
+    }))
+  }
+  return broken
+}
+
 async function syncToFirestore(game, freshCards) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
-  const lastBulkSyncAt = metaSnap.exists() ? metaSnap.data().lastBulkSyncAt ?? null : null
+  const meta = metaSnap.exists() ? metaSnap.data() : {}
+  const lastBulkSyncAt = meta.lastBulkSyncAt ?? null
+  // Cards already known to have a broken image as of the last sync — re-checked every run (see
+  // below) regardless of whether this run's scrape touched them, so a fix that shows up purely
+  // upstream (TCGPlayer finally uploads the photo, nothing in *our* data changes) still gets
+  // noticed rather than staying flagged forever.
+  const previouslyBrokenImageIds = Array.isArray(meta.brokenImageIds) ? meta.brokenImageIds : []
 
   const existingSnap = await getDocs(collection(db, 'catalog', game, 'cards'))
   const existingMap = new Map(existingSnap.docs.map((d) => [d.id, d.data()]))
+  // Pre-sync distinct set names — lets callers with no registry to diff against (Pokemon, MTG;
+  // Lorcana/Riftbound/One Piece already do their own registry-based new-set diffing) still know
+  // "N sets are new to the catalog this run" for free, no extra Firestore read needed.
+  const existingSetNames = new Set([...existingMap.values()].map((c) => c.setName).filter(Boolean))
 
   const finalMap = new Map(existingMap) // start from current Firestore state — never drop a card
   const writes = []
+  const newCardIds = []
 
   for (const card of freshCards) {
     const existing = existingMap.get(card.id)
@@ -100,6 +137,7 @@ async function syncToFirestore(game, freshCards) {
     if (!existing) {
       finalMap.set(card.id, { ...card, hidden: false })
       writes.push({ id: card.id, data: { ...card, hidden: false, updatedAt: serverTimestamp() } })
+      newCardIds.push(card.id)
       continue
     }
 
@@ -129,10 +167,35 @@ async function syncToFirestore(game, freshCards) {
   }
 
   const finalCards = [...finalMap.values()]
-  await writeSnapshot(game, finalCards)
-  await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp() })
 
-  return { setNames: [...new Set(finalCards.map((c) => c.setName).filter(Boolean))], cards: finalCards }
+  // Image health: re-check every previously-flagged card (small, bounded list) plus every card
+  // that's brand-new this run (also bounded — never the whole catalog) rather than re-validating
+  // every image on every sync, which would be thousands of needless HEAD requests for images that
+  // already work fine and essentially never stop working once they do.
+  const toCheckIds = new Set([...previouslyBrokenImageIds.filter((id) => finalMap.has(id)), ...newCardIds])
+  const checkCandidates = [...toCheckIds].map((id) => ({ id, imageUrl: finalMap.get(id)?.imageUrl }))
+  const brokenImageIds = checkCandidates.length > 0 ? await findBrokenImageUrls(checkCandidates) : []
+  const previouslyBrokenSet = new Set(previouslyBrokenImageIds)
+  const brokenSet = new Set(brokenImageIds)
+  const newlyBrokenImages = brokenImageIds.filter((id) => !previouslyBrokenSet.has(id))
+  const newlyFixedImages = previouslyBrokenImageIds.filter((id) => finalMap.has(id) && !brokenSet.has(id))
+  if (checkCandidates.length > 0) {
+    console.log(`   Image check (${game}): ${checkCandidates.length} checked, ${brokenImageIds.length} broken (${newlyBrokenImages.length} new, ${newlyFixedImages.length} fixed)`)
+  }
+
+  const newSetNames = [...new Set(finalCards.map((c) => c.setName).filter(Boolean))].filter((n) => !existingSetNames.has(n))
+
+  await writeSnapshot(game, finalCards)
+  await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp(), brokenImageIds }, { merge: true })
+
+  return {
+    setNames: [...new Set(finalCards.map((c) => c.setName).filter(Boolean))],
+    cards: finalCards,
+    newSetNames,
+    totalBrokenImages: brokenImageIds.length,
+    newlyBrokenImages: newlyBrokenImages.length,
+    newlyFixedImages: newlyFixedImages.length,
+  }
 }
 
 // The set registry (formerly data/set-registry.json, now Firestore's registry/main doc — see

@@ -8,7 +8,8 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "download-cards": "node scripts/download-card-catalog.mjs"
+    "download-cards": "node scripts/download-card-catalog.mjs",
+    "check-images": "node scripts/check-image-health.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

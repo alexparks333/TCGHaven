@@ -17,6 +17,17 @@ export interface SyncStatus {
   at: string          // ISO timestamp of this attempt
   setCount?: number
   newSets?: string[]
+  // Rarity values this sync found that CARDEX_RARITY_ORDER (lib/api/catalog.ts) doesn't have an
+  // entry for yet — the Cardex's rarity toggle already works for them (it derives its button
+  // list dynamically), this is purely a "go add a color/label" signal. See lib/api/syncHealth.ts.
+  newRarities?: string[]
+  // Image-health tracking (see syncToFirestore()'s comment in catalog-sync.mjs) — totalBrokenImages
+  // is how many catalog cards currently have an imageUrl that doesn't actually resolve (e.g. a
+  // TCGPlayer product photo not uploaded yet); newlyBroken/newlyFixed describe what changed
+  // *this* run specifically, since every previously-broken card gets re-checked on every sync.
+  totalBrokenImages?: number
+  newlyBrokenImages?: number
+  newlyFixedImages?: number
   error?: string
 }
 

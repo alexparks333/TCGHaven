@@ -4,6 +4,7 @@ import { invalidateSetsCache } from '@/lib/api/search'
 import { invalidateCatalogCache } from '@/lib/api/catalog'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 import { ensureSignedIn, downloadLorcana } from '@/scripts/lib/catalog-sync.mjs'
+import { findNewRarities } from '@/lib/api/syncHealth'
 
 // The actual sync, with no auth check of its own — kept in this plain module (not route.ts)
 // rather than exported alongside POST, because Next.js's route-file export validator only
@@ -45,8 +46,14 @@ export async function runLorcanaSync(): Promise<Response> {
     }
 
     invalidateCatalogCache('lorcana')
-    await recordSyncStatus('lorcana', { ok: true, at: new Date().toISOString(), setCount: result.setNames.length, newSets: newNames })
-    return NextResponse.json({ ok: true, setCount: result.setNames.length, newSets: newNames })
+    const newRarities = findNewRarities(result.cards)
+    const status = {
+      ok: true, at: new Date().toISOString(), setCount: result.setNames.length,
+      newSets: newNames, newRarities,
+      totalBrokenImages: result.totalBrokenImages, newlyBrokenImages: result.newlyBrokenImages, newlyFixedImages: result.newlyFixedImages,
+    }
+    await recordSyncStatus('lorcana', status)
+    return NextResponse.json(status)
   } catch (err) {
     await recordSyncStatus('lorcana', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

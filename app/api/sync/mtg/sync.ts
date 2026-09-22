@@ -4,6 +4,7 @@ import { invalidateMtgSetsCache } from '@/lib/api/mtg'
 import { invalidateSetsCache } from '@/lib/api/search'
 import { invalidateCatalogCache } from '@/lib/api/catalog'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
+import { findNewRarities } from '@/lib/api/syncHealth'
 
 // The actual sync, with no auth check of its own — kept in this plain module (not route.ts)
 // rather than exported alongside POST, because Next.js's route-file export validator only
@@ -23,8 +24,19 @@ export async function runMtgSync(): Promise<Response> {
     invalidateMtgSetsCache()
     invalidateSetsCache('mtg')
     invalidateCatalogCache('mtg')
-    await recordSyncStatus('mtg', { ok: true, at: new Date().toISOString(), setCount: result.setNames.length })
-    return NextResponse.json({ ok: true, setCount: result.setNames.length })
+    // MTG has no registry either (live Scryfall set list) — same generic newSetNames signal as
+    // Pokemon. Image checks here are bounded to new/previously-flagged cards only (see
+    // syncToFirestore()'s comment) — otherwise checking all ~100k MTG cards' images every run
+    // would be its own real cost, on top of the write-quota concern that already keeps MTG off
+    // the automatic cron.
+    const newRarities = findNewRarities(result.cards)
+    const status = {
+      ok: true, at: new Date().toISOString(), setCount: result.setNames.length,
+      newSets: result.newSetNames, newRarities,
+      totalBrokenImages: result.totalBrokenImages, newlyBrokenImages: result.newlyBrokenImages, newlyFixedImages: result.newlyFixedImages,
+    }
+    await recordSyncStatus('mtg', status)
+    return NextResponse.json(status)
   } catch (err) {
     await recordSyncStatus('mtg', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

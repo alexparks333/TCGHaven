@@ -4,6 +4,7 @@ import { invalidateSetsCache } from '@/lib/api/search'
 import { invalidateCatalogCache } from '@/lib/api/catalog'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 import { ensureSignedIn, downloadOnePiece } from '@/scripts/lib/catalog-sync.mjs'
+import { findNewRarities } from '@/lib/api/syncHealth'
 
 interface OnePieceCard {
   setName: string
@@ -63,8 +64,14 @@ export async function runOnePieceSync(): Promise<Response> {
     }
 
     invalidateCatalogCache('onepiece')
-    await recordSyncStatus('onepiece', { ok: true, at: new Date().toISOString(), setCount: result.setNames.length, newSets: newNames })
-    return NextResponse.json({ ok: true, setCount: result.setNames.length, newSets: newNames })
+    const newRarities = findNewRarities(result.cards)
+    const status = {
+      ok: true, at: new Date().toISOString(), setCount: result.setNames.length,
+      newSets: newNames, newRarities,
+      totalBrokenImages: result.totalBrokenImages, newlyBrokenImages: result.newlyBrokenImages, newlyFixedImages: result.newlyFixedImages,
+    }
+    await recordSyncStatus('onepiece', status)
+    return NextResponse.json(status)
   } catch (err) {
     await recordSyncStatus('onepiece', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

@@ -73,6 +73,12 @@ npm run start
 # new upstream sets/cards; it is NOT how Admin Catalog edits get applied — see §5.
 npm run download-cards
 
+# Full one-time image-health scan for a game (or `all`) — seeds catalog_meta/{game}.brokenImageIds
+# so the ongoing per-sync check (§16) has a real baseline. Run this once per game, or any time you
+# suspect a broader image problem than the ongoing check would catch on its own.
+npm run check-images -- riftbound
+npm run check-images -- all
+
 # Type-check only, no build output (fast — this is what CI-equivalent verification
 # should run before trusting a change; `next build` also re-runs lint/type-checks
 # as part of the real build, and only `next build` catches an invalid Next.js
@@ -153,9 +159,12 @@ catalog_snapshot/{game}/chunks/{0,1,…} — pre-sharded full-catalog snapshot, 
                                           (Firestore's 1MiB/doc limit), JSON-stringified in a
                                           `cards` field. What a cold app instance reads instead
                                           of scanning every card doc individually.
-catalog_meta/{game}                    — { lastBulkSyncAt } — lets download-card-catalog.mjs
-                                          know whether an admin edit happened since its last
-                                          run, so it never clobbers one.
+catalog_meta/{game}                    — { lastBulkSyncAt, brokenImageIds } — lastBulkSyncAt lets
+                                          download-card-catalog.mjs know whether an admin edit
+                                          happened since its last run, so it never clobbers one;
+                                          brokenImageIds is the image-health check's own bookkeeping
+                                          (§16) — card ids whose imageUrl doesn't actually resolve,
+                                          re-verified every sync.
 ```
 
 `game` is `pokemon` | `lorcana` | `riftbound`. Reads are public (`allow read: if true`);
@@ -1544,6 +1553,52 @@ sync it — a deliberate one-off admin action rather than a recurring background
 writes ~99,000 Firestore documents in one run, which can exceed a Firebase Spark (free) plan's
 daily write quota.
 
+### New-Rarity Detection & Image Health Check
+
+Every sync (all 5 games, regardless of whether that game has a registry) also does two more
+things, surfaced in the Sync panel's result and persisted in `sync_status/{game}` so they're
+visible even from the "last known status" view, not just right after clicking Sync:
+
+- **New rarity detection** (`findNewRarities()`, `lib/api/syncHealth.ts`) — diffs the sync's
+  distinct `rarity` values against `CARDEX_RARITY_ORDER` (`lib/api/catalog.ts`). The Cardex's
+  per-game rarity toggle ([§14](#cardex-feature--how-sets-register)) already derives its button
+  list dynamically, so a brand-new rarity value works as a toggle immediately with zero code
+  changes — this check exists purely to tell the admin "hey, go add a color/label for it" rather
+  than leaving it a flat-gray, un-relabeled pill forever. This is exactly the kind of gap that
+  already bit One Piece's `TR`/`P`/`PR` and Pokémon's RGB Mew cards before anyone happened to
+  notice by eye — now a sync itself says so.
+- **Image health check** — `syncToFirestore()` (`scripts/lib/catalog-sync.mjs`) HEAD-checks every
+  card's `imageUrl` and tracks ids whose image doesn't actually resolve in
+  `catalog_meta/{game}.brokenImageIds`. The real bug that motivated this: Riftbound's Vendetta Alt
+  Rune cards synced with a completely well-formed `tcgplayer-cdn.tcgplayer.com` URL that 403'd
+  (TCGPlayer hadn't uploaded that specific product's photo yet) — nothing about the synced *data*
+  looked wrong, only an actual HTTP check catches it. To keep this cheap, the **ongoing per-sync
+  check only re-verifies two bounded sets**: cards that are brand-new this run, and cards already
+  in `brokenImageIds` from a previous run — never the whole catalog on every sync. A previously-
+  broken card whose photo TCGPlayer/the source has since uploaded gets detected and dropped from
+  the list automatically, reported as `newlyFixedImages`; a newly-broken one is `newlyBrokenImages`.
+  Because the ongoing check is bounded to new + already-flagged cards, it has **nothing to catch
+  for a card that was already broken before this feature shipped** — that's what
+  `npm run check-images -- <game>|all` (`scripts/check-image-health.mjs`) is for: a full one-time
+  (or occasional re-run) scan of every card in a game's catalog, seeding `brokenImageIds` with a
+  real baseline. Run once per game when this feature is new, or any time you suspect a broader
+  problem than the ongoing check would catch; the ongoing per-sync check keeps it current after
+  that with no further manual scans needed. `SyncStatus` (`lib/api/syncStatus.ts`) carries
+  `newRarities`/`totalBrokenImages`/`newlyBrokenImages`/`newlyFixedImages` alongside the existing
+  `newSets`/`setCount` — like `newSets`, these are only meaningful on a successful run;
+  `recordSyncStatus()` merges rather than replaces (see quirk #25), so a failed run's write
+  leaves an earlier run's counts sitting in the doc, which is why the Sync panel only ever
+  displays them next to `last.ok`.
+- **Pokémon and MTG's `newSets`** — both lack a registry to diff against (their set lists come
+  live from `api.pokemontcg.io`/`api.scryfall.com`), so unlike Lorcana/Riftbound/One Piece they
+  never had a "new sets found" signal at all before this. `syncToFirestore()` now computes this
+  generically for every game (pre-sync vs. post-sync distinct `setName`s, no extra Firestore read
+  — it already has the pre-sync collection in memory for its own admin-edit-wins diffing) and
+  returns it as `newSetNames`; Pokémon/MTG's `sync.ts` wire this straight into their `newSets`
+  response field, while Lorcana/Riftbound/One Piece keep using their own registry-based `newNames`
+  (the one that actually drives registering the set, not just reporting it) since that's a
+  materially different, more authoritative signal for those three.
+
 ### Key files
 
 - **Firestore `registry/main`** — the single source of truth this whole feature reads/writes
@@ -1679,7 +1734,8 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
 ```
 catalog/{game}/cards/{cardId}          — Shared catalog, admin-write-only (§4, §5)
 catalog_snapshot/{game}/chunks/{n}     — Pre-sharded catalog snapshot for cheap cold reads (§4)
-catalog_meta/{game}                    — { lastBulkSyncAt } — resync-vs-admin-edit bookkeeping (§4)
+catalog_meta/{game}                    — { lastBulkSyncAt, brokenImageIds } — resync-vs-admin-edit
+                                          bookkeeping + image-health tracking (§4, §16)
 registry/main                          — Set registry, admin-write-only (§17)
 sync_status/{game|"mtg-new-set-check"} — Last-run status per sync job, admin-write-only (§18)
 
@@ -1882,6 +1938,10 @@ TCGHaven/
 ├── scripts/
 │   ├── download-card-catalog.mjs  ← Thin CLI entry point (`npm run download-cards`) — calls
 │   │                                 scripts/lib/catalog-sync.mjs, no local file writes anymore.
+│   ├── check-image-health.mjs     ← `npm run check-images -- <game>|all` (§16) — full one-time
+│   │                                 catalog scan seeding catalog_meta/{game}.brokenImageIds;
+│   │                                 the ongoing per-sync check only covers new/already-flagged
+│   │                                 cards, so this is what gives it a real baseline.
 │   ├── gen-icons.mjs              ← Generates PWA icons at multiple sizes
 │   └── lib/
 │       ├── catalog-sync.mjs       ← The actual per-game scraping + Firestore-sync logic
@@ -1927,6 +1987,8 @@ TCGHaven/
 │   │   ├── syncStatus.ts          ← recordSyncStatus()/getSyncStatus()/getAllSyncStatuses() —
 │   │   │                             durable per-job success/failure record at sync_status/{id},
 │   │   │                             read by Admin Catalog's Sync panel (§17, §18)
+│   │   ├── syncHealth.ts          ← findNewRarities() — diffs a sync's rarity values against
+│   │   │                             CARDEX_RARITY_ORDER, used by every game's sync.ts (§16)
 │   │   ├── catalog.ts             ← loadCatalog()/loadVisibleCatalog()/regenerateSnapshot()/
 │   │   │                             invalidateCatalogCache() + scoreMatch() — Firestore-backed
 │   │   │                             catalog read/write core shared by all 5 games (§4)

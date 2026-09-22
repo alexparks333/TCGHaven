@@ -5,6 +5,7 @@ import { invalidateCatalogCache } from '@/lib/api/catalog'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 import { matchSetName } from '@/scripts/lib/text-norm.mjs'
 import { ensureSignedIn, downloadRiftbound } from '@/scripts/lib/catalog-sync.mjs'
+import { findNewRarities } from '@/lib/api/syncHealth'
 
 const TCGCSV_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -104,8 +105,16 @@ export async function runRiftboundSync(): Promise<Response> {
     }
 
     invalidateCatalogCache('riftbound')
-    await recordSyncStatus('riftbound', { ok: true, at: new Date().toISOString(), setCount: first.setNames.length, newSets: newNames })
-    return NextResponse.json({ ok: true, setCount: first.setNames.length, newSets: newNames, groupMatches })
+    // Reported from `first`, same as setCount above — a second downloadRiftbound() run (when a
+    // group just got matched) only changes prices for the newly-matched set, not rarities/images.
+    const newRarities = findNewRarities(first.cards)
+    const status = {
+      ok: true, at: new Date().toISOString(), setCount: first.setNames.length,
+      newSets: newNames, newRarities, groupMatches,
+      totalBrokenImages: first.totalBrokenImages, newlyBrokenImages: first.newlyBrokenImages, newlyFixedImages: first.newlyFixedImages,
+    }
+    await recordSyncStatus('riftbound', status)
+    return NextResponse.json(status)
   } catch (err) {
     await recordSyncStatus('riftbound', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })

@@ -95,6 +95,10 @@ export default function AdminCatalogPage() {
 interface GameSyncResult {
   setCount: number
   newSets?: string[]
+  newRarities?: string[]
+  totalBrokenImages?: number
+  newlyBrokenImages?: number
+  newlyFixedImages?: number
   groupMatches?: Array<{ setName: string; matched: boolean; confidence: number | null }>
 }
 
@@ -194,13 +198,27 @@ function SyncPanel() {
 
               {/* Last-known status — from this session's own click, the automatic cron, or a
                   sync from another device, whichever is more recent. Shown whenever this
-                  session hasn't already displayed a fresher result of its own below. */}
+                  session hasn't already displayed a fresher result of its own below. Only
+                  rendered when last.ok — recordSyncStatus() merges rather than replaces, so a
+                  failed run's write leaves an earlier successful run's newRarities/broken-image
+                  counts sitting in the doc; showing them next to a failure would look like this
+                  run found them, when it never got far enough to check anything. */}
               {s.status === 'idle' && last && (
                 <div className={cn('flex items-center gap-1.5 text-xs mt-2', last.ok ? 'text-slate-500' : 'text-red-400')}>
                   {last.ok ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
                   <span>
                     Last sync {timeAgo(last.at)}{last.ok ? (last.setCount != null ? ` — ${last.setCount} sets` : '') : ` — failed: ${last.error}`}
                   </span>
+                </div>
+              )}
+              {s.status === 'idle' && last?.ok && !!last.newRarities?.length && (
+                <div className="text-xs text-amber-400 mt-1">
+                  New rarity value{last.newRarities.length > 1 ? 's' : ''} from last sync: {last.newRarities.join(', ')} — needs a color/label in CardexPage.tsx.
+                </div>
+              )}
+              {s.status === 'idle' && last?.ok && !!last.totalBrokenImages && (
+                <div className="text-xs text-amber-400 mt-1">
+                  {last.totalBrokenImages} card image{last.totalBrokenImages > 1 ? 's' : ''} still unavailable upstream (rechecked every sync).
                 </div>
               )}
               {game === 'mtg' && s.status === 'idle' && mtgCheck?.ok && !!mtgCheck.newSets?.length && (
@@ -223,7 +241,30 @@ function SyncPanel() {
                     <span>{s.result.setCount} sets synced</span>
                   </div>
                   {!!s.result.newSets?.length && (
-                    <div>New sets found: {s.result.newSets.join(', ')} — flagged for review below.</div>
+                    <div>
+                      New set{s.result.newSets.length > 1 ? 's' : ''} found: {s.result.newSets.join(', ')}
+                      {game === 'pokemon' || game === 'mtg' ? ' — already visible in the set picker automatically.' : ' — flagged for review below.'}
+                    </div>
+                  )}
+                  {!!s.result.newRarities?.length && (
+                    <div className="text-amber-400">
+                      New rarity value{s.result.newRarities.length > 1 ? 's' : ''} found: {s.result.newRarities.join(', ')} — the rarity toggle
+                      already works for {s.result.newRarities.length > 1 ? 'them' : 'it'}, but needs a color/label added in CardexPage.tsx&apos;s
+                      RARITY_COLORS/RARITY_LABELS_BY_GAME for full polish.
+                    </div>
+                  )}
+                  {!!s.result.newlyFixedImages && (
+                    <div className="text-emerald-400">
+                      {s.result.newlyFixedImages} previously-broken card image{s.result.newlyFixedImages > 1 ? 's' : ''} now resolve upstream.
+                    </div>
+                  )}
+                  {!!s.result.newlyBrokenImages && (
+                    <div className="text-amber-400">
+                      {s.result.newlyBrokenImages} new card image{s.result.newlyBrokenImages > 1 ? 's' : ''} unavailable upstream (will recheck next sync).
+                    </div>
+                  )}
+                  {!!s.result.totalBrokenImages && (
+                    <div>{s.result.totalBrokenImages} card image{s.result.totalBrokenImages > 1 ? 's' : ''} total still unavailable.</div>
                   )}
                   {!!s.result.groupMatches?.length && (
                     <div>
