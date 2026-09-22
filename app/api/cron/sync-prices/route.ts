@@ -3,6 +3,8 @@ import { POST as syncPokemon } from '../../sync/pokemon/route'
 import { POST as syncLorcana } from '../../sync/lorcana/route'
 import { POST as syncRiftbound } from '../../sync/riftbound/route'
 import { POST as syncOnePiece } from '../../sync/onepiece/route'
+import { checkForNewMtgSets } from '@/lib/api/mtg'
+import { recordSyncStatus } from '@/lib/api/syncStatus'
 
 // Called by an external scheduler (cron-job.org, GitHub Actions, etc.) 4x/day to keep the shared
 // catalog's prices fresh — this is what lets Portfolio's "Refresh Prices" button and Pack
@@ -22,15 +24,20 @@ export const dynamic = 'force-dynamic'
 // fresh as its last successful run, same as if the cron hadn't fired for it at all.
 export const maxDuration = 300
 
-// MTG is deliberately NOT wired into this automatic cron yet — its first sync alone writes
-// ~99,000 Firestore documents (its "default_cards" catalog is far bigger than any other game
-// here), which can blow through a Firebase Spark (free) plan's 20k writes/day quota in one run
-// and starve every other write that day, including this cron's own remaining games. Once the
-// Firebase plan/quota is confirmed to handle it, wire it in the same way the others are below
-// (`import { POST as syncMtg } from '../../sync/mtg/route'`, add to the Promise.allSettled array
-// and the summarize() calls) — see "MTG Integration.md" at the repo root for the full writeup.
-// Until then, MTG only ever syncs when an admin manually clicks Admin Catalog → "Sync Card Data"
-// → Magic: The Gathering, a deliberate one-off action rather than an automatic recurring one.
+// MTG's full catalog sync is deliberately NOT wired into this automatic cron — its first sync
+// alone writes ~99,000 Firestore documents (its "default_cards" catalog is far bigger than any
+// other game here), which can blow through a Firebase Spark (free) plan's 20k writes/day quota
+// in one run and starve every other write that day, including this cron's own remaining games.
+// Once the Firebase plan/quota is confirmed to handle it, wire it in the same way the others are
+// below (`import { POST as syncMtg } from '../../sync/mtg/route'`, add to the Promise.allSettled
+// array and the summarize() calls) — see "MTG Integration.md" at the repo root for the full
+// writeup. Until then, the actual card/price sync only ever runs when an admin manually clicks
+// Admin Catalog → "Sync Card Data" → Magic: The Gathering.
+//
+// What DOES run automatically below is checkForNewMtgSets() — a read-only, zero-catalog-write
+// check (see lib/api/mtg.ts) that just flags when Scryfall has a set this app hasn't seen before,
+// so a new MTG set doesn't sit completely unnoticed between manual syncs. It costs nothing
+// against the write quota that keeps the real sync off this cron in the first place.
 
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET
@@ -40,15 +47,29 @@ function isAuthorized(req: NextRequest): boolean {
   return header === secret || query === secret
 }
 
+async function runMtgCheck() {
+  try {
+    const { newSets } = await checkForNewMtgSets()
+    await recordSyncStatus('mtg-new-set-check', { ok: true, at: new Date().toISOString(), newSets })
+    return { game: 'mtg-new-set-check', ok: true, newSets }
+  } catch (err) {
+    const error = (err as Error).message
+    await recordSyncStatus('mtg-new-set-check', { ok: false, at: new Date().toISOString(), error })
+    return { game: 'mtg-new-set-check', ok: false, error }
+  }
+}
+
 async function runSync() {
   // Was missing One Piece entirely until this was touched to add MTG support elsewhere —
   // CLAUDE.md's file map always claimed this called "all four" sync routes, but the code only
-  // ever called three. Fixed here; MTG stays out on purpose (see comment above).
-  const [pokemon, lorcana, riftbound, onepiece] = await Promise.allSettled([
+  // ever called three. Fixed here; MTG's full sync stays out on purpose (see comment above) —
+  // only its lightweight new-set check runs here.
+  const [pokemon, lorcana, riftbound, onepiece, mtgCheck] = await Promise.allSettled([
     syncPokemon(),
     syncLorcana(),
     syncRiftbound(),
     syncOnePiece(),
+    runMtgCheck(),
   ])
 
   const summarize = async (label: string, result: PromiseSettledResult<Response>) => {
@@ -65,6 +86,7 @@ async function runSync() {
     summarize('lorcana', lorcana),
     summarize('riftbound', riftbound),
     summarize('onepiece', onepiece),
+    mtgCheck.status === 'fulfilled' ? mtgCheck.value : { game: 'mtg-new-set-check', ok: false, error: String(mtgCheck.reason) },
   ])
 }
 

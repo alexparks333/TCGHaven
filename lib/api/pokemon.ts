@@ -94,14 +94,38 @@ let _setsCache: PokemonSet[] | null = null
 export async function getPokemonSets(): Promise<PokemonSet[]> {
   if (_setsCache) return _setsCache
   let sets: PokemonSet[] = []
-  try {
-    const res = await fetch(`${BASE_URL}/sets?orderBy=releaseDate&pageSize=250`, { headers: HEADERS })
-    if (res.ok) {
-      const data = await res.json()
-      sets = data.data ?? []
+  let liveFetchOk = false
+  // api.pokemontcg.io/v2/sets is genuinely flaky in practice — observed real-world error rates
+  // as high as 50-60% of requests (500s/502s) while diagnosing why a newly-released set wasn't
+  // showing up. One failed attempt (or three) shouldn't be allowed to define this whole
+  // process's view of the catalog, so retry with backoff before giving up. This only costs
+  // latency on the rare call that actually has to hit the live API — once it succeeds, the
+  // in-memory cache above serves every request after that for free.
+  for (let attempt = 0; attempt < 5 && !liveFetchOk; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt))
+    try {
+      // no-store: without this, Next.js's own fetch Data Cache (disk-backed under .next/cache,
+      // survives a dev-server restart) can pin a response from before a new set existed — this
+      // is the in-memory `_setsCache` above's problem all over again, one layer further down
+      // and outside our own control to invalidate. This is a genuinely live endpoint
+      // (`getPokemonSets()` is already cached in-memory for that purpose); Next's own fetch
+      // cache should never be the thing deciding freshness here.
+      const res = await fetch(`${BASE_URL}/sets?orderBy=releaseDate&pageSize=250`, { headers: HEADERS, cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        const fetched: PokemonSet[] = data.data ?? []
+        // A degraded upstream has been observed returning 200 OK with an empty `data` array
+        // (not just outright 5xx) — treating that as "success" would let an empty result slip
+        // past the retry loop and get permanently cached below, same failure mode as the 5xx
+        // case this loop already guards against.
+        if (fetched.length > 0) {
+          sets = fetched
+          liveFetchOk = true
+        }
+      }
+    } catch {
+      // try again, or fall through to manual-only after the last attempt
     }
-  } catch {
-    // fall through — manual sets below still get returned even if the live API is unreachable
   }
   // Sets created via the Admin Catalog "New Set" form ("source": "manual" in
   // the registry) don't exist on api.pokemontcg.io at all, so the live fetch above will
@@ -121,10 +145,24 @@ export async function getPokemonSets(): Promise<PokemonSet[]> {
       source: 'manual',
     }))]
   }
-  // Only cache a non-empty result — a transient API failure shouldn't
-  // pin an empty set list in memory for the life of the process
-  if (sets.length > 0) _setsCache = sets
+  // Only cache when the live fetch actually succeeded — a manual-only (or empty) list reflects
+  // a transient upstream failure surviving all retries, not the real catalog, and caching that
+  // would pin the partial view in memory for the rest of this process's life. This is exactly
+  // what happened once already while diagnosing why a newly-released set wasn't showing up.
+  if (liveFetchOk) _setsCache = sets
   return sets
+}
+
+/** Whether the last getPokemonSets() call (this one or an earlier one in this process) actually
+ * got a real result from the live API, vs. falling back to manual-only after every retry failed.
+ * getSetsForGame() (lib/api/search.ts) needs this — its own wrapping cache only checks
+ * "non-empty" before pinning a result for the rest of the process's life, which a manual-only
+ * fallback (rarely empty — there's often at least one custom set) satisfies just fine. Without
+ * this check, a single unlucky moment of complete pokemontcg.io downtime permanently reduces the
+ * whole Cardex/AddCardDialog set picker down to whatever manual sets exist — this happened for
+ * real while diagnosing why a newly-released set wasn't showing up. */
+export function isPokemonSetsCacheReliable(): boolean {
+  return _setsCache !== null
 }
 
 /** Drops the cached Pokemon set list — called after registering a new custom set so it shows

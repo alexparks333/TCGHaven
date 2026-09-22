@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Loader2, Package, FolderHeart, ChevronDown } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Loader2, Package, FolderHeart, ChevronDown, Search } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
@@ -92,6 +93,11 @@ interface MtgSetOption {
 const PLACEHOLDER_SET: SetMeta = { name: '', game: 'lorcana' }
 
 const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], onepiece: [], mtg: [] }
+
+// Deep-link support (e.g. clicking a "Card Unlocked" toast) — ?game=riftbound&set=Secret+Garden
+function isCatalogGame(v: string | null): v is CatalogGame {
+  return v === 'lorcana' || v === 'riftbound' || v === 'pokemon' || v === 'onepiece' || v === 'mtg'
+}
 
 function buildGroups(
   registrySide: { groupOrder: string[]; sets: RegistrySet[] },
@@ -269,6 +275,11 @@ const RARITY_COLORS: Record<string, string> = {
   common: '#6b7280', uncommon: '#22c55e', rare: '#3b82f6', mythic: '#f97316', special: '#a855f7', bonus: '#ec4899',
 }
 
+// Riftbound-only rarity toggle filter — Star (Signature) is deliberately left out, matching what
+// was actually asked for; Star cards are never hidden by this filter regardless of toggle state.
+const RIFTBOUND_RARITY_FILTERS = ['Common', 'Uncommon', 'Rare', 'Epic', 'Alt Art', 'Overnumbered'] as const
+const EMPTY_SET: Set<string> = new Set()
+
 // ── Matching helpers ──────────────────────────────────────────────────────────
 
 function getOwnedInfo(
@@ -303,6 +314,18 @@ function getOwnedInfo(
   return { owned: matches.length > 0, quantity: matches.reduce((s, c) => s + c.quantity, 0) }
 }
 
+// ── Search filtering ─────────────────────────────────────────────────────────
+
+// Plain substring match against name (and collector number, so "#42" or "42" also works) —
+// deliberately simpler than AddCardDialog's scoreMatch()/word-start ranking, since this filters
+// a set that's already small (one set's worth of cards, or one personal collection) rather than
+// searching the whole catalog for a dropdown.
+function matchesSearch(query: string, name: string, number: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return name.toLowerCase().includes(q) || number.toLowerCase().includes(q.replace(/^#/, ''))
+}
+
 // ── Group collapsing ────────────────────────────────────────────────────────────
 
 // A catch-all group (label mentions "special", "promo", or "other") starts collapsed — these are
@@ -323,11 +346,24 @@ function isGroupCollapsed(key: string, label: string, toggled: Set<string>): boo
 
 export default function CardexPage() {
   const { cards } = useStore()
-  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>('pokemon')
+
+  // Deep-link support — e.g. clicking a "Card Unlocked" toast navigates to
+  // /cardex?game=riftbound&set=Secret+Garden. Read once; a mid-session change to the URL isn't
+  // expected to re-drive the page (the user is already browsing at that point).
+  const searchParams = useSearchParams()
+  const urlGame = searchParams.get('game')
+  const urlSet = searchParams.get('set')
+
+  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>(isCatalogGame(urlGame) ? urlGame : 'pokemon')
   const [activeSet, setActiveSet] = useState<SetMeta>(PLACEHOLDER_SET)
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
   const [loading, setLoading] = useState(false)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  // Riftbound-only rarity toggle filter — persists across sets/tabs on purpose (switching from
+  // Origins to Spiritforged with "Alt Art" toggled off should keep it off), so this isn't reset
+  // alongside searchQuery. A rarity in this set is hidden; empty set means nothing's hidden.
+  const [hiddenRarities, setHiddenRarities] = useState<Set<string>>(new Set())
   const [groupsByGame, setGroupsByGame] = useState(EMPTY_GROUPS_BY_GAME)
   const [registryLoading, setRegistryLoading] = useState(true)
   const [pokemonSetsLoading, setPokemonSetsLoading] = useState(true)
@@ -345,8 +381,11 @@ export default function CardexPage() {
   // Only the very first successful group fetch (whichever game it's for) gets to pick the
   // initial active set — otherwise the lorcana/riftbound registry fetch and the Pokemon live-set
   // fetch (which run independently, and can resolve in either order) would race to overwrite
-  // each other's default selection.
-  const initialSetPicked = useRef(false)
+  // each other's default selection. Starts pre-claimed when a deep-link game is present, so none
+  // of the four generic pickers below fire — the dedicated effect further down handles picking
+  // the actual set (by name, or falling back to the Special bucket) once that game's groups load.
+  const initialSetPicked = useRef(isCatalogGame(urlGame))
+  const urlSetApplied = useRef(false)
 
   // "Personalized Collections" isn't a catalog game — fall back to a safe key for the
   // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
@@ -440,6 +479,40 @@ export default function CardexPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Resolves a deep-linked ?game=&set= once that game's groups have finished loading. Looks for
+  // an exact-name match among registered sets first; a card added under a set name the catalog
+  // doesn't recognize (not yet synced, or genuinely custom) instead lands in that game's
+  // inventory-only Special bucket, same as it does when browsing normally. Also force-opens the
+  // containing group if it defaults to collapsed (Promos/Special Sets/etc.), so the picked set's
+  // pill is actually visible rather than hidden under a collapsed header.
+  useEffect(() => {
+    if (!isCatalogGame(urlGame) || urlGame !== activeGame || urlSetApplied.current) return
+    const groups = groupsByGame[urlGame]
+    if (groups.length === 0) return // this game's groups haven't loaded yet
+    urlSetApplied.current = true
+
+    let chosen: SetMeta | null = null
+    let chosenGroupLabel: string | null = null
+    if (urlSet) {
+      for (const g of groups) {
+        const found = g.sets.find((s) => !s.fromInventory && s.name === urlSet)
+        if (found) { chosen = found; chosenGroupLabel = g.label; break }
+      }
+      if (!chosen) {
+        for (const g of groups) {
+          const special = g.sets.find((s) => s.fromInventory)
+          if (special) { chosen = special; chosenGroupLabel = g.label; break }
+        }
+      }
+    }
+    if (!chosen) { chosen = groups[0]?.sets[0] ?? null; chosenGroupLabel = groups[0]?.label ?? null }
+
+    setActiveSet(chosen ?? PLACEHOLDER_SET)
+    if (chosenGroupLabel && defaultGroupCollapsed(chosenGroupLabel)) {
+      setToggledGroups((prev) => new Set(prev).add(`${urlGame}:${chosenGroupLabel}`))
+    }
+  }, [urlGame, urlSet, activeGame, groupsByGame])
+
   const knownSets = useMemo(() => {
     const s = new Set<string>()
     for (const g of groupsByGame[catalogGame]) {
@@ -483,6 +556,9 @@ export default function CardexPage() {
     return () => { stale = true }
   }, [activeGame, activeSet])
 
+  // A search left over from a previous set/game is almost never what you want on the next one.
+  useEffect(() => { setSearchQuery('') }, [activeGame, activeSet])
+
   function switchGame(game: CatalogGame | 'personal') {
     setActiveGame(game)
     if (game !== 'personal') setActiveSet(groupsByGame[game][0]?.sets[0] ?? PLACEHOLDER_SET)
@@ -497,15 +573,32 @@ export default function CardexPage() {
     })
   }
 
+  function toggleRarity(rarity: string) {
+    setHiddenRarities((prev) => {
+      const next = new Set(prev)
+      if (next.has(rarity)) next.delete(rarity)
+      else next.add(rarity)
+      return next
+    })
+  }
+
   // Enrich catalog cards with owned status
   const enriched = useMemo(
     () => catalogCards.map((cc) => ({ ...cc, ...getOwnedInfo(cc, gameCards, catalogGame) })),
     [catalogCards, gameCards, catalogGame],
   )
 
+  // Progress is always against the full set, not the filtered search view.
   const ownedCount = enriched.filter((c) => c.owned).length
   const totalCount = enriched.length
   const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0
+
+  const filteredEnriched = useMemo(() => {
+    let list = enriched
+    if (searchQuery.trim()) list = list.filter((c) => matchesSearch(searchQuery, c.name, c.number))
+    if (catalogGame === 'riftbound' && hiddenRarities.size > 0) list = list.filter((c) => !hiddenRarities.has(c.rarity))
+    return list
+  }, [enriched, searchQuery, catalogGame, hiddenRarities])
 
   const isSpecial = activeSet.fromInventory
 
@@ -594,6 +687,48 @@ export default function CardexPage() {
               })}
             </div>
 
+            {/* Search within the active set/bucket */}
+            {!(catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading) && activeSet.name && (
+              <div className="relative mb-4">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${activeSet.label ?? activeSet.name}…`}
+                  className="input-field pl-9"
+                />
+              </div>
+            )}
+
+            {/* Riftbound rarity filter */}
+            {catalogGame === 'riftbound' && activeSet.name && (
+              <div className="flex items-center gap-2 flex-wrap mb-4">
+                {RIFTBOUND_RARITY_FILTERS.map((r) => {
+                  const active = !hiddenRarities.has(r)
+                  const color = RARITY_COLORS[r] ?? '#6b7280'
+                  return (
+                    <button
+                      key={r}
+                      onClick={() => toggleRarity(r)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
+                        !active && 'bg-slate-900/50 text-slate-600 border-slate-800 line-through',
+                      )}
+                      style={active ? { backgroundColor: color + '22', borderColor: color + '55', color } : {}}
+                    >
+                      {r}
+                    </button>
+                  )
+                })}
+                {hiddenRarities.size > 0 && (
+                  <button onClick={() => setHiddenRarities(new Set())} className="text-[11px] text-slate-500 hover:text-white px-1">
+                    Reset
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Progress bar (catalog-backed sets only) */}
             {!loading && !isSpecial && totalCount > 0 && (
               <div className="mb-5 card-glass px-4 py-3">
@@ -619,9 +754,9 @@ export default function CardexPage() {
             )}
 
             {/* Catalog-backed card grid */}
-            {!loading && !isSpecial && enriched.length > 0 && (
+            {!loading && !isSpecial && filteredEnriched.length > 0 && (
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
-                {enriched.map((card) => (
+                {filteredEnriched.map((card) => (
                   <CardTile
                     key={card.id}
                     card={card}
@@ -635,13 +770,27 @@ export default function CardexPage() {
             )}
 
             {/* Inventory-only "special" bucket */}
-            {isSpecial && <SpecialBucket cards={specialCards} gameColor={gameColor} game={catalogGame} />}
+            {isSpecial && (
+              <SpecialBucket
+                cards={specialCards}
+                gameColor={gameColor}
+                game={catalogGame}
+                searchQuery={searchQuery}
+                hiddenRarities={catalogGame === 'riftbound' ? hiddenRarities : EMPTY_SET}
+              />
+            )}
 
             {/* Empty states */}
-            {!loading && !isSpecial && enriched.length === 0 && (
+            {!loading && !isSpecial && totalCount === 0 && (
               <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
                 <div className="text-4xl mb-3">📖</div>
                 <div className="text-slate-400 font-medium">No cards found for this set</div>
+              </div>
+            )}
+            {!loading && !isSpecial && totalCount > 0 && filteredEnriched.length === 0 && (
+              <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
+                <div className="text-4xl mb-3">🔍</div>
+                <div className="text-slate-400 font-medium">No cards match &quot;{searchQuery}&quot;</div>
               </div>
             )}
           </>
@@ -653,7 +802,9 @@ export default function CardexPage() {
 
 // ── Special / inventory-only bucket ──────────────────────────────────────────
 
-function SpecialBucket({ cards, gameColor, game }: { cards: Card[]; gameColor: string; game: string }) {
+function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities }: {
+  cards: Card[]; gameColor: string; game: string; searchQuery: string; hiddenRarities: Set<string>
+}) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   if (cards.length === 0) {
@@ -672,8 +823,26 @@ function SpecialBucket({ cards, gameColor, game }: { cards: Card[]; gameColor: s
     )
   }
 
+  let filteredCards = searchQuery.trim()
+    ? cards.filter((c) => matchesSearch(searchQuery, c.name, c.number || ''))
+    : cards
+  if (hiddenRarities.size > 0) {
+    filteredCards = filteredCards.filter((c) => !c.rarity || !hiddenRarities.has(c.rarity))
+  }
+
+  if (filteredCards.length === 0) {
+    return (
+      <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
+        <div className="text-4xl mb-3">🔍</div>
+        <div className="text-slate-400 font-medium">
+          {searchQuery.trim() ? <>No cards match &quot;{searchQuery}&quot;</> : 'No cards match the current rarity filter'}
+        </div>
+      </div>
+    )
+  }
+
   // Group by set name so D23, Cruise, Metal each get their own section
-  const bySet = cards.reduce<Record<string, Card[]>>((acc, c) => {
+  const bySet = filteredCards.reduce<Record<string, Card[]>>((acc, c) => {
     const key = c.set || 'Unknown Set'
     acc[key] = [...(acc[key] ?? []), c]
     return acc

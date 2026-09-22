@@ -7,7 +7,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore, addPricePoint } from '@/lib/firebase/db'
 import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } from '@/lib/types'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
-import { cn, localDateString } from '@/lib/utils'
+import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 
 type MarketSource = 'catalog' | 'ebay' | 'manual'
 
@@ -54,7 +54,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: Props) {
-  const { addCard, updateCard, deleteCard, addPriceHistoryPoint, priceMode, cards: allCards } = useStore()
+  const { addCard, updateCard, deleteCard, addPriceHistoryPoint, priceMode, cards: allCards, pushCardUnlock } = useStore()
   const { user } = useAuth()
 
   const existingGroups = Array.from(new Set(allCards.map((c) => c.group).filter(Boolean) as string[]))
@@ -291,7 +291,11 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
     try {
       await Promise.race([saveCard(user.uid, ref.id, cardData), timeout])
       // Confirmed — now add to UI
-      addCard({ ...cardData, id: ref.id })
+      const newCard: Card = { ...cardData, id: ref.id }
+      addCard(newCard)
+      // Fire the "Card Unlocked" celebration only for a genuinely new slot — checked against
+      // `allCards` as it was before this add (addCard's own state update hasn't applied yet).
+      if (isFirstCopyOfCard(newCard, allCards)) pushCardUnlock(newCard)
       if (resolvedMarketPrice > 0) {
         addPriceHistoryPoint(ref.id, resolvedMarketPrice, now)
         addPricePoint(user.uid, ref.id, resolvedMarketPrice, now).catch(() => {})

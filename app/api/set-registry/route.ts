@@ -39,6 +39,12 @@ export async function PUT(request: Request) {
   await ensureAdminAuth()
   await saveSetRegistry(registry)
 
+  // Same reasoning as the POST handler below — a patch here (e.g. fixing a "Needs Review" set's
+  // cardexGroup or tcgcsvGroupId) needs the set picker to reflect it without a server restart.
+  invalidateSetsCache(game)
+  if (game === 'pokemon') invalidatePokemonSetsCache()
+  if (game === 'mtg') invalidateMtgSetsCache()
+
   return NextResponse.json({ ok: true, set: sets[idx] })
 }
 

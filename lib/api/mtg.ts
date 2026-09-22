@@ -1,3 +1,5 @@
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase/config'
 import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
 import { getMtgRegistrySets } from './registry'
 
@@ -41,22 +43,35 @@ export async function getMtgSets(): Promise<MtgSet[]> {
   if (_setsCache && Date.now() - _setsCache.loadedAt < STALE_MS) return _setsCache.data
 
   let sets: MtgSet[] = []
-  try {
-    const res = await fetch('https://api.scryfall.com/sets', { headers: SCRYFALL_HEADERS })
-    if (res.ok) {
-      const data = await res.json()
-      sets = (data.data ?? [])
-        .filter((s: { digital?: boolean; set_type?: string }) => !s.digital && !MTG_EXCLUDED_SET_TYPES.has(s.set_type ?? ''))
-        .map((s: { code: string; name: string; released_at?: string; card_count?: number; set_type?: string }) => ({
-          code: s.code,
-          name: s.name,
-          releaseDate: s.released_at ?? '',
-          cardCount: s.card_count ?? 0,
-          setType: s.set_type,
-        }))
+  let liveFetchOk = false
+  // Scryfall is generally reliable, but treat it the same as api.pokemontcg.io regardless — a
+  // single failed attempt landing at the exact moment this process's cache is empty would
+  // otherwise get permanently masked by the manual-sets merge below (non-empty as long as any
+  // custom set exists) and pin a degraded list for the full hour-long staleness window. This is
+  // the exact bug class that briefly made every Pokemon set except a custom one disappear.
+  for (let attempt = 0; attempt < 3 && !liveFetchOk; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt))
+    try {
+      const res = await fetch('https://api.scryfall.com/sets', { headers: SCRYFALL_HEADERS, cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        const fetched: MtgSet[] = (data.data ?? [])
+          .filter((s: { digital?: boolean; set_type?: string }) => !s.digital && !MTG_EXCLUDED_SET_TYPES.has(s.set_type ?? ''))
+          .map((s: { code: string; name: string; released_at?: string; card_count?: number; set_type?: string }) => ({
+            code: s.code,
+            name: s.name,
+            releaseDate: s.released_at ?? '',
+            cardCount: s.card_count ?? 0,
+            setType: s.set_type,
+          }))
+        if (fetched.length > 0) {
+          sets = fetched
+          liveFetchOk = true
+        }
+      }
+    } catch {
+      // try again, or fall through to manual-only after the last attempt
     }
-  } catch {
-    // fall through — manual sets below still get returned even if Scryfall is unreachable
   }
 
   // Sets created via the Admin Catalog "New Set" form ("source": "manual" in the registry)
@@ -76,8 +91,45 @@ export async function getMtgSets(): Promise<MtgSet[]> {
     }))]
   }
 
-  if (sets.length > 0) _setsCache = { data: sets, loadedAt: Date.now() }
+  // Only cache when the live fetch actually succeeded — see isPokemonSetsCacheReliable() in
+  // lib/api/pokemon.ts for the full reasoning; same fix, same bug class, applied here too.
+  if (liveFetchOk) _setsCache = { data: sets, loadedAt: Date.now() }
   return sets
+}
+
+/** Same purpose as isPokemonSetsCacheReliable() — lets getSetsForGame() (lib/api/search.ts)
+ * know whether its own wrapping cache is safe to populate from this call's result. */
+export function isMtgSetsCacheReliable(): boolean {
+  return _setsCache !== null
+}
+
+/**
+ * Lightweight "did a brand new MTG set appear on Scryfall" check — a live sets fetch and a
+ * comparison against the last-seen code list, with zero writes to `catalog/mtg/cards`. MTG is
+ * deliberately left off the automatic 4x/day cron (a full sync is ~99k Firestore writes, enough
+ * to blow through a Firebase Spark plan's daily quota in one run — see CLAUDE.md's MTG section),
+ * which otherwise means a new MTG set can go unnoticed indefinitely until someone happens to
+ * remember to click the manual Sync button. This closes that visibility gap safely: the cron can
+ * call it every run, and it costs nothing but a Scryfall read plus one small Firestore doc write
+ * (sync_status/mtg-new-set-check — a distinct doc from sync_status/mtg, the real sync's own
+ * status, so this never overwrites that history).
+ */
+export async function checkForNewMtgSets(): Promise<{ newSets: string[] }> {
+  const sets = await getMtgSets()
+  const codes = sets.filter((s) => s.source !== 'manual').map((s) => s.code)
+
+  const ref = doc(db, 'sync_status', 'mtg-new-set-check')
+  const snap = await getDoc(ref)
+  const known: string[] = snap.exists() ? (snap.data().codes ?? []) : []
+  const isFirstRun = known.length === 0
+  const knownSet = new Set(known)
+  const newCodes = codes.filter((c) => !knownSet.has(c))
+
+  await setDoc(ref, { codes, updatedAt: new Date().toISOString() })
+
+  // First-ever run has no real baseline — every set would otherwise report as "new", which is
+  // noise, not a finding.
+  return { newSets: isFirstRun ? [] : newCodes }
 }
 
 /** Drops the cached MTG set list — called after registering a new custom set so it shows up

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { loadSetRegistry, saveSetRegistry, invalidateRegistryCache, type RiftboundRegistrySet } from '@/lib/api/registry'
+import { invalidateSetsCache } from '@/lib/api/search'
+import { invalidateCatalogCache } from '@/lib/api/catalog'
+import { recordSyncStatus } from '@/lib/api/syncStatus'
 import { matchSetName } from '@/scripts/lib/text-norm.mjs'
 import { ensureSignedIn, downloadRiftbound } from '@/scripts/lib/catalog-sync.mjs'
 
@@ -72,6 +75,12 @@ export async function POST() {
     }
 
     await saveSetRegistry(registry)
+    // getSetsForGame()'s own wrapping cache (lib/api/search.ts) never expires on its own and
+    // doesn't know the registry changed underneath it — without this, a newly-auto-detected set
+    // is fully written to Firestore but stays invisible in the set picker (AddCardDialog, Admin
+    // Catalog) until the server process restarts. Same bug class that briefly made every Pokemon
+    // set except a custom one disappear — see CLAUDE.md quirk #15.
+    if (newNames.length > 0) invalidateSetsCache('riftbound')
 
     // A newly-matched tcgcsvGroupId can only be priced by re-running the sync now that the
     // registry override is in place.
@@ -90,8 +99,11 @@ export async function POST() {
       await saveSetRegistry(registry2)
     }
 
+    invalidateCatalogCache('riftbound')
+    await recordSyncStatus('riftbound', { ok: true, at: new Date().toISOString(), setCount: first.setNames.length, newSets: newNames })
     return NextResponse.json({ ok: true, setCount: first.setNames.length, newSets: newNames, groupMatches })
   } catch (err) {
+    await recordSyncStatus('riftbound', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

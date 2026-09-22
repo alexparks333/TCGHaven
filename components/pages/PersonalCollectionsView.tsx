@@ -31,6 +31,14 @@ function isOwned(card: PersonalCollectionCard, ownedCards: Card[]): { owned: boo
   return { owned: matches.length > 0, quantity: matches.reduce((s, c) => s + c.quantity, 0) }
 }
 
+// Plain substring match against name and collector number — same shape as CardexPage's
+// matchesSearch(), filtering an already-small list rather than ranking a whole-catalog search.
+function matchesSearch(query: string, name: string, number: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return name.toLowerCase().includes(q) || number.toLowerCase().includes(q.replace(/^#/, ''))
+}
+
 export function PersonalCollectionsView() {
   const { user } = useAuth()
   const { cards } = useStore()
@@ -271,6 +279,7 @@ function CollectionDetail({
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const color = GAME_COLORS[collection.game]
   const cardIds = useMemo(() => new Set(collection.cards.map((c) => c.id)), [collection.cards])
 
@@ -332,6 +341,11 @@ function CollectionDetail({
   const totalCount = enriched.length
   const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0
 
+  const normalizedQuery = searchQuery.trim()
+  const filteredEnriched = normalizedQuery
+    ? enriched.filter((c) => matchesSearch(searchQuery, c.name, c.number))
+    : enriched
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -380,6 +394,20 @@ function CollectionDetail({
 
       {saveError && <div className="text-xs text-red-400 mb-3">{saveError}</div>}
 
+      {/* Search within this collection */}
+      {totalCount > 0 && (
+        <div className="relative mb-4">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={`Search ${collection.name}…`}
+            className="input-field pl-9"
+          />
+        </div>
+      )}
+
       {/* Progress */}
       {totalCount > 0 && (
         <div className="mb-5 card-glass px-4 py-3">
@@ -401,6 +429,27 @@ function CollectionDetail({
         <div className="card-glass flex flex-col items-center justify-center py-16 text-center">
           <div className="text-slate-400 font-medium">No cards added yet</div>
           <div className="text-slate-600 text-sm mt-1">Click &quot;Add Card&quot; above to start building this collection.</div>
+        </div>
+      ) : filteredEnriched.length === 0 ? (
+        <div className="card-glass flex flex-col items-center justify-center py-16 text-center">
+          <div className="text-4xl mb-3">🔍</div>
+          <div className="text-slate-400 font-medium">No cards match &quot;{searchQuery}&quot;</div>
+        </div>
+      ) : normalizedQuery ? (
+        // Drag-to-reorder is ambiguous against a filtered subset, so search results render as a
+        // plain (non-sortable) grid — clear the search to go back to reordering.
+        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+          {filteredEnriched.map((card) => (
+            <PersonalCardTile
+              key={card.id}
+              card={card}
+              gameColor={color}
+              isHovered={hoveredId === card.id}
+              onHover={() => setHoveredId(card.id)}
+              onLeave={() => setHoveredId(null)}
+              onRemove={() => removeCard(card.id)}
+            />
+          ))}
         </div>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

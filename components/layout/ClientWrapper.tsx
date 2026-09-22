@@ -3,6 +3,7 @@
 import { AuthProvider } from '@/components/auth/AuthProvider'
 import { Sidebar } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
+import { CardUnlockToast } from '@/components/CardUnlockToast'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
           </main>
         </div>
       </div>
+      <CardUnlockToast />
     </AuthProvider>
   )
 }

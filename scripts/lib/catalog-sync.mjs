@@ -156,6 +156,22 @@ async function fetchJSON(url, headers = {}) {
   return res.json()
 }
 
+// api.github.com's unauthenticated REST API is rate-limited to 60 requests/hour *per source IP*
+// — fine for a single sync run in isolation, but Vercel functions commonly share a handful of
+// outbound NAT IPs across many unrelated customers' traffic, so that budget can already be
+// partly (or fully) consumed by requests this app never made. Pokemon and One Piece each make
+// exactly one such call per sync (listing cards/en/), but a 429 here fails the WHOLE sync (no
+// per-file fallback exists for a directory listing the way there is for individual card files
+// below). An optional GITHUB_TOKEN env var (a GitHub personal access token with no special
+// scopes needed — this only ever reads public repos) raises that ceiling to 5,000/hour, entirely
+// separate from whatever else is sharing the egress IP. Safe to leave unset; every call here
+// still works unauthenticated, just at the lower shared limit.
+function githubApiHeaders(extra = {}) {
+  return process.env.GITHUB_TOKEN
+    ? { ...extra, Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
+    : extra
+}
+
 async function fetchText(url, headers = {}) {
   const res = await fetch(url, { headers })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${url}`)
@@ -209,7 +225,7 @@ export async function downloadPokemon() {
 
   const files = await fetchJSON(
     'https://api.github.com/repos/PokemonTCG/pokemon-tcg-data/contents/cards/en',
-    { Accept: 'application/vnd.github.v3+json' }
+    githubApiHeaders({ Accept: 'application/vnd.github.v3+json' })
   )
 
   const all = []
@@ -446,24 +462,39 @@ export async function downloadLorcana() {
     )
   }
 
-  // Phase 3: TCGPlayer-only groups — D23, Disney promos, Illumineer's Quest, etc.
-  // lorcast doesn't include these; we pull from tcgcsv (category 71, same CSV format as Riftbound).
-  const LORCANA_PROMO_GROUPS = [
-    { groupId: 17690, setName: 'D23 Promos' },
-    { groupId: 23234, setName: 'Disney Lorcana Promo Cards' },
-    { groupId: 23305, setName: 'Disney100 Promos' },
-    { groupId: 23528, setName: "Illumineer's Quest: Deep Trouble" },
-    { groupId: 24257, setName: "Illumineer's Quest: Palace Heist" },
-    { groupId: 24734, setName: "Illumineer's Quest: The Great Hunny Rescue" },
-    { groupId: 24740, setName: 'Hyperia City' },
-  ]
+  // Phase 3: TCGPlayer-only groups — D23, Disney promos, Illumineer's Quest, Hyperia City, etc.
+  // lorcast doesn't include these; we pull from tcgcsv (category 71, same CSV format as
+  // Riftbound). This used to be a hardcoded { groupId, setName } list that needed a code change
+  // + deploy every time TCGPlayer added a new promo-only group (that's literally how "Hyperia
+  // City" got added last time) — the same class of "a real drop needs a human to notice and edit
+  // source" risk that bit Pokemon's 30th Celebration set. Instead, auto-discover: fetch every
+  // group tcgcsv lists under Lorcana's category, and for each one, keep it only if it's mostly
+  // cards lorcast has never heard of (a genuine promo-only group). A REAL numbered set (Wilds
+  // Unknown, Whispers in the Well, ...) also has its own tcgcsv group in this same listing, but
+  // its cards are already in `seen` from Phase 1/2 — verified empirically that TCGPlayer's
+  // product `name` column matches lorcast's own "Name - Version" format closely enough that
+  // per-card dedup below correctly recognizes nearly all of them. The MOSTLY-UNMATCHED threshold
+  // (not "any unmatched card counts") exists as a safety margin against the rare name-format
+  // mismatch on a real set's group producing a stray near-duplicate catalog entry — a group
+  // that's mostly-already-known is treated as "nothing to add here" rather than trusting a
+  // handful of straggler rows.
+  const UNMATCHED_RATIO_THRESHOLD = 0.5
 
   // Dedup by name+setName to avoid re-adding lorcast cards that also appear in TCGPlayer promo groups
   const seenByNameSet = new Set([...seen.values()].map(c => `${c.name}|${c.setName}`))
 
   const promoByProductId = new Map() // productId → card (merges Normal + Foil rows)
 
-  await Promise.all(LORCANA_PROMO_GROUPS.map(async ({ groupId, setName }) => {
+  let tcgcsvGroups = []
+  try {
+    const groupData = await fetchJSON('https://tcgcsv.com/tcgplayer/71/groups', TCGCSV_HEADERS)
+    tcgcsvGroups = (groupData.results ?? []).map((g) => ({ groupId: g.groupId, setName: g.name }))
+    console.log(`   Found ${tcgcsvGroups.length} TCGPlayer groups (auto-discovered, incl. real numbered sets — those just contribute 0 new cards below)`)
+  } catch (err) {
+    console.warn(`   ⚠️  Could not list TCGPlayer groups: ${err.message} — promo-only cards (D23, Illumineer's Quest, etc.) will be missing this sync`)
+  }
+
+  await Promise.all(tcgcsvGroups.map(async ({ groupId, setName }) => {
     try {
       const res = await fetch(
         `https://tcgcsv.com/tcgplayer/71/${groupId}/ProductsAndPrices.csv`,
@@ -486,7 +517,9 @@ export async function downloadLorcana() {
         extRarity: col('extRarity'), extNumber: col('extNumber'),
         marketPrice: col('marketPrice'), midPrice: col('midPrice'), subTypeName: col('subTypeName'),
       }
-      let added = 0
+      // Buffer candidate rows first — whether this group's unmatched cards actually get kept
+      // depends on the group-wide ratio computed after this loop, not decided per-row.
+      const candidates = []
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim()
         if (!line) continue
@@ -500,9 +533,19 @@ export async function downloadLorcana() {
         // marketPrice can be empty for low-volume promos; fall back to midPrice
         const marketPrice = parseFloat(get(idx.marketPrice)) || parseFloat(get(idx.midPrice)) || 0
         const subTypeName = get(idx.subTypeName)
-        if (!productId || !name || !extNumber) continue
-        if (seenByNameSet.has(`${name}|${setName}`)) continue // already in lorcast
+        if (!productId || !name || !extNumber) continue // sealed product row — no per-card fields
+        candidates.push({ productId, name, imageUrl, extRarity, extNumber, marketPrice, subTypeName })
+      }
+      if (candidates.length === 0) return // sealed-goods-only group (e.g. a pure booster-box listing)
 
+      const unmatched = candidates.filter((c) => !seenByNameSet.has(`${c.name}|${setName}`))
+      if (unmatched.length / candidates.length < UNMATCHED_RATIO_THRESHOLD) {
+        console.log(`   TCGPlayer ${setName}: already covered by lorcast (${candidates.length - unmatched.length}/${candidates.length} matched) — skipped`)
+        return
+      }
+
+      let added = 0
+      for (const { productId, name, imageUrl, extRarity, extNumber, marketPrice, subTypeName } of unmatched) {
         const id = `tcg-${productId}`
         if (!promoByProductId.has(id)) {
           promoByProductId.set(id, {
@@ -825,6 +868,20 @@ export async function downloadRiftbound() {
   // When ids collide, the TCGCSV-derived version always wins for numbering purposes: replace
   // the gallery entry instead of skipping the extra, rather than assuming (as before) that a
   // colliding id always means the gallery already has it right.
+  //
+  // extraCards were built inside fetchRiftboundPrices(), which runs in parallel with the
+  // gallery fetch above and so had no gallery data yet — their `setName` came from the
+  // hardcoded SET_NAMES_MAP, which needs a code change for every new set. Patch it here from
+  // this SAME run's own gallery scrape instead, now that `all` (real gallery cards, one per set)
+  // is available — this is the one Riftbound source that already has to stay code-free for a
+  // new set to work at all, so piggyback on it rather than needing SET_NAMES_MAP kept in sync
+  // too. SET_NAMES_MAP stays only as the last-resort fallback for a set with zero gallery cards
+  // (shouldn't happen for anything with an actual Rune, but cheap insurance).
+  const setNameByCode = new Map(all.map((c) => [c.setCode, c.setName]).filter(([, name]) => name))
+  for (const extra of extraCards) {
+    extra.setName = setNameByCode.get(extra.setCode) ?? SET_NAMES_MAP[extra.setCode] ?? extra.setCode
+  }
+
   const galleryIndexById = new Map(all.map((c, i) => [c.id, i]))
   for (const extra of extraCards) {
     const existingIndex = galleryIndexById.get(extra.id)
@@ -960,7 +1017,7 @@ export async function downloadOnePiece() {
   // ── Phase 1: Card data from GitHub ──────────────────────────────────────────
   const files = await fetchJSON(
     'https://api.github.com/repos/apitcg/one-piece-tcg-data/contents/cards/en',
-    { Accept: 'application/vnd.github.v3+json' }
+    githubApiHeaders({ Accept: 'application/vnd.github.v3+json' })
   )
 
   const all = []

@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { loadSetRegistry, saveSetRegistry, invalidateRegistryCache } from '@/lib/api/registry'
+import { invalidateSetsCache } from '@/lib/api/search'
+import { invalidateCatalogCache } from '@/lib/api/catalog'
+import { recordSyncStatus } from '@/lib/api/syncStatus'
 import { ensureSignedIn, downloadLorcana } from '@/scripts/lib/catalog-sync.mjs'
 
 export const dynamic = 'force-dynamic'
@@ -27,10 +30,21 @@ export async function POST() {
         } as (typeof registry.lorcana.sets)[number])
       }
       await saveSetRegistry(registry)
+      // getSetsForGame()'s own wrapping cache (lib/api/search.ts) never expires on its own and
+      // doesn't know the registry changed underneath it — without this, a newly-auto-detected
+      // set is fully written to Firestore but stays invisible in the set picker (AddCardDialog,
+      // Admin Catalog) until the server process restarts. This is the exact same class of bug
+      // that briefly made every Pokemon set except a custom one disappear — see CLAUDE.md quirk
+      // #15, and the POST /api/set-registry route's own "New Set" form, which already did this
+      // correctly for the manual-entry path but was missing here on the auto-detected one.
+      invalidateSetsCache('lorcana')
     }
 
+    invalidateCatalogCache('lorcana')
+    await recordSyncStatus('lorcana', { ok: true, at: new Date().toISOString(), setCount: result.setNames.length, newSets: newNames })
     return NextResponse.json({ ok: true, setCount: result.setNames.length, newSets: newNames })
   } catch (err) {
+    await recordSyncStatus('lorcana', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }

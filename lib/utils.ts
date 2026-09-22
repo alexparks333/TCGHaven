@@ -18,6 +18,21 @@ export function cardIdentityKey(card: Card): string {
   return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${nexusPart}`
 }
 
+// Whether `newCard` is the first copy of this exact print the user has ever added — same
+// identity rules the Cardex uses to decide whether a set slot is "owned" (apiId when present,
+// otherwise a per-game set/number fallback; see CLAUDE.md's Cardex matching section and quirk
+// #5 for why Riftbound needs setCode+number rather than a bare number). Used to fire the
+// "Card Unlocked" celebration in AddCardDialog — deliberately checked against inventory alone,
+// not the catalog, so it also fires for a manually-typed card in an unregistered/Special set.
+export function isFirstCopyOfCard(newCard: Card, existingCards: Card[]): boolean {
+  return !existingCards.some((c) => {
+    if (c.game !== newCard.game) return false
+    if (newCard.apiId) return c.apiId === newCard.apiId
+    if (newCard.game === 'riftbound') return c.setCode === newCard.setCode && c.number === newCard.number
+    return c.set === newCard.set && c.number === newCard.number
+  })
+}
+
 // Constructing Intl.NumberFormat is expensive — build it once, reuse everywhere
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 

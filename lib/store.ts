@@ -19,6 +19,7 @@ interface TCGStore {
   priceMode: 'market' | 'lowestNM'
   hiddenGroups: string[]
   catalogSyncNotices: CatalogSyncNotice[]
+  cardUnlocks: { id: string; card: Card }[]
 
   // Populated by AuthProvider on login
   loadUserCards: (cards: Card[]) => void
@@ -51,6 +52,8 @@ interface TCGStore {
   removePurchase: (id: string) => void
   addCatalogSyncNotice: (notice: CatalogSyncNotice) => void
   dismissCatalogSyncNotice: (id: string) => void
+  pushCardUnlock: (card: Card) => void
+  dismissCardUnlock: (id: string) => void
 }
 
 const defaultPackSets: PackSet[] = [
@@ -151,12 +154,13 @@ export const useStore = create<TCGStore>()(
   priceMode: 'market' as const,
   hiddenGroups: [] as string[],
   catalogSyncNotices: [] as CatalogSyncNotice[],
+  cardUnlocks: [] as { id: string; card: Card }[],
 
   loadUserCards: (cards) => set({ cards }),
   loadUserSoldCards: (soldCards) => set({ soldCards }),
   loadUserPriceHistory: (priceHistory) => set({ priceHistory }),
   loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [], catalogSyncNotices: [] }),
+  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [] }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, card] })),
@@ -256,6 +260,15 @@ export const useStore = create<TCGStore>()(
 
   dismissCatalogSyncNotice: (id) =>
     set((state) => ({ catalogSyncNotices: state.catalogSyncNotices.filter((n) => n.id !== id) })),
+
+  // Queued rather than a single value — a fast burst of "first copy" adds (e.g. logging a whole
+  // box unboxing) shouldn't clobber earlier unlocks before the user's seen them. CardUnlockToast
+  // shows only the front of the queue at a time.
+  pushCardUnlock: (card) =>
+    set((state) => ({ cardUnlocks: [...state.cardUnlocks, { id: `${card.id}-${Date.now()}`, card }] })),
+
+  dismissCardUnlock: (id) =>
+    set((state) => ({ cardUnlocks: state.cardUnlocks.filter((u) => u.id !== id) })),
 
   setCalcFloor: (v) => set({ calcFloor: v }),
   setShowFilters: (v) => set({ showFilters: v }),

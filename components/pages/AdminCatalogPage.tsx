@@ -13,6 +13,7 @@ import { useStore } from '@/lib/store'
 import { editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { db, storage, ADMIN_UID } from '@/lib/firebase/config'
 import { regenerateSnapshot, normNum } from '@/lib/api/catalog'
+import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game, type CatalogSyncNotice } from '@/lib/types'
 
@@ -110,12 +111,36 @@ const SYNC_GAMES: { game: Game; label: string }[] = [
   { game: 'mtg', label: 'Magic: The Gathering' },
 ]
 
+// Relative "how long ago" for a sync_status timestamp — short-form since it sits inline next to
+// a small status line, not a full date picker.
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(ms / 60000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  return `${Math.floor(hr / 24)}d ago`
+}
+
 function SyncPanel() {
   const { user } = useAuth()
   const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
   const [state, setState] = useState<Record<Game, GameSyncState>>({
     pokemon: { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' },
   })
+  // Last-known status per game, including from runs this session never triggered — the
+  // automatic 4x/day cron, or an admin syncing from a different browser/device. Without this, a
+  // failed cron run at 3am stays invisible until someone notices the catalog looks stale days
+  // later; sync_status/{game} is what makes that visible here instead.
+  const [lastStatus, setLastStatus] = useState<Partial<Record<Game, SyncStatus>>>({})
+  const [mtgCheck, setMtgCheck] = useState<SyncStatus | null>(null)
+
+  useEffect(() => {
+    if (!isAdmin) return
+    getAllSyncStatuses().then(setLastStatus).catch(() => {})
+    getSyncStatus('mtg-new-set-check').then(setMtgCheck).catch(() => {})
+  }, [isAdmin])
 
   if (!isAdmin) return null
 
@@ -129,6 +154,7 @@ function SyncPanel() {
         return
       }
       setState((s) => ({ ...s, [game]: { status: 'done', result: data } }))
+      getSyncStatus(game).then((st) => st && setLastStatus((prev) => ({ ...prev, [game]: st }))).catch(() => {})
     } catch {
       setState((s) => ({ ...s, [game]: { status: 'error', error: 'Could not reach the server.' } }))
     }
@@ -145,6 +171,7 @@ function SyncPanel() {
         {SYNC_GAMES.map(({ game, label }) => {
           const s = state[game]
           const running = s.status === 'running'
+          const last = lastStatus[game]
           return (
             <div key={game} className="border-t border-slate-800 pt-3 first:border-t-0 first:pt-0">
               <div className="flex items-center justify-between gap-4">
@@ -163,6 +190,23 @@ function SyncPanel() {
                   Sync
                 </button>
               </div>
+
+              {/* Last-known status — from this session's own click, the automatic cron, or a
+                  sync from another device, whichever is more recent. Shown whenever this
+                  session hasn't already displayed a fresher result of its own below. */}
+              {s.status === 'idle' && last && (
+                <div className={cn('flex items-center gap-1.5 text-xs mt-2', last.ok ? 'text-slate-500' : 'text-red-400')}>
+                  {last.ok ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                  <span>
+                    Last sync {timeAgo(last.at)}{last.ok ? (last.setCount != null ? ` — ${last.setCount} sets` : '') : ` — failed: ${last.error}`}
+                  </span>
+                </div>
+              )}
+              {game === 'mtg' && s.status === 'idle' && mtgCheck?.ok && !!mtgCheck.newSets?.length && (
+                <div className="text-xs text-amber-400 mt-1">
+                  New Scryfall set{mtgCheck.newSets.length > 1 ? 's' : ''} not yet synced: {mtgCheck.newSets.join(', ')}
+                </div>
+              )}
 
               {s.status === 'error' && (
                 <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2 mt-2">

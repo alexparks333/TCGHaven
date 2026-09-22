@@ -1,5 +1,21 @@
-import CardexPage from '@/components/pages/CardexPage'
+import { Suspense } from 'react'
+import dynamic from 'next/dynamic'
+
+const CardexPageInner = dynamic(
+  () => import('@/components/pages/CardexPage'),
+  { ssr: false }
+)
+
+const fallback = (
+  <div className="flex items-center justify-center h-64">
+    <div className="text-slate-600 text-sm">Loading…</div>
+  </div>
+)
 
 export default function Page() {
-  return <CardexPage />
+  return (
+    <Suspense fallback={fallback}>
+      <CardexPageInner />
+    </Suspense>
+  )
 }

@@ -1,9 +1,9 @@
 import type { Game } from '../types'
-import { searchPokemonCards, getPokemonSets, getPokemonCardMarketPrice } from './pokemon'
+import { searchPokemonCards, getPokemonSets, getPokemonCardMarketPrice, isPokemonSetsCacheReliable } from './pokemon'
 import { searchLorcanaCards, getLorcanaSets } from './lorcana'
 import { searchRiftboundCards, getRiftboundSets } from './riftbound'
 import { searchOnePieceCards, getOnePieceSets } from './onepiece'
-import { searchMtgCards, getMtgSets } from './mtg'
+import { searchMtgCards, getMtgSets, isMtgSetsCacheReliable } from './mtg'
 import { riftboundDisplayNumber, riftboundVariantFlags } from '../utils'
 
 export interface CardSearchResult {
@@ -244,6 +244,12 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
         series: s.series,
       }))
       .reverse() // newest first
+    // getPokemonSets() only populates its own cache on a genuine live-API success — a
+    // manual-only fallback (after every retry failed) is non-empty as long as at least one
+    // custom set exists, which would otherwise satisfy the generic "only cache non-empty
+    // results" check below and permanently reduce the whole set picker down to just that
+    // custom set for the rest of this process's life. Return early to skip caching it here.
+    if (!isPokemonSetsCacheReliable()) return sets
   }
 
   if (game === 'lorcana') {
@@ -290,6 +296,9 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
       isCustom: s.source === 'manual',
       setType: s.setType,
     })).reverse() // newest first, matching every other game's dropdown order
+    // Same reasoning as the pokemon branch above — don't let a manual-only fallback (after every
+    // retry failed) satisfy the generic "non-empty" cache check below.
+    if (!isMtgSetsCacheReliable()) return sets
   }
 
   // Only cache non-empty results so a transient API failure doesn't stick

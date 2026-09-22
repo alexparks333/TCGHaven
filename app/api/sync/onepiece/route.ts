@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { loadSetRegistry, saveSetRegistry, invalidateRegistryCache, type OnePieceRegistrySet } from '@/lib/api/registry'
+import { invalidateSetsCache } from '@/lib/api/search'
+import { invalidateCatalogCache } from '@/lib/api/catalog'
+import { recordSyncStatus } from '@/lib/api/syncStatus'
 import { ensureSignedIn, downloadOnePiece } from '@/scripts/lib/catalog-sync.mjs'
 
 export const dynamic = 'force-dynamic'
@@ -44,10 +47,21 @@ export async function POST() {
       } as OnePieceRegistrySet)
     }
 
-    if (newNames.length > 0) await saveSetRegistry(registry)
+    if (newNames.length > 0) {
+      await saveSetRegistry(registry)
+      // getSetsForGame()'s own wrapping cache (lib/api/search.ts) never expires on its own and
+      // doesn't know the registry changed underneath it — without this, a newly-auto-detected
+      // set is fully written to Firestore but stays invisible in the set picker (AddCardDialog,
+      // Admin Catalog) until the server process restarts. Same bug class that briefly made every
+      // Pokemon set except a custom one disappear — see CLAUDE.md quirk #15.
+      invalidateSetsCache('onepiece')
+    }
 
+    invalidateCatalogCache('onepiece')
+    await recordSyncStatus('onepiece', { ok: true, at: new Date().toISOString(), setCount: result.setNames.length, newSets: newNames })
     return NextResponse.json({ ok: true, setCount: result.setNames.length, newSets: newNames })
   } catch (err) {
+    await recordSyncStatus('onepiece', { ok: false, at: new Date().toISOString(), error: (err as Error).message })
     return NextResponse.json({ error: (err as Error).message }, { status: 500 })
   }
 }
