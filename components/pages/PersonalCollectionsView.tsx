@@ -18,7 +18,7 @@ import {
 } from '@/lib/firebase/collections'
 import type { CardSearchResult } from '@/lib/api/search'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, openEbaySearch } from '@/lib/utils'
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
@@ -454,6 +454,7 @@ function CollectionDetail({
               key={cardKey(card)}
               card={card}
               gameColor={color}
+              game={collection.game}
               isHovered={hoveredId === cardKey(card)}
               onHover={() => setHoveredId(cardKey(card))}
               onLeave={() => setHoveredId(null)}
@@ -470,6 +471,7 @@ function CollectionDetail({
                   key={cardKey(card)}
                   card={card}
                   gameColor={color}
+                  game={collection.game}
                   isHovered={hoveredId === cardKey(card)}
                   onHover={() => setHoveredId(cardKey(card))}
                   onLeave={() => setHoveredId(null)}
@@ -615,6 +617,7 @@ function AddCardToCollectionModal({
 function SortablePersonalCardTile(props: {
   card: PersonalCollectionCard & { owned: boolean; quantity: number }
   gameColor: string
+  game: Game
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
@@ -637,10 +640,11 @@ function SortablePersonalCardTile(props: {
 // ── Card tile — same visual language as the main Cardex grid, plus a remove button ──
 
 function PersonalCardTile({
-  card, gameColor, isHovered, onHover, onLeave, onRemove,
+  card, gameColor, game, isHovered, onHover, onLeave, onRemove,
 }: {
   card: PersonalCollectionCard & { owned: boolean; quantity: number }
   gameColor: string
+  game: Game
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
@@ -649,7 +653,15 @@ function PersonalCardTile({
   const rarityColor = RARITY_COLORS[card.rarity ?? ''] ?? '#6b7280'
 
   return (
-    <div className="relative group cursor-default" onMouseEnter={onHover} onMouseLeave={onLeave}>
+    <div
+      className="relative group cursor-pointer"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) openEbaySearch({ name: card.name, number: card.number, set: card.setName, game, isFoil: card.isFoil })
+      }}
+      title="⌘/Ctrl+Click to search eBay sold listings"
+    >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
         style={{

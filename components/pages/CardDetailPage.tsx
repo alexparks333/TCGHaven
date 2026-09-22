@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { formatCurrency, formatPercent, formatDate, localDateString } from '@/lib/utils'
+import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 
@@ -66,7 +66,11 @@ export default function CardDetailPage() {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="card-glass p-6 flex gap-5">
+          <div
+            className="card-glass p-6 flex gap-5 cursor-pointer"
+            onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
+            title="⌘/Ctrl+Click to search eBay sold listings"
+          >
             {card.imageUrl ? (
               <Image src={card.imageUrl} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
             ) : (

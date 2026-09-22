@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { RotateCcw, Banknote } from 'lucide-react'
 import { useStore } from '@/lib/store'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, openEbaySearch } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type SoldCard } from '@/lib/types'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -185,7 +185,9 @@ export default function SoldPage() {
               return (
                 <div
                   key={card.id}
-                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-2 md:gap-4 px-5 py-4 border-b border-slate-800/50 last:border-0"
+                  className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-2 md:gap-4 px-5 py-4 border-b border-slate-800/50 last:border-0 cursor-pointer hover:bg-slate-800/20 transition-colors"
+                  onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
+                  title="⌘/Ctrl+Click to search eBay sold listings"
                 >
                   <div className="flex items-center gap-3">
                     {card.imageUrl ? (

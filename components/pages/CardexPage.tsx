@@ -6,7 +6,7 @@ import { Loader2, Package, FolderHeart, ChevronDown, Search } from 'lucide-react
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
-import { cn, RARITY_LABELS_BY_GAME } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, openEbaySearch } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 
@@ -267,7 +267,7 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
-  Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899',
+  Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899', Iconic: '#eab308',
   Epic: '#06b6d4', 'Alt Art': '#fbbf24', Overnumbered: '#fbbf24', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
   // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), SEC(ret rare) — "SP CARD"
   // is a further-out special/promo print tier.
@@ -306,7 +306,7 @@ const RARITY_COLORS: Record<string, string> = {
 // (lib/api/catalog.ts) and RARITY_LABELS_BY_GAME (lib/utils.ts), so enabling it for another game
 // is just adding it here plus, if its raw rarity strings need friendlier display text or new
 // CARDEX_RARITY_ORDER/RARITY_COLORS entries, filling those in — no filtering-logic changes.
-const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon'])
+const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana'])
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
@@ -755,7 +755,7 @@ export default function CardexPage() {
                 {rarityFilters.map((r) => {
                   const active = !hiddenRarities.has(r)
                   const color = RARITY_COLORS[r] ?? '#6b7280'
-                  const label = RARITY_LABELS_BY_GAME[catalogGame]?.[r] ?? r
+                  const label = RARITY_LABELS_BY_GAME[catalogGame]?.[r] ?? r.replace('_', ' ')
                   return (
                     <button
                       key={r}
@@ -943,7 +943,15 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave }: CardTi
   const rarityLabel = RARITY_LABELS_BY_GAME[game]?.[card.rarity] ?? card.rarity
 
   return (
-    <div className="relative group cursor-default" onMouseEnter={onHover} onMouseLeave={onLeave}>
+    <div
+      className="relative group cursor-pointer"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) openEbaySearch({ name: card.name, number: card.number, set: card.setName, game })
+      }}
+      title="⌘/Ctrl+Click to search eBay sold listings"
+    >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
         style={{
@@ -1004,7 +1012,13 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave }: {
   card: Card; gameColor: string; isHovered: boolean; onHover: () => void; onLeave: () => void
 }) {
   return (
-    <div className="relative cursor-default" onMouseEnter={onHover} onMouseLeave={onLeave}>
+    <div
+      className="relative cursor-pointer"
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
+      title="⌘/Ctrl+Click to search eBay sold listings"
+    >
       <div
         className="relative w-full rounded-lg overflow-hidden shadow-lg transition-all duration-200"
         style={{
