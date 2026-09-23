@@ -50,9 +50,34 @@ interface ZoomCardData {
   owned: boolean
   quantity: number
   isFoil?: boolean
-  gameColor: string
+  // The card-back/border/glow-ring accent color — rarity-based where ZOOM_GLOW_COLORS has an
+  // entry for this game+rarity, falling back to the game's own color otherwise (see
+  // zoomGlowColor() below). Deliberately its own field, not reusing `rarityColor` (the rarity
+  // pill's color elsewhere in the app) — the user wants a distinct, simpler palette just for this
+  // glow effect.
+  glowColor: string
   ebayCard: Parameters<typeof openEbaySearch>[0]
   originRect: DOMRect
+}
+
+// Per-game, per-rarity override for the zoom overlay's glow/border/card-back color — distinct
+// from RARITY_COLORS (the rarity pill color used everywhere else), since this is a separate,
+// simpler palette by design. Only Riftbound is populated for now (the user's own testing ground);
+// zoomGlowColor() falls back to the card's game color for every other game/rarity until more are
+// specified.
+const ZOOM_GLOW_COLORS: Partial<Record<CatalogGame, Record<string, string>>> = {
+  riftbound: {
+    Common: '#9ca3af',       // light gray
+    Uncommon: '#4b5563',     // darker gray
+    Rare: '#6d28d9',         // dark purple
+    Epic: '#eab308',         // gold/yellow
+    Overnumbered: '#eab308', // gold/yellow
+    Star: '#eab308',         // gold/yellow (Overnumbered Signature)
+  },
+}
+
+function zoomGlowColor(game: CatalogGame, rarity: string, fallback: string): string {
+  return ZOOM_GLOW_COLORS[game]?.[rarity] ?? fallback
 }
 
 // ── Set catalog (fetched from /api/set-registry — see lib/api/registry.ts) ────
@@ -997,7 +1022,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom }
           marketPrice: card.marketPrice,
           owned: card.owned,
           quantity: card.quantity,
-          gameColor,
+          glowColor: zoomGlowColor(game, card.rarity, gameColor),
           ebayCard: { name: card.name, number: card.number, set: card.setName, game },
         })
       }}
@@ -1082,7 +1107,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
           owned: true,
           quantity: card.quantity,
           isFoil: card.isFoil,
-          gameColor,
+          glowColor: zoomGlowColor(card.game, card.rarity ?? '', gameColor),
           ebayCard: card,
         })
       }}
@@ -1237,15 +1262,24 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
           style={{ width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
           <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
-            {/* Front face — the real card */}
+            {/* Front face — the real card. Not-owned cards stay grayscale here too, same
+                treatment as their grid tile, rather than "revealing" full color on zoom. */}
             <div
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
-              style={{ boxShadow: `0 0 0 2px ${d.gameColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
+              style={{ boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
             >
               {d.imageUrl ? (
-                <img src={d.imageUrl} alt={d.name} className="w-full h-full object-cover" />
+                <img
+                  src={d.imageUrl}
+                  alt={d.name}
+                  className="w-full h-full object-cover"
+                  style={{ filter: d.owned ? 'none' : 'grayscale(1)' }}
+                />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>
+                <div
+                  className="w-full h-full flex items-center justify-center text-lg font-bold"
+                  style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor, filter: d.owned ? 'none' : 'grayscale(1)' }}
+                >
                   #{d.number}
                 </div>
               )}
@@ -1255,23 +1289,18 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
             <div
               className="card-zoom-face card-zoom-face-back absolute inset-0 rounded-2xl overflow-hidden flex items-center justify-center"
               style={{
-                background: `radial-gradient(circle at 50% 40%, ${d.gameColor}33, #0a0a0f 70%)`,
-                boxShadow: `0 0 0 2px ${d.gameColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
+                background: `radial-gradient(circle at 50% 40%, ${d.glowColor}33, #0a0a0f 70%)`,
+                boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
               }}
             >
-              <div className="rounded-full p-4" style={{ backgroundColor: d.gameColor + '22', border: `1px solid ${d.gameColor}55` }}>
-                <Sparkles size={32} style={{ color: d.gameColor }} />
+              <div className="rounded-full p-4" style={{ backgroundColor: d.glowColor + '22', border: `1px solid ${d.glowColor}55` }}>
+                <Sparkles size={32} style={{ color: d.glowColor }} />
               </div>
             </div>
           </div>
 
           {visible && (
-            <div className="card-zoom-glow-ring absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: `0 0 60px 20px ${d.gameColor}` }} />
-          )}
-          {visible && (
-            <div className="card-zoom-shine absolute inset-0 rounded-2xl pointer-events-none overflow-hidden">
-              <div className="absolute inset-y-0 w-1/3" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)' }} />
-            </div>
+            <div className="card-zoom-glow-ring absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
           )}
         </div>
 

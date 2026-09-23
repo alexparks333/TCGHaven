@@ -155,8 +155,9 @@
 /* Cardex "zoom card" overlay — clicking a Cardex tile flies the card from its grid position to
    center screen while flipping over twice (a FLIP-technique transform play, see CardZoomOverlay
    in CardexPage.tsx for the position math), then settles with the same bounce-easing convention
-   as sold-pop/card-unlock above, followed by a staggered glow/shine/panel reveal reusing that same
-   established language. */
+   as sold-pop/card-unlock above, followed by a staggered glow-ring/info-panel reveal reusing that
+   same established language. The glow ring's color is rarity-based per game (see
+   ZOOM_GLOW_COLORS in CardexPage.tsx), not a fixed color. */
 @keyframes card-zoom-backdrop-in {
   0%   { opacity: 0; }
   100% { opacity: 1; }
@@ -176,13 +177,6 @@
   0%   { opacity: 0; transform: scale(0.8); }
   45%  { opacity: 0.9; transform: scale(1.25); }
   100% { opacity: 0; transform: scale(1.6); }
-}
-
-@keyframes card-zoom-shine {
-  0%   { transform: translateX(-130%) skewX(-20deg); opacity: 0; }
-  15%  { opacity: 0.85; }
-  55%  { opacity: 0.85; }
-  100% { transform: translateX(230%) skewX(-20deg); opacity: 0; }
 }
 
 @keyframes card-zoom-panel-in {
@@ -229,10 +223,6 @@
 
 .card-zoom-glow-ring {
   animation: card-zoom-glow 1s ease-out 0.55s both;
-}
-
-.card-zoom-shine {
-  animation: card-zoom-shine 0.8s ease-in-out 0.55s both;
 }
 
 .card-zoom-panel {
