@@ -92,23 +92,30 @@ async function writeSnapshot(game, finalCards) {
 // looks wrong, so only an actual HTTP check catches it. HEAD (not GET) keeps this cheap — no image
 // bytes downloaded, just a status + content-type check.
 //
-// Shipped a real bug the first time this ran against MTG's ~100k-card catalog: sustained
-// high-volume concurrent HEAD requests tripped the upstream CDN's rate limiting partway through,
-// and every subsequent request failed for the rest of the run — the code at the time treated any
-// failure as "broken" with no retry, so it reported essentially the entire catalog as broken
-// (confirmed false: the sample included cards like Forest/Swamp/Birds of Paradise, whose images
-// definitely work). That result then blew past Firestore's 1MiB document size limit trying to
-// store it, crashing the run entirely. Two independent defenses against this now: a single retry
-// after a short delay before declaring any one URL broken (survives a transient blip), and an
-// overall `suspicious` flag — if the broken rate across the whole run is implausibly high, that's
-// a signal something upstream/systemic happened, not that every card is genuinely broken. Callers
-// must check `suspicious` and skip trusting/persisting the result if it's true, same as they'd
-// treat a network error partway through — this is what actually prevents the Firestore-size crash
-// from recurring, not just what caused it that one time.
+// Shipped a real bug the first time this ran against MTG's ~100k-card catalog: every single
+// request failed, reporting the entire catalog as broken (confirmed false: the sample included
+// cards like Forest/Swamp/Birds of Paradise, whose images definitely work) — which then blew past
+// Firestore's 1MiB document size limit trying to store it, crashing the run entirely. Originally
+// misdiagnosed as CDN rate-limiting under concurrency and "fixed" with a retry-after-delay — that
+// fix didn't actually work (a second, unchanged full run still failed 100370/100370, retries
+// included) because the real cause was different: Node's built-in `fetch()` sends no `User-Agent`
+// header by default, and cards.scryfall.io's edge (unlike every other game's image CDN this check
+// already worked against) 400s any request with no User-Agent at all — confirmed by reproducing
+// outside this script: a plain `curl` HEAD succeeds every time (curl always sends its own UA), a
+// bare Node `fetch()` HEAD 400s every time even at concurrency 1, and adding literally any
+// non-empty `User-Agent` string (no `Accept` override needed) makes it 200 every time. This is a
+// separate requirement from `SCRYFALL_HEADERS` below (that one's for api.scryfall.com's JSON API,
+// `Accept: application/json` included) — an image HEAD check has no JSON body to accept, just
+// needs a UA. The retry-after-delay and `suspicious`-rate guard below are still worth keeping as a
+// backstop against a genuine transient outage/rate-limit on any CDN, just weren't what actually
+// caused this one — callers must still check `suspicious` and skip trusting/persisting the result
+// if it's true, exactly as before.
+const IMAGE_CHECK_HEADERS = { 'User-Agent': 'TCGHaven/1.0' }
+
 export async function findBrokenImageUrls(candidates, { concurrency = 20, timeoutMs = 6000, retryDelayMs = 500, suspiciousRate = 0.25 } = {}) {
   const broken = []
   async function checkOnce(imageUrl) {
-    const res = await fetch(imageUrl, { method: 'HEAD', signal: AbortSignal.timeout(timeoutMs) })
+    const res = await fetch(imageUrl, { method: 'HEAD', headers: IMAGE_CHECK_HEADERS, signal: AbortSignal.timeout(timeoutMs) })
     const contentType = res.headers.get('content-type') || ''
     if (!res.ok || !contentType.startsWith('image/')) throw new Error(`bad response: ${res.status} ${contentType}`)
   }

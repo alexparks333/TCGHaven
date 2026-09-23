@@ -2502,3 +2502,29 @@ collection card (no native `game` field either — comes from `collection.game`)
 Deliberately NOT wired up on `AddCardDialog`'s search results or Admin Catalog's browser table —
 those are "picking a card to add" / "managing shared catalog data" contexts, not "viewing a card
 you already have," which is what this gesture is for everywhere else.
+
+### 27. `cards.scryfall.io` 400s any request with no `User-Agent` header — including Node's bare `fetch()`
+The image-health check's `findBrokenImageUrls()` (`scripts/lib/catalog-sync.mjs`, §16) first shipped
+broken against MTG's ~100k-card catalog: every single HEAD check failed, reporting the entire
+catalog as broken (a sample included cards like Forest/Swamp/Birds of Paradise, confirmed working),
+which blew past Firestore's 1MiB document limit and crashed the run. **First fix attempt
+misdiagnosed the cause as CDN rate-limiting under concurrency** and added a retry-after-delay plus
+a `suspicious`-result guard (skip trusting/persisting a run whose broken rate is implausibly high)
+— the guard correctly stopped the crash from recurring, but a second full run still failed
+100370/100370 with the retry in place, proving rate-limiting was never the real cause. **The actual
+cause:** Node's built-in `fetch()` sends no `User-Agent` header by default, and `cards.scryfall.io`'s
+edge 400s any request with none — confirmed by direct reproduction outside this app: a plain `curl`
+HEAD to the exact same URL succeeds every time (curl always sends its own UA), a bare Node
+`fetch()` HEAD 400s every time even at concurrency 1 (so retries never helped — the same missing
+header fails identically on every attempt), and adding literally any non-empty `User-Agent` string
+makes it 200 every time, no `Accept` header needed. This is a separate requirement from
+`SCRYFALL_HEADERS` (§11 — `api.scryfall.com`'s JSON API, needs `Accept: application/json` too) —
+an image HEAD check has no JSON body to accept, just needs *a* UA present. Fixed by adding a
+dedicated `IMAGE_CHECK_HEADERS = { 'User-Agent': 'TCGHaven/1.0' }` to every `findBrokenImageUrls()`
+request, sent unconditionally (not just for Scryfall URLs) since a harmless header addition is
+simpler than per-CDN branching and can only help elsewhere. The retry-after-delay and `suspicious`-
+rate guard are still worth keeping as a backstop against a genuine transient outage on some other
+CDN — they just weren't what caused *this* particular 100%-failure run. If a future image-source
+CDN ever shows the same "every single check fails, including retries" pattern, suspect a missing
+required header (User-Agent, Referer, etc.) before assuming rate-limiting — a real rate limit
+usually degrades gradually or recovers on retry; a header-rejection failure is 100% and deterministic.
