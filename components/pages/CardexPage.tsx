@@ -1262,8 +1262,10 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
           style={{ width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
           <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
-            {/* Front face — the real card. Not-owned cards stay grayscale here too, same
-                treatment as their grid tile, rather than "revealing" full color on zoom. */}
+            {/* Front face — the real card. Not-owned cards stay dimmed/grayscale here too, same
+                treatment as their grid tile (grayscale(1) + darkened, not just desaturated —
+                matches card-unlock-reveal's own "before reveal" brightness elsewhere in this
+                file), rather than "revealing" full color/brightness on zoom. */}
             <div
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
               style={{ boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
@@ -1273,12 +1275,12 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                   src={d.imageUrl}
                   alt={d.name}
                   className="w-full h-full object-cover"
-                  style={{ filter: d.owned ? 'none' : 'grayscale(1)' }}
+                  style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }}
                 />
               ) : (
                 <div
                   className="w-full h-full flex items-center justify-center text-lg font-bold"
-                  style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor, filter: d.owned ? 'none' : 'grayscale(1)' }}
+                  style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor, filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }}
                 >
                   #{d.number}
                 </div>
