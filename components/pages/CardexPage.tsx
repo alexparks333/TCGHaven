@@ -1306,8 +1306,15 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
           )}
         </div>
 
+        {/* `relative z-10` on the panel below matters, not just cosmetic: card-zoom-glow-ring
+            above is `position: absolute` inside .card-zoom-mover, which (per CSS stacking rules)
+            paints positioned descendants above every non-positioned element regardless of DOM
+            order — so without this, the glow's blur/spread (it extends well past the card's own
+            edges) painted over this panel even though the panel comes later in the markup. Making
+            the panel positioned too puts it in that same paint step, where DOM order (it's after
+            the glow) correctly wins. */}
         {visible && (
-          <div className="card-zoom-panel card-glass px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
+          <div className="card-zoom-panel card-glass relative z-10 px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
             <div className="text-base font-bold text-white leading-tight">{d.name}</div>
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-xs text-slate-500">#{d.number}</span>
