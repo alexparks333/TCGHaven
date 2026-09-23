@@ -688,9 +688,10 @@ export default function CardexPage() {
           <PersonalCollectionsView />
         ) : (
           <>
-            {/* Two-tier set tree: pick a category (era/product group) on the left, then a set
-                from just that category on the right — replaces an older design that rendered
-                every category's sets expanded at once (170+ pill buttons for Pokemon alone). */}
+            {/* Two-tier set picker: pick a category (era/product group) from a dropdown, then a
+                set from just that category as pills below — a plain vertical list of categories
+                (Pokemon alone has 14+) was worse than the wall of set pills it replaced, so the
+                category level collapses into a single-line select instead of its own list. */}
             {setsLoading && (
               <div className="flex items-center gap-2 text-slate-500 text-sm mb-6">
                 <Loader2 size={14} className="animate-spin" />
@@ -698,37 +699,26 @@ export default function CardexPage() {
               </div>
             )}
             {!setsLoading && (
-              <div className="mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
-                {/* Categories */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0 sm:flex-col sm:w-52 sm:flex-shrink-0 sm:overflow-visible sm:border-r sm:border-slate-800 sm:pr-3">
-                  {categories.map((group) => {
-                    const isActive = group.label === activeCategoryLabel
-                    return (
-                      <button
-                        key={group.label}
-                        onClick={() => selectCategory(group.label)}
-                        className={cn(
-                          'shrink-0 sm:shrink sm:w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap text-left border',
-                          isActive
-                            ? 'text-white border-transparent'
-                            : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
-                        )}
-                        style={isActive ? { backgroundColor: gameColor + '22', color: gameColor, borderColor: gameColor + '55' } : {}}
-                      >
-                        <span>{group.label}</span>
-                        <span className="flex items-center gap-1 shrink-0">
-                          <span className={cn('text-[10px] font-normal', isActive ? 'opacity-70' : 'text-slate-600')}>
-                            {group.sets.length}
-                          </span>
-                          <ChevronRight size={12} className="hidden sm:block opacity-60" />
-                        </span>
-                      </button>
-                    )
-                  })}
+              <div className="mb-6">
+                {/* Category dropdown */}
+                <div className="relative inline-block mb-3">
+                  <select
+                    value={activeCategoryLabel}
+                    onChange={(e) => selectCategory(e.target.value)}
+                    className="appearance-none bg-slate-900 border rounded-lg pl-3 pr-8 py-2 text-sm font-medium outline-none cursor-pointer"
+                    style={{ borderColor: gameColor + '55', color: gameColor }}
+                  >
+                    {categories.map((group) => (
+                      <option key={group.label} value={group.label} className="bg-slate-900 text-white">
+                        {group.label} ({group.sets.length})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronRight size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none opacity-70" style={{ color: gameColor }} />
                 </div>
 
                 {/* Sets within the active category */}
-                <div className="flex-1 min-w-0 flex gap-2 flex-wrap content-start">
+                <div className="flex gap-2 flex-wrap">
                   {(activeCategoryGroup?.sets ?? []).map((set) => {
                     const isActive = activeSet.name === set.name
                     return (
