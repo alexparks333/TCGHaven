@@ -1306,15 +1306,19 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
           )}
         </div>
 
-        {/* `relative z-10` on the panel below matters, not just cosmetic: card-zoom-glow-ring
-            above is `position: absolute` inside .card-zoom-mover, which (per CSS stacking rules)
-            paints positioned descendants above every non-positioned element regardless of DOM
-            order — so without this, the glow's blur/spread (it extends well past the card's own
-            edges) painted over this panel even though the panel comes later in the markup. Making
-            the panel positioned too puts it in that same paint step, where DOM order (it's after
-            the glow) correctly wins. */}
+        {/* Two things had to be fixed for the expanding glow-ring above to stop showing over this
+            panel, not just one: (1) `relative z-10` — card-zoom-glow-ring is `position: absolute`
+            (plus its own scale animation, which alone also creates a stacking context), and per
+            CSS stacking rules positioned/stacking-context elements paint above plain in-flow ones
+            regardless of DOM order, so the panel needed to be positioned too, putting it in the
+            same paint step where DOM order (it's after the glow) correctly wins. That alone wasn't
+            enough, though — (2) this panel used to reuse `.card-glass`, whose background is only
+            60% opaque (`bg-slate-900/60`) — so even with correct paint order, the glow (which can
+            grow to 1.6x the card's own size, well into this panel's own space) still visibly
+            bled THROUGH the translucent background from behind. Using a fully opaque background
+            here instead (not `.card-glass`) blocks that regardless of how large the glow grows. */}
         {visible && (
-          <div className="card-zoom-panel card-glass relative z-10 px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
+          <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
             <div className="text-base font-bold text-white leading-tight">{d.name}</div>
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-xs text-slate-500">#{d.number}</span>
