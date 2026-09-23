@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Loader2, Package, FolderHeart, ChevronRight, Search } from 'lucide-react'
+import { Loader2, Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
@@ -35,6 +35,24 @@ interface SetMeta {
 interface SetGroup {
   label: string
   sets: SetMeta[]
+}
+
+// The isolated card view CardZoomOverlay renders — normalized so both CardTile (catalog-backed,
+// carries `owned`/`quantity`) and InventoryCardTile (special bucket, always owned) can feed it the
+// same shape without the overlay needing to know which kind of tile it came from.
+interface ZoomCardData {
+  imageUrl: string
+  name: string
+  number: string
+  rarityLabel: string
+  rarityColor: string
+  marketPrice: number
+  owned: boolean
+  quantity: number
+  isFoil?: boolean
+  gameColor: string
+  ebayCard: Parameters<typeof openEbaySearch>[0]
+  originRect: DOMRect
 }
 
 // ── Set catalog (fetched from /api/set-registry — see lib/api/registry.ts) ────
@@ -374,6 +392,13 @@ export default function CardexPage() {
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
   const [loading, setLoading] = useState(false)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  // The isolated "zoom" view a plain click on a tile opens — see CardZoomOverlay below. Holding
+  // the clicked tile's own bounding rect here (captured at click time) is what lets the overlay
+  // fly the card from wherever it actually was in the grid rather than a fixed spot.
+  const [zoomCard, setZoomCard] = useState<ZoomCardData | null>(null)
+  function openZoom(el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) {
+    setZoomCard({ ...data, originRect: el.getBoundingClientRect() })
+  }
   const [searchQuery, setSearchQuery] = useState('')
   // Riftbound-only rarity toggle filter — persists across sets/tabs on purpose (switching from
   // Origins to Spiritforged with "Alt Art" toggled off should keep it off), so this isn't reset
@@ -822,6 +847,7 @@ export default function CardexPage() {
                     isHovered={hoveredId === card.id}
                     onHover={() => setHoveredId(card.id)}
                     onLeave={() => setHoveredId(null)}
+                    onZoom={openZoom}
                   />
                 ))}
               </div>
@@ -835,6 +861,7 @@ export default function CardexPage() {
                 game={catalogGame}
                 searchQuery={searchQuery}
                 hiddenRarities={RARITY_TOGGLE_GAMES.has(catalogGame) ? hiddenRarities : EMPTY_SET}
+                onZoom={openZoom}
               />
             )}
 
@@ -854,14 +881,16 @@ export default function CardexPage() {
           </>
         )}
       </div>
+      <CardZoomOverlay data={zoomCard} onClose={() => setZoomCard(null)} />
     </AuthGuard>
   )
 }
 
 // ── Special / inventory-only bucket ──────────────────────────────────────────
 
-function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities }: {
+function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, onZoom }: {
   cards: Card[]; gameColor: string; game: string; searchQuery: string; hiddenRarities: Set<string>
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
@@ -923,6 +952,7 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities }: 
                 isHovered={hoveredId === card.id}
                 onHover={() => setHoveredId(card.id)}
                 onLeave={() => setHoveredId(null)}
+                onZoom={onZoom}
               />
             ))}
           </div>
@@ -941,9 +971,10 @@ interface CardTileProps {
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }
 
-function CardTile({ card, gameColor, game, isHovered, onHover, onLeave }: CardTileProps) {
+function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#6b7280'
   // RARITY_LABELS_BY_GAME is keyed per-game (lib/utils.ts) — the same raw string can mean
   // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
@@ -956,9 +987,21 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave }: CardTi
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
       onClick={(e) => {
-        if (e.ctrlKey || e.metaKey) openEbaySearch({ name: card.name, number: card.number, set: card.setName, game })
+        if (e.ctrlKey || e.metaKey) { openEbaySearch({ name: card.name, number: card.number, set: card.setName, game }); return }
+        onZoom(e.currentTarget, {
+          imageUrl: card.imageUrl,
+          name: card.name,
+          number: card.number,
+          rarityLabel: rarityLabel.replace('_', ' '),
+          rarityColor,
+          marketPrice: card.marketPrice,
+          owned: card.owned,
+          quantity: card.quantity,
+          gameColor,
+          ebayCard: { name: card.name, number: card.number, set: card.setName, game },
+        })
       }}
-      title="⌘/Ctrl+Click to search eBay sold listings"
+      title="Click to view — ⌘/Ctrl+Click to search eBay sold listings"
     >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
@@ -1016,16 +1059,34 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave }: CardTi
 
 // ── Inventory card tile (special bucket — always owned) ───────────────────────
 
-function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave }: {
+function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoom }: {
   card: Card; gameColor: string; isHovered: boolean; onHover: () => void; onLeave: () => void
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
+  const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#6b7280') : '#6b7280'
+
   return (
     <div
       className="relative cursor-pointer"
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
-      onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
-      title="⌘/Ctrl+Click to search eBay sold listings"
+      onClick={(e) => {
+        if (e.ctrlKey || e.metaKey) { openEbaySearch(card); return }
+        onZoom(e.currentTarget, {
+          imageUrl: card.imageUrl ?? '',
+          name: card.name,
+          number: card.number,
+          rarityLabel: card.rarity ?? '',
+          rarityColor,
+          marketPrice: card.currentPrice ?? 0,
+          owned: true,
+          quantity: card.quantity,
+          isFoil: card.isFoil,
+          gameColor,
+          ebayCard: card,
+        })
+      }}
+      title="Click to view — ⌘/Ctrl+Click to search eBay sold listings"
     >
       <div
         className="relative w-full rounded-lg overflow-hidden shadow-lg transition-all duration-200"
@@ -1074,6 +1135,171 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave }: {
           <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Card zoom overlay ──────────────────────────────────────────────────────────
+// Clicking a Cardex tile (without ⌘/Ctrl, which is the eBay shortcut instead) pops the card open
+// here for an isolated look: it flies from wherever it actually was in the grid to center screen
+// while flipping over twice (a real 3D rotateY, not just a scale-up), landing with the same
+// bounce-settle feel the rest of the app's "special moment" animations already use (sold-pop,
+// card-unlock-toast — see the card-zoom-* keyframes in globals.css, deliberately reusing that
+// established motion language rather than inventing a new one).
+//
+// The flight is a classic FLIP transform play: the mover div is rendered at its real FINAL
+// on-screen position/size (centered by the backdrop's own flex layout — no percentage-anchor
+// math needed), then measured via a ref. Its bounding rect is compared against the clicked tile's
+// own rect (captured at click time, before this component even mounts) to compute the inverse
+// translate+scale, which is applied INLINE with no transition so nothing visibly jumps. One frame
+// later that inline override is cleared, and the CSS class's own transition animates smoothly from
+// "sitting where the tile was" to "centered and full size." This all happens in useLayoutEffect via
+// direct ref mutation (not React state) specifically to avoid an extra render and guarantee zero
+// flash at the wrong position — see globals.css's own comment on the card-zoom-* rules for the
+// timing this is tuned to match.
+function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose: () => void }) {
+  const [visible, setVisible] = useState(false)
+  const [closing, setClosing] = useState(false)
+  const moverRef = useRef<HTMLDivElement>(null)
+  // Keeps rendering the last real card while the close animation plays — `data` itself goes null
+  // immediately on close, but the fade/shrink-out still needs something to fade out.
+  const lastData = useRef<ZoomCardData | null>(null)
+  if (data) lastData.current = data
+
+  useLayoutEffect(() => {
+    if (!data || !moverRef.current) return
+    const el = moverRef.current
+    setVisible(false)
+    setClosing(false)
+    const finalRect = el.getBoundingClientRect()
+    const origin = data.originRect
+    const dx = (origin.left + origin.width / 2) - (finalRect.left + finalRect.width / 2)
+    const dy = (origin.top + origin.height / 2) - (finalRect.top + finalRect.height / 2)
+    const scaleX = origin.width / finalRect.width
+    const scaleY = origin.height / finalRect.height
+    el.style.transition = 'none'
+    el.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`
+    el.offsetHeight // force layout so the line above is committed before it's cleared next frame
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!moverRef.current) return
+        moverRef.current.style.transition = ''
+        moverRef.current.style.transform = ''
+        setVisible(true)
+      })
+    })
+  }, [data])
+
+  function handleClose() {
+    setClosing(true)
+    // `closing` must be reset back to false once the exit animation finishes, in the same beat as
+    // telling the parent to clear `data` — otherwise `!data && !closing` never becomes true again
+    // after the very first close (parent's `data` goes null, but this component's own `closing`
+    // state has nothing else that ever un-sets it), so the component keeps rendering forever: an
+    // invisible (opacity-0, but still `fixed inset-0 z-50`) backdrop left sitting over the whole
+    // page, silently swallowing every click underneath it. Reproduces on literally the second zoom
+    // open/close of a session, not some rare edge case — caught by testing exactly that.
+    setTimeout(() => {
+      setClosing(false)
+      onClose()
+    }, 200) // matches card-zoom-backdrop-out / card-zoom-shrink-out's duration
+  }
+
+  useEffect(() => {
+    if (!data) return
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') handleClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+
+  if (!data && !closing) return null
+  const d = lastData.current
+  if (!d) return null
+
+  return (
+    <div
+      className={cn('fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 p-4 card-zoom-backdrop', closing && 'closing pointer-events-none')}
+      style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
+    >
+      <button
+        onClick={handleClose}
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 z-10"
+      >
+        <X size={18} />
+      </button>
+
+      <div className={cn('flex flex-col items-center gap-4', closing && 'card-zoom-content closing')}>
+        <div
+          ref={moverRef}
+          className="relative card-zoom-mover"
+          style={{ width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
+        >
+          <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
+            {/* Front face — the real card */}
+            <div
+              className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
+              style={{ boxShadow: `0 0 0 2px ${d.gameColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
+            >
+              {d.imageUrl ? (
+                <img src={d.imageUrl} alt={d.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>
+                  #{d.number}
+                </div>
+              )}
+            </div>
+            {/* Back face — a generic card back (no real per-game back art exists), briefly visible
+                twice mid-flip since it never actually shows for more than an instant */}
+            <div
+              className="card-zoom-face card-zoom-face-back absolute inset-0 rounded-2xl overflow-hidden flex items-center justify-center"
+              style={{
+                background: `radial-gradient(circle at 50% 40%, ${d.gameColor}33, #0a0a0f 70%)`,
+                boxShadow: `0 0 0 2px ${d.gameColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
+              }}
+            >
+              <div className="rounded-full p-4" style={{ backgroundColor: d.gameColor + '22', border: `1px solid ${d.gameColor}55` }}>
+                <Sparkles size={32} style={{ color: d.gameColor }} />
+              </div>
+            </div>
+          </div>
+
+          {visible && (
+            <div className="card-zoom-glow-ring absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: `0 0 60px 20px ${d.gameColor}` }} />
+          )}
+          {visible && (
+            <div className="card-zoom-shine absolute inset-0 rounded-2xl pointer-events-none overflow-hidden">
+              <div className="absolute inset-y-0 w-1/3" style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)' }} />
+            </div>
+          )}
+        </div>
+
+        {visible && (
+          <div className="card-zoom-panel card-glass px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
+            <div className="text-base font-bold text-white leading-tight">{d.name}</div>
+            <div className="flex items-center gap-2 flex-wrap justify-center">
+              <span className="text-xs text-slate-500">#{d.number}</span>
+              {d.rarityLabel && (
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: d.rarityColor + '22', color: d.rarityColor }}>
+                  {d.rarityLabel}
+                </span>
+              )}
+              {d.isFoil && <span className="text-[11px] font-medium text-amber-400">✨ Foil</span>}
+            </div>
+            {d.marketPrice > 0 && <div className="text-sm font-semibold text-white">${d.marketPrice.toFixed(2)}</div>}
+            <div className="text-xs" style={{ color: d.owned ? '#34d399' : '#64748b' }}>
+              {d.owned ? `✓ ${d.quantity > 1 ? `×${d.quantity} owned` : 'owned'}` : 'not collected'}
+            </div>
+            <button
+              onClick={() => openEbaySearch(d.ebayCard)}
+              className="mt-1 text-[11px] text-slate-500 hover:text-white underline underline-offset-2"
+            >
+              Search eBay sold listings
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
