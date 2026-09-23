@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Loader2, Package, FolderHeart, ChevronDown, Search } from 'lucide-react'
+import { Loader2, Package, FolderHeart, ChevronRight, Search } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
@@ -357,22 +357,6 @@ function matchesSearch(query: string, name: string, number: string): boolean {
   return name.toLowerCase().includes(q) || number.toLowerCase().includes(q.replace(/^#/, ''))
 }
 
-// ── Group collapsing ────────────────────────────────────────────────────────────
-
-// A catch-all group (label mentions "special", "promo", or "other") starts collapsed — these are
-// the ones that tend to accumulate dozens of one-off sets nobody's specifically browsing for
-// (One Piece's "Special Sets" alone can run 100+ entries). A curated era/product group (Main
-// Sets, Booster Sets, Scarlet & Violet, ...) starts open, matching the pre-existing behavior for
-// those.
-function defaultGroupCollapsed(label: string): boolean {
-  return /special|promo|other/i.test(label)
-}
-
-function isGroupCollapsed(key: string, label: string, toggled: Set<string>): boolean {
-  const isDefault = defaultGroupCollapsed(label)
-  return toggled.has(key) ? !isDefault : isDefault
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CardexPage() {
@@ -401,13 +385,13 @@ export default function CardexPage() {
   const [onepieceSetsLoading, setOnepieceSetsLoading] = useState(true)
   const [mtgSetsLoading, setMtgSetsLoading] = useState(true)
 
-  // Every group is collapsible; catch-all groups (Special/Promo/Other-labeled — One Piece's
-  // "Special Sets" alone can run 100+ entries) start collapsed since they're rarely what someone
-  // came to browse, while curated era/product groups (Main Sets, Booster Sets, Scarlet & Violet,
-  // ...) start open as before. A key in this set means "toggled away from its computed default,"
-  // not "collapsed" outright — see isGroupCollapsed() — so this only has to track user overrides,
-  // not the default itself, which can be computed fresh from each group's own label/size anytime.
-  const [toggledGroups, setToggledGroups] = useState<Set<string>>(new Set())
+  // The set picker is a two-level tree: pick a category (an era/product group, e.g. "Scarlet &
+  // Violet" or "Main Sets") first, then pick a set from just that category's list — replacing an
+  // earlier design that rendered every group's sets expanded all at once (170+ pill buttons for
+  // Pokemon alone, most of the page spent scrolling past sets before reaching the actual grid).
+  // Remembered per game so switching from Pokemon to Riftbound and back doesn't reset which era
+  // you were browsing.
+  const [activeCategoryByGame, setActiveCategoryByGame] = useState<Partial<Record<CatalogGame, string>>>({})
 
   // Only the very first successful group fetch (whichever game it's for) gets to pick the
   // initial active set — otherwise the lorcana/riftbound registry fetch and the Pokemon live-set
@@ -434,7 +418,9 @@ export default function CardexPage() {
         const built = buildGroupsByGame(data)
         setGroupsByGame((g) => ({ ...g, ...built }))
         if (!initialSetPicked.current && (activeGame === 'lorcana' || activeGame === 'riftbound')) {
-          setActiveSet(built[activeGame][0]?.sets[0] ?? PLACEHOLDER_SET)
+          const first = built[activeGame][0]
+          setActiveSet(first?.sets[0] ?? PLACEHOLDER_SET)
+          if (first) setActiveCategoryByGame((c) => ({ ...c, [activeGame]: first.label }))
           initialSetPicked.current = true
         }
       })
@@ -457,6 +443,7 @@ export default function CardexPage() {
         setGroupsByGame((g) => ({ ...g, pokemon: built }))
         if (!initialSetPicked.current && activeGame === 'pokemon') {
           setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          if (built[0]) setActiveCategoryByGame((c) => ({ ...c, pokemon: built[0].label }))
           initialSetPicked.current = true
         }
       })
@@ -479,6 +466,7 @@ export default function CardexPage() {
         setGroupsByGame((g) => ({ ...g, onepiece: built }))
         if (!initialSetPicked.current && activeGame === 'onepiece') {
           setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          if (built[0]) setActiveCategoryByGame((c) => ({ ...c, onepiece: built[0].label }))
           initialSetPicked.current = true
         }
       })
@@ -501,6 +489,7 @@ export default function CardexPage() {
         setGroupsByGame((g) => ({ ...g, mtg: built }))
         if (!initialSetPicked.current && activeGame === 'mtg') {
           setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          if (built[0]) setActiveCategoryByGame((c) => ({ ...c, mtg: built[0].label }))
           initialSetPicked.current = true
         }
       })
@@ -539,8 +528,8 @@ export default function CardexPage() {
     if (!chosen) { chosen = groups[0]?.sets[0] ?? null; chosenGroupLabel = groups[0]?.label ?? null }
 
     setActiveSet(chosen ?? PLACEHOLDER_SET)
-    if (chosenGroupLabel && defaultGroupCollapsed(chosenGroupLabel)) {
-      setToggledGroups((prev) => new Set(prev).add(`${urlGame}:${chosenGroupLabel}`))
+    if (chosenGroupLabel) {
+      setActiveCategoryByGame((c) => ({ ...c, [urlGame]: chosenGroupLabel! }))
     }
   }, [urlGame, urlSet, activeGame, groupsByGame])
 
@@ -592,16 +581,21 @@ export default function CardexPage() {
 
   function switchGame(game: CatalogGame | 'personal') {
     setActiveGame(game)
-    if (game !== 'personal') setActiveSet(groupsByGame[game][0]?.sets[0] ?? PLACEHOLDER_SET)
+    if (game === 'personal') return
+    const groups = groupsByGame[game]
+    // Restore whichever category was last active for this game, if it still exists; otherwise
+    // fall back to the first one. Lets switching Pokemon -> Riftbound -> back to Pokemon land on
+    // the same era instead of resetting to the top every time.
+    const remembered = activeCategoryByGame[game]
+    const group = groups.find((g) => g.label === remembered) ?? groups[0]
+    setActiveSet(group?.sets[0] ?? PLACEHOLDER_SET)
+    if (group) setActiveCategoryByGame((c) => ({ ...c, [game]: group.label }))
   }
 
-  function toggleGroup(key: string) {
-    setToggledGroups((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+  function selectCategory(label: string) {
+    setActiveCategoryByGame((c) => ({ ...c, [catalogGame]: label }))
+    const group = groupsByGame[catalogGame].find((g) => g.label === label)
+    setActiveSet(group?.sets[0] ?? PLACEHOLDER_SET)
   }
 
   function toggleRarity(rarity: string) {
@@ -651,6 +645,13 @@ export default function CardexPage() {
 
   const isSpecial = activeSet.fromInventory
 
+  // The active game's categories (eras/product groups) and which one is currently selected —
+  // drives the two-tier tree picker below (category list, then that category's sets).
+  const categories = groupsByGame[catalogGame]
+  const activeCategoryLabel = activeCategoryByGame[catalogGame] ?? categories[0]?.label
+  const activeCategoryGroup = categories.find((g) => g.label === activeCategoryLabel) ?? categories[0]
+  const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading
+
   return (
     <AuthGuard>
       <div className="pb-20 md:pb-0">
@@ -687,57 +688,72 @@ export default function CardexPage() {
           <PersonalCollectionsView />
         ) : (
           <>
-            {/* Grouped set selector */}
-            {(catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading) && (
+            {/* Two-tier set tree: pick a category (era/product group) on the left, then a set
+                from just that category on the right — replaces an older design that rendered
+                every category's sets expanded at once (170+ pill buttons for Pokemon alone). */}
+            {setsLoading && (
               <div className="flex items-center gap-2 text-slate-500 text-sm mb-6">
                 <Loader2 size={14} className="animate-spin" />
                 Loading sets…
               </div>
             )}
-            <div className="space-y-3 mb-6">
-              {groupsByGame[catalogGame].map((group) => {
-                const key = `${catalogGame}:${group.label}`
-                const collapsed = isGroupCollapsed(key, group.label, toggledGroups)
-                return (
-                  <div key={group.label}>
-                    <button
-                      onClick={() => toggleGroup(key)}
-                      className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-600 hover:text-slate-400 mb-1.5 px-0.5"
-                    >
-                      <ChevronDown size={12} className={cn('transition-transform', collapsed && '-rotate-90')} />
-                      {group.label}
-                      <span className="text-slate-700 normal-case font-normal">({group.sets.length})</span>
-                    </button>
-                    {!collapsed && (
-                      <div className="flex gap-2 flex-wrap">
-                        {group.sets.map((set) => {
-                          const isActive = activeSet.name === set.name
-                          return (
-                            <button
-                              key={set.name}
-                              onClick={() => setActiveSet(set)}
-                              className={cn(
-                                'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
-                                isActive
-                                  ? 'text-white border-transparent'
-                                  : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
-                                set.fromInventory && !isActive && 'border-dashed',
-                              )}
-                              style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
-                            >
-                              {set.label ?? set.name}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            {!setsLoading && (
+              <div className="mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4">
+                {/* Categories */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0 sm:flex-col sm:w-52 sm:flex-shrink-0 sm:overflow-visible sm:border-r sm:border-slate-800 sm:pr-3">
+                  {categories.map((group) => {
+                    const isActive = group.label === activeCategoryLabel
+                    return (
+                      <button
+                        key={group.label}
+                        onClick={() => selectCategory(group.label)}
+                        className={cn(
+                          'shrink-0 sm:shrink sm:w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap text-left border',
+                          isActive
+                            ? 'text-white border-transparent'
+                            : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
+                        )}
+                        style={isActive ? { backgroundColor: gameColor + '22', color: gameColor, borderColor: gameColor + '55' } : {}}
+                      >
+                        <span>{group.label}</span>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <span className={cn('text-[10px] font-normal', isActive ? 'opacity-70' : 'text-slate-600')}>
+                            {group.sets.length}
+                          </span>
+                          <ChevronRight size={12} className="hidden sm:block opacity-60" />
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Sets within the active category */}
+                <div className="flex-1 min-w-0 flex gap-2 flex-wrap content-start">
+                  {(activeCategoryGroup?.sets ?? []).map((set) => {
+                    const isActive = activeSet.name === set.name
+                    return (
+                      <button
+                        key={set.name}
+                        onClick={() => setActiveSet(set)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
+                          isActive
+                            ? 'text-white border-transparent'
+                            : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
+                          set.fromInventory && !isActive && 'border-dashed',
+                        )}
+                        style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
+                      >
+                        {set.label ?? set.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Search within the active set/bucket */}
-            {!(catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading) && activeSet.name && (
+            {!setsLoading && activeSet.name && (
               <div className="relative mb-4">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                 <input
