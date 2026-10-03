@@ -1,9 +1,31 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import type { Card } from './types'
+import type { Card, Game } from './types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+// Per-game, per-rarity override for the Cardex zoom overlay's glow/border/card-back color —
+// distinct from RARITY_COLORS (the rarity pill color used elsewhere), a separate, simpler palette
+// by design. Only Riftbound is populated for now (the user's own testing ground); falls back to
+// the card's game color for every other game/rarity until more are specified. Lives here (not in
+// CardexPage.tsx, where the zoom overlay itself is defined) so PersonalCollectionsView.tsx — a
+// sibling tab inside the same Cardex page, not a descendant of CardexPage's module — can share it
+// without a circular import between the two.
+const ZOOM_GLOW_COLORS: Partial<Record<Game, Record<string, string>>> = {
+  riftbound: {
+    Common: '#9ca3af',       // light gray
+    Uncommon: '#4b5563',     // darker gray
+    Rare: '#6d28d9',         // dark purple
+    Epic: '#eab308',         // gold/yellow
+    Overnumbered: '#eab308', // gold/yellow
+    Star: '#eab308',         // gold/yellow (Overnumbered Signature)
+  },
+}
+
+export function zoomGlowColor(game: Game, rarity: string, fallback: string): string {
+  return ZOOM_GLOW_COLORS[game]?.[rarity] ?? fallback
 }
 
 // Unique identity key — same card from different purchase sessions (different Firestore

@@ -18,7 +18,12 @@ import {
 } from '@/lib/firebase/collections'
 import type { CardSearchResult } from '@/lib/api/search'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
-import { cn, openEbaySearch } from '@/lib/utils'
+import { cn, openEbaySearch, zoomGlowColor } from '@/lib/utils'
+// Type-only import — erased at compile time, so this carries none of the runtime circular-import
+// risk a value import would (CardexPage.tsx imports THIS file to render the Personalized
+// Collections tab). See ZoomCardData's own comment in CardexPage.tsx for why the type lives there
+// and zoomGlowColor() lives in lib/utils.ts instead.
+import type { ZoomCardData } from './CardexPage'
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
@@ -49,7 +54,11 @@ function matchesSearch(query: string, name: string, number: string): boolean {
   return name.toLowerCase().includes(q) || number.toLowerCase().includes(q.replace(/^#/, ''))
 }
 
-export function PersonalCollectionsView() {
+export function PersonalCollectionsView({
+  onZoom,
+}: {
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
+}) {
   const { user } = useAuth()
   const { cards } = useStore()
   const [collections, setCollections] = useState<PersonalCollection[]>([])
@@ -196,6 +205,7 @@ export function PersonalCollectionsView() {
               showAddModal={showAddModal}
               onOpenAddModal={() => setShowAddModal(true)}
               onCloseAddModal={() => setShowAddModal(false)}
+              onZoom={onZoom}
             />
           )}
         </>
@@ -275,7 +285,7 @@ function CreateCollectionForm({
 // ── Collection detail (grid + Add Card modal) ─────────────────────────────────
 
 function CollectionDetail({
-  collection, ownedCards, onDelete, onCardsChanged, showAddModal, onOpenAddModal, onCloseAddModal,
+  collection, ownedCards, onDelete, onCardsChanged, showAddModal, onOpenAddModal, onCloseAddModal, onZoom,
 }: {
   collection: PersonalCollection
   ownedCards: Card[]
@@ -284,6 +294,7 @@ function CollectionDetail({
   showAddModal: boolean
   onOpenAddModal: () => void
   onCloseAddModal: () => void
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const { user } = useAuth()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -459,6 +470,7 @@ function CollectionDetail({
               onHover={() => setHoveredId(cardKey(card))}
               onLeave={() => setHoveredId(null)}
               onRemove={() => removeCard(cardKey(card))}
+              onZoom={onZoom}
             />
           ))}
         </div>
@@ -476,6 +488,7 @@ function CollectionDetail({
                   onHover={() => setHoveredId(cardKey(card))}
                   onLeave={() => setHoveredId(null)}
                   onRemove={() => removeCard(cardKey(card))}
+                  onZoom={onZoom}
                 />
               ))}
             </div>
@@ -622,6 +635,7 @@ function SortablePersonalCardTile(props: {
   onHover: () => void
   onLeave: () => void
   onRemove: () => void
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cardKey(props.card) })
   const style = {
@@ -640,7 +654,7 @@ function SortablePersonalCardTile(props: {
 // ── Card tile — same visual language as the main Cardex grid, plus a remove button ──
 
 function PersonalCardTile({
-  card, gameColor, game, isHovered, onHover, onLeave, onRemove,
+  card, gameColor, game, isHovered, onHover, onLeave, onRemove, onZoom,
 }: {
   card: PersonalCollectionCard & { owned: boolean; quantity: number }
   gameColor: string
@@ -649,8 +663,10 @@ function PersonalCardTile({
   onHover: () => void
   onLeave: () => void
   onRemove: () => void
+  onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const rarityColor = RARITY_COLORS[card.rarity ?? ''] ?? '#6b7280'
+  const ebayCard = { name: card.name, number: card.number, set: card.setName, game, isFoil: card.isFoil }
 
   return (
     <div
@@ -658,9 +674,22 @@ function PersonalCardTile({
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
       onClick={(e) => {
-        if (e.ctrlKey || e.metaKey) openEbaySearch({ name: card.name, number: card.number, set: card.setName, game, isFoil: card.isFoil })
+        if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
+        onZoom(e.currentTarget, {
+          imageUrl: card.imageUrl,
+          name: card.name,
+          number: card.number,
+          rarityLabel: card.rarity ?? '',
+          rarityColor,
+          marketPrice: card.marketPrice ?? 0,
+          owned: card.owned,
+          quantity: card.quantity,
+          isFoil: card.isFoil,
+          glowColor: zoomGlowColor(game, card.rarity ?? '', gameColor),
+          ebayCard,
+        })
       }}
-      title="⌘/Ctrl+Click to search eBay sold listings"
+      title="Click to view — ⌘/Ctrl+Click to search eBay sold listings"
     >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
@@ -698,7 +727,7 @@ function PersonalCardTile({
         </div>
 
         <button
-          onClick={onRemove}
+          onClick={(e) => { e.stopPropagation(); onRemove() }}
           title="Remove from this collection"
           className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/70 flex items-center justify-center text-white/70 hover:text-red-400 hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity"
         >

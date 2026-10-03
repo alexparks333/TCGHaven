@@ -1,8 +1,8 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, Upload, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw } from 'lucide-react'
+import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch,
 } from 'firebase/firestore'
@@ -1176,49 +1176,45 @@ const UPLOAD_ALLOWED_TYPES: Record<string, string> = {
 }
 const UPLOAD_MAX_BYTES = 8 * 1024 * 1024 // 8MB
 
-// Every card image in this app renders as a small thumbnail (≤160px, see the Cardex grid —
-// there's no zoom/detail view anywhere) and roughly matches what the official sources already
-// provide (Pokemon's "large" ~600x825, lorcast's "small" digital variant). A photo uploaded
-// straight from a phone can be 3000px+ and several MB — dead weight that's downloaded in full
-// on every render everywhere (Cardex, Inventory, Portfolio, search dropdown) forever, only to
-// be squeezed down by CSS. So resize once here, client-side, before the file ever reaches
-// Storage — the cost is paid once at upload time instead of on every future page load.
-const DISPLAY_MAX_DIM = 800
-const DISPLAY_QUALITY = 0.85
-
-// Downscales via canvas and re-encodes as WebP (universally supported by the browsers this app
-// already requires for Lorcana's AVIF images — see CLAUDE.md's Lorcana image format note).
-// Returns null (rather than throwing) if the browser can't do it, so callers can fall back to
-// uploading the original untouched instead of failing the whole upload over this optimization.
-async function resizeImageForDisplay(file: File): Promise<Blob | null> {
-  try {
-    const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, DISPLAY_MAX_DIM / Math.max(bitmap.width, bitmap.height))
-    const w = Math.round(bitmap.width * scale)
-    const h = Math.round(bitmap.height * scale)
-    const canvas = document.createElement('canvas')
-    canvas.width = w
-    canvas.height = h
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-    ctx.drawImage(bitmap, 0, 0, w, h)
-    bitmap.close()
-    return await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob((blob) => resolve(blob), 'image/webp', DISPLAY_QUALITY)
-    })
-  } catch {
-    return null
-  }
-}
+// Every card image in this app renders as a small thumbnail in most places, but the Cardex zoom
+// overlay (CardexPage.tsx's CardZoomOverlay) blows it up to `min(80vw, 300px)` at a fixed 5/7
+// aspect ratio — the same ratio every card grid tile uses (Cardex, Personal Collections). A photo
+// uploaded straight from a phone is framed however the photo happened to be taken, not to that
+// ratio, so letting CSS `object-cover` auto-crop it at render time picks an arbitrary center-crop
+// that often cuts off the top/bottom of the actual card art. The crop tool below lets the admin
+// choose exactly what part of the photo fills that frame *once*, at upload time, rather than
+// leaving it to chance on every future render.
+const CROP_ASPECT_W = 5
+const CROP_ASPECT_H = 7
+const CROP_OUTPUT_H = 700
+const CROP_OUTPUT_W = Math.round((CROP_OUTPUT_H * CROP_ASPECT_W) / CROP_ASPECT_H) // 500
+const CROP_QUALITY = 0.85
+const CROP_MAX_ZOOM = 4
 
 function ImageUploadField({
-  game, uploadId, imageUrl, onChange,
-}: { game: Game; uploadId: string; imageUrl: string; onChange: (url: string) => void }) {
+  game, uploadId, imageUrl, onChange, onBusyChange,
+}: {
+  game: Game
+  uploadId: string
+  imageUrl: string
+  onChange: (url: string) => void
+  // Lets the parent form (AddCardForm/EditCardForm) disable its own Save button while an upload
+  // is still in flight — without this, clicking "Use this image" then immediately "Save Changes"
+  // saves whatever `imageUrl` was *before* the upload resolves (onChange(url) only fires once
+  // uploadBytes()+getDownloadURL() both complete), silently discarding the crop: the photo really
+  // did get uploaded to Storage, it just never got linked to the card doc.
+  onBusyChange?: (busy: boolean) => void
+}) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [cropSource, setCropSource] = useState<Blob | null>(null)
+  const [fetchingExisting, setFetchingExisting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  async function handleFile(file: File) {
+  useEffect(() => { onBusyChange?.(uploading || fetchingExisting) }, [uploading, fetchingExisting, onBusyChange])
+
+  function pickFile(file: File) {
     setUploadError(null)
     const ext = UPLOAD_ALLOWED_TYPES[file.type]
     if (!ext) { setUploadError('Only JPEG, PNG, WebP, or AVIF images are accepted'); return }
@@ -1226,16 +1222,43 @@ function ImageUploadField({
       setUploadError(`Image is too large (${(file.size / 1024 / 1024).toFixed(1)}MB) — max 8MB`)
       return
     }
-    setUploading(true)
+    setCropSource(file)
+  }
+
+  // Re-opens the crop tool on whatever image is already set, without asking for a new file. The
+  // browser can't draw a cross-origin image straight onto a <canvas> to crop it (missing
+  // Access-Control-Allow-Origin taints the canvas — true of Firebase Storage's own download URLs,
+  // not just third-party ones, confirmed with `curl -I`), so this fetches the bytes through
+  // /api/admin/catalog/image-proxy (same-origin from the browser's perspective) instead of
+  // loading `imageUrl` directly into an <img> for the crop source.
+  async function resizeExisting() {
+    if (!imageUrl) return
+    setUploadError(null)
+    setFetchingExisting(true)
     try {
-      const resized = await resizeImageForDisplay(file)
+      const res = await adminFetch(`/api/admin/catalog/image-proxy?url=${encodeURIComponent(imageUrl)}`)
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || `Request failed (${res.status})`)
+      }
+      setCropSource(await res.blob())
+    } catch (err) {
+      setUploadError(`Couldn't load the current image to resize: ${(err as Error).message}`)
+    } finally {
+      setFetchingExisting(false)
+    }
+  }
+
+  async function uploadCropped(blob: Blob) {
+    setUploading(true)
+    setUploadError(null)
+    try {
       const safeId = uploadId.replace(/[^a-zA-Z0-9_-]/g, '-')
-      const storageRef = resized
-        ? ref(storage, `catalog/${game}/${safeId}.webp`)
-        : ref(storage, `catalog/${game}/${safeId}.${ext}`)
-      await uploadBytes(storageRef, resized ?? file, { contentType: resized ? 'image/webp' : file.type })
+      const storageRef = ref(storage, `catalog/${game}/${safeId}.webp`)
+      await uploadBytes(storageRef, blob, { contentType: 'image/webp' })
       const url = await getDownloadURL(storageRef)
       onChange(url)
+      setCropSource(null)
     } catch (err) {
       setUploadError(`Upload failed: ${(err as Error).message}`)
     } finally {
@@ -1243,42 +1266,345 @@ function ImageUploadField({
     }
   }
 
+  // Deliberately no <input> for the URL here — the caller (AddCardForm/EditCardForm) renders
+  // that as a plain field alongside its others; this component is just the image box itself,
+  // sized to sit as its own column next to the field list rather than inline with them.
   return (
-    <div className="col-span-2 sm:col-span-4 space-y-1.5">
-      <div className="flex gap-2 items-center">
-        <input
-          placeholder="Image URL (or upload a photo instead →)"
-          value={imageUrl}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200"
-        />
-        {/* Plain <img>, deliberately not next/image: this previews whatever URL the admin has
-            typed/pasted so far (e.g. a manual TCGPlayer link), which can be any domain — next/image
-            would throw at runtime for anything outside next.config.js's remotePatterns allowlist. */}
-        {imageUrl && (
-          <img src={imageUrl} alt="" className="w-8 h-11 object-cover rounded shrink-0 bg-slate-800" />
+    <div className="w-40 sm:w-44 shrink-0 mx-auto sm:mx-0 flex flex-col gap-2">
+      {/* Plain <img>, deliberately not next/image: this previews whatever URL is set so far
+          (e.g. a pasted TCGPlayer link), which can be any domain — next/image would throw at
+          runtime for anything outside next.config.js's remotePatterns allowlist. */}
+      <div
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          const f = e.dataTransfer.files?.[0]
+          if (f) pickFile(f)
+        }}
+        className={cn(
+          'group relative w-full aspect-[5/7] rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden bg-slate-950 transition-colors cursor-pointer',
+          dragOver ? 'border-violet-500 bg-violet-950/30' : 'border-slate-700 hover:border-violet-700/60',
         )}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/avif"
-          className="hidden"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-        />
+        title="Click, or drag & drop a photo, to upload and fit it to the card frame"
+      >
+        {uploading ? (
+          <Loader2 size={24} className="animate-spin text-slate-500" />
+        ) : imageUrl ? (
+          <>
+            <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 opacity-0 group-hover:opacity-100 transition-all">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-white">
+                <Pencil size={12} /> Replace
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-slate-600 px-4 text-center">
+            <ImagePlus size={28} />
+            <span className="text-[11px] leading-tight">Drag &amp; drop a photo, or click to upload</span>
+          </div>
+        )}
+      </div>
+      {imageUrl && (
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-50 shrink-0"
+          onClick={resizeExisting}
+          disabled={fetchingExisting || uploading}
+          className="w-full flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-violet-600 hover:text-white transition-colors disabled:opacity-50"
+          title="Reposition and zoom the current image to better fit the card frame — no re-upload needed"
         >
-          {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
-          Upload photo
+          {fetchingExisting ? <Loader2 size={13} className="animate-spin" /> : <ZoomIn size={13} />}
+          Resize
         </button>
-      </div>
-      {uploadError && <div className="text-[11px] text-red-400">{uploadError}</div>}
+      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/avif"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = '' }}
+      />
+      {uploadError && <div className="text-[10.5px] text-red-400 text-center leading-tight">{uploadError}</div>}
+      {cropSource && (
+        <ImageCropModal source={cropSource} uploading={uploading} onCancel={() => setCropSource(null)} onConfirm={uploadCropped} />
+      )}
     </div>
   )
 }
+
+// Drag-to-pan / slider-to-zoom cropper — a full-screen takeover, the same "the tool IS the
+// screen" treatment as the Cardex zoom overlay (CardZoomOverlay in this file's sibling
+// CardexPage.tsx), not a small floating dialog. A fixed-size dialog box was tried first and
+// shipped two real problems in a row: too small to see the card clearly, and on a short browser
+// window the footer buttons could end up entirely below the viewport with no way to reach them
+// (the backdrop is `fixed`, so page-scrolling never moves it, and centering a too-tall flex child
+// clips it top AND bottom). Full-screen with a pinned header/footer sidesteps both at once: the
+// crop frame gets the full remaining height of the screen to work with (so it's always as big as
+// it can be), and the footer controls are laid out in normal flow below it — never scrolled away,
+// never off-screen, since the header+footer heights are subtracted from the frame's available
+// space rather than competing with it inside one scrollable box.
+//
+// The frame's on-screen size is therefore responsive (CSS `h-full`/`aspect-[5/7]`, not a fixed
+// px constant) and measured via ResizeObserver into `frameSize` — every bit of the crop math
+// (base scale, pan clamping, and the final crop rect) reads that measured size instead of a
+// hardcoded width/height, so it stays correct at any window size or on rotation.
+const CROP_ZOOM_STEP = 0.25
+
+function ImageCropModal({
+  source, uploading, onCancel, onConfirm,
+}: { source: Blob; uploading: boolean; onCancel: () => void; onConfirm: (blob: Blob) => void }) {
+  const [src] = useState(() => URL.createObjectURL(source))
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
+  const [zoom, setZoom] = useState(1)
+  // The zoom % text field's own displayed string, deliberately NOT derived straight from `zoom`
+  // on every keystroke — clamping (and therefore re-rendering the controlled value) on every
+  // single character typed makes typing a 2+ digit number nearly impossible: typing "150" one
+  // key at a time hits "1" first, which parses to 1% and instantly clamps up to the 100% floor,
+  // snapping the field back to "100" before the "5" or "0" is ever entered. This mirrors how any
+  // "type a number with a min/max" field should work: let the text be whatever's typed, and only
+  // parse+clamp+apply on blur or Enter (see commitZoomText/onKeyDown below) — never mid-keystroke.
+  const [zoomText, setZoomText] = useState('100')
+  const zoomInputFocused = useRef(false)
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const [frameSize, setFrameSize] = useState({ w: 280, h: 392 }) // fallback until measured
+  const imgRef = useRef<HTMLImageElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ startX: number; startY: number; startOffset: { x: number; y: number } } | null>(null)
+
+  useEffect(() => () => URL.revokeObjectURL(src), [src])
+
+  // Keeps the text field showing the current zoom whenever it changes from anywhere ELSE (the
+  // slider, the +/- buttons, scroll/pinch) — but never while the field itself has focus, so it
+  // doesn't fight live typing.
+  useEffect(() => {
+    if (!zoomInputFocused.current) setZoomText(String(Math.round(zoom * 100)))
+  }, [zoom])
+
+  function commitZoomText(raw: string) {
+    const pct = parseInt(raw, 10)
+    const next = isNaN(pct) ? zoom : Math.min(CROP_MAX_ZOOM, Math.max(1, pct / 100))
+    setZoom(next)
+    setZoomText(String(Math.round(next * 100)))
+  }
+
+  useLayoutEffect(() => {
+    const el = frameRef.current
+    if (!el) return
+    const update = () => setFrameSize({ w: el.clientWidth, h: el.clientHeight })
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  const baseScale = natural ? Math.max(frameSize.w / natural.w, frameSize.h / natural.h) : 1
+  const displayScale = baseScale * zoom
+  const displayW = natural ? natural.w * displayScale : 0
+  const displayH = natural ? natural.h * displayScale : 0
+  const maxOffsetX = Math.max(0, (displayW - frameSize.w) / 2)
+  const maxOffsetY = Math.max(0, (displayH - frameSize.h) / 2)
+
+  function clampOffset(o: { x: number; y: number }) {
+    return {
+      x: Math.min(maxOffsetX, Math.max(-maxOffsetX, o.x)),
+      y: Math.min(maxOffsetY, Math.max(-maxOffsetY, o.y)),
+    }
+  }
+
+  // Zooming out (or the frame itself resizing) shrinks the valid offset range — re-clamp so a
+  // pan made at high zoom, or in a bigger frame, doesn't leave a gap at the edge afterward.
+  useEffect(() => { setOffset((o) => clampOffset(o)) }, [zoom, natural, frameSize.w, frameSize.h]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handlePointerDown(e: React.PointerEvent) {
+    e.preventDefault()
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startOffset: offset }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragRef.current) return
+    setOffset(clampOffset({
+      x: dragRef.current.startOffset.x + (e.clientX - dragRef.current.startX),
+      y: dragRef.current.startOffset.y + (e.clientY - dragRef.current.startY),
+    }))
+  }
+  function handlePointerUp() { dragRef.current = null }
+  function handleWheel(e: React.WheelEvent) {
+    e.preventDefault()
+    setZoom((z) => Math.min(CROP_MAX_ZOOM, Math.max(1, z - e.deltaY * 0.0015)))
+  }
+
+  function confirm() {
+    const el = imgRef.current
+    if (!el || !natural) return
+    const canvas = document.createElement('canvas')
+    canvas.width = CROP_OUTPUT_W
+    canvas.height = CROP_OUTPUT_H
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    // Invert the on-screen positioning math to find which rectangle of the *original* photo
+    // (in its natural pixel coordinates) is currently visible inside the frame.
+    const srcW = frameSize.w / displayScale
+    const srcH = frameSize.h / displayScale
+    const srcX = natural.w / 2 - (frameSize.w / 2 + offset.x) / displayScale
+    const srcY = natural.h / 2 - (frameSize.h / 2 + offset.y) / displayScale
+    ctx.drawImage(el, srcX, srcY, srcW, srcH, 0, 0, CROP_OUTPUT_W, CROP_OUTPUT_H)
+    canvas.toBlob((blob) => { if (blob) onConfirm(blob) }, 'image/webp', CROP_QUALITY)
+  }
+
+  if (typeof document === 'undefined') return null
+
+  // Rendered via portal straight to <body>, not inline here: this component is always mounted
+  // inside AddCardForm/EditCardForm's `.card-glass` container, which uses `backdrop-blur-sm` —
+  // and per the CSS spec, a `backdrop-filter` on an ancestor creates a new containing block for
+  // `position: fixed` descendants. Left inline, this "full-screen" overlay actually centers on
+  // that (possibly scrolled, definitely not viewport-sized) card-glass box instead of the real
+  // viewport — which is exactly what shipped broken before this was portaled out. See the
+  // matching fix (and same root cause) on CardTable's hover-preview portal above.
+  return createPortal(
+    <div className="crop-modal-backdrop fixed inset-0 z-50 bg-slate-950 flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800">
+        <div className="flex items-center gap-2 text-base font-semibold text-white">
+          <ZoomIn size={18} className="text-violet-400" />
+          Fit the card to the frame
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <div className="flex-1 min-h-0 flex items-center justify-center p-4 sm:p-8 overflow-hidden">
+        <div
+          ref={frameRef}
+          className="crop-modal-frame relative h-full max-h-[640px] w-auto aspect-[5/7] max-w-[92vw] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl shadow-black/60 overflow-hidden touch-none select-none cursor-move ring-1 ring-black/40"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onWheel={handleWheel}
+        >
+          <img
+            ref={imgRef}
+            src={src}
+            alt=""
+            draggable={false}
+            onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+            className="absolute pointer-events-none max-w-none"
+            style={{
+              width: displayW || undefined,
+              height: displayH || undefined,
+              left: '50%',
+              top: '50%',
+              transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)`,
+            }}
+          />
+          {/* Rule-of-thirds guide + viewfinder corners — purely decorative, pointer-events-none so
+              drag/wheel/scroll still land on the frame div's own handlers underneath. */}
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-y-0 left-1/3 w-px bg-white/20" />
+            <div className="absolute inset-y-0 left-2/3 w-px bg-white/20" />
+            <div className="absolute inset-x-0 top-1/3 h-px bg-white/20" />
+            <div className="absolute inset-x-0 top-2/3 h-px bg-white/20" />
+            <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-white/80 rounded-tl-lg" />
+            <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-white/80 rounded-tr-lg" />
+            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-white/80 rounded-bl-lg" />
+            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-white/80 rounded-br-lg" />
+          </div>
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-slate-800 px-4 sm:px-6 py-4">
+        <div className="max-w-md mx-auto w-full space-y-3">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(1, z - CROP_ZOOM_STEP))}
+              className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 text-slate-300 hover:bg-violet-600 hover:text-white transition-colors"
+              title="Zoom out"
+            >
+              <ZoomOut size={16} />
+            </button>
+            <input
+              type="range"
+              min={1}
+              max={CROP_MAX_ZOOM}
+              step={0.01}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="flex-1 accent-violet-600 cursor-pointer"
+            />
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(CROP_MAX_ZOOM, z + CROP_ZOOM_STEP))}
+              className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full bg-slate-800 text-slate-300 hover:bg-violet-600 hover:text-white transition-colors"
+              title="Zoom in"
+            >
+              <ZoomIn size={16} />
+            </button>
+            <div className="shrink-0 flex items-center gap-0.5 bg-slate-950 border border-slate-800 rounded-lg pl-2.5 pr-2 py-1.5">
+              <input
+                type="number"
+                min={100}
+                max={Math.round(CROP_MAX_ZOOM * 100)}
+                step={5}
+                value={zoomText}
+                onFocus={() => { zoomInputFocused.current = true }}
+                onChange={(e) => setZoomText(e.target.value)}
+                onBlur={(e) => { zoomInputFocused.current = false; commitZoomText(e.target.value) }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  commitZoomText(e.currentTarget.value)
+                  e.currentTarget.blur()
+                }}
+                className="w-10 bg-transparent text-right text-sm text-slate-200 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span className="text-sm text-slate-500">%</span>
+            </div>
+          </div>
+          <div className="text-xs text-slate-500 text-center">Drag the photo to reposition it — scroll, pinch, or zoom above.</div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={uploading}
+              className="btn-secondary justify-center py-2.5 disabled:opacity-50"
+              title={uploading ? 'Upload in progress — the crop can no longer be discarded' : undefined}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={confirm}
+              disabled={uploading || !natural}
+              className="btn-primary justify-center py-2.5 disabled:opacity-50"
+            >
+              {uploading && <Loader2 size={14} className="animate-spin" />}
+              Use this image
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// Shared by AddCardForm/EditCardForm's field lists — a slightly bigger, rounder, focus-styled
+// take on the plain "bg-slate-950 border ..." classes the rest of this file's compact admin
+// tables use, since these two forms are more of a "fill out a card" experience than a data grid.
+const FIELD_CLASS = 'bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-slate-200 outline-none transition-colors focus:border-violet-600'
 
 // Mirrors the id scheme the old server-side add route used, so manually-added cards keep the
 // same recognizable shape ("custom-riftbound-ven-227-showcase") as before this migration.
@@ -1323,6 +1649,7 @@ function AddCardForm({
   const [candidates, setCandidates] = useState<LookupCandidate[]>([])
   const [looking, setLooking] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [imageBusy, setImageBusy] = useState(false)
 
   // Lorcana/Riftbound sets always have a registry entry (it's the source of truth for their
   // whole set list); Pokemon's and MTG's official sets come live from an external API
@@ -1358,6 +1685,7 @@ function AddCardForm({
 
   async function save() {
     if (!number || !name) { onError('Number and name are required.'); return }
+    if (imageBusy) { onError('Still uploading the image — wait for it to finish before saving.'); return }
     setSaving(true)
     onError(null)
     const card: Record<string, unknown> = {
@@ -1407,72 +1735,85 @@ function AddCardForm({
   }
 
   return (
-    <div className="card-glass p-4 mb-4 space-y-3">
+    <div className="card-glass p-5 mb-4">
       <div className="text-sm font-semibold text-white">Add a card missing from {activeSet.name}</div>
       {prefill && (
-        <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 rounded-lg px-2.5 py-1.5">
+        <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 rounded-lg px-2.5 py-1.5 mt-2">
           Prefilled from the raw source check — double-check price/image before saving.
         </div>
       )}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-        <input placeholder="Number (e.g. 21b)" value={number} onChange={(e) => setNumber(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2" />
-        <input placeholder="Rarity" value={rarity} onChange={(e) => setRarity(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <input placeholder="Variant (e.g. showcase)" value={variant} onChange={(e) => setVariant(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        {(game === 'pokemon' || game === 'mtg') && (
-          <input
-            placeholder={game === 'mtg' ? 'Official Scryfall id (UUID, optional)' : 'Official apiId (e.g. sv7-1)'}
-            value={apiId} onChange={(e) => setApiId(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2" />
-        )}
-        <ImageUploadField game={game} uploadId={uploadId} imageUrl={imageUrl} onChange={setImageUrl} />
-        <input placeholder="Price" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        {setDateEditable ? (
-          <input placeholder="Set release date (YYYY-MM-DD)" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)}
-            title="This set's release date — saved to the set itself, not just this card"
-            className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        ) : (
-          <div className="flex items-center px-2 py-1.5 text-slate-600" title="Sourced live from the official Pokémon TCG API, not editable here">
-            Released {activeSet.releaseDate || 'unknown'}
+      <div className="flex flex-col-reverse sm:flex-row gap-5 mt-4">
+        <div className="flex-1 min-w-0 space-y-2.5 text-xs">
+          <div className="flex gap-2">
+            <input placeholder="No." value={number} onChange={(e) => setNumber(e.target.value)}
+              className={cn(FIELD_CLASS, 'w-16 shrink-0')} title="Collector number (e.g. 21b)" />
+            <input placeholder="Rarity" value={rarity} onChange={(e) => setRarity(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+            <input placeholder="Variant (e.g. showcase)" value={variant} onChange={(e) => setVariant(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
           </div>
-        )}
-        <textarea
-          placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2 sm:col-span-4 resize-y"
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          onClick={runLookup}
-          disabled={looking || !number}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 disabled:opacity-50"
-        >
-          {looking ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-          Auto-fetch price &amp; image
-        </button>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
-          Save to catalog
-        </button>
+          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
+            className={cn(FIELD_CLASS, 'w-full')} />
+          {(game === 'pokemon' || game === 'mtg') && (
+            <input
+              placeholder={game === 'mtg' ? 'Official Scryfall id (UUID, optional)' : 'Official apiId (e.g. sv7-1)'}
+              value={apiId} onChange={(e) => setApiId(e.target.value)}
+              className={cn(FIELD_CLASS, 'w-full')} />
+          )}
+          <input placeholder="Image URL (paste a link, or use the box →)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
+            className={cn(FIELD_CLASS, 'w-full')} />
+          <div className="flex gap-2">
+            <input placeholder="Price" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+            <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+          </div>
+          {setDateEditable ? (
+            <input placeholder="Set release date (YYYY-MM-DD)" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)}
+              title="This set's release date — saved to the set itself, not just this card"
+              className={cn(FIELD_CLASS, 'w-full')} />
+          ) : (
+            <div className="flex items-center px-2.5 py-2 text-slate-600" title="Sourced live from the official Pokémon TCG API, not editable here">
+              Released {activeSet.releaseDate || 'unknown'}
+            </div>
+          )}
+          <textarea
+            placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className={cn(FIELD_CLASS, 'w-full resize-y')}
+          />
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={runLookup}
+              disabled={looking || !number}
+              className="flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-lg bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 disabled:opacity-50"
+            >
+              {looking ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+              Auto-fetch price &amp; image
+            </button>
+            <button
+              onClick={save}
+              disabled={saving || imageBusy}
+              title={imageBusy ? 'Waiting for the image to finish uploading…' : undefined}
+              className="flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Search size={12} />}
+              Save to catalog
+            </button>
+            {imageBusy && (
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <Loader2 size={12} className="animate-spin" /> Uploading image…
+              </span>
+            )}
+          </div>
+        </div>
+        <ImageUploadField game={game} uploadId={uploadId} imageUrl={imageUrl} onChange={setImageUrl} onBusyChange={setImageBusy} />
       </div>
 
       {candidates.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 mt-4">
           <div className="text-xs text-slate-500">Found — click one to prefill:</div>
           {candidates.map((c, i) => (
             <button
@@ -1504,9 +1845,10 @@ function EditCardForm({
   const [marketPriceFoil, setMarketPriceFoil] = useState(card.marketPriceFoil ? String(card.marketPriceFoil) : '')
   const [notes, setNotes] = useState(card.notes ?? '')
   const [saving, setSaving] = useState(false)
+  const [imageBusy, setImageBusy] = useState(false)
 
   async function save() {
-    if (!number || !name) return
+    if (!number || !name || imageBusy) return
     setSaving(true)
     const patch: Record<string, unknown> = {
       number,
@@ -1525,50 +1867,63 @@ function EditCardForm({
   }
 
   return (
-    <div className="card-glass p-4 mb-4 space-y-3 border-violet-800/50">
+    <div className="card-glass p-5 mb-4 border-violet-800/50">
       <div className="text-sm font-semibold text-white">
         Editing &quot;{card.name}&quot; · {card.publicCode ?? card.number}
       </div>
-      <div className="text-xs text-slate-500">
+      <div className="text-xs text-slate-500 mt-1 mb-4">
         Changes apply immediately and cascade to any inventory entries with this apiId
         (number, name, image only — never price).
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-        <input placeholder="Number (e.g. 21b)" value={number} onChange={(e) => setNumber(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2" />
-        <input placeholder="Rarity" value={rarity} onChange={(e) => setRarity(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <ImageUploadField game={game} uploadId={card.id} imageUrl={imageUrl} onChange={setImageUrl} />
-        <input placeholder="Price" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
-        <textarea
-          placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200 col-span-2 sm:col-span-4 resize-y"
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
-          Save Changes
-        </button>
-        <button
-          onClick={onCancel}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-white"
-        >
-          Cancel
-        </button>
+      <div className="flex flex-col-reverse sm:flex-row gap-5">
+        <div className="flex-1 min-w-0 space-y-2.5 text-xs">
+          <div className="flex gap-2">
+            <input placeholder="No." value={number} onChange={(e) => setNumber(e.target.value)}
+              className={cn(FIELD_CLASS, 'w-16 shrink-0')} title="Collector number (e.g. 21b)" />
+            <input placeholder="Rarity" value={rarity} onChange={(e) => setRarity(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+          </div>
+          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
+            className={cn(FIELD_CLASS, 'w-full')} />
+          <input placeholder="Image URL (paste a link, or use the box →)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
+            className={cn(FIELD_CLASS, 'w-full')} />
+          <div className="flex gap-2">
+            <input placeholder="Price" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+            <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+          </div>
+          <textarea
+            placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className={cn(FIELD_CLASS, 'w-full resize-y')}
+          />
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={save}
+              disabled={saving || imageBusy}
+              title={imageBusy ? 'Waiting for the image to finish uploading…' : undefined}
+              className="flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Pencil size={12} />}
+              Save Changes
+            </button>
+            <button
+              onClick={onCancel}
+              className="text-xs font-medium px-3.5 py-2 rounded-lg text-slate-400 hover:text-white"
+            >
+              Cancel
+            </button>
+            {imageBusy && (
+              <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                <Loader2 size={12} className="animate-spin" /> Uploading image…
+              </span>
+            )}
+          </div>
+        </div>
+        <ImageUploadField game={game} uploadId={card.id} imageUrl={imageUrl} onChange={setImageUrl} onBusyChange={setImageBusy} />
       </div>
     </div>
   )

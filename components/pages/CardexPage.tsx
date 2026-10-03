@@ -6,7 +6,7 @@ import { Loader2, Package, FolderHeart, ChevronRight, Search, X, Sparkles } from
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
-import { cn, RARITY_LABELS_BY_GAME, openEbaySearch } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 
@@ -37,10 +37,14 @@ interface SetGroup {
   sets: SetMeta[]
 }
 
-// The isolated card view CardZoomOverlay renders — normalized so both CardTile (catalog-backed,
-// carries `owned`/`quantity`) and InventoryCardTile (special bucket, always owned) can feed it the
-// same shape without the overlay needing to know which kind of tile it came from.
-interface ZoomCardData {
+// The isolated card view CardZoomOverlay renders — normalized so CardTile (catalog-backed,
+// carries `owned`/`quantity`), InventoryCardTile (special bucket, always owned), and
+// PersonalCardTile (PersonalCollectionsView.tsx, a sibling tab on this same page) can all feed it
+// the same shape without the overlay needing to know which kind of tile it came from. Exported so
+// PersonalCollectionsView can type its own `onZoom` prop against it — zoomGlowColor() itself lives
+// in lib/utils.ts (shared, pure) rather than here, to avoid a circular import between the two
+// page-level files; this type-only export carries no such risk (erased at compile time).
+export interface ZoomCardData {
   imageUrl: string
   name: string
   number: string
@@ -50,34 +54,14 @@ interface ZoomCardData {
   owned: boolean
   quantity: number
   isFoil?: boolean
-  // The card-back/border/glow-ring accent color — rarity-based where ZOOM_GLOW_COLORS has an
-  // entry for this game+rarity, falling back to the game's own color otherwise (see
-  // zoomGlowColor() below). Deliberately its own field, not reusing `rarityColor` (the rarity
-  // pill's color elsewhere in the app) — the user wants a distinct, simpler palette just for this
-  // glow effect.
+  // The card-back/border/glow-ring accent color — rarity-based where lib/utils.ts's
+  // ZOOM_GLOW_COLORS has an entry for this game+rarity, falling back to the game's own color
+  // otherwise (see zoomGlowColor()). Deliberately its own field, not reusing `rarityColor` (the
+  // rarity pill's color elsewhere in the app) — the user wants a distinct, simpler palette just
+  // for this glow effect.
   glowColor: string
   ebayCard: Parameters<typeof openEbaySearch>[0]
   originRect: DOMRect
-}
-
-// Per-game, per-rarity override for the zoom overlay's glow/border/card-back color — distinct
-// from RARITY_COLORS (the rarity pill color used everywhere else), since this is a separate,
-// simpler palette by design. Only Riftbound is populated for now (the user's own testing ground);
-// zoomGlowColor() falls back to the card's game color for every other game/rarity until more are
-// specified.
-const ZOOM_GLOW_COLORS: Partial<Record<CatalogGame, Record<string, string>>> = {
-  riftbound: {
-    Common: '#9ca3af',       // light gray
-    Uncommon: '#4b5563',     // darker gray
-    Rare: '#6d28d9',         // dark purple
-    Epic: '#eab308',         // gold/yellow
-    Overnumbered: '#eab308', // gold/yellow
-    Star: '#eab308',         // gold/yellow (Overnumbered Signature)
-  },
-}
-
-function zoomGlowColor(game: CatalogGame, rarity: string, fallback: string): string {
-  return ZOOM_GLOW_COLORS[game]?.[rarity] ?? fallback
 }
 
 // ── Set catalog (fetched from /api/set-registry — see lib/api/registry.ts) ────
@@ -735,7 +719,7 @@ export default function CardexPage() {
         </div>
 
         {activeGame === 'personal' ? (
-          <PersonalCollectionsView />
+          <PersonalCollectionsView onZoom={openZoom} />
         ) : (
           <>
             {/* Two-tier set picker: pick a category (era/product group) from a dropdown, then a

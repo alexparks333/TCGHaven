@@ -228,3 +228,23 @@
 .card-zoom-panel {
   animation: card-zoom-panel-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s both;
 }
+
+/* Admin Catalog's image crop tool — a full-screen takeover (fades in as a whole), with the crop
+   frame itself popping in with the same bounce-settle language as the Cardex zoom overlay above. */
+@keyframes crop-modal-backdrop-in {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes crop-modal-frame-in {
+  0%   { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.crop-modal-backdrop {
+  animation: crop-modal-backdrop-in 0.15s ease-out both;
+}
+
+.crop-modal-frame {
+  animation: crop-modal-frame-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
