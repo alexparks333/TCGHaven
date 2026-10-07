@@ -8,7 +8,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { useStore } from '@/lib/store'
+import { useStore, portfolioGames } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 
@@ -28,10 +28,10 @@ interface TimelinePoint {
 // ── Metric config ─────────────────────────────────────────────────────────────
 
 const METRICS: { key: Metric; label: string; dataKey: keyof TimelinePoint; staticColor: string }[] = [
-  { key: 'value',  label: 'Collection Value', dataKey: 'value',     staticColor: '#8B5CF6' },
-  { key: 'pnl',    label: 'P&L',              dataKey: 'pnl',       staticColor: '#10B981' },
-  { key: 'return', label: 'Return %',          dataKey: 'returnPct', staticColor: '#10B981' },
-  { key: 'cost',   label: 'Total Invested',    dataKey: 'cost',      staticColor: '#6366F1' },
+  { key: 'value',  label: 'Collection Value', dataKey: 'value',     staticColor: '#7a5230' },
+  { key: 'pnl',    label: 'P&L',              dataKey: 'pnl',       staticColor: '#5f7a32' },
+  { key: 'return', label: 'Return %',          dataKey: 'returnPct', staticColor: '#5f7a32' },
+  { key: 'cost',   label: 'Total Invested',    dataKey: 'cost',      staticColor: '#5c4d5a' },
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,7 +74,8 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceHistory, activeGames, calcFloor } = useStore()
+  const { cards, priceHistory, activeGames: filterGames, trackedGames, calcFloor } = useStore()
+  const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // Apply the same filters as PortfolioPage so numbers line up exactly
   const filteredCards = useMemo(() => {
@@ -157,7 +158,7 @@ export default function PortfolioAnalyticsPage() {
   // P&L and Return flip red when negative
   const color =
     metric === 'pnl' || metric === 'return'
-      ? (current >= 0 ? '#10B981' : '#EF4444')
+      ? (current >= 0 ? '#5f7a32' : '#a8452a')
       : staticColor
 
   const hasData = timeline.length >= 2
@@ -178,12 +179,12 @@ export default function PortfolioAnalyticsPage() {
         <div className="flex items-center gap-3 mb-6">
           <Link
             href="/"
-            className="p-2 rounded-xl text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-500 hover:text-ink hover:bg-slate-800 transition-colors"
           >
             <ArrowLeft size={18} />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">Portfolio Analytics</h1>
+            <h1 className="text-2xl font-bold text-ink">Portfolio Analytics</h1>
             <p className="text-slate-500 text-xs mt-0.5">
               {hasData
                 ? `${timeline.length} day${timeline.length !== 1 ? 's' : ''} of history`
@@ -201,7 +202,7 @@ export default function PortfolioAnalyticsPage() {
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                 metric === key
                   ? 'bg-violet-600 border-violet-500 text-white'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
               }`}
             >
               {label}
@@ -217,12 +218,12 @@ export default function PortfolioAnalyticsPage() {
             <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">
               {cfg.label}
             </div>
-            <div className="text-4xl font-black text-white mb-2">
+            <div className="text-4xl font-black text-ink mb-2">
               {formatValue(current, metric)}
             </div>
             {hasData && (
               <div className={`flex items-center gap-1.5 text-sm font-medium ${
-                totalChange >= 0 ? 'text-emerald-400' : 'text-red-400'
+                totalChange >= 0 ? 'text-emerald-600' : 'text-red-600'
               }`}>
                 {totalChange >= 0
                   ? <TrendingUp size={15} />
@@ -252,19 +253,19 @@ export default function PortfolioAnalyticsPage() {
                     <stop offset="95%" stopColor={color} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#d6c49f" vertical={false} />
                 {(metric === 'pnl' || metric === 'return') && (
-                  <ReferenceLine y={0} stroke="#334155" strokeDasharray="4 4" />
+                  <ReferenceLine y={0} stroke="#bba883" strokeDasharray="4 4" />
                 )}
                 <XAxis
                   dataKey="label"
-                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tick={{ fill: '#7a654a', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   interval="preserveStartEnd"
                 />
                 <YAxis
-                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tick={{ fill: '#7a654a', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v) => yAxisLabel(v, metric)}
@@ -272,12 +273,12 @@ export default function PortfolioAnalyticsPage() {
                 />
                 <Tooltip
                   contentStyle={{
-                    background: '#0f172a',
-                    border: '1px solid #1e293b',
+                    background: '#ede1c6',
+                    border: '1px solid #d6c49f',
                     borderRadius: '0.75rem',
                     fontSize: 12,
                   }}
-                  labelStyle={{ color: '#94a3b8', marginBottom: 4 }}
+                  labelStyle={{ color: '#634f38', marginBottom: 4 }}
                   formatter={(val: number) => [formatValue(val, metric), cfg.label]}
                 />
                 <Area
@@ -304,8 +305,8 @@ export default function PortfolioAnalyticsPage() {
                 </div>
                 <div className={`text-lg font-bold ${
                   isChange
-                    ? (value >= 0 ? 'text-emerald-400' : 'text-red-400')
-                    : 'text-white'
+                    ? (value >= 0 ? 'text-emerald-600' : 'text-red-600')
+                    : 'text-ink'
                 }`}>
                   {isChange ? formatChange(value, metric) : formatValue(value, metric)}
                 </div>

@@ -91,11 +91,12 @@ export const GAME_LABELS: Record<Game, string> = {
 }
 
 export const GAME_COLORS: Record<Game, string> = {
-  pokemon: '#FFCB05',
-  lorcana: '#7B61FF',
-  riftbound: '#E8472A',
-  onepiece: '#2F6FED',
-  mtg: '#FF6B35',
+  // Muted, earthy takes on each game's brand color so nothing clashes with the parchment theme
+  pokemon: '#B8860B',
+  lorcana: '#6e4f6a',
+  riftbound: '#b5532f',
+  onepiece: '#566a5e',
+  mtg: '#a8642e',
 }
 
 export const CONDITION_MULTIPLIER: Record<Condition, number> = {

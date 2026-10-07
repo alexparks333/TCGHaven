@@ -15,6 +15,12 @@ interface TCGStore {
   calcFloor: number
   showFilters: boolean
   activeGames: Game[]
+  // The games this user has chosen to track (Inventory's game tabs + "+" picker). Inventory,
+  // Portfolio, and Cardex only ever show these — cards for an untracked game are kept untouched
+  // in Firestore, just hidden until the game is tracked again. Loaded from
+  // users/{uid}/settings/preferences on login (lib/firebase/preferences.ts); also persisted to
+  // localStorage below purely so the first render after a reload doesn't flash the default.
+  trackedGames: Game[]
   timeFrame: 'entry' | '1d' | '7d' | '30d' | '365d'
   priceMode: 'market' | 'lowestNM'
   hiddenGroups: string[]
@@ -45,6 +51,7 @@ interface TCGStore {
   setCalcFloor: (v: number) => void
   setShowFilters: (v: boolean) => void
   setActiveGames: (games: Game[]) => void
+  setTrackedGames: (games: Game[]) => void
   setTimeFrame: (frame: 'entry' | '1d' | '7d' | '30d' | '365d') => void
   setPriceMode: (mode: 'market' | 'lowestNM') => void
   toggleHiddenGroup: (group: string) => void
@@ -54,6 +61,16 @@ interface TCGStore {
   dismissCatalogSyncNotice: (id: string) => void
   pushCardUnlock: (card: Card) => void
   dismissCardUnlock: (id: string) => void
+}
+
+export const DEFAULT_TRACKED_GAMES: Game[] = ['riftbound']
+
+// Which games Portfolio actually counts: the Filters panel's game toggles, narrowed to the games
+// this user tracks. Falls back to every tracked game if that intersection is empty (e.g. the
+// filter only had a now-untracked game switched on), so Portfolio never silently shows nothing.
+export function portfolioGames(activeGames: Game[], trackedGames: Game[]): Game[] {
+  const both = trackedGames.filter((g) => activeGames.includes(g))
+  return both.length > 0 ? both : trackedGames
 }
 
 const defaultPackSets: PackSet[] = [
@@ -150,6 +167,7 @@ export const useStore = create<TCGStore>()(
   calcFloor: 0,
   showFilters: false,
   activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg'] as Game[],
+  trackedGames: DEFAULT_TRACKED_GAMES,
   timeFrame: 'entry' as const,
   priceMode: 'market' as const,
   hiddenGroups: [] as string[],
@@ -160,7 +178,7 @@ export const useStore = create<TCGStore>()(
   loadUserSoldCards: (soldCards) => set({ soldCards }),
   loadUserPriceHistory: (priceHistory) => set({ priceHistory }),
   loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [] }),
+  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, card] })),
@@ -273,6 +291,13 @@ export const useStore = create<TCGStore>()(
   setCalcFloor: (v) => set({ calcFloor: v }),
   setShowFilters: (v) => set({ showFilters: v }),
   setActiveGames: (games) => set({ activeGames: games }),
+  // A newly tracked game also gets switched on in Portfolio's game filter — otherwise a game the
+  // user had toggled off there long ago would look like it was tracked but showed nothing.
+  setTrackedGames: (games) =>
+    set((state) => ({
+      trackedGames: games,
+      activeGames: Array.from(new Set([...state.activeGames, ...games.filter((g) => !state.trackedGames.includes(g))])),
+    })),
   setTimeFrame: (frame) => set({ timeFrame: frame }),
   setPriceMode: (mode) => set({ priceMode: mode }),
   toggleHiddenGroup: (group) =>
@@ -288,6 +313,7 @@ export const useStore = create<TCGStore>()(
       partialize: (state) => ({
         calcFloor: state.calcFloor,
         activeGames: state.activeGames,
+        trackedGames: state.trackedGames,
         timeFrame: state.timeFrame,
         packPriceOverrides: state.packPriceOverrides,
         priceMode: state.priceMode,

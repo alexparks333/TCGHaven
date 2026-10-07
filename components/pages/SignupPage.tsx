@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Sparkles, Mail, Lock, User, KeyRound, AlertCircle, Loader2 } from 'lucide-react'
+import { Mail, Lock, User, KeyRound, AlertCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { friendlyAuthError } from '@/lib/auth-errors'
 
@@ -67,10 +67,9 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-violet-600 flex items-center justify-center mb-4 shadow-lg shadow-violet-900/40">
-            <Sparkles size={26} className="text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">TCGHaven</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" className="w-28 h-28 object-contain mb-3 drop-shadow-xl" />
+          <h1 className="text-2xl font-bold text-ink">TCGHaven</h1>
           <p className="text-slate-500 text-sm mt-1">Create your collection account</p>
         </div>
 
@@ -88,12 +87,12 @@ export default function SignupPage() {
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
                 placeholder="Invite code"
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
               />
             </div>
 
             {passcodeError && (
-              <div className="flex items-center gap-2 text-red-400 bg-red-950/40 border border-red-900 rounded-xl px-3 py-2 text-xs">
+              <div className="flex items-center gap-2 text-red-600 bg-red-100/40 border border-red-200 rounded-xl px-3 py-2 text-xs">
                 <AlertCircle size={14} className="shrink-0" />
                 {passcodeError}
               </div>
@@ -145,7 +144,7 @@ export default function SignupPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Display name"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
             />
           </div>
           <div className="relative">
@@ -156,7 +155,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="Email address"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
             />
           </div>
           <div className="relative">
@@ -167,12 +166,12 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password (min 6 characters)"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
             />
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 text-red-400 bg-red-950/40 border border-red-900 rounded-xl px-3 py-2 text-xs">
+            <div className="flex items-center gap-2 text-red-600 bg-red-100/40 border border-red-200 rounded-xl px-3 py-2 text-xs">
               <AlertCircle size={14} className="shrink-0" />
               {error}
             </div>
@@ -192,7 +191,7 @@ export default function SignupPage() {
 
         <p className="text-center text-slate-500 text-xs mt-6">
           Already have an account?{' '}
-          <Link href="/login" className="text-violet-400 hover:text-violet-300 transition-colors font-medium">
+          <Link href="/login" className="text-violet-600 hover:text-violet-700 transition-colors font-medium">
             Sign in
           </Link>
         </p>

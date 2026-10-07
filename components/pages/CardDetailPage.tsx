@@ -61,7 +61,7 @@ export default function CardDetailPage() {
   return (
     <AuthGuard>
       <div className="pb-20 md:pb-0">
-        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-slate-400 hover:text-white text-sm mb-6 transition-colors">
+        <button onClick={() => router.back()} className="flex items-center gap-1.5 text-slate-400 hover:text-ink text-sm mb-6 transition-colors">
           <ArrowLeft size={14} /> Back to Portfolio
         </button>
 
@@ -80,9 +80,9 @@ export default function CardDetailPage() {
               <span className="text-xs font-bold px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>
                 {GAME_LABELS[card.game]}
               </span>
-              <h1 className="text-xl font-bold text-white">{card.name}</h1>
+              <h1 className="text-xl font-bold text-ink">{card.name}</h1>
               {card.nexus && (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 w-fit">
+                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30 w-fit">
                   Nexus
                 </span>
               )}
@@ -97,24 +97,24 @@ export default function CardDetailPage() {
           <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="stat-card">
               <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Current Value</span>
-              <span className="text-2xl font-bold text-white">{formatCurrency(currentVal)}</span>
+              <span className="text-2xl font-bold text-ink">{formatCurrency(currentVal)}</span>
               <span className="text-xs text-slate-500">{formatCurrency(card.currentPrice ?? card.purchasePrice)} each</span>
             </div>
             <div className="stat-card">
               <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Paid</span>
-              <span className="text-2xl font-bold text-white">{formatCurrency(cost)}</span>
+              <span className="text-2xl font-bold text-ink">{formatCurrency(cost)}</span>
               <span className="text-xs text-slate-500">{formatCurrency(card.purchasePrice)} each</span>
             </div>
             <div className="stat-card">
               <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">P&amp;L</span>
-              <span className={`text-2xl font-bold ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`text-2xl font-bold ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
               </span>
               {pnl >= 0 ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-red-500" />}
             </div>
             <div className="stat-card">
               <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Return</span>
-              <span className={`text-2xl font-bold ${pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`text-2xl font-bold ${pnlPct >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {formatPercent(pnlPct)}
               </span>
             </div>
@@ -123,7 +123,7 @@ export default function CardDetailPage() {
 
         <div className="card-glass p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-sm font-semibold text-white">Price History</h2>
+            <h2 className="text-sm font-semibold text-ink">Price History</h2>
             <div className="flex gap-1.5">
               {(['30d', '90d', '1y', 'all'] as Range[]).map((r) => (
                 <button

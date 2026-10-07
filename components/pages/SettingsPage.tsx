@@ -53,7 +53,7 @@ export default function SettingsPage() {
     <AuthGuard>
       <div className="pb-20 md:pb-0 max-w-2xl">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white">Settings</h1>
+          <h1 className="text-2xl font-bold text-ink">Settings</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             Keep card catalogs, prices, and set registrations up to date.
           </p>
@@ -179,7 +179,7 @@ function InventoryNumberRepairCard() {
 
   return (
     <div className="card-glass p-5 mb-6">
-      <h2 className="text-white font-semibold mb-1">Fix Riftbound Numbers, Foil Status &amp; Rarity</h2>
+      <h2 className="text-ink font-semibold mb-1">Fix Riftbound Numbers, Foil Status &amp; Rarity</h2>
       <p className="text-slate-400 text-sm mb-4">
         Alt-art Riftbound cards (e.g. an alt-art printed as &quot;92a&quot;) were sometimes saved with
         just the bare number (&quot;92&quot;), missing the letter suffix printed on the card. Overnumbered
@@ -213,20 +213,20 @@ function InventoryNumberRepairCard() {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2 mb-3">
+        <div className="flex items-start gap-2 text-red-600 text-xs bg-red-100/30 border border-red-200/50 rounded-lg px-3 py-2 mb-3">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
       {mismatches && mismatches.length === 0 && fixedCount === null && (
-        <div className="flex items-center gap-2 text-sm text-emerald-400">
+        <div className="flex items-center gap-2 text-sm text-emerald-600">
           <CheckCircle2 size={14} /> No mismatches found — your Riftbound numbers, foil status, and rarities already look correct.
         </div>
       )}
 
       {fixedCount !== null && (
-        <div className="flex items-center gap-2 text-sm text-emerald-400">
+        <div className="flex items-center gap-2 text-sm text-emerald-600">
           <CheckCircle2 size={14} /> Fixed {fixedCount} card{fixedCount !== 1 ? 's' : ''}.
         </div>
       )}
@@ -235,19 +235,19 @@ function InventoryNumberRepairCard() {
         <div className="space-y-1 text-xs max-h-60 overflow-y-auto border-t border-slate-800 pt-2">
           {mismatches.map((m) => (
             <div key={m.cardId} className="flex justify-between items-center border-b border-slate-900 py-1 gap-3">
-              <span className="text-white truncate">{m.name}</span>
+              <span className="text-ink truncate">{m.name}</span>
               <span className="text-slate-400 flex items-center gap-3 shrink-0">
                 {m.newNumber !== undefined && (
-                  <span>{m.oldNumber} → <span className="text-violet-300 font-medium">{m.newNumber}</span></span>
+                  <span>{m.oldNumber} → <span className="text-violet-700 font-medium">{m.newNumber}</span></span>
                 )}
                 {m.newFoil !== undefined && (
                   <span>
                     {m.oldFoil ? '✨ Foil' : 'Normal'} →{' '}
-                    <span className="text-violet-300 font-medium">{m.newFoil ? '✨ Foil' : 'Normal'}</span>
+                    <span className="text-violet-700 font-medium">{m.newFoil ? '✨ Foil' : 'Normal'}</span>
                   </span>
                 )}
                 {m.newRarity !== undefined && (
-                  <span>{m.oldRarity || '(none)'} → <span className="text-violet-300 font-medium">{m.newRarity}</span></span>
+                  <span>{m.oldRarity || '(none)'} → <span className="text-violet-700 font-medium">{m.newRarity}</span></span>
                 )}
               </span>
             </div>
@@ -305,7 +305,7 @@ function NeedsReviewCard() {
 
   return (
     <div className="card-glass p-5">
-      <h2 className="text-white font-semibold mb-1">Needs Review</h2>
+      <h2 className="text-ink font-semibold mb-1">Needs Review</h2>
       <p className="text-slate-400 text-sm mb-4">
         These sets were auto-detected by a sync. Confirm the details before they&apos;re fully live.
       </p>
@@ -343,8 +343,8 @@ function LorcanaReviewRow({
   return (
     <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
       <div className="flex items-center gap-2 mb-2">
-        <ChevronRight size={14} className="text-violet-400" />
-        <span className="text-sm font-medium text-white">{set.setName}</span>
+        <ChevronRight size={14} className="text-violet-600" />
+        <span className="text-sm font-medium text-ink">{set.setName}</span>
         <span className="text-[10px] uppercase tracking-wide text-slate-500">Lorcana</span>
       </div>
       <div className="flex flex-wrap gap-3 items-center text-xs text-slate-400 mb-3">
@@ -385,7 +385,7 @@ function LorcanaReviewRow({
           packAnalysis: included ? { included: true, id: set.code ?? set.setName, released: set.releaseDate ?? '', packPrice, hasEpic } : { included: false },
           needsReview: false,
         })}
-        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600/20 text-violet-300 hover:bg-violet-600/30"
+        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600/20 text-violet-700 hover:bg-violet-600/30"
       >
         Mark reviewed
       </button>
@@ -402,8 +402,8 @@ function RiftboundReviewRow({
   return (
     <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
       <div className="flex items-center gap-2 mb-2">
-        <ChevronRight size={14} className="text-cyan-400" />
-        <span className="text-sm font-medium text-white">{set.setName}</span>
+        <ChevronRight size={14} className="text-cyan-600" />
+        <span className="text-sm font-medium text-ink">{set.setName}</span>
         <span className="text-[10px] uppercase tracking-wide text-slate-500">Riftbound</span>
         <span className="text-[10px] text-slate-600">{set.cardCount} cards</span>
       </div>
@@ -437,7 +437,7 @@ function RiftboundReviewRow({
           tcgcsvGroupId: groupId === '' ? null : groupId,
           needsReview: false,
         })}
-        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30"
+        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-cyan-600/20 text-cyan-700 hover:bg-cyan-600/30"
       >
         Mark reviewed
       </button>

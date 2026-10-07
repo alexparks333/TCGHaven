@@ -3,24 +3,27 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from './AuthProvider'
-import { Sparkles } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+  const { user, loading, dataLoading, dataProgress } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login')
   }, [user, loading, router])
 
-  if (loading) {
+  // Held until the user's cards/prices/purchases have actually arrived from Firestore, not just
+  // until sign-in resolves — otherwise every page briefly renders an empty store (Portfolio at
+  // $0, Inventory at 0 cards), which looks exactly like lost data.
+  if (loading) return <LogoLoader fullScreen />
+  if (user && dataLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <div className="w-12 h-12 rounded-2xl bg-violet-600 flex items-center justify-center animate-pulse">
-          <Sparkles size={22} className="text-white" />
-        </div>
-        <p className="text-slate-500 text-sm">Loading your collection…</p>
-      </div>
+      <LogoLoader
+        fullScreen
+        label={dataProgress.pending.length > 0 ? `Loading ${dataProgress.pending[0]}…` : 'Loading your collection…'}
+        progress={{ done: dataProgress.done, total: dataProgress.total }}
+      />
     )
   }
 

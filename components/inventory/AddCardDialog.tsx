@@ -54,12 +54,15 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: Props) {
-  const { addCard, updateCard, deleteCard, addPriceHistoryPoint, priceMode, cards: allCards, pushCardUnlock } = useStore()
+  const { addCard, updateCard, deleteCard, addPriceHistoryPoint, priceMode, cards: allCards, pushCardUnlock, trackedGames } = useStore()
   const { user } = useAuth()
 
   const existingGroups = Array.from(new Set(allCards.map((c) => c.group).filter(Boolean) as string[]))
 
   const [form, setForm] = useState<CardForm>(editCard ? { ...editCard } : emptyForm(defaultGame))
+  // Only offer the games this user tracks — a card added to an untracked game would vanish from
+  // Inventory the moment it saved. An edited card's own game always stays selectable.
+  const gameChoices = GAMES.filter((g) => trackedGames.includes(g) || g === form.game)
   // Catalog market prices for the selected card
   const existingMarket = editCard?.currentPrice ?? 0
   const [marketPrices, setMarketPrices] = useState({ regular: existingMarket, foil: existingMarket })
@@ -328,19 +331,19 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">{editCard ? 'Edit Card' : 'Add Card'}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700">
+          <h2 className="text-lg font-bold text-ink">{editCard ? 'Edit Card' : 'Add Card'}</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700">
             <X size={18} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-          {/* Game tabs */}
-          <div>
+          {/* Game tabs — hidden when there's only one game to pick from */}
+          {gameChoices.length > 1 && <div>
             <label className="field-label">Game</label>
             <div className="flex gap-2">
-              {GAMES.map((g) => (
+              {gameChoices.map((g) => (
                 <button
                   key={g}
                   type="button"
@@ -349,14 +352,14 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                     'flex-1 py-2 rounded-xl text-sm font-medium transition-all border',
                     form.game === g
                       ? 'bg-violet-600 border-violet-500 text-white'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
                   )}
                 >
                   {GAME_LABELS[g]}
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
 
           {/* Card search */}
           <div ref={cardResultsRef} className="relative">
@@ -412,7 +415,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm text-white font-medium truncate">{result.name}</div>
+                      <div className="text-sm text-ink font-medium truncate">{result.name}</div>
                       <div className="text-xs text-slate-500 truncate">{result.setName} · #{result.number}</div>
                     </div>
                     {(() => {
@@ -421,7 +424,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                         ? ((result.lowPriceNM ?? 0) > 0 ? result.lowPriceNM! : result.marketPrice)
                         : result.marketPrice
                       return displayPrice > 0 ? (
-                        <div className="text-xs text-emerald-400 font-medium flex-shrink-0 text-right">
+                        <div className="text-xs text-emerald-600 font-medium flex-shrink-0 text-right">
                           <div>${displayPrice.toFixed(2)}</div>
                           {useLowest && <div className="text-[9px] text-slate-500">low NM</div>}
                         </div>
@@ -441,7 +444,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
 
           {/* Card name (auto-filled or manual) */}
           <div>
-            <label className="field-label">Card Name <span className="text-red-400">*</span></label>
+            <label className="field-label">Card Name <span className="text-red-600">*</span></label>
             <input
               type="text"
               required
@@ -479,7 +482,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-800 transition-colors text-left border-b border-slate-800 last:border-0"
                     >
                       <div>
-                        <div className="text-sm text-white">{set.name}</div>
+                        <div className="text-sm text-ink">{set.name}</div>
                         <div className="text-xs text-slate-500">
                           {set.code}
                           {set.cardCount ? ` · ${set.cardCount} cards` : ''}
@@ -554,7 +557,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                     'flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all border',
                     marketSource === src
                       ? 'bg-violet-600 border-violet-500 text-white'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
                   )}
                 >
                   {src === 'ebay' && ebayLoading ? (
@@ -572,7 +575,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                 {(() => {
                   const mp = form.isFoil && marketPrices.foil > 0 ? marketPrices.foil : marketPrices.regular
                   return mp > 0
-                    ? <span className="text-emerald-400 font-medium">${mp.toFixed(2)}</span>
+                    ? <span className="text-emerald-600 font-medium">${mp.toFixed(2)}</span>
                     : <span className="text-slate-500">No catalog price available</span>
                 })()}
               </div>
@@ -582,8 +585,8 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
               <div className={cn(
                 'px-3 py-2 rounded-lg flex items-start gap-2 text-xs border',
                 ebayData.error
-                  ? 'bg-red-950/50 text-red-400 border-red-900'
-                  : 'bg-emerald-950/50 text-emerald-400 border-emerald-900'
+                  ? 'bg-red-100/50 text-red-600 border-red-200'
+                  : 'bg-emerald-100/50 text-emerald-600 border-emerald-200'
               )}>
                 {ebayData.error
                   ? <><AlertCircle size={13} className="mt-0.5 flex-shrink-0" /><span>{ebayData.error}</span></>
@@ -761,10 +764,10 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
             <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
               <img src={form.imageUrl} alt={form.name} className="w-12 h-16 object-contain rounded" />
               <div>
-                <div className="text-sm font-medium text-white">{form.name}</div>
+                <div className="text-sm font-medium text-ink">{form.name}</div>
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>
                 {form.game === 'riftbound' && form.nexus && (
-                  <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-400 border border-blue-800 rounded px-1 py-0.5">Nexus</span>
+                  <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-600 border border-blue-300 rounded px-1 py-0.5">Nexus</span>
                 )}
               </div>
             </div>
@@ -772,8 +775,8 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
 
           {/* Save error */}
           {dialogError && (
-            <div className="flex items-start gap-2 bg-red-950/50 border border-red-800 rounded-xl px-3 py-2.5 text-xs text-red-300 mt-2">
-              <AlertCircle size={13} className="text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 bg-red-100/50 border border-red-300 rounded-xl px-3 py-2.5 text-xs text-red-700 mt-2">
+              <AlertCircle size={13} className="text-red-600 flex-shrink-0 mt-0.5" />
               <span>{dialogError}</span>
             </div>
           )}

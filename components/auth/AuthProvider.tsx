@@ -15,18 +15,30 @@ import {
 import { auth, googleProvider } from '@/lib/firebase/config'
 import { loadCards, loadPriceHistory, loadSoldCards } from '@/lib/firebase/db'
 import { loadPurchases } from '@/lib/firebase/spending'
-import { useStore } from '@/lib/store'
+import { loadTrackedGames } from '@/lib/firebase/preferences'
+import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 
 interface AuthContextValue {
   user: User | null
   loading: boolean
   dataLoading: boolean
+  // Real progress of the post-sign-in data load: which of the parallel Firestore reads are
+  // still outstanding. Drives the loading bar in AuthGuard's LogoLoader.
+  dataProgress: DataLoadProgress
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string, displayName: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   verifyPasscode: (code: string) => Promise<boolean>
 }
+
+export interface DataLoadProgress {
+  done: number
+  total: number
+  pending: string[] // human labels of the reads still in flight, in load order
+}
+
+const DATA_STEPS = ['your cards', 'price history', 'purchases', 'sold cards', 'your games'] as const
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -39,7 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
-  const { loadUserCards, loadUserSoldCards, loadUserPriceHistory, loadPurchases: storePurchases, clearUserData } = useStore()
+  const [dataProgress, setDataProgress] = useState<DataLoadProgress>({ done: 0, total: DATA_STEPS.length, pending: [...DATA_STEPS] })
+  const { loadUserCards, loadUserSoldCards, loadUserPriceHistory, loadPurchases: storePurchases, clearUserData, setTrackedGames } = useStore()
 
   useEffect(() => {
     // Tracks the uid the current in-flight load belongs to, so a load that
@@ -52,6 +65,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(firebaseUser)
         setLoading(false)
         setDataLoading(true)
+        setDataProgress({ done: 0, total: DATA_STEPS.length, pending: [...DATA_STEPS] })
+        // Marks one read finished (success or failure) — the bar only ever moves when a read
+        // actually completes, never on a timer.
+        const track = <T,>(step: typeof DATA_STEPS[number], p: Promise<T>): Promise<T> =>
+          p.finally(() => {
+            if (activeUid !== firebaseUser.uid) return
+            setDataProgress((prev) => {
+              const pending = prev.pending.filter((s) => s !== step)
+              return { done: DATA_STEPS.length - pending.length, total: DATA_STEPS.length, pending }
+            })
+          })
 
         // Each read is isolated with its own .catch so one failing Firestore read (e.g. a
         // transient permission/network blip on just priceHistory) can't blank out the other
@@ -60,12 +84,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // landing the user on a fully empty Inventory/Portfolio/Spending with only a
         // console.error to explain it (easy to mistake for real data loss).
         Promise.all([
-          loadCards(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return [] as Awaited<ReturnType<typeof loadCards>> }),
-          loadPriceHistory(firebaseUser.uid).catch((err) => { console.error('Failed to load price history:', err); return [] as Awaited<ReturnType<typeof loadPriceHistory>> }),
-          loadPurchases(firebaseUser.uid).catch((err) => { console.error('Failed to load purchases:', err); return [] as Awaited<ReturnType<typeof loadPurchases>> }),
-          loadSoldCards(firebaseUser.uid).catch((err) => { console.error('Failed to load sold cards:', err); return [] as Awaited<ReturnType<typeof loadSoldCards>> }),
-        ]).then(([cards, priceHistory, purchases, soldCards]) => {
+          track('your cards', loadCards(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return [] as Awaited<ReturnType<typeof loadCards>> })),
+          track('price history', loadPriceHistory(firebaseUser.uid).catch((err) => { console.error('Failed to load price history:', err); return [] as Awaited<ReturnType<typeof loadPriceHistory>> })),
+          track('purchases', loadPurchases(firebaseUser.uid).catch((err) => { console.error('Failed to load purchases:', err); return [] as Awaited<ReturnType<typeof loadPurchases>> })),
+          track('sold cards', loadSoldCards(firebaseUser.uid).catch((err) => { console.error('Failed to load sold cards:', err); return [] as Awaited<ReturnType<typeof loadSoldCards>> })),
+          // undefined (read failed) leaves whatever the store already has alone, rather than
+          // snapping a multi-game user back to the Riftbound-only default over a network blip.
+          track('your games', loadTrackedGames(firebaseUser.uid).catch((err) => { console.error('Failed to load tracked games:', err); return undefined })),
+        ]).then(([cards, priceHistory, purchases, soldCards, trackedGames]) => {
           if (activeUid !== firebaseUser.uid) return // signed out mid-load
+          if (trackedGames !== undefined) setTrackedGames(trackedGames ?? DEFAULT_TRACKED_GAMES)
           loadUserCards(cards)
           loadUserSoldCards(soldCards)
           loadUserPriceHistory(priceHistory)
@@ -132,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, dataLoading, signIn, signUp, signInWithGoogle, signOut, verifyPasscode }}>
+    <AuthContext.Provider value={{ user, loading, dataLoading, dataProgress, signIn, signUp, signInWithGoogle, signOut, verifyPasscode }}>
       {children}
     </AuthContext.Provider>
   )

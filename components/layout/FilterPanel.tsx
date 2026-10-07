@@ -17,7 +17,7 @@ const TIME_OPTIONS = [
 ] as const
 
 // Pill styles — three states
-const pillOn   = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-violet-600/20 border-violet-500/40 text-violet-300 hover:bg-violet-600/30'
+const pillOn   = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-violet-600/20 border-violet-500/40 text-violet-700 hover:bg-violet-600/30'
 const pillOff  = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-slate-900 border-slate-700 text-slate-500 line-through decoration-slate-600 hover:text-slate-300 hover:border-slate-600'
 const pillIdle = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
 
@@ -25,7 +25,7 @@ export function FilterPanel() {
   const {
     calcFloor, setCalcFloor,
     showFilters, setShowFilters,
-    activeGames, setActiveGames,
+    activeGames, setActiveGames, trackedGames,
     timeFrame, setTimeFrame,
     cards,
     hiddenGroups, toggleHiddenGroup,
@@ -53,16 +53,21 @@ export function FilterPanel() {
     setFloorInput(val === 0 ? '' : String(val))
   }
 
+  // Only tracked games (Inventory's game tabs) are offered here — an untracked game never counts
+  // toward Portfolio regardless (see portfolioGames() in lib/store.ts).
+  const shownGames = ALL_GAMES.filter((g) => trackedGames.includes(g))
+  const onCount = shownGames.filter((g) => activeGames.includes(g)).length
+
   function toggleGame(game: Game) {
     if (activeGames.includes(game)) {
-      if (activeGames.length === 1) return
+      if (onCount <= 1) return
       setActiveGames(activeGames.filter((g) => g !== game))
     } else {
       setActiveGames([...activeGames, game])
     }
   }
 
-  const allGamesActive = ALL_GAMES.every((g) => activeGames.includes(g))
+  const allGamesActive = shownGames.every((g) => activeGames.includes(g))
   const hasActiveFilters = calcFloor > 0 || !allGamesActive || timeFrame !== 'entry' || hiddenGroups.length > 0
 
   return (
@@ -80,11 +85,11 @@ export function FilterPanel() {
             {/* Header row */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <SlidersHorizontal size={14} className="text-violet-400" />
-                <span className="text-sm font-bold text-white">Portfolio Filters</span>
+                <SlidersHorizontal size={14} className="text-violet-600" />
+                <span className="text-sm font-bold text-ink">Portfolio Filters</span>
                 <span className="text-xs text-slate-500">— affects all calculations &amp; top performers</span>
               </div>
-              <button onClick={() => setShowFilters(false)} className="text-slate-500 hover:text-white transition-colors p-1">
+              <button onClick={() => setShowFilters(false)} className="text-slate-500 hover:text-ink transition-colors p-1">
                 <X size={15} />
               </button>
             </div>
@@ -95,9 +100,9 @@ export function FilterPanel() {
                 <div className="text-xs font-semibold text-slate-400">Games</div>
               </div>
               <div className="flex flex-wrap gap-2">
-                {ALL_GAMES.map((game) => {
+                {shownGames.map((game) => {
                   const on = activeGames.includes(game)
-                  const isLast = on && activeGames.length === 1
+                  const isLast = on && onCount === 1
                   return (
                     <button
                       key={game}
@@ -143,7 +148,7 @@ export function FilterPanel() {
                     className={cn(
                       'text-xs px-3 py-1.5 rounded-full border font-medium transition-all',
                       calcFloor === val
-                        ? 'bg-violet-600/20 border-violet-500/40 text-violet-300 hover:bg-violet-600/30'
+                        ? 'bg-violet-600/20 border-violet-500/40 text-violet-700 hover:bg-violet-600/30'
                         : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600',
                     )}
                   >
@@ -163,7 +168,7 @@ export function FilterPanel() {
                       const n = parseFloat(e.target.value)
                       setCalcFloor(isNaN(n) || n < 0 ? 0 : n)
                     }}
-                    className="w-24 bg-slate-800 border border-slate-700 rounded-full pl-6 pr-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-violet-500"
+                    className="w-24 bg-slate-800 border border-slate-700 rounded-full pl-6 pr-3 py-1.5 text-xs text-ink placeholder-slate-600 focus:outline-none focus:border-violet-500"
                   />
                 </div>
               </div>
@@ -197,10 +202,10 @@ export function FilterPanel() {
             {totalHidden > 0 && (
               <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
                 <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-                <span className="text-xs text-amber-400">
+                <span className="text-xs text-amber-600">
                   <span className="font-semibold">{totalHidden} card{totalHidden !== 1 ? 's' : ''}</span> hidden below {formatCurrency(calcFloor)}
                 </span>
-                <button onClick={() => applyFloor(0)} className="ml-auto text-xs text-slate-500 hover:text-white underline underline-offset-2">
+                <button onClick={() => applyFloor(0)} className="ml-auto text-xs text-slate-500 hover:text-ink underline underline-offset-2">
                   Clear floor
                 </button>
               </div>
@@ -211,16 +216,16 @@ export function FilterPanel() {
 
       {/* Active-filter banner when panel is closed */}
       {!showFilters && hasActiveFilters && (
-        <div className="bg-amber-950/40 border-b border-amber-900/40 px-4 sm:px-6 lg:px-8 py-1.5">
+        <div className="bg-amber-100/40 border-b border-amber-200/40 px-4 sm:px-6 lg:px-8 py-1.5">
           <div className="max-w-7xl mx-auto flex items-center gap-3 flex-wrap">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-            <div className="flex items-center gap-2 text-xs text-amber-400 flex-wrap">
+            <div className="flex items-center gap-2 text-xs text-amber-600 flex-wrap">
               {calcFloor > 0 && <span>Floor: {formatCurrency(calcFloor)}{totalHidden > 0 ? ` (${totalHidden} hidden)` : ''}</span>}
-              {!allGamesActive && <span>Games: {activeGames.map((g) => GAME_LABELS[g]).join(', ')}</span>}
+              {!allGamesActive && <span>Games: {shownGames.filter((g) => activeGames.includes(g)).map((g) => GAME_LABELS[g]).join(', ')}</span>}
               {timeFrame !== 'entry' && <span>Period: {TIME_OPTIONS.find((t) => t.value === timeFrame)?.label}</span>}
               {hiddenGroups.length > 0 && <span>Hidden: {hiddenGroups.join(', ')}</span>}
             </div>
-            <button onClick={() => setShowFilters(true)} className="ml-auto text-xs text-amber-500 hover:text-amber-300 underline underline-offset-2">
+            <button onClick={() => setShowFilters(true)} className="ml-auto text-xs text-amber-500 hover:text-amber-700 underline underline-offset-2">
               Edit
             </button>
           </div>

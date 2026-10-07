@@ -1,14 +1,15 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Loader2, Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
+import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
 import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
+import { LogoLoader } from '@/components/LogoLoader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -293,16 +294,16 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
 // ── Rarity colors ─────────────────────────────────────────────────────────────
 
 const RARITY_COLORS: Record<string, string> = {
-  Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
-  Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899', Iconic: '#eab308',
-  Epic: '#06b6d4', 'Alt Art': '#fbbf24', Overnumbered: '#fbbf24', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
+  Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
+  Super_rare: '#7a4a5a', Legendary: '#b0602a', Enchanted: '#9a5a5a', Iconic: '#a8861e',
+  Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030',
   // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), T(reasure) R(are — a real
   // premium chase tier, see CARDEX_RARITY_ORDER's comment), SEC(ret rare) — "SP CARD" is a
   // further-out special/promo print tier, P/PR both promotional-card codes.
-  L: '#38bdf8', C: '#6b7280', UC: '#22c55e', R: '#3b82f6', SR: '#a855f7', TR: '#eab308',
-  SEC: '#f97316', 'SP CARD': '#fbbf24', P: '#84cc16', PR: '#84cc16',
+  L: '#5f7360', C: '#7a6a55', UC: '#5f7a32', R: '#5d6a55', SR: '#7a4a5a', TR: '#a8781e',
+  SEC: '#b0602a', 'SP CARD': '#a8701e', P: '#7a8030', PR: '#7a8030',
   // MTG: Scryfall's `rarity` field is always lowercase.
-  common: '#6b7280', uncommon: '#22c55e', rare: '#3b82f6', mythic: '#f97316', special: '#a855f7', bonus: '#ec4899',
+  common: '#7a6a55', uncommon: '#5f7a32', rare: '#5d6a55', mythic: '#b0602a', special: '#7a4a5a', bonus: '#9a5a5a',
   // Pokemon — 44 real values (verified against api.pokemontcg.io/v2/rarities and the full
   // 176-set GitHub dataset), too many for a bespoke color each, so bucketed into 4 value tiers
   // instead: blue (the plain "Rare Holo" baseline, same as Rare) -> purple (the broad "holo
@@ -313,21 +314,21 @@ const RARITY_COLORS: Record<string, string> = {
   // generic keys above. See CARDEX_RARITY_ORDER (lib/api/catalog.ts) for the same 44 values'
   // canonical sort order — that map is the source of truth for what counts as "known" at all;
   // this is purely a display color, unrelated to whether a value is safe to filter by.
-  'Rare Holo': '#3b82f6',
-  'Rare Holo EX': '#a855f7', 'Rare Holo Star': '#a855f7', 'Rare Holo LV.X': '#a855f7', LEGEND: '#a855f7',
-  'Rare Prime': '#a855f7', 'Rare Ultra': '#a855f7', 'Rare ACE': '#a855f7', 'Rare BREAK': '#a855f7',
-  'Rare Holo GX': '#a855f7', 'Rare Prism Star': '#a855f7', 'Rare Holo V': '#a855f7', 'Rare Holo VMAX': '#a855f7',
-  'Classic Collection': '#a855f7', 'Rare Holo VSTAR': '#a855f7', 'Trainer Gallery Rare Holo': '#a855f7',
-  'Double Rare': '#a855f7', 'Ultra Rare': '#a855f7', 'ACE SPEC Rare': '#a855f7',
-  'Holo Rare V': '#a855f7', 'Holo Rare VMAX': '#a855f7', 'Holo Rare VSTAR': '#a855f7', 'Rare Holo ex': '#a855f7',
-  'Rare Secret': '#f97316', 'Rare Shining': '#f97316', 'Rare Rainbow': '#f97316', 'Rare Shiny': '#f97316',
-  'Rare Shiny GX': '#f97316', 'Amazing Rare': '#f97316', 'Radiant Rare': '#f97316', 'Illustration Rare': '#f97316',
-  'Shiny Rare': '#f97316', 'Shiny Ultra Rare': '#f97316', 'Black White Rare': '#f97316',
-  'Futuristic Rare': '#f97316', 'Pikachu Rare': '#f97316',
-  'Special Illustration Rare': '#ec4899', 'Hyper Rare': '#ec4899', 'Mega Hyper Rare': '#ec4899', MEGA_ATTACK_RARE: '#ec4899',
+  'Rare Holo': '#5d6a55',
+  'Rare Holo EX': '#7a4a5a', 'Rare Holo Star': '#7a4a5a', 'Rare Holo LV.X': '#7a4a5a', LEGEND: '#7a4a5a',
+  'Rare Prime': '#7a4a5a', 'Rare Ultra': '#7a4a5a', 'Rare ACE': '#7a4a5a', 'Rare BREAK': '#7a4a5a',
+  'Rare Holo GX': '#7a4a5a', 'Rare Prism Star': '#7a4a5a', 'Rare Holo V': '#7a4a5a', 'Rare Holo VMAX': '#7a4a5a',
+  'Classic Collection': '#7a4a5a', 'Rare Holo VSTAR': '#7a4a5a', 'Trainer Gallery Rare Holo': '#7a4a5a',
+  'Double Rare': '#7a4a5a', 'Ultra Rare': '#7a4a5a', 'ACE SPEC Rare': '#7a4a5a',
+  'Holo Rare V': '#7a4a5a', 'Holo Rare VMAX': '#7a4a5a', 'Holo Rare VSTAR': '#7a4a5a', 'Rare Holo ex': '#7a4a5a',
+  'Rare Secret': '#b0602a', 'Rare Shining': '#b0602a', 'Rare Rainbow': '#b0602a', 'Rare Shiny': '#b0602a',
+  'Rare Shiny GX': '#b0602a', 'Amazing Rare': '#b0602a', 'Radiant Rare': '#b0602a', 'Illustration Rare': '#b0602a',
+  'Shiny Rare': '#b0602a', 'Shiny Ultra Rare': '#b0602a', 'Black White Rare': '#b0602a',
+  'Futuristic Rare': '#b0602a', 'Pikachu Rare': '#b0602a',
+  'Special Illustration Rare': '#9a5a5a', 'Hyper Rare': '#9a5a5a', 'Mega Hyper Rare': '#9a5a5a', MEGA_ATTACK_RARE: '#9a5a5a',
   // App-local correction, not a real pokemontcg.io value — see CARDEX_RARITY_ORDER's comment
   // (lib/api/catalog.ts) for why. Same top-tier pink as the rest of the modern chase tier.
-  'Secret Anniversary Rare': '#ec4899',
+  'Secret Anniversary Rare': '#9a5a5a',
 }
 
 // Games whose rarity toggle filter is wired up in the Cardex — the filter/toggle-list logic
@@ -335,6 +336,11 @@ const RARITY_COLORS: Record<string, string> = {
 // (lib/api/catalog.ts) and RARITY_LABELS_BY_GAME (lib/utils.ts), so enabling it for another game
 // is just adding it here plus, if its raw rarity strings need friendlier display text or new
 // CARDEX_RARITY_ORDER/RARITY_COLORS entries, filling those in — no filtering-logic changes.
+// How many tiles at the top of a set count toward its loading bar (roughly a screenful at
+// desktop widths), and how long to wait on them before revealing the set anyway.
+const FIRST_SCREEN_ART = 40
+const ART_WAIT_LIMIT_MS = 15_000
+
 const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg'])
 const EMPTY_SET: Set<string> = new Set()
 
@@ -387,7 +393,7 @@ function matchesSearch(query: string, name: string, number: string): boolean {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CardexPage() {
-  const { cards } = useStore()
+  const { cards, trackedGames } = useStore()
 
   // Deep-link support — e.g. clicking a "Card Unlocked" toast navigates to
   // /cardex?game=riftbound&set=Secret+Garden. Read once; a mid-session change to the URL isn't
@@ -396,10 +402,22 @@ export default function CardexPage() {
   const urlGame = searchParams.get('game')
   const urlSet = searchParams.get('set')
 
-  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>(isCatalogGame(urlGame) ? urlGame : 'pokemon')
+  // Starts on the deep-linked game if there is one, else the first game this user tracks
+  // (trackedGames is already hydrated from localStorage by the time this first renders).
+  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>(isCatalogGame(urlGame) ? urlGame : trackedGames[0])
   const [activeSet, setActiveSet] = useState<SetMeta>(PLACEHOLDER_SET)
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
   const [loading, setLoading] = useState(false)
+  // Which game+set `catalogCards` currently belongs to — lets the grid keep showing the loader
+  // until the active set's cards have actually arrived, rather than flashing "No cards found"
+  // for the render between picking a set and its fetch starting.
+  const [loadedSetKey, setLoadedSetKey] = useState('')
+  // Card-art progress for the first screen of a freshly opened set: which of those images have
+  // actually finished downloading (or failed), keyed to the set they belong to. The set stays
+  // behind the logo loader + a real progress bar until they're in, then is revealed once
+  // (`revealedSetKey`) — later search/rarity filtering never re-hides it.
+  const [artDone, setArtDone] = useState<{ key: string; ids: Set<string> }>({ key: '', ids: new Set() })
+  const [revealedSetKey, setRevealedSetKey] = useState('')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   // The isolated "zoom" view a plain click on a tile opens — see CardZoomOverlay below. Holding
   // the clicked tile's own bounding rect here (captured at click time) is what lets the overlay
@@ -440,7 +458,7 @@ export default function CardexPage() {
   // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
   // rendered while that tab is active.
   const catalogGame: CatalogGame = activeGame === 'personal' ? 'lorcana' : activeGame
-  const gameColor = activeGame === 'personal' ? '#8b5cf6' : GAME_COLORS[catalogGame]
+  const gameColor = activeGame === 'personal' ? '#7a5230' : GAME_COLORS[catalogGame]
 
   // Load Lorcana/Riftbound set groups from the registry once on mount.
   useEffect(() => {
@@ -597,6 +615,7 @@ export default function CardexPage() {
       // click lands here, so a slow prior request's dangling `loading=true` never gets undone.
       setCatalogCards([])
       setLoading(false)
+      setLoadedSetKey(`${activeGame}:${activeSet.name}`)
       return
     }
     let stale = false // rapid set switching: ignore responses for a set we've left
@@ -606,12 +625,28 @@ export default function CardexPage() {
       .then((r) => (r.ok ? r.json() : []))
       .then((cards: CatalogCard[]) => { if (!stale) setCatalogCards(cards) })
       .catch(() => {})
-      .finally(() => { if (!stale) setLoading(false) })
+      .finally(() => { if (!stale) { setLoading(false); setLoadedSetKey(`${activeGame}:${activeSet.name}`) } })
     return () => { stale = true }
   }, [activeGame, activeSet])
 
   // A search left over from a previous set/game is almost never what you want on the next one.
   useEffect(() => { setSearchQuery('') }, [activeGame, activeSet])
+
+  // If the active game isn't one this user tracks (tracked games changed after this page first
+  // rendered — e.g. the Firestore preference load landed with a different list than the
+  // localStorage cache had — or a deep link pointed at an untracked game), move to the first
+  // tracked game. Waits for that game's set list to finish loading so switchGame() has real
+  // groups to pick from, and claims initialSetPicked first so none of the mount-time fetch
+  // effects above (which captured the *original* activeGame) can overwrite the choice afterward.
+  useEffect(() => {
+    if (activeGame === 'personal' || trackedGames.includes(activeGame)) return
+    const target = trackedGames[0]
+    const targetLoading = target === 'pokemon' ? pokemonSetsLoading : target === 'onepiece' ? onepieceSetsLoading : target === 'mtg' ? mtgSetsLoading : registryLoading
+    if (targetLoading) return
+    initialSetPicked.current = true
+    switchGame(target)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGame, trackedGames, pokemonSetsLoading, onepieceSetsLoading, mtgSetsLoading, registryLoading])
 
   function switchGame(game: CatalogGame | 'personal') {
     setActiveGame(game)
@@ -678,6 +713,38 @@ export default function CardexPage() {
   }, [enriched, searchQuery, catalogGame, hiddenRarities])
 
   const isSpecial = activeSet.fromInventory
+  const setKey = `${activeGame}:${activeSet.name}`
+  const catalogPending = !isSpecial && (loading || loadedSetKey !== setKey)
+
+  // Only the first screen of tiles counts — the rest are loading="lazy" and only download as
+  // they're scrolled into view, so waiting on all of them would never finish.
+  const firstScreenArtIds = useMemo(
+    () => filteredEnriched.slice(0, FIRST_SCREEN_ART).filter((c) => c.imageUrl).map((c) => c.id),
+    [filteredEnriched],
+  )
+  const artCount = artDone.key === setKey ? firstScreenArtIds.filter((id) => artDone.ids.has(id)).length : 0
+  const artPending = !catalogPending && !isSpecial && revealedSetKey !== setKey && artCount < firstScreenArtIds.length
+  const setReady = !catalogPending && !artPending
+
+  const markArtDone = useCallback((id: string) => {
+    setArtDone((prev) => {
+      if (prev.key !== setKey) return { key: setKey, ids: new Set([id]) }
+      if (prev.ids.has(id)) return prev
+      return { key: setKey, ids: new Set(prev.ids).add(id) }
+    })
+  }, [setKey])
+
+  useEffect(() => {
+    if (!catalogPending && !isSpecial && !artPending && revealedSetKey !== setKey) setRevealedSetKey(setKey)
+  }, [catalogPending, isSpecial, artPending, revealedSetKey, setKey])
+
+  // A stalled image request shouldn't trap the set behind the loader forever — after this long,
+  // reveal what's there and let any stragglers finish in place.
+  useEffect(() => {
+    if (!artPending) return
+    const t = setTimeout(() => setRevealedSetKey(setKey), ART_WAIT_LIMIT_MS)
+    return () => clearTimeout(t)
+  }, [artPending, setKey])
 
   // The active game's categories (eras/product groups) and which one is currently selected —
   // drives the two-tier tree picker below (category list, then that category's sets).
@@ -690,7 +757,7 @@ export default function CardexPage() {
     <AuthGuard>
       <div className="pb-20 md:pb-0">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white">Cardex</h1>
+          <h1 className="text-2xl font-bold text-ink">Cardex</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             Your personal collection tracker — grey means missing, full color means you own it.
           </p>
@@ -698,18 +765,19 @@ export default function CardexPage() {
 
         {/* Game tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
-          {(['pokemon', 'onepiece', 'lorcana', 'riftbound', 'mtg', 'personal'] as const).map((game) => (
+          {/* Only the games this user tracks (added from Inventory's "+" game picker) */}
+          {[...(['pokemon', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(g)), 'personal' as const].map((game) => (
             <button
               key={game}
               onClick={() => switchGame(game)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all',
                 activeGame === game
-                  ? 'text-white shadow-lg'
-                  : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800',
+                  ? 'text-ink shadow-lg'
+                  : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800',
               )}
               style={activeGame === game
-                ? { backgroundColor: (game === 'personal' ? '#8b5cf6' : GAME_COLORS[game]) + '33', color: game === 'personal' ? '#8b5cf6' : GAME_COLORS[game], border: `1px solid ${(game === 'personal' ? '#8b5cf6' : GAME_COLORS[game])}55` }
+                ? { backgroundColor: (game === 'personal' ? '#7a5230' : GAME_COLORS[game]) + '33', color: game === 'personal' ? '#7a5230' : GAME_COLORS[game], border: `1px solid ${(game === 'personal' ? '#7a5230' : GAME_COLORS[game])}55` }
                 : {}}
             >
               {game === 'personal' && <FolderHeart size={14} />}
@@ -720,18 +788,14 @@ export default function CardexPage() {
 
         {activeGame === 'personal' ? (
           <PersonalCollectionsView onZoom={openZoom} />
+        ) : setsLoading ? (
+          <LogoLoader label="Loading your Cardex…" />
         ) : (
           <>
             {/* Two-tier set picker: pick a category (era/product group) from a dropdown, then a
                 set from just that category as pills below — a plain vertical list of categories
                 (Pokemon alone has 14+) was worse than the wall of set pills it replaced, so the
                 category level collapses into a single-line select instead of its own list. */}
-            {setsLoading && (
-              <div className="flex items-center gap-2 text-slate-500 text-sm mb-6">
-                <Loader2 size={14} className="animate-spin" />
-                Loading sets…
-              </div>
-            )}
             {!setsLoading && (
               <div className="mb-6">
                 {/* Category dropdown */}
@@ -743,7 +807,7 @@ export default function CardexPage() {
                     style={{ borderColor: gameColor + '55', color: gameColor }}
                   >
                     {categories.map((group) => (
-                      <option key={group.label} value={group.label} className="bg-slate-900 text-white">
+                      <option key={group.label} value={group.label} className="bg-slate-900 text-ink">
                         {group.label} ({group.sets.length})
                       </option>
                     ))}
@@ -762,8 +826,8 @@ export default function CardexPage() {
                         className={cn(
                           'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
                           isActive
-                            ? 'text-white border-transparent'
-                            : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
+                            ? 'text-ink border-transparent'
+                            : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-ink hover:bg-slate-800',
                           set.fromInventory && !isActive && 'border-dashed',
                         )}
                         style={isActive ? { backgroundColor: gameColor + '28', borderColor: gameColor + '60', color: gameColor } : {}}
@@ -796,7 +860,9 @@ export default function CardexPage() {
               <div className="flex items-center gap-2 flex-wrap mb-4">
                 {rarityFilters.map((r) => {
                   const active = !hiddenRarities.has(r)
-                  const color = RARITY_COLORS[r] ?? '#6b7280'
+                  // One dark brown for every rarity pill (not RARITY_COLORS) — per-rarity colors
+                  // read as too loud on the parchment theme.
+                  const color = '#4a3520'
                   const label = RARITY_LABELS_BY_GAME[catalogGame]?.[r] ?? r.replace('_', ' ')
                   return (
                     <button
@@ -813,7 +879,7 @@ export default function CardexPage() {
                   )
                 })}
                 {hiddenRarities.size > 0 && (
-                  <button onClick={() => setHiddenRarities(new Set())} className="text-[11px] text-slate-500 hover:text-white px-1">
+                  <button onClick={() => setHiddenRarities(new Set())} className="text-[11px] text-slate-500 hover:text-ink px-1">
                     Reset
                   </button>
                 )}
@@ -821,10 +887,10 @@ export default function CardexPage() {
             )}
 
             {/* Progress bar (catalog-backed sets only) */}
-            {!loading && !isSpecial && totalCount > 0 && (
+            {setReady && !isSpecial && totalCount > 0 && (
               <div className="mb-5 card-glass px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-semibold text-white">{activeSet.label ?? activeSet.name}</span>
+                  <span className="text-sm font-semibold text-ink">{activeSet.label ?? activeSet.name}</span>
                   <span className="text-sm font-bold" style={{ color: gameColor }}>
                     {ownedCount} / {totalCount}
                     <span className="text-slate-500 font-normal text-xs ml-1">({pct}%)</span>
@@ -837,19 +903,21 @@ export default function CardexPage() {
             )}
 
             {/* Loading */}
-            {loading && (
-              <div className="flex items-center justify-center py-24 gap-3 text-slate-500">
-                <Loader2 size={24} className="animate-spin" style={{ color: gameColor }} />
-                <span className="text-sm">Loading {activeSet.label ?? activeSet.name}…</span>
-              </div>
+            {!setReady && (
+              <LogoLoader
+                label={`Loading ${activeSet.label || activeSet.name || 'cards'}…`}
+                progress={artPending ? { done: artCount, total: firstScreenArtIds.length, unit: 'card images' } : undefined}
+              />
             )}
 
             {/* Catalog-backed card grid */}
-            {!loading && !isSpecial && filteredEnriched.length > 0 && (
-              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
-                {filteredEnriched.map((card) => (
+            {!catalogPending && !isSpecial && filteredEnriched.length > 0 && (
+              <div className={cn('grid gap-3', artPending && 'hidden')} style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+                {filteredEnriched.map((card, i) => (
                   <CardTile
                     key={card.id}
+                    eagerArt={i < FIRST_SCREEN_ART}
+                    onArtDone={markArtDone}
                     card={card}
                     gameColor={gameColor}
                     game={catalogGame}
@@ -875,13 +943,13 @@ export default function CardexPage() {
             )}
 
             {/* Empty states */}
-            {!loading && !isSpecial && totalCount === 0 && (
+            {setReady && !isSpecial && totalCount === 0 && (
               <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
                 <div className="text-4xl mb-3">📖</div>
                 <div className="text-slate-400 font-medium">No cards found for this set</div>
               </div>
             )}
-            {!loading && !isSpecial && totalCount > 0 && filteredEnriched.length === 0 && (
+            {setReady && !isSpecial && totalCount > 0 && filteredEnriched.length === 0 && (
               <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
                 <div className="text-4xl mb-3">🔍</div>
                 <div className="text-slate-400 font-medium">No cards match &quot;{searchQuery}&quot;</div>
@@ -949,7 +1017,7 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
       {Object.entries(bySet).map(([setName, setCards]) => (
         <div key={setName}>
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-sm font-bold text-white">{setName}</span>
+            <span className="text-sm font-bold text-ink">{setName}</span>
             <span className="text-xs text-slate-500">{setCards.length} card{setCards.length !== 1 ? 's' : ''}</span>
           </div>
           <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
@@ -981,10 +1049,12 @@ interface CardTileProps {
   onHover: () => void
   onLeave: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
+  eagerArt?: boolean
+  onArtDone?: (id: string) => void
 }
 
-function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom }: CardTileProps) {
-  const rarityColor = RARITY_COLORS[card.rarity] ?? '#6b7280'
+function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, eagerArt, onArtDone }: CardTileProps) {
+  const rarityColor = RARITY_COLORS[card.rarity] ?? '#7a6a55'
   // RARITY_LABELS_BY_GAME is keyed per-game (lib/utils.ts) — the same raw string can mean
   // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
   // "Promo" tier), so relabeling must only ever use the current game's own map.
@@ -1017,12 +1087,21 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom }
         style={{
           aspectRatio: '5/7',
           filter: card.owned ? 'none' : 'grayscale(1)',
-          outline: card.owned ? `2px solid ${gameColor}40` : '1px solid #1e293b',
+          outline: card.owned ? `2px solid ${gameColor}40` : '1px solid #d6c49f',
           boxShadow: card.owned && isHovered ? `0 0 12px ${gameColor}60` : undefined,
         }}
       >
         {card.imageUrl ? (
-          <img src={card.imageUrl} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
+          <img
+            src={card.imageUrl}
+            alt={card.name}
+            loading={eagerArt ? 'eager' : 'lazy'}
+            onLoad={() => onArtDone?.(card.id)}
+            onError={() => onArtDone?.(card.id)}
+            // An image already in the browser cache can finish before onLoad is attached
+            ref={(el) => { if (el?.complete) onArtDone?.(card.id) }}
+            className="w-full h-full object-cover"
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: rarityColor + '18', color: rarityColor }}>
             #{card.number}
@@ -1051,12 +1130,12 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom }
       {isHovered && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-white leading-tight max-w-[140px] truncate">{card.name}</div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
             {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
             {card.marketPrice > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice.toFixed(2)}</div>}
             {card.owned
-              ? <div className="text-[10px] text-emerald-400 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
+              ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
               : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
           </div>
           <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
@@ -1072,7 +1151,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   card: Card; gameColor: string; isHovered: boolean; onHover: () => void; onLeave: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
-  const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#6b7280') : '#6b7280'
+  const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#7a6a55') : '#7a6a55'
 
   return (
     <div
@@ -1135,9 +1214,9 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
       {isHovered && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-white leading-tight max-w-[140px] truncate">{card.name}</div>
-            {card.isFoil && <div className="text-[10px] text-amber-400 mt-0.5">✨ Foil</div>}
-            <div className="text-[10px] text-emerald-400 mt-0.5">
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
+            {card.isFoil && <div className="text-[10px] text-amber-600 mt-0.5">✨ Foil</div>}
+            <div className="text-[10px] text-emerald-600 mt-0.5">
               ✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}
             </div>
           </div>
@@ -1234,7 +1313,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
     >
       <button
         onClick={handleClose}
-        className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 z-10"
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-ink hover:bg-slate-800 z-10"
       >
         <X size={18} />
       </button>
@@ -1303,7 +1382,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
             here instead (not `.card-glass`) blocks that regardless of how large the glow grows. */}
         {visible && (
           <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
-            <div className="text-base font-bold text-white leading-tight">{d.name}</div>
+            <div className="text-base font-bold text-ink leading-tight">{d.name}</div>
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-xs text-slate-500">#{d.number}</span>
               {d.rarityLabel && (
@@ -1311,15 +1390,15 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                   {d.rarityLabel}
                 </span>
               )}
-              {d.isFoil && <span className="text-[11px] font-medium text-amber-400">✨ Foil</span>}
+              {d.isFoil && <span className="text-[11px] font-medium text-amber-600">✨ Foil</span>}
             </div>
-            {d.marketPrice > 0 && <div className="text-sm font-semibold text-white">${d.marketPrice.toFixed(2)}</div>}
-            <div className="text-xs" style={{ color: d.owned ? '#34d399' : '#64748b' }}>
+            {d.marketPrice > 0 && <div className="text-sm font-semibold text-ink">${d.marketPrice.toFixed(2)}</div>}
+            <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
               {d.owned ? `✓ ${d.quantity > 1 ? `×${d.quantity} owned` : 'owned'}` : 'not collected'}
             </div>
             <button
               onClick={() => openEbaySearch(d.ebayCard)}
-              className="mt-1 text-[11px] text-slate-500 hover:text-white underline underline-offset-2"
+              className="mt-1 text-[11px] text-slate-500 hover:text-ink underline underline-offset-2"
             >
               Search eBay sold listings
             </button>

@@ -8,8 +8,11 @@
     --foreground: 248 250 252;
   }
 
+  /* Parchment theme: a flat warm tan page. Panels sit on it as lighter paper (see the slate
+     remap in tailwind.config.ts). */
   body {
-    @apply bg-[#0a0a0f] text-slate-100 antialiased;
+    @apply text-slate-100 antialiased;
+    background-color: #d9c6a0;
   }
 
   * {
@@ -19,7 +22,7 @@
 
 @layer components {
   .card-glass {
-    @apply bg-slate-900/60 border border-slate-800 rounded-2xl backdrop-blur-sm;
+    @apply bg-slate-900/70 border border-slate-800 rounded-2xl backdrop-blur-sm shadow-sm shadow-amber-900/5;
   }
 
   .stat-card {
@@ -27,11 +30,11 @@
   }
 
   .nav-link {
-    @apply flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all;
+    @apply flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-400 hover:text-ink hover:bg-slate-800/60 transition-all;
   }
 
   .nav-link.active {
-    @apply text-white bg-slate-800;
+    @apply text-ink bg-slate-800;
   }
 
   .btn-primary {
@@ -51,7 +54,7 @@
   }
 
   .input-field {
-    @apply w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white outline-none transition-colors focus:border-violet-600;
+    @apply w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-violet-600;
   }
 
   .input-field option {

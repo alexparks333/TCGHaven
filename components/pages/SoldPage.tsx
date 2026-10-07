@@ -95,7 +95,7 @@ export default function SoldPage() {
       <div className="pb-20 md:pb-0">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Sold</h1>
+            <h1 className="text-2xl font-bold text-ink">Sold</h1>
             <p className="text-slate-400 text-sm mt-0.5">
               {stats.totalCards} cards sold · {formatCurrency(stats.totalRevenue)} revenue
             </p>
@@ -106,15 +106,15 @@ export default function SoldPage() {
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="card-glass px-4 py-4">
             <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Amount Sold</div>
-            <div className="text-xl font-bold text-white">{formatCurrency(stats.totalRevenue)}</div>
+            <div className="text-xl font-bold text-ink">{formatCurrency(stats.totalRevenue)}</div>
           </div>
           <div className="card-glass px-4 py-4">
             <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Cards Sold</div>
-            <div className="text-xl font-bold text-white">{stats.totalCards}</div>
+            <div className="text-xl font-bold text-ink">{stats.totalCards}</div>
           </div>
           <div className="card-glass px-4 py-4">
             <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Total P&L</div>
-            <div className={`text-xl font-bold ${stats.totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <div className={`text-xl font-bold ${stats.totalPnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {stats.totalPnl >= 0 ? '+' : ''}{formatCurrency(stats.totalPnl)}
             </div>
           </div>
@@ -130,7 +130,7 @@ export default function SoldPage() {
                 'px-3 py-1.5 rounded-full text-xs font-medium transition-all',
                 timeFilter === key
                   ? 'bg-violet-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                  : 'bg-slate-800 text-slate-400 hover:text-ink hover:bg-slate-700'
               )}
             >
               {label}
@@ -149,8 +149,8 @@ export default function SoldPage() {
                 className={cn(
                   'px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2',
                   activeGame === game
-                    ? 'text-white shadow-lg'
-                    : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                    ? 'text-ink shadow-lg'
+                    : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
                 )}
                 style={
                   activeGame === game
@@ -196,7 +196,7 @@ export default function SoldPage() {
                       <div className="w-10 h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                     )}
                     <div>
-                      <div className="font-semibold text-white text-sm">{card.name}</div>
+                      <div className="font-semibold text-ink text-sm">{card.name}</div>
                       <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
                       <div className="text-[10px] text-slate-600 mt-0.5">Sold {card.soldDate}</div>
                     </div>
@@ -204,8 +204,8 @@ export default function SoldPage() {
                   <div className="text-sm text-slate-300 flex items-center">{card.set}</div>
                   <div className="text-sm text-slate-300 flex items-center">{CONDITION_LABELS[card.condition]}</div>
                   <div className="text-sm text-slate-300 flex items-center">{formatCurrency(card.purchasePrice * card.quantity)}</div>
-                  <div className="text-sm text-white font-medium flex items-center">{formatCurrency(card.soldPrice)}</div>
-                  <div className={`text-sm font-semibold flex items-center ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <div className="text-sm text-ink font-medium flex items-center">{formatCurrency(card.soldPrice)}</div>
+                  <div className={`text-sm font-semibold flex items-center ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                     {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                   </div>
                   <div className="flex items-center justify-end">
@@ -213,7 +213,7 @@ export default function SoldPage() {
                       onClick={() => handleRestore(card)}
                       disabled={restoringId === card.id}
                       title="Restore to inventory"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:text-violet-400 hover:bg-violet-950/30 transition-colors disabled:opacity-40"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-slate-500 hover:text-violet-600 hover:bg-violet-100/30 transition-colors disabled:opacity-40"
                     >
                       <RotateCcw size={13} />
                       Restore

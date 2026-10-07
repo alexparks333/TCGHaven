@@ -33,24 +33,24 @@ export function PriceHistoryChart({ data, color }: Props) {
             <stop offset="95%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#d6c49f" vertical={false} />
         <XAxis
           dataKey="label"
-          tick={{ fill: '#64748b', fontSize: 11 }}
+          tick={{ fill: '#7a654a', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           interval="preserveStartEnd"
         />
         <YAxis
-          tick={{ fill: '#64748b', fontSize: 11 }}
+          tick={{ fill: '#7a654a', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => `$${v}`}
           width={50}
         />
         <Tooltip
-          contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '0.75rem', fontSize: 12 }}
-          labelStyle={{ color: '#94a3b8' }}
+          contentStyle={{ background: '#ede1c6', border: '1px solid #d6c49f', color: '#2b2014', borderRadius: '0.75rem', fontSize: 12 }}
+          labelStyle={{ color: '#634f38' }}
           formatter={(val: number) => [formatCurrency(val), 'Price']}
         />
         <Area

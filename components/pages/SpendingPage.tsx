@@ -117,7 +117,7 @@ export default function SpendingPage() {
       <div className="pb-20 md:pb-0">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white">Spending</h1>
+          <h1 className="text-2xl font-bold text-ink">Spending</h1>
           <p className="text-slate-400 text-sm mt-0.5">Log every pack and box you buy at the price you paid</p>
         </div>
 
@@ -125,7 +125,7 @@ export default function SpendingPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="stat-card col-span-2 lg:col-span-1">
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Total Spent</span>
-            <span className="text-3xl font-bold text-white">{formatCurrency(totals.totalSpent)}</span>
+            <span className="text-3xl font-bold text-ink">{formatCurrency(totals.totalSpent)}</span>
             <span className="text-xs text-slate-500">{totals.totalPacks.toLocaleString()} packs total</span>
           </div>
           {totals.byGame.map(({ game, spent, packs }) => (
@@ -133,7 +133,7 @@ export default function SpendingPage() {
               <span className="text-xs font-bold uppercase tracking-wide" style={{ color: GAME_COLORS[game] }}>
                 {GAME_LABELS[game]}
               </span>
-              <span className="text-2xl font-bold text-white">{formatCurrency(spent)}</span>
+              <span className="text-2xl font-bold text-ink">{formatCurrency(spent)}</span>
               <span className="text-xs text-slate-500">{packs.toLocaleString()} packs</span>
             </div>
           ))}
@@ -147,7 +147,7 @@ export default function SpendingPage() {
               'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
               view === 'browse'
                 ? 'bg-violet-600 text-white'
-                : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
             )}
           >
             <ShoppingBag size={14} />
@@ -159,13 +159,13 @@ export default function SpendingPage() {
               'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
               view === 'history'
                 ? 'bg-violet-600 text-white'
-                : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
             )}
           >
             <History size={14} />
             Purchase History
             {purchases.length > 0 && (
-              <span className="bg-violet-500/30 text-violet-300 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+              <span className="bg-violet-500/30 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                 {purchases.length}
               </span>
             )}
@@ -183,8 +183,8 @@ export default function SpendingPage() {
                   className={cn(
                     'px-4 py-2 rounded-xl text-sm font-medium transition-all',
                     activeGame === game
-                      ? 'text-white shadow-lg'
-                      : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                      ? 'text-ink shadow-lg'
+                      : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
                   )}
                   style={
                     activeGame === game
@@ -214,7 +214,7 @@ export default function SpendingPage() {
                 return (
                   <div key={setCode}>
                     <div className="flex items-center gap-3 mb-4">
-                      <h2 className="text-base font-bold text-white">{setName}</h2>
+                      <h2 className="text-base font-bold text-ink">{setName}</h2>
                       {setSpent > 0 && (
                         <span
                           className="text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -333,7 +333,7 @@ function ProductCard({ product, gameColor, purchaseCount, onAdd }: ProductCardPr
         {/* Purchase count badge */}
         {purchaseCount > 0 && (
           <div
-            className="absolute top-2 left-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
+            className="absolute top-2 left-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-ink"
             style={{ backgroundColor: gameColor }}
           >
             {purchaseCount}×
@@ -344,7 +344,7 @@ function ProductCard({ product, gameColor, purchaseCount, onAdd }: ProductCardPr
       {/* Info */}
       <div className="p-3 flex flex-col gap-2 flex-1">
         <div>
-          <div className="font-semibold text-white text-sm leading-tight">{product.name}</div>
+          <div className="font-semibold text-ink text-sm leading-tight">{product.name}</div>
           <div className="text-xs text-slate-500 mt-0.5">
             {product.packsIncluded} pack{product.packsIncluded !== 1 ? 's' : ''} · MSRP {formatCurrency(product.price)}
           </div>
@@ -363,7 +363,7 @@ function ProductCard({ product, gameColor, purchaseCount, onAdd }: ProductCardPr
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && submit()}
-                  className="w-full text-sm font-bold text-white bg-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full text-sm font-bold text-ink bg-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
                   autoFocus
                 />
               </div>
@@ -375,21 +375,21 @@ function ProductCard({ product, gameColor, purchaseCount, onAdd }: ProductCardPr
                   value={qty}
                   onChange={(e) => setQty(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && submit()}
-                  className="w-full text-sm font-bold text-white bg-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full text-sm font-bold text-ink bg-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
               </div>
             </div>
             <div className="flex gap-1.5">
               <button
                 onClick={submit}
-                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-bold text-white"
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-bold text-ink"
                 style={{ backgroundColor: gameColor }}
               >
                 <Check size={11} /> Add to Tab
               </button>
               <button
                 onClick={cancel}
-                className="w-8 flex items-center justify-center rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+                className="w-8 flex items-center justify-center rounded-lg bg-slate-800 text-slate-400 hover:text-ink"
               >
                 <X size={12} />
               </button>
@@ -462,7 +462,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
   const [qty, setQty] = useState(String(purchase.quantity))
   const [date, setDate] = useState(purchase.date)
 
-  const gameColor = product ? GAME_COLORS[product.game] : '#6366f1'
+  const gameColor = product ? GAME_COLORS[product.game] : '#5c4d5a'
   const initials = product
     ? product.setName.split(' ').map((w) => w[0]).join('').toUpperCase()
     : '??'
@@ -519,7 +519,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
                   step="0.01"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  className="w-full text-sm font-bold text-white bg-slate-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full text-sm font-bold text-ink bg-slate-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
                   autoFocus
                 />
               </div>
@@ -530,7 +530,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
                   min="1"
                   value={qty}
                   onChange={(e) => setQty(e.target.value)}
-                  className="w-full text-sm font-bold text-white bg-slate-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full text-sm font-bold text-ink bg-slate-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
               </div>
               <div className="flex-1 min-w-[110px]">
@@ -539,7 +539,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full text-sm text-white bg-slate-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                  className="w-full text-sm text-ink bg-slate-800 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 />
               </div>
             </div>
@@ -552,7 +552,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
               </button>
               <button
                 onClick={discard}
-                className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium text-slate-400 bg-slate-800 hover:text-white"
+                className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium text-slate-400 bg-slate-800 hover:text-ink"
               >
                 <X size={11} /> Cancel
               </button>
@@ -561,7 +561,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-white truncate">
+              <div className="text-sm font-semibold text-ink truncate">
                 {product?.name ?? purchase.productId}
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
@@ -578,7 +578,7 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
               </div>
             </div>
             <div className="text-right shrink-0">
-              <div className="text-sm font-bold text-white">
+              <div className="text-sm font-bold text-ink">
                 {purchase.quantity > 1
                   ? `${purchase.quantity}× ${formatCurrency(purchase.pricePaid)} = ${formatCurrency(total)}`
                   : formatCurrency(total)}
@@ -594,13 +594,13 @@ function HistoryRow({ purchase, product, onEdit, onDelete }: HistoryRowProps) {
         <div className="flex gap-1 shrink-0">
           <button
             onClick={() => setEditing(true)}
-            className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-ink transition-colors"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => onDelete(purchase.id)}
-            className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-red-400 transition-colors"
+            className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 hover:text-red-600 transition-colors"
           >
             <Trash2 size={13} />
           </button>

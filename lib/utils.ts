@@ -15,12 +15,12 @@ export function cn(...inputs: ClassValue[]) {
 // without a circular import between the two.
 const ZOOM_GLOW_COLORS: Partial<Record<Game, Record<string, string>>> = {
   riftbound: {
-    Common: '#9ca3af',       // light gray
-    Uncommon: '#4b5563',     // darker gray
-    Rare: '#6d28d9',         // dark purple
-    Epic: '#eab308',         // gold/yellow
-    Overnumbered: '#eab308', // gold/yellow
-    Star: '#eab308',         // gold/yellow (Overnumbered Signature)
+    Common: '#8a7a65',       // light gray
+    Uncommon: '#5e5040',     // darker gray
+    Rare: '#5e3a4a',         // dark purple
+    Epic: '#a8861e',         // gold/yellow
+    Overnumbered: '#a8861e', // gold/yellow
+    Star: '#a8861e',         // gold/yellow (Overnumbered Signature)
   },
 }
 

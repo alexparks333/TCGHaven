@@ -23,12 +23,18 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0a0a0f',
+  themeColor: '#d9c6a0',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
+      <head>
+        {/* LogoLoader (components/LogoLoader.tsx) is the app's loading screen — fetched up front
+            so the logo is already there the first time a loader appears, not drawn in late. */}
+        <link rel="preload" as="image" href="/logo.png" />
+        <link rel="preload" as="image" href="/logo-text.png" />
+      </head>
       <body className={inter.className}>
         <ClientWrapper>{children}</ClientWrapper>
       </body>

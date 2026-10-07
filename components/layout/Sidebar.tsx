@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Package, TrendingUp, Layers, Sparkles, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings, ShieldCheck } from 'lucide-react'
+import { Package, TrendingUp, Layers, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
@@ -45,12 +45,12 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-56 border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
-        <div className="flex items-center gap-2 px-3 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center">
-            <Sparkles size={16} className="text-white" />
-          </div>
-          <span className="font-bold text-white text-lg">TCGHaven</span>
+      <aside className="hidden md:flex flex-col w-[272px] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
+        <div className="flex items-center gap-1.5 px-1 mb-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" className="w-[72px] h-[72px] object-contain shrink-0" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-text.png" alt="TCGHaven" className="min-w-0 flex-1 h-auto object-contain" />
         </div>
 
         <nav className="flex flex-col gap-1">
@@ -94,7 +94,7 @@ export function Sidebar() {
                   ) : initials}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs font-semibold text-white truncate">
+                  <div className="text-xs font-semibold text-ink truncate">
                     {user.displayName ?? 'Collector'}
                   </div>
                   <div className="text-[10px] text-slate-500 truncate">{user.email}</div>
@@ -102,7 +102,7 @@ export function Sidebar() {
               </div>
               <button
                 onClick={handleSignOut}
-                className="w-full flex items-center gap-2 text-xs text-slate-500 hover:text-red-400 transition-colors px-1 py-1 rounded-lg hover:bg-red-950/20"
+                className="w-full flex items-center gap-2 text-xs text-slate-500 hover:text-red-600 transition-colors px-1 py-1 rounded-lg hover:bg-red-100/20"
               >
                 <LogOut size={12} />
                 Sign out
@@ -120,7 +120,7 @@ export function Sidebar() {
             href={href}
             className={cn(
               'flex-1 flex flex-col items-center gap-0.5 py-3 text-slate-500 transition-colors',
-              pathname === href && 'text-violet-400'
+              pathname === href && 'text-violet-600'
             )}
           >
             <Icon size={20} />
@@ -131,7 +131,7 @@ export function Sidebar() {
           onClick={() => setShowFilters(!showFilters)}
           className={cn(
             'flex-1 flex flex-col items-center gap-0.5 py-3 transition-colors relative',
-            showFilters ? 'text-violet-400' : 'text-slate-500',
+            showFilters ? 'text-violet-600' : 'text-slate-500',
           )}
         >
           <div className="relative">

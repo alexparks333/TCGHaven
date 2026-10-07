@@ -11,6 +11,7 @@ import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { removeCard, removeCards, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
+import { saveTrackedGames } from '@/lib/firebase/preferences'
 import { cn } from '@/lib/utils'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -45,11 +46,13 @@ interface CardGroup {
 export default function InventoryPage() {
   const {
     cards, deleteCard, addSoldCard, activeGame, setActiveGame, updateCard,
-    catalogSyncNotices, dismissCatalogSyncNotice,
+    catalogSyncNotices, dismissCatalogSyncNotice, trackedGames, setTrackedGames,
   } = useStore()
   const { user, dataLoading } = useAuth()
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const [showGamePicker, setShowGamePicker] = useState(false)
+  const gamePickerRef = useRef<HTMLDivElement>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dateFilter, setDateFilter] = useState<string>('')
@@ -326,6 +329,41 @@ export default function InventoryPage() {
     return counts
   }, [cards])
 
+  // Only tracked games get a tab — if the shared activeGame (also driven by the Sold page's
+  // tabs) points at an untracked one, land on the first tracked game instead.
+  useEffect(() => {
+    if (!trackedGames.includes(activeGame)) setActiveGame(trackedGames[0])
+  }, [trackedGames, activeGame, setActiveGame])
+
+  useEffect(() => {
+    if (!showGamePicker) return
+    function onClick(e: MouseEvent) {
+      if (gamePickerRef.current && !gamePickerRef.current.contains(e.target as Node)) setShowGamePicker(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [showGamePicker])
+
+  // Tracking/untracking a game only changes which tabs show — it never touches the cards
+  // themselves, so untracking Pokemon and re-adding it later brings every card right back.
+  function updateTrackedGames(next: Game[]) {
+    setTrackedGames(next)
+    if (user) saveTrackedGames(user.uid, next).catch((err) => console.error('Failed to save tracked games:', err))
+  }
+
+  function trackGame(game: Game) {
+    updateTrackedGames([...trackedGames, game])
+    setActiveGame(game)
+    setShowGamePicker(false)
+  }
+
+  function untrackGame(game: Game) {
+    if (trackedGames.length <= 1) return
+    updateTrackedGames(trackedGames.filter((g) => g !== game))
+  }
+
+  const untrackedGames = GAMES.filter((g) => !trackedGames.includes(g))
+
   async function handleDelete(card: Card) {
     if (!user) return
     deleteCard(card.id)
@@ -350,10 +388,10 @@ export default function InventoryPage() {
     <AuthGuard>
       <div className="pb-20 md:pb-0">
         {saveError && (
-          <div className="mb-4 flex items-center gap-3 bg-red-950/50 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">
-            <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
+          <div className="mb-4 flex items-center gap-3 bg-red-100/50 border border-red-300 rounded-xl px-4 py-3 text-sm text-red-700">
+            <AlertTriangle size={16} className="text-red-600 flex-shrink-0" />
             <span>{saveError}</span>
-            <button onClick={() => setSaveError(null)} className="ml-auto text-red-500 hover:text-red-300">✕</button>
+            <button onClick={() => setSaveError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
           </div>
         )}
         {catalogSyncNotices.length > 0 && (
@@ -361,21 +399,21 @@ export default function InventoryPage() {
             {catalogSyncNotices.map((notice) => (
               <div
                 key={notice.id}
-                className="flex items-start gap-3 bg-violet-950/40 border border-violet-800/50 rounded-xl px-4 py-3 text-sm text-violet-200"
+                className="flex items-start gap-3 bg-violet-100/40 border border-violet-300/50 rounded-xl px-4 py-3 text-sm text-violet-700"
               >
-                <RefreshCw size={16} className="text-violet-400 flex-shrink-0 mt-0.5" />
+                <RefreshCw size={16} className="text-violet-600 flex-shrink-0 mt-0.5" />
                 <span>
                   {notice.matchedCount} card{notice.matchedCount !== 1 ? 's were' : ' was'} updated to match a catalog
                   correction: {notice.cardName}
                   {notice.changedFields.length > 0 && (
-                    <span className="text-violet-400/80">
+                    <span className="text-violet-600/80">
                       {' '}({notice.changedFields.map((f) => `${f.field} ${f.from} → ${f.to}`).join(', ')})
                     </span>
                   )}
                 </span>
                 <button
                   onClick={() => dismissCatalogSyncNotice(notice.id)}
-                  className="ml-auto text-violet-500 hover:text-violet-300 flex-shrink-0"
+                  className="ml-auto text-violet-500 hover:text-violet-700 flex-shrink-0"
                 >
                   ✕
                 </button>
@@ -385,7 +423,7 @@ export default function InventoryPage() {
         )}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Inventory</h1>
+            <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <p className="text-slate-400 text-sm mt-0.5">
               {displayCount} cards · paid {formatCurrency(totalPaid)}
               {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
@@ -397,31 +435,77 @@ export default function InventoryPage() {
           </button>
         </div>
 
-        {/* Game Tabs */}
-        <div className="flex gap-2 mb-6">
-          {GAMES.map((game) => {
+        {/* Game Tabs — only the games this user tracks, plus a "+" to start tracking another */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          {trackedGames.map((game) => {
             const count = gameCounts[game]
+            const active = activeGame === game
             return (
-              <button
-                key={game}
-                onClick={() => setActiveGame(game)}
-                className={cn(
-                  'px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2',
-                  activeGame === game
-                    ? 'text-white shadow-lg'
-                    : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+              <div key={game} className="relative group">
+                <button
+                  onClick={() => setActiveGame(game)}
+                  className={cn(
+                    'px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2',
+                    active
+                      ? 'text-ink shadow-lg'
+                      : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
+                  )}
+                  style={
+                    active
+                      ? { backgroundColor: GAME_COLORS[game] + '33', color: GAME_COLORS[game], borderColor: GAME_COLORS[game] + '55', border: '1px solid' }
+                      : {}
+                  }
+                >
+                  {GAME_LABELS[game]}
+                  <span className="text-xs opacity-60">{count}</span>
+                </button>
+                {trackedGames.length > 1 && (
+                  <button
+                    onClick={() => untrackGame(game)}
+                    title={`Stop tracking ${GAME_LABELS[game]} — your cards are kept, just hidden`}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-700 text-slate-300 hover:bg-red-500 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={10} />
+                  </button>
                 )}
-                style={
-                  activeGame === game
-                    ? { backgroundColor: GAME_COLORS[game] + '33', color: GAME_COLORS[game], borderColor: GAME_COLORS[game] + '55', border: '1px solid' }
-                    : {}
-                }
-              >
-                {GAME_LABELS[game]}
-                <span className="text-xs opacity-60">{count}</span>
-              </button>
+              </div>
             )
           })}
+
+          {untrackedGames.length > 0 && (
+            <div className="relative" ref={gamePickerRef}>
+              <button
+                onClick={() => setShowGamePicker((v) => !v)}
+                title="Track another game"
+                className={cn(
+                  'h-full min-h-[38px] aspect-square rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
+                  showGamePicker
+                    ? 'border-slate-400 text-ink'
+                    : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'
+                )}
+              >
+                <Plus size={16} />
+              </button>
+              {showGamePicker && (
+                <div className="absolute left-0 top-full mt-2 z-30 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5">
+                  <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
+                  {untrackedGames.map((game) => (
+                    <button
+                      key={game}
+                      onClick={() => trackGame(game)}
+                      className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-ink transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GAME_COLORS[game] }} />
+                        {GAME_LABELS[game]}
+                      </span>
+                      {gameCounts[game] > 0 && <span className="text-xs text-slate-500">{gameCounts[game]} cards</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Search + Date filter */}
@@ -433,7 +517,7 @@ export default function InventoryPage() {
               placeholder="Search cards or sets…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-slate-600"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-slate-600"
             />
           </div>
           <div className="relative" ref={rarityFilterRef}>
@@ -442,8 +526,8 @@ export default function InventoryPage() {
               className={cn(
                 'flex items-center gap-1.5 h-full px-3 py-2.5 rounded-xl text-sm border transition-colors',
                 selectedRarities.size > 0
-                  ? 'bg-violet-600/20 border-violet-700 text-violet-300'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:bg-slate-800',
+                  ? 'bg-violet-600/20 border-violet-400 text-violet-700'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:bg-slate-800',
               )}
               title="Filter by rarity"
             >
@@ -474,7 +558,7 @@ export default function InventoryPage() {
                     {selectedRarities.size > 0 && (
                       <button
                         onClick={() => setSelectedRarities(new Set())}
-                        className="w-full text-left text-xs text-slate-500 hover:text-white px-2 py-1.5 mt-1 border-t border-slate-800"
+                        className="w-full text-left text-xs text-slate-500 hover:text-ink px-2 py-1.5 mt-1 border-t border-slate-800"
                       >
                         Clear
                       </button>
@@ -491,13 +575,13 @@ export default function InventoryPage() {
               value={dateFilter}
               max={todayISO()}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-xl pl-9 py-2.5 text-sm text-white focus:outline-none focus:border-slate-600 w-[170px] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
+              className="bg-slate-900 border border-slate-800 rounded-xl pl-9 py-2.5 text-sm text-ink focus:outline-none focus:border-slate-600 w-[170px] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
               style={dateFilter ? { paddingRight: '1.5rem' } : { paddingRight: '0.5rem' }}
             />
             {dateFilter && (
               <button
                 onClick={() => setDateFilter('')}
-                className="absolute right-2 text-slate-500 hover:text-white z-10"
+                className="absolute right-2 text-slate-500 hover:text-ink z-10"
               >
                 <X size={13} />
               </button>
@@ -507,9 +591,9 @@ export default function InventoryPage() {
 
         {/* Session summary — shown when a date is selected */}
         {session && (
-          <div className="mb-6 rounded-2xl border border-violet-800/40 bg-violet-950/30 px-5 py-4">
+          <div className="mb-6 rounded-2xl border border-violet-300/40 bg-violet-100/30 px-5 py-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold uppercase tracking-wide text-violet-400">
+              <span className="text-xs font-bold uppercase tracking-wide text-violet-600">
                 Session · {dateFilter}
               </span>
               <span className="text-xs text-slate-500">{session.count} cards logged</span>
@@ -517,15 +601,15 @@ export default function InventoryPage() {
             <div className="grid grid-cols-3 gap-4 mb-3">
               <div>
                 <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Market Value</div>
-                <div className="text-xl font-bold text-white">{formatCurrency(session.market)}</div>
+                <div className="text-xl font-bold text-ink">{formatCurrency(session.market)}</div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Paid</div>
-                <div className="text-xl font-bold text-white">{formatCurrency(session.paid)}</div>
+                <div className="text-xl font-bold text-ink">{formatCurrency(session.paid)}</div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Gain / Loss</div>
-                <div className={`text-xl font-bold ${session.market - session.paid >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                <div className={`text-xl font-bold ${session.market - session.paid >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {session.market - session.paid >= 0 ? '+' : ''}{formatCurrency(session.market - session.paid)}
                 </div>
               </div>
@@ -597,30 +681,30 @@ export default function InventoryPage() {
                       )}
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-white text-sm">{rep.name}</span>
+                          <span className="font-semibold text-ink text-sm">{rep.name}</span>
                           {rep.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                           {rep.nexus && (
-                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                               Nexus
                             </span>
                           )}
                         </div>
                         <div className="text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}</div>
-                        {rep.group && <div className="text-[10px] text-violet-400/70 mt-0.5">{rep.group}</div>}
+                        {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
                     <div className="text-sm text-slate-300 flex items-center">{rep.set}</div>
                     <div className="text-sm text-slate-300 flex items-center">
                       {multiLot ? <span className="text-slate-500 text-xs">varies</span> : CONDITION_LABELS[rep.condition]}
                     </div>
-                    <div className="text-sm font-semibold text-white flex items-center">×{totalQty}</div>
+                    <div className="text-sm font-semibold text-ink flex items-center">×{totalQty}</div>
                     <div className="text-sm text-slate-300 flex items-center">{formatCurrency(gPaid)}</div>
                     <div className="flex flex-col justify-center">
                       {marketTotal !== null ? (
                         <>
-                          <span className="text-sm text-white font-medium">{formatCurrency(marketTotal)}</span>
+                          <span className="text-sm text-ink font-medium">{formatCurrency(marketTotal)}</span>
                           {pnl !== null && (
-                            <span className={`text-xs ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <span className={`text-xs ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                             </span>
                           )}
@@ -634,7 +718,7 @@ export default function InventoryPage() {
                       <button
                         onClick={(e) => { e.stopPropagation(); openSell(lots[0]) }}
                         title="Sell"
-                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-800 hover:bg-emerald-500 flex items-center justify-center text-emerald-400 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
                       >
                         <DollarSign size={13} strokeWidth={2.5} />
                       </button>
@@ -643,7 +727,7 @@ export default function InventoryPage() {
                       {!multiLot && (
                         <button
                           onClick={() => setEditCard(lots[0])}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700 transition-colors"
                         >
                           <Edit2 size={14} />
                         </button>
@@ -652,7 +736,7 @@ export default function InventoryPage() {
                         <button
                           onClick={() => setExpandedKey(isExpanded ? null : key)}
                           title="Expand to edit or delete individual lots"
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700 transition-colors"
                         >
                           <ChevronDown size={14} className={cn('transition-transform', isExpanded && 'rotate-180')} />
                         </button>
@@ -660,7 +744,7 @@ export default function InventoryPage() {
                       <button
                         onClick={() => handleDeleteGroup(lots)}
                         title={multiLot ? `Delete all ${lots.length} lots at once` : 'Delete'}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-100/30 transition-colors"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -707,20 +791,20 @@ export default function InventoryPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); openSell(lot) }}
                             title="Sell"
-                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-800 hover:bg-emerald-500 flex items-center justify-center text-emerald-400 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
                           >
                             <DollarSign size={12} strokeWidth={2.5} />
                           </button>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             <button
                               onClick={() => setEditCard(lot)}
-                              className="p-1.5 rounded-lg text-slate-600 hover:text-white hover:bg-slate-700 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-600 hover:text-ink hover:bg-slate-700 transition-colors"
                             >
                               <Edit2 size={13} />
                             </button>
                             <button
                               onClick={() => handleDelete(lot)}
-                              className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-950/30 transition-colors"
+                              className="p-1.5 rounded-lg text-slate-600 hover:text-red-600 hover:bg-red-100/30 transition-colors"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -762,21 +846,21 @@ export default function InventoryPage() {
                     )}
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-white text-sm">{card.name}</span>
+                        <span className="font-semibold text-ink text-sm">{card.name}</span>
                         {card.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                         {card.gradingCompany && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                             {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
                           </span>
                         )}
                         {card.nexus && (
-                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                             Nexus
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
-                      {card.group && <div className="text-[10px] text-violet-400/70 mt-0.5">{card.group}</div>}
+                      {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
                   <div className="text-sm text-slate-300 flex items-center">{card.set}</div>
@@ -786,9 +870,9 @@ export default function InventoryPage() {
                   <div className="flex flex-col justify-center">
                     {marketTotal !== null ? (
                       <>
-                        <span className="text-sm text-white font-medium">{formatCurrency(marketTotal)}</span>
+                        <span className="text-sm text-ink font-medium">{formatCurrency(marketTotal)}</span>
                         {pnl !== null && (
-                          <span className={`text-xs ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          <span className={`text-xs ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                           </span>
                         )}
@@ -801,15 +885,15 @@ export default function InventoryPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); openSell(card) }}
                     title="Sell"
-                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-800 hover:bg-emerald-500 flex items-center justify-center text-emerald-400 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
                   >
                     <DollarSign size={13} strokeWidth={2.5} />
                   </button>
                   <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => setEditCard(card)} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-colors">
+                    <button onClick={() => setEditCard(card)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700 transition-colors">
                       <Edit2 size={14} />
                     </button>
-                    <button onClick={() => handleDelete(card)} className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-950/30 transition-colors">
+                    <button onClick={() => handleDelete(card)} className="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-100/30 transition-colors">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -843,11 +927,11 @@ export default function InventoryPage() {
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-                      <DollarSign size={14} className="text-emerald-400" />
+                      <DollarSign size={14} className="text-emerald-600" />
                     </div>
-                    <h2 className="text-lg font-bold text-white">Sell Card</h2>
+                    <h2 className="text-lg font-bold text-ink">Sell Card</h2>
                   </div>
-                  <button onClick={() => setSellCard(null)} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700 transition-colors">
+                  <button onClick={() => setSellCard(null)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700 transition-colors">
                     <X size={18} />
                   </button>
                 </div>
@@ -860,7 +944,7 @@ export default function InventoryPage() {
                     <div className="w-12 h-[67px] bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500 flex-shrink-0">#{sellCard.number}</div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-white text-sm truncate">{sellCard.name}</div>
+                    <div className="font-semibold text-ink text-sm truncate">{sellCard.name}</div>
                     <div className="text-xs text-slate-400 mt-0.5">{sellCard.set} · #{sellCard.number}</div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       {sellCard.isFoil ? '✨ Foil · ' : ''}{CONDITION_LABELS[sellCard.condition]}
@@ -873,11 +957,11 @@ export default function InventoryPage() {
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-700/30">
                     <div className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">You Paid</div>
-                    <div className="text-white font-semibold text-sm">{formatCurrency(paid)}</div>
+                    <div className="text-ink font-semibold text-sm">{formatCurrency(paid)}</div>
                   </div>
                   <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-700/30">
                     <div className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Market Value</div>
-                    <div className="text-white font-semibold text-sm">{market > 0 ? formatCurrency(market) : '—'}</div>
+                    <div className="text-ink font-semibold text-sm">{market > 0 ? formatCurrency(market) : '—'}</div>
                   </div>
                 </div>
 
@@ -895,7 +979,7 @@ export default function InventoryPage() {
                     autoFocus
                   />
                   {pnl !== null && (
-                    <div className={`mt-1.5 text-xs font-medium ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div className={`mt-1.5 text-xs font-medium ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)} P&L
                     </div>
                   )}
@@ -914,8 +998,8 @@ export default function InventoryPage() {
 
                 {/* Error */}
                 {sellError && (
-                  <div className="mb-4 flex items-start gap-2 bg-red-950/50 border border-red-800 rounded-xl px-3 py-2.5 text-xs text-red-300">
-                    <AlertTriangle size={13} className="text-red-400 flex-shrink-0 mt-0.5" />
+                  <div className="mb-4 flex items-start gap-2 bg-red-100/50 border border-red-300 rounded-xl px-3 py-2.5 text-xs text-red-700">
+                    <AlertTriangle size={13} className="text-red-600 flex-shrink-0 mt-0.5" />
                     <span>{sellError}</span>
                   </div>
                 )}
@@ -958,11 +1042,11 @@ export default function InventoryPage() {
                 {/* glow ring */}
                 <div className="absolute inset-0 rounded-full bg-emerald-400/30 scale-125 blur-xl" />
                 <div className="relative w-28 h-28 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/60">
-                  <Check size={56} className="text-white" strokeWidth={3} />
+                  <Check size={56} className="text-ink" strokeWidth={3} />
                 </div>
               </div>
               <div className="sold-text flex flex-col items-center gap-1">
-                <span className="text-5xl font-black text-white tracking-widest drop-shadow-lg">SOLD!</span>
+                <span className="text-5xl font-black text-ink tracking-widest drop-shadow-lg">SOLD!</span>
                 <span className="text-slate-300 text-sm font-medium max-w-[220px] text-center truncate">{soldCelebration}</span>
               </div>
             </div>

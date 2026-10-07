@@ -74,7 +74,7 @@ export default function AdminCatalogPage() {
     <AuthGuard>
       <div className="pb-20 md:pb-0">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-white">Admin Catalog</h1>
+          <h1 className="text-2xl font-bold text-ink">Admin Catalog</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             Browse the full card catalog in display order. This is the shared catalog everyone&apos;s
             copy of the app reads from — edits here apply immediately for everyone.
@@ -167,7 +167,7 @@ function SyncPanel() {
 
   return (
     <div className="card-glass p-5 mb-6">
-      <h2 className="text-white font-semibold mb-1">Sync Card Data</h2>
+      <h2 className="text-ink font-semibold mb-1">Sync Card Data</h2>
       <p className="text-slate-400 text-sm mb-4">
         Re-downloads a game&apos;s catalog and registers any newly-found sets. Each game syncs
         independently — Pokémon has by far the most sets/cards, so it can take a while.
@@ -180,7 +180,7 @@ function SyncPanel() {
           return (
             <div key={game} className="border-t border-slate-800 pt-3 first:border-t-0 first:pt-0">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-sm text-white font-medium">{label}</span>
+                <span className="text-sm text-ink font-medium">{label}</span>
                 <button
                   onClick={() => runSync(game)}
                   disabled={running}
@@ -204,7 +204,7 @@ function SyncPanel() {
                   counts sitting in the doc; showing them next to a failure would look like this
                   run found them, when it never got far enough to check anything. */}
               {s.status === 'idle' && last && (
-                <div className={cn('flex items-center gap-1.5 text-xs mt-2', last.ok ? 'text-slate-500' : 'text-red-400')}>
+                <div className={cn('flex items-center gap-1.5 text-xs mt-2', last.ok ? 'text-slate-500' : 'text-red-600')}>
                   {last.ok ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
                   <span>
                     Last sync {timeAgo(last.at)}{last.ok ? (last.setCount != null ? ` — ${last.setCount} sets` : '') : ` — failed: ${last.error}`}
@@ -212,23 +212,23 @@ function SyncPanel() {
                 </div>
               )}
               {s.status === 'idle' && last?.ok && !!last.newRarities?.length && (
-                <div className="text-xs text-amber-400 mt-1">
+                <div className="text-xs text-amber-600 mt-1">
                   New rarity value{last.newRarities.length > 1 ? 's' : ''} from last sync: {last.newRarities.join(', ')} — needs a color/label in CardexPage.tsx.
                 </div>
               )}
               {s.status === 'idle' && last?.ok && !!last.totalBrokenImages && (
-                <div className="text-xs text-amber-400 mt-1">
+                <div className="text-xs text-amber-600 mt-1">
                   {last.totalBrokenImages} card image{last.totalBrokenImages > 1 ? 's' : ''} still unavailable upstream (rechecked every sync).
                 </div>
               )}
               {game === 'mtg' && s.status === 'idle' && mtgCheck?.ok && !!mtgCheck.newSets?.length && (
-                <div className="text-xs text-amber-400 mt-1">
+                <div className="text-xs text-amber-600 mt-1">
                   New Scryfall set{mtgCheck.newSets.length > 1 ? 's' : ''} not yet synced: {mtgCheck.newSets.join(', ')}
                 </div>
               )}
 
               {s.status === 'error' && (
-                <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2 mt-2">
+                <div className="flex items-start gap-2 text-red-600 text-xs bg-red-100/30 border border-red-200/50 rounded-lg px-3 py-2 mt-2">
                   <AlertCircle size={14} className="shrink-0 mt-0.5" />
                   <span>{s.error}</span>
                 </div>
@@ -236,7 +236,7 @@ function SyncPanel() {
 
               {s.status === 'done' && s.result && (
                 <div className="text-xs text-slate-400 mt-2 space-y-1">
-                  <div className="flex items-center gap-1.5 text-emerald-400">
+                  <div className="flex items-center gap-1.5 text-emerald-600">
                     <CheckCircle2 size={13} />
                     <span>{s.result.setCount} sets synced</span>
                   </div>
@@ -247,19 +247,19 @@ function SyncPanel() {
                     </div>
                   )}
                   {!!s.result.newRarities?.length && (
-                    <div className="text-amber-400">
+                    <div className="text-amber-600">
                       New rarity value{s.result.newRarities.length > 1 ? 's' : ''} found: {s.result.newRarities.join(', ')} — the rarity toggle
                       already works for {s.result.newRarities.length > 1 ? 'them' : 'it'}, but needs a color/label added in CardexPage.tsx&apos;s
                       RARITY_COLORS/RARITY_LABELS_BY_GAME for full polish.
                     </div>
                   )}
                   {!!s.result.newlyFixedImages && (
-                    <div className="text-emerald-400">
+                    <div className="text-emerald-600">
                       {s.result.newlyFixedImages} previously-broken card image{s.result.newlyFixedImages > 1 ? 's' : ''} now resolve upstream.
                     </div>
                   )}
                   {!!s.result.newlyBrokenImages && (
-                    <div className="text-amber-400">
+                    <div className="text-amber-600">
                       {s.result.newlyBrokenImages} new card image{s.result.newlyBrokenImages > 1 ? 's' : ''} unavailable upstream (will recheck next sync).
                     </div>
                   )}
@@ -613,14 +613,14 @@ function CatalogBrowser() {
           value={globalQuery}
           onChange={(e) => setGlobalQuery(e.target.value)}
           placeholder={`Search the entire ${activeGame} catalog (e.g. "Pikachu")…`}
-          className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-8 py-2.5 text-sm text-white"
+          className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-8 py-2.5 text-sm text-ink"
         />
         {globalQuery && (
           <button
             type="button"
             onClick={() => setGlobalQuery('')}
             title="Clear search"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-ink"
           >
             <X size={14} />
           </button>
@@ -633,7 +633,7 @@ function CatalogBrowser() {
             type="button"
             onClick={() => handleJumpName(jumpName)}
             title="Jump to this name"
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-ink"
           >
             <LocateFixed size={14} />
           </button>
@@ -643,8 +643,8 @@ function CatalogBrowser() {
             onKeyDown={(e) => { if (e.key === 'Enter') handleJumpName(jumpName) }}
             placeholder="Jump to name…"
             className={cn(
-              'bg-slate-900 border rounded-lg pl-8 pr-3 py-2 text-sm text-white w-48',
-              jumpNameMissed ? 'border-red-800' : 'border-slate-800',
+              'bg-slate-900 border rounded-lg pl-8 pr-3 py-2 text-sm text-ink w-48',
+              jumpNameMissed ? 'border-red-300' : 'border-slate-800',
             )}
           />
         </div>
@@ -653,7 +653,7 @@ function CatalogBrowser() {
             type="button"
             onClick={() => handleJumpNumber(jumpNumber)}
             title="Jump to this number"
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-ink"
           >
             <LocateFixed size={14} />
           </button>
@@ -663,12 +663,12 @@ function CatalogBrowser() {
             onKeyDown={(e) => { if (e.key === 'Enter') handleJumpNumber(jumpNumber) }}
             placeholder="Jump to number…"
             className={cn(
-              'bg-slate-900 border rounded-lg pl-8 pr-3 py-2 text-sm text-white w-40',
-              jumpNumberMissed ? 'border-red-800' : 'border-slate-800',
+              'bg-slate-900 border rounded-lg pl-8 pr-3 py-2 text-sm text-ink w-40',
+              jumpNumberMissed ? 'border-red-300' : 'border-slate-800',
             )}
           />
         </div>
-        {(jumpNameMissed || jumpNumberMissed) && <span className="text-xs text-red-400">No match</span>}
+        {(jumpNameMissed || jumpNumberMissed) && <span className="text-xs text-red-600">No match</span>}
       </div>
 
       <div className="flex gap-2 mb-4">
@@ -678,7 +678,7 @@ function CatalogBrowser() {
             onClick={() => setActiveGame(g)}
             className={cn(
               'px-4 py-2 rounded-xl text-sm font-medium transition-all capitalize',
-              activeGame === g ? 'text-white' : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800',
+              activeGame === g ? 'text-ink' : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800',
             )}
             style={activeGame === g ? { backgroundColor: GAME_COLORS[g] + '33', color: GAME_COLORS[g], border: `1px solid ${GAME_COLORS[g]}55` } : {}}
           >
@@ -694,7 +694,7 @@ function CatalogBrowser() {
           <select
             value={activeSet?.code ?? ''}
             onChange={(e) => setActiveSet(sets.find((s) => s.code === e.target.value) ?? null)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink"
           >
             {sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
           </select>
@@ -729,7 +729,7 @@ function CatalogBrowser() {
           <button
             onClick={deleteSet}
             disabled={deletingSet}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-red-950/40 text-red-400 hover:bg-red-950/70 disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-red-100/40 text-red-600 hover:bg-red-100/70 disabled:opacity-50"
             title="Permanently delete this custom set and every card in it — cannot be undone"
           >
             {deletingSet ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -739,14 +739,14 @@ function CatalogBrowser() {
       </div>
 
       {actionError && (
-        <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2 mb-4">
+        <div className="flex items-start gap-2 text-red-600 text-xs bg-red-100/30 border border-red-200/50 rounded-lg px-3 py-2 mb-4">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <span>{actionError}</span>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="flex items-start gap-2 text-emerald-400 text-xs bg-emerald-950/30 border border-emerald-900/50 rounded-lg px-3 py-2 mb-4">
+        <div className="flex items-start gap-2 text-emerald-600 text-xs bg-emerald-100/30 border border-emerald-200/50 rounded-lg px-3 py-2 mb-4">
           <CheckCircle2 size={14} className="shrink-0 mt-0.5" />
           <span>{actionSuccess}</span>
         </div>
@@ -906,7 +906,7 @@ function SetInfoBar({
 
   return (
     <div className="card-glass px-4 py-2.5 mb-3 flex items-center gap-2.5 flex-wrap text-xs">
-      <span className="text-white font-medium">{activeSet.name}</span>
+      <span className="text-ink font-medium">{activeSet.name}</span>
       <span className="text-slate-700">·</span>
 
       {editing ? (
@@ -918,10 +918,10 @@ function SetInfoBar({
             autoFocus
             className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 w-32"
           />
-          <button onClick={save} disabled={saving} className="text-cyan-400 hover:text-cyan-300 font-medium disabled:opacity-50 flex items-center gap-1">
+          <button onClick={save} disabled={saving} className="text-cyan-600 hover:text-cyan-700 font-medium disabled:opacity-50 flex items-center gap-1">
             {saving && <Loader2 size={11} className="animate-spin" />} Save
           </button>
-          <button onClick={() => { setEditing(false); setReleaseDate(activeSet.releaseDate || '') }} className="text-slate-500 hover:text-white">
+          <button onClick={() => { setEditing(false); setReleaseDate(activeSet.releaseDate || '') }} className="text-slate-500 hover:text-ink">
             Cancel
           </button>
         </>
@@ -929,7 +929,7 @@ function SetInfoBar({
         <>
           <span className="text-slate-400">Released {activeSet.releaseDate || 'unknown'}</span>
           {isAdmin && editable && (
-            <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-slate-500 hover:text-white" title="Fix this set's release date">
+            <button onClick={() => setEditing(true)} className="flex items-center gap-1 text-slate-500 hover:text-ink" title="Fix this set's release date">
               <Pencil size={11} /> Edit
             </button>
           )}
@@ -944,7 +944,7 @@ function SetInfoBar({
       <span className="text-slate-700">·</span>
       <span className="text-slate-500">Code: {activeSet.code}</span>
       {activeSet.isCustom && (
-        <span className="text-[10px] font-bold uppercase text-violet-400 border border-violet-800 rounded px-1 py-0.5">custom</span>
+        <span className="text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
       )}
     </div>
   )
@@ -1030,7 +1030,7 @@ function CardTable({
                 <td className="pl-3 py-2">
                   <button
                     onClick={() => toggleExpanded(c.id)}
-                    className="text-slate-600 hover:text-white"
+                    className="text-slate-600 hover:text-ink"
                     title={expandedIds.has(c.id) ? 'Hide details' : 'Show details (release date, IDs, and more)'}
                   >
                     {expandedIds.has(c.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -1056,9 +1056,9 @@ function CardTable({
                     />
                   ) : <div className="w-8 h-11 bg-slate-800 rounded" />}
                 </td>
-                <td className="px-3 py-2 text-white">
+                <td className="px-3 py-2 text-ink">
                   {c.name}
-                  {c.isCustom && <span className="ml-2 text-[10px] font-bold uppercase text-violet-400 border border-violet-800 rounded px-1 py-0.5">custom</span>}
+                  {c.isCustom && <span className="ml-2 text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>}
                   {c.isHidden && <span className="ml-2 text-[10px] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}
                   {c.notes && <StickyNote size={11} className="inline ml-2 text-amber-500 align-text-top" aria-label="Has notes" />}
                 </td>
@@ -1066,7 +1066,7 @@ function CardTable({
                   <td className="px-3 py-2">
                     <button
                       onClick={() => onJumpToSet?.(c.setName, c.id)}
-                      className="block text-slate-400 hover:text-white hover:underline text-left"
+                      className="block text-slate-400 hover:text-ink hover:underline text-left"
                       title="Open this card in its own set"
                     >
                       {c.setName}
@@ -1084,7 +1084,7 @@ function CardTable({
                     <div className="flex items-center gap-2 justify-end">
                       <button
                         onClick={() => onEdit(c)}
-                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-white"
+                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-ink"
                         title="Edit this card — changes apply immediately and cascade to matching inventory"
                       >
                         <Pencil size={12} /> Edit
@@ -1093,7 +1093,7 @@ function CardTable({
                         onClick={() => onToggleHide(c.id)}
                         className={cn(
                           'flex items-center gap-1 text-xs',
-                          c.isHidden ? 'text-slate-500 hover:text-emerald-400' : 'text-slate-500 hover:text-red-400',
+                          c.isHidden ? 'text-slate-500 hover:text-emerald-600' : 'text-slate-500 hover:text-red-600',
                         )}
                         title={c.isHidden ? 'Unhide — restore to search/Cardex/Pack Analysis' : 'Hide from catalog — reversible, never deletes data'}
                       >
@@ -1286,7 +1286,7 @@ function ImageUploadField({
         }}
         className={cn(
           'group relative w-full aspect-[5/7] rounded-xl border-2 border-dashed flex items-center justify-center overflow-hidden bg-slate-950 transition-colors cursor-pointer',
-          dragOver ? 'border-violet-500 bg-violet-950/30' : 'border-slate-700 hover:border-violet-700/60',
+          dragOver ? 'border-violet-500 bg-violet-100/30' : 'border-slate-700 hover:border-violet-400/60',
         )}
         title="Click, or drag & drop a photo, to upload and fit it to the card frame"
       >
@@ -1296,7 +1296,7 @@ function ImageUploadField({
           <>
             <img src={imageUrl} alt="" className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 opacity-0 group-hover:opacity-100 transition-all">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-white">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-ink">
                 <Pencil size={12} /> Replace
               </span>
             </div>
@@ -1327,7 +1327,7 @@ function ImageUploadField({
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = '' }}
       />
-      {uploadError && <div className="text-[10.5px] text-red-400 text-center leading-tight">{uploadError}</div>}
+      {uploadError && <div className="text-[10.5px] text-red-600 text-center leading-tight">{uploadError}</div>}
       {cropSource && (
         <ImageCropModal source={cropSource} uploading={uploading} onCancel={() => setCropSource(null)} onConfirm={uploadCropped} />
       )}
@@ -1472,14 +1472,14 @@ function ImageCropModal({
   return createPortal(
     <div className="crop-modal-backdrop fixed inset-0 z-50 bg-slate-950 flex flex-col">
       <div className="shrink-0 flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-800">
-        <div className="flex items-center gap-2 text-base font-semibold text-white">
-          <ZoomIn size={18} className="text-violet-400" />
+        <div className="flex items-center gap-2 text-base font-semibold text-ink">
+          <ZoomIn size={18} className="text-violet-600" />
           Fit the card to the frame
         </div>
         <button
           type="button"
           onClick={onCancel}
-          className="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-ink hover:bg-slate-800 transition-colors"
         >
           <X size={20} />
         </button>
@@ -1736,9 +1736,9 @@ function AddCardForm({
 
   return (
     <div className="card-glass p-5 mb-4">
-      <div className="text-sm font-semibold text-white">Add a card missing from {activeSet.name}</div>
+      <div className="text-sm font-semibold text-ink">Add a card missing from {activeSet.name}</div>
       {prefill && (
-        <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-900/50 rounded-lg px-2.5 py-1.5 mt-2">
+        <div className="text-xs text-cyan-600 bg-cyan-100/30 border border-cyan-200/50 rounded-lg px-2.5 py-1.5 mt-2">
           Prefilled from the raw source check — double-check price/image before saving.
         </div>
       )}
@@ -1788,7 +1788,7 @@ function AddCardForm({
             <button
               onClick={runLookup}
               disabled={looking || !number}
-              className="flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-lg bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs font-medium px-3.5 py-2 rounded-lg bg-cyan-600/20 text-cyan-700 hover:bg-cyan-600/30 disabled:opacity-50"
             >
               {looking ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
               Auto-fetch price &amp; image
@@ -1867,8 +1867,8 @@ function EditCardForm({
   }
 
   return (
-    <div className="card-glass p-5 mb-4 border-violet-800/50">
-      <div className="text-sm font-semibold text-white">
+    <div className="card-glass p-5 mb-4 border-violet-300/50">
+      <div className="text-sm font-semibold text-ink">
         Editing &quot;{card.name}&quot; · {card.publicCode ?? card.number}
       </div>
       <div className="text-xs text-slate-500 mt-1 mb-4">
@@ -1912,7 +1912,7 @@ function EditCardForm({
             </button>
             <button
               onClick={onCancel}
-              className="text-xs font-medium px-3.5 py-2 rounded-lg text-slate-400 hover:text-white"
+              className="text-xs font-medium px-3.5 py-2 rounded-lg text-slate-400 hover:text-ink"
             >
               Cancel
             </button>
@@ -1993,8 +1993,8 @@ function NewSetForm({
   }
 
   return (
-    <div className="card-glass p-4 mb-4 space-y-3 border-cyan-800/50">
-      <div className="text-sm font-semibold text-white">Register a new {game} set</div>
+    <div className="card-glass p-4 mb-4 space-y-3 border-cyan-300/50">
+      <div className="text-sm font-semibold text-ink">Register a new {game} set</div>
       <div className="text-xs text-slate-500">
         Use this for a real set the auto-sync hasn&apos;t picked up yet, or a fully custom/curated
         set. It starts with no cards and no sync link — add cards to it with &quot;Add Missing Card&quot;.
@@ -2029,7 +2029,7 @@ function NewSetForm({
           {saving ? <Loader2 size={12} className="animate-spin" /> : <FolderPlus size={12} />}
           Create Set
         </button>
-        <button onClick={onCancel} className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-white">
+        <button onClick={onCancel} className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-ink">
           Cancel
         </button>
       </div>
@@ -2082,10 +2082,10 @@ function RawSourceCheckPanel({
   }, [setCode])
 
   return (
-    <div className="card-glass p-4 mb-4 space-y-4 border-cyan-800/50">
+    <div className="card-glass p-4 mb-4 space-y-4 border-cyan-300/50">
       <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-white">Raw source check</div>
-        <button onClick={onClose} className="p-1 rounded text-slate-500 hover:text-white hover:bg-slate-800">
+        <div className="text-sm font-semibold text-ink">Raw source check</div>
+        <button onClick={onClose} className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800">
           <X size={14} />
         </button>
       </div>
@@ -2097,7 +2097,7 @@ function RawSourceCheckPanel({
       )}
 
       {error && (
-        <div className="flex items-start gap-2 text-red-400 text-xs bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2">
+        <div className="flex items-start gap-2 text-red-600 text-xs bg-red-100/30 border border-red-200/50 rounded-lg px-3 py-2">
           <AlertCircle size={14} className="shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
@@ -2106,19 +2106,19 @@ function RawSourceCheckPanel({
       {result && (
         <>
           <div className="text-xs text-slate-500">
-            Local catalog has <span className="text-white font-medium">{result.localCardCount}</span> cards for {result.setName}.
+            Local catalog has <span className="text-ink font-medium">{result.localCardCount}</span> cards for {result.setName}.
           </div>
 
           <div>
             <div className="text-xs font-semibold text-slate-300 mb-2">
               Official gallery — {result.gallery.totalFound} cards found upstream
               {result.gallery.missingFromCatalog.length > 0 && (
-                <span className="text-cyan-400"> · {result.gallery.missingFromCatalog.length} not in the local catalog</span>
+                <span className="text-cyan-600"> · {result.gallery.missingFromCatalog.length} not in the local catalog</span>
               )}
             </div>
-            {result.gallery.error && <div className="text-xs text-red-400 mb-2">{result.gallery.error}</div>}
+            {result.gallery.error && <div className="text-xs text-red-600 mb-2">{result.gallery.error}</div>}
             {result.gallery.missingFromCatalog.length === 0 && !result.gallery.error && (
-              <div className="text-xs text-emerald-400">Every card the gallery has for this set is in the local catalog.</div>
+              <div className="text-xs text-emerald-600">Every card the gallery has for this set is in the local catalog.</div>
             )}
             {result.gallery.missingFromCatalog.length > 0 && (
               <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -2131,7 +2131,7 @@ function RawSourceCheckPanel({
                     </div>
                     <button
                       onClick={() => onAddCandidate({ number: c.number, name: c.name, rarity: c.rarity, imageUrl: c.imageUrl })}
-                      className="shrink-0 text-[11px] font-medium text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+                      className="shrink-0 text-[11px] font-medium text-cyan-600 hover:text-cyan-700 flex items-center gap-1"
                     >
                       <Plus size={11} /> Add
                     </button>
@@ -2149,13 +2149,13 @@ function RawSourceCheckPanel({
                 <span className="text-slate-500"> — no group id registered for this set yet</span>
               ) : (
                 result.tcgcsv.unmatchedRows.length > 0 && (
-                  <span className="text-cyan-400"> · {result.tcgcsv.unmatchedRows.length} rows with no matching local card</span>
+                  <span className="text-cyan-600"> · {result.tcgcsv.unmatchedRows.length} rows with no matching local card</span>
                 )
               )}
             </div>
-            {result.tcgcsv.error && <div className="text-xs text-red-400 mb-2">{result.tcgcsv.error}</div>}
+            {result.tcgcsv.error && <div className="text-xs text-red-600 mb-2">{result.tcgcsv.error}</div>}
             {result.tcgcsv.groupId != null && result.tcgcsv.unmatchedRows.length === 0 && !result.tcgcsv.error && (
-              <div className="text-xs text-emerald-400">Every priced row in TCGCSV matches a local card by number.</div>
+              <div className="text-xs text-emerald-600">Every priced row in TCGCSV matches a local card by number.</div>
             )}
             {result.tcgcsv.unmatchedRows.length > 0 && (
               <div className="space-y-1 max-h-48 overflow-y-auto">

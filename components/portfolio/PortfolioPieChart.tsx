@@ -25,13 +25,13 @@ export function PortfolioPieChart({ data }: Props) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: '0.75rem', fontSize: 12 }}
+          contentStyle={{ background: '#ede1c6', border: '1px solid #d6c49f', color: '#2b2014', borderRadius: '0.75rem', fontSize: 12 }}
           formatter={(val: number) => formatCurrency(val)}
         />
         <Legend
           iconType="circle"
           iconSize={8}
-          formatter={(val) => <span style={{ color: '#94a3b8', fontSize: 12 }}>{val}</span>}
+          formatter={(val) => <span style={{ color: '#634f38', fontSize: 12 }}>{val}</span>}
         />
       </PieChart>
     </ResponsiveContainer>

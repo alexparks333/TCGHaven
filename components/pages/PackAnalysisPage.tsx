@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   ChevronDown, ChevronUp, Edit3, Check, X,
-  TrendingUp, TrendingDown, Minus, Info, Loader2, RefreshCw, type LucideIcon,
+  TrendingUp, TrendingDown, Minus, Info, RefreshCw, type LucideIcon,
 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -12,6 +12,7 @@ import { GAME_COLORS, GAME_LABELS, type Game, type PackSet } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { PULL_RATES } from '@/lib/pack-analysis/riftbound-ev'
 import { LORCANA_PULL_RATES, type LorcanaSetEV } from '@/lib/pack-analysis/lorcana-ev'
+import { LogoLoader } from '@/components/LogoLoader'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound']
 const RB_COLOR = GAME_COLORS['riftbound']
@@ -98,9 +99,9 @@ export default function PackAnalysisPage() {
 
   function getVerdict(ev: number, price: number) {
     const ratio = ev / price
-    if (ratio >= 1.15) return { label: 'Over EV', color: 'text-emerald-400', bg: 'bg-emerald-950/40 border-emerald-900', icon: TrendingUp }
-    if (ratio >= 0.9)  return { label: 'Near EV', color: 'text-amber-400',   bg: 'bg-amber-950/40 border-amber-900',   icon: Minus }
-    return              { label: 'Below EV', color: 'text-red-400',     bg: 'bg-red-950/40 border-red-900',     icon: TrendingDown }
+    if (ratio >= 1.15) return { label: 'Over EV', color: 'text-emerald-600', bg: 'bg-emerald-100/40 border-emerald-200', icon: TrendingUp }
+    if (ratio >= 0.9)  return { label: 'Near EV', color: 'text-amber-600',   bg: 'bg-amber-100/40 border-amber-200',   icon: Minus }
+    return              { label: 'Below EV', color: 'text-red-600',     bg: 'bg-red-100/40 border-red-200',     icon: TrendingDown }
   }
 
   const standardSets = packSets
@@ -115,7 +116,7 @@ export default function PackAnalysisPage() {
       <div className="pb-20 md:pb-0">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Pack Analysis</h1>
+            <h1 className="text-2xl font-bold text-ink">Pack Analysis</h1>
             <p className="text-slate-400 text-sm mt-0.5">
               Expected Value (EV) per pack based on pull rates and live market prices.
             </p>
@@ -124,7 +125,7 @@ export default function PackAnalysisPage() {
             <button
               onClick={handleRefresh}
               disabled={isLoading}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-white hover:border-slate-600 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 hover:text-ink hover:border-slate-600 transition-all disabled:opacity-50"
             >
               <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
               {isLoading ? 'Loading…' : 'Refresh Prices'}
@@ -139,7 +140,7 @@ export default function PackAnalysisPage() {
               onClick={() => setActiveGame(game)}
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-all',
-                activeGame === game ? 'text-white shadow-lg' : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+                activeGame === game ? 'text-ink shadow-lg' : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
               )}
               style={activeGame === game ? { backgroundColor: GAME_COLORS[game] + '33', color: GAME_COLORS[game], border: `1px solid ${GAME_COLORS[game]}55` } : {}}
             >
@@ -200,14 +201,6 @@ export default function PackAnalysisPage() {
 
 // ── Shared loading / empty states ─────────────────────────────────────────────
 
-function LoadingState({ color }: { color: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-500">
-      <Loader2 size={28} className="animate-spin" style={{ color }} />
-      <span className="text-sm">Fetching live prices…</span>
-    </div>
-  )
-}
 
 // ── Price edit controls (shared) ──────────────────────────────────────────────
 
@@ -234,18 +227,18 @@ function PackPriceCell({ id, packPrice, color, editingPrice, priceInput, setPric
           <input
             type="number" step="0.01" value={priceInput}
             onChange={(e) => setPriceInput(e.target.value)}
-            className="w-16 bg-slate-800 border rounded px-1.5 py-0.5 text-sm text-white text-center focus:outline-none"
+            className="w-16 bg-slate-800 border rounded px-1.5 py-0.5 text-sm text-ink text-center focus:outline-none"
             style={{ borderColor: color }}
             autoFocus
             onKeyDown={(e) => { if (e.key === 'Enter') onSavePrice(id); if (e.key === 'Escape') onCancelEdit() }}
           />
-          <button onClick={() => onSavePrice(id)} className="text-emerald-400 hover:text-emerald-300"><Check size={14} /></button>
+          <button onClick={() => onSavePrice(id)} className="text-emerald-600 hover:text-emerald-700"><Check size={14} /></button>
           <button onClick={onCancelEdit} className="text-slate-500 hover:text-slate-300"><X size={14} /></button>
         </div>
       ) : (
         <button
           onClick={() => onEditPrice(id, packPrice)}
-          className="flex items-center gap-1 text-white font-bold hover:opacity-70 transition-opacity"
+          className="flex items-center gap-1 text-ink font-bold hover:opacity-70 transition-opacity"
         >
           {formatCurrency(packPrice)}<Edit3 size={11} className="text-slate-600" />
         </button>
@@ -272,17 +265,17 @@ interface RiftboundViewProps {
 }
 
 function RiftboundView({ sets, loading, expandedId, setExpandedId, editingPrice, priceInput, setPriceInput, packPriceOverrides, onEditPrice, onSavePrice, onCancelEdit, getVerdict }: RiftboundViewProps) {
-  if (loading || sets === null) return <LoadingState color={RB_COLOR} />
+  if (loading || sets === null) return <LogoLoader label="Loading pack prices…" />
 
   const sorted = [...sets].sort((a, b) => b.ev.total - a.ev.total)
 
   return (
     <div className="space-y-4">
       <div className="card-glass p-4 flex gap-3 items-start">
-        <Info size={16} className="text-orange-400 mt-0.5 shrink-0" />
+        <Info size={16} className="text-orange-600 mt-0.5 shrink-0" />
         <div className="text-sm text-slate-400 space-y-1">
           <div>
-            <span className="text-white font-medium">Pack contents (14 cards):</span>
+            <span className="text-ink font-medium">Pack contents (14 cards):</span>
             {' '}7 Commons · 3 Uncommons · 2 foil Rare-or-better · 1 foil wildcard · 1 token
           </div>
           <div className="text-xs text-slate-500">
@@ -310,7 +303,7 @@ function RiftboundView({ sets, loading, expandedId, setExpandedId, editingPrice,
                   #{idx + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-white text-sm">{set.setName}</div>
+                  <div className="font-bold text-ink text-sm">{set.setName}</div>
                   <div className="text-xs text-slate-500">
                     {set.cardsPerPack} tradeable cards/pack ·{' '}
                     {set.countCommon}C / {set.countUncommon}U / {set.countRare}R / {set.countEpic}E ·{' '}
@@ -320,7 +313,7 @@ function RiftboundView({ sets, loading, expandedId, setExpandedId, editingPrice,
                 <PackPriceCell id={set.setCode} packPrice={packPrice} color={RB_COLOR} editingPrice={editingPrice} priceInput={priceInput} setPriceInput={setPriceInput} onEditPrice={onEditPrice} onSavePrice={onSavePrice} onCancelEdit={onCancelEdit} />
                 <div className="text-center shrink-0">
                   <div className="text-xs text-slate-500 mb-1">EV / Pack</div>
-                  <div className="text-white font-bold">{formatCurrency(ev)}</div>
+                  <div className="text-ink font-bold">{formatCurrency(ev)}</div>
                 </div>
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shrink-0 ${verdict.bg} ${verdict.color}`}>
                   <VerdictIcon size={12} />{verdict.label}
@@ -329,7 +322,7 @@ function RiftboundView({ sets, loading, expandedId, setExpandedId, editingPrice,
               </div>
               <div className="mt-3 flex items-center gap-3">
                 <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(ratio * 50, 100)}%`, backgroundColor: ratio >= 1.15 ? '#34d399' : ratio >= 0.9 ? '#fbbf24' : '#f87171' }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(ratio * 50, 100)}%`, backgroundColor: ratio >= 1.15 ? '#5f7a32' : ratio >= 0.9 ? '#b8862a' : '#b0553a' }} />
                 </div>
                 <span className="text-xs text-slate-400 shrink-0">{(ratio * 100).toFixed(0)}% ROI</span>
               </div>
@@ -372,7 +365,7 @@ function RiftboundSetDetail({ set, packPrice }: { set: RBSetAPI; packPrice: numb
       <div className="flex gap-1 mb-5 bg-slate-900 rounded-xl p-1 w-fit">
         {(['ev', 'epics', 'rares', 'premium'] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all', activeTab === tab ? 'text-white' : 'text-slate-500 hover:text-white')}
+            className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all', activeTab === tab ? 'text-ink' : 'text-slate-500 hover:text-ink')}
             style={activeTab === tab ? { backgroundColor: RB_COLOR + '30', color: RB_COLOR } : {}}
           >
             {{ ev: 'EV Breakdown', epics: 'Top Epics', rares: 'Top Rares', premium: 'Premium Hits' }[tab]}
@@ -385,7 +378,7 @@ function RiftboundSetDetail({ set, packPrice }: { set: RBSetAPI; packPrice: numb
           {slots.map((slot) => (
             <div key={slot.label} className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-white font-medium">{slot.label}</span>
+                <span className="text-sm text-ink font-medium">{slot.label}</span>
                 <span className="text-sm font-bold" style={{ color: RB_COLOR }}>{formatCurrency(slot.value)}</span>
               </div>
               <div className="text-xs text-slate-500">{slot.desc}</div>
@@ -399,29 +392,29 @@ function RiftboundSetDetail({ set, packPrice }: { set: RBSetAPI; packPrice: numb
             {wildcardRows.map((row) => (
               <div key={row.label} className="flex justify-between py-1 text-sm border-b border-slate-800/50 last:border-0">
                 <span className="text-slate-400">{row.label}</span>
-                <span className="text-white">{formatCurrency(row.value)}</span>
+                <span className="text-ink">{formatCurrency(row.value)}</span>
               </div>
             ))}
           </div>
           <div className="mt-4 pt-4 border-t border-slate-800 space-y-1">
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Total EV per pack</span><span className="text-white font-bold">{formatCurrency(total)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Pack price</span><span className="text-white">{formatCurrency(packPrice)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Total EV per pack</span><span className="text-ink font-bold">{formatCurrency(total)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Pack price</span><span className="text-ink">{formatCurrency(packPrice)}</span></div>
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">Net EV</span>
-              <span className={`font-bold ${total - packPrice >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`font-bold ${total - packPrice >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {total - packPrice >= 0 ? '+' : ''}{formatCurrency(total - packPrice)}
               </span>
             </div>
           </div>
         </div>
       )}
-      {activeTab === 'epics'   && <CardHitList hits={set.topEpics}       label="Top Epics"          rateLabel={`25% per pack · avg ${formatCurrency(set.avgEpic)}`}       color="#c084fc" />}
+      {activeTab === 'epics'   && <CardHitList hits={set.topEpics}       label="Top Epics"          rateLabel={`25% per pack · avg ${formatCurrency(set.avgEpic)}`}       color="#7a4a5a" />}
       {activeTab === 'rares'   && <CardHitList hits={set.topRares}       label="Top Rares"          rateLabel={`Guaranteed (2/pack) · avg ${formatCurrency(set.avgRare)}`} color={RB_COLOR} />}
       {activeTab === 'premium' && (
         <div className="space-y-6">
-          <CardHitList hits={set.topAltArts}    label="Alt Arts"          rateLabel={`${(PULL_RATES.altArtPerPack * 100).toFixed(1)}% per pack (~2/box) · avg ${formatCurrency(set.avgAltArt)}`}    color="#fb923c" />
-          <CardHitList hits={set.topOvernumbers} label="Overnumbers"       rateLabel={`${(PULL_RATES.overnumberPerPack * 100).toFixed(1)}% per pack (1 in ~72) · avg ${formatCurrency(set.avgOvernumber)}`} color="#f472b6" />
-          <CardHitList hits={set.topSignatures}  label="Signature Overnumbers" rateLabel={`${(PULL_RATES.signaturePerPack * 100).toFixed(2)}% per pack (1 in ~720) · avg ${formatCurrency(set.avgSignature)}`} color="#fbbf24" />
+          <CardHitList hits={set.topAltArts}    label="Alt Arts"          rateLabel={`${(PULL_RATES.altArtPerPack * 100).toFixed(1)}% per pack (~2/box) · avg ${formatCurrency(set.avgAltArt)}`}    color="#b0602a" />
+          <CardHitList hits={set.topOvernumbers} label="Overnumbers"       rateLabel={`${(PULL_RATES.overnumberPerPack * 100).toFixed(1)}% per pack (1 in ~72) · avg ${formatCurrency(set.avgOvernumber)}`} color="#9a5a5a" />
+          <CardHitList hits={set.topSignatures}  label="Signature Overnumbers" rateLabel={`${(PULL_RATES.signaturePerPack * 100).toFixed(2)}% per pack (1 in ~720) · avg ${formatCurrency(set.avgSignature)}`} color="#b8862a" />
         </div>
       )}
     </div>
@@ -434,7 +427,7 @@ function CardHitList({ hits, label, rateLabel, color }: { hits: CardHit[]; label
   return (
     <div>
       <div className="mb-3">
-        <h4 className="text-sm font-bold text-white">{label}</h4>
+        <h4 className="text-sm font-bold text-ink">{label}</h4>
         <p className="text-xs text-slate-500 mt-0.5">{rateLabel}</p>
       </div>
       <div className="space-y-2">
@@ -444,7 +437,7 @@ function CardHitList({ hits, label, rateLabel, color }: { hits: CardHit[]; label
               <img src={hit.imageUrl} alt={hit.name} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm text-white font-medium truncate">{hit.name}</div>
+              <div className="text-sm text-ink font-medium truncate">{hit.name}</div>
             </div>
             <div className="text-sm font-bold shrink-0" style={{ color }}>{formatCurrency(hit.price)}</div>
             <div className="w-20 shrink-0">
@@ -477,7 +470,7 @@ interface LorcanaViewProps {
 }
 
 function LorcanaView({ sets, loading, expandedId, setExpandedId, editingPrice, priceInput, setPriceInput, packPriceOverrides, onEditPrice, onSavePrice, onCancelEdit, getVerdict }: LorcanaViewProps) {
-  if (loading || sets === null) return <LoadingState color={LC_COLOR} />
+  if (loading || sets === null) return <LogoLoader label="Loading pack prices…" />
 
   const sorted = [...sets].sort((a, b) => b.ev.total - a.ev.total)
 
@@ -487,7 +480,7 @@ function LorcanaView({ sets, loading, expandedId, setExpandedId, editingPrice, p
         <Info size={16} className="mt-0.5 shrink-0" style={{ color: LC_COLOR }} />
         <div className="text-sm text-slate-400 space-y-1">
           <div>
-            <span className="text-white font-medium">Pack contents (12 cards):</span>
+            <span className="text-ink font-medium">Pack contents (12 cards):</span>
             {' '}6 Commons · 3 Uncommons · 2 Rares · 1 cold foil (any rarity)
           </div>
           <div className="text-xs text-slate-500">
@@ -514,7 +507,7 @@ function LorcanaView({ sets, loading, expandedId, setExpandedId, editingPrice, p
                   #{idx + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-bold text-white text-sm">{set.name}</div>
+                  <div className="font-bold text-ink text-sm">{set.name}</div>
                   <div className="text-xs text-slate-500">
                     {set.countSR}SR · {set.countLeg}Leg · {set.countEnch}Ench
                     {set.hasEpic && ` · ${set.countEpic}Epic`}
@@ -524,7 +517,7 @@ function LorcanaView({ sets, loading, expandedId, setExpandedId, editingPrice, p
                 <PackPriceCell id={set.id} packPrice={packPrice} color={LC_COLOR} editingPrice={editingPrice} priceInput={priceInput} setPriceInput={setPriceInput} onEditPrice={onEditPrice} onSavePrice={onSavePrice} onCancelEdit={onCancelEdit} />
                 <div className="text-center shrink-0">
                   <div className="text-xs text-slate-500 mb-1">EV / Pack</div>
-                  <div className="text-white font-bold">{formatCurrency(ev)}</div>
+                  <div className="text-ink font-bold">{formatCurrency(ev)}</div>
                 </div>
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shrink-0 ${verdict.bg} ${verdict.color}`}>
                   <VerdictIcon size={12} />{verdict.label}
@@ -533,7 +526,7 @@ function LorcanaView({ sets, loading, expandedId, setExpandedId, editingPrice, p
               </div>
               <div className="mt-3 flex items-center gap-3">
                 <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(ratio * 50, 100)}%`, backgroundColor: ratio >= 1.15 ? '#34d399' : ratio >= 0.9 ? '#fbbf24' : '#f87171' }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(ratio * 50, 100)}%`, backgroundColor: ratio >= 1.15 ? '#5f7a32' : ratio >= 0.9 ? '#b8862a' : '#b0553a' }} />
                 </div>
                 <span className="text-xs text-slate-400 shrink-0">{(ratio * 100).toFixed(0)}% ROI</span>
               </div>
@@ -575,7 +568,7 @@ function LorcanaSetDetail({ set }: { set: LorcanaSetEV }) {
       <div className="flex gap-1 mb-5 bg-slate-900 rounded-xl p-1 w-fit">
         {tabs.map(([tab, label]) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all', activeTab === tab ? 'text-white' : 'text-slate-500 hover:text-white')}
+            className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all', activeTab === tab ? 'text-ink' : 'text-slate-500 hover:text-ink')}
             style={activeTab === tab ? { backgroundColor: LC_COLOR + '30', color: LC_COLOR } : {}}
           >{label}</button>
         ))}
@@ -586,7 +579,7 @@ function LorcanaSetDetail({ set }: { set: LorcanaSetEV }) {
           {slots.map((slot) => (
             <div key={slot.label} className="space-y-1">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-white font-medium">{slot.label}</span>
+                <span className="text-sm text-ink font-medium">{slot.label}</span>
                 <span className="text-sm font-bold" style={{ color: LC_COLOR }}>{formatCurrency(slot.value)}</span>
               </div>
               <div className="text-xs text-slate-500">{slot.desc}</div>
@@ -599,16 +592,16 @@ function LorcanaSetDetail({ set }: { set: LorcanaSetEV }) {
             <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Cold Foil Slot Detail</h4>
             {foilRows.map((row) => (
               <div key={row.label} className="flex justify-between py-1 text-sm border-b border-slate-800/50 last:border-0">
-                <span className="text-slate-400">{row.label}</span><span className="text-white">{formatCurrency(row.value)}</span>
+                <span className="text-slate-400">{row.label}</span><span className="text-ink">{formatCurrency(row.value)}</span>
               </div>
             ))}
           </div>
           <div className="mt-4 pt-4 border-t border-slate-800 space-y-1">
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Total EV per pack</span><span className="text-white font-bold">{formatCurrency(total)}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Pack price</span><span className="text-white">{formatCurrency(set.packPrice)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Total EV per pack</span><span className="text-ink font-bold">{formatCurrency(total)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Pack price</span><span className="text-ink">{formatCurrency(set.packPrice)}</span></div>
             <div className="flex justify-between text-sm">
               <span className="text-slate-400">Net EV</span>
-              <span className={`font-bold ${total - set.packPrice >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span className={`font-bold ${total - set.packPrice >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                 {total - set.packPrice >= 0 ? '+' : ''}{formatCurrency(total - set.packPrice)}
               </span>
             </div>
@@ -616,11 +609,11 @@ function LorcanaSetDetail({ set }: { set: LorcanaSetEV }) {
         </div>
       )}
       {activeTab === 'srs'       && <CardHitList hits={set.topSRs}        label="Top Super Rares (foil)"  rateLabel={`${(set.rates.foilSRRate * 100).toFixed(0)}% per pack from foil slot · avg ${formatCurrency(set.avgFoilSR)}`}              color={LC_COLOR} />}
-      {activeTab === 'legendary' && <CardHitList hits={set.topLegendaries} label="Top Legendaries (foil)"  rateLabel={`${(set.rates.foilLegRate * 100).toFixed(1)}% per pack (1 per box) · avg ${formatCurrency(set.avgFoilLeg)}`}           color="#fbbf24" />}
+      {activeTab === 'legendary' && <CardHitList hits={set.topLegendaries} label="Top Legendaries (foil)"  rateLabel={`${(set.rates.foilLegRate * 100).toFixed(1)}% per pack (1 per box) · avg ${formatCurrency(set.avgFoilLeg)}`}           color="#b8862a" />}
       {activeTab === 'premium'   && (
         <div className="space-y-6">
-          <CardHitList hits={set.topEnchanted} label="Enchanted (foil only)" rateLabel={`${(set.rates.foilEnchRate * 100).toFixed(1)}% per pack (1 per ~3 boxes) · avg ${formatCurrency(set.avgFoilEnch)}`} color="#e879f9" />
-          {set.hasEpic && <CardHitList hits={set.topEpics} label="Epic (foil only)" rateLabel={`${(set.rates.foilEpicRate * 100).toFixed(1)}% per pack (1 per ~2 boxes) · avg ${formatCurrency(set.avgFoilEpic)}`} color="#a78bfa" />}
+          <CardHitList hits={set.topEnchanted} label="Enchanted (foil only)" rateLabel={`${(set.rates.foilEnchRate * 100).toFixed(1)}% per pack (1 per ~3 boxes) · avg ${formatCurrency(set.avgFoilEnch)}`} color="#8a5a6a" />
+          {set.hasEpic && <CardHitList hits={set.topEpics} label="Epic (foil only)" rateLabel={`${(set.rates.foilEpicRate * 100).toFixed(1)}% per pack (1 per ~2 boxes) · avg ${formatCurrency(set.avgFoilEpic)}`} color="#7a5230" />}
         </div>
       )}
     </div>
@@ -648,11 +641,11 @@ function StandardView({ sets, game, expandedId, setExpandedId, editingPrice, pri
   return (
     <div className="space-y-4">
       <div className="card-glass p-4 flex gap-3 items-start">
-        <div className="w-8 h-8 rounded-lg bg-violet-900/50 flex items-center justify-center shrink-0">
-          <span className="text-violet-400 text-sm font-bold">?</span>
+        <div className="w-8 h-8 rounded-lg bg-violet-200/50 flex items-center justify-center shrink-0">
+          <span className="text-violet-600 text-sm font-bold">?</span>
         </div>
         <div className="text-sm text-slate-400">
-          <span className="text-white font-medium">Expected Value (EV)</span> is the average dollar value you&apos;d expect per pack, calculated from pull rates × card market prices. EV &gt; pack price = statistically worth opening.
+          <span className="text-ink font-medium">Expected Value (EV)</span> is the average dollar value you&apos;d expect per pack, calculated from pull rates × card market prices. EV &gt; pack price = statistically worth opening.
         </div>
       </div>
       {sets.map((set, idx) => {
@@ -668,7 +661,7 @@ function StandardView({ sets, game, expandedId, setExpandedId, editingPrice, pri
               <div className="flex items-center gap-4">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black shrink-0" style={{ backgroundColor: color + '22', color }}>#{idx + 1}</div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-white text-sm">{set.name}</h3>
+                  <h3 className="font-bold text-ink text-sm">{set.name}</h3>
                   <div className="text-xs text-slate-500">{set.cardsPerPack} cards/pack · Released {new Date(set.releaseDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</div>
                 </div>
                 <div className="text-center shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -676,19 +669,19 @@ function StandardView({ sets, game, expandedId, setExpandedId, editingPrice, pri
                   {isEditing ? (
                     <div className="flex items-center gap-1">
                       <span className="text-xs text-slate-400">$</span>
-                      <input type="number" step="0.01" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} className="w-16 bg-slate-800 border border-violet-600 rounded px-1.5 py-0.5 text-sm text-white text-center focus:outline-none" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onSavePrice(set.id); if (e.key === 'Escape') onCancelEdit() }} />
-                      <button onClick={() => onSavePrice(set.id)} className="text-emerald-400 hover:text-emerald-300"><Check size={14} /></button>
+                      <input type="number" step="0.01" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} className="w-16 bg-slate-800 border border-violet-600 rounded px-1.5 py-0.5 text-sm text-ink text-center focus:outline-none" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') onSavePrice(set.id); if (e.key === 'Escape') onCancelEdit() }} />
+                      <button onClick={() => onSavePrice(set.id)} className="text-emerald-600 hover:text-emerald-700"><Check size={14} /></button>
                       <button onClick={onCancelEdit} className="text-slate-500 hover:text-slate-300"><X size={14} /></button>
                     </div>
                   ) : (
-                    <button onClick={() => onEditPrice(set.id, set.packPrice)} className="flex items-center gap-1 text-white font-bold hover:text-violet-400 transition-colors">
+                    <button onClick={() => onEditPrice(set.id, set.packPrice)} className="flex items-center gap-1 text-ink font-bold hover:text-violet-600 transition-colors">
                       {formatCurrency(set.packPrice)}<Edit3 size={11} className="text-slate-600" />
                     </button>
                   )}
                 </div>
                 <div className="text-center shrink-0">
                   <div className="text-xs text-slate-500 mb-1">EV / Pack</div>
-                  <div className="text-white font-bold">{formatCurrency(ev)}</div>
+                  <div className="text-ink font-bold">{formatCurrency(ev)}</div>
                 </div>
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shrink-0 ${verdict.bg} ${verdict.color}`}>
                   <VerdictIcon size={12} />{verdict.label}
@@ -697,7 +690,7 @@ function StandardView({ sets, game, expandedId, setExpandedId, editingPrice, pri
               </div>
               <div className="mt-3 flex items-center gap-3">
                 <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(ratio * 100, 100)}%`, backgroundColor: ratio >= 1.15 ? '#34d399' : ratio >= 0.9 ? '#fbbf24' : '#f87171' }} />
+                  <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(ratio * 100, 100)}%`, backgroundColor: ratio >= 1.15 ? '#5f7a32' : ratio >= 0.9 ? '#b8862a' : '#b0553a' }} />
                 </div>
                 <span className="text-xs text-slate-400 shrink-0">{(ratio * 100).toFixed(0)}% ROI</span>
               </div>
@@ -721,9 +714,9 @@ function StandardView({ sets, game, expandedId, setExpandedId, editingPrice, pri
                   })}
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-800 space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-slate-400">Total EV per pack</span><span className="text-white font-bold">{formatCurrency(ev)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Pack price</span><span className="text-white">{formatCurrency(set.packPrice)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Net EV</span><span className={`font-bold ${ev - set.packPrice >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{ev - set.packPrice >= 0 ? '+' : ''}{formatCurrency(ev - set.packPrice)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Total EV per pack</span><span className="text-ink font-bold">{formatCurrency(ev)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pack price</span><span className="text-ink">{formatCurrency(set.packPrice)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Net EV</span><span className={`font-bold ${ev - set.packPrice >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{ev - set.packPrice >= 0 ? '+' : ''}{formatCurrency(ev - set.packPrice)}</span></div>
                 </div>
               </div>
             )}

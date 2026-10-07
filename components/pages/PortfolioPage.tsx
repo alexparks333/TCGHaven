@@ -3,7 +3,8 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, ArrowUpRight, Search, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useStore } from '@/lib/store'
+import { useStore, portfolioGames } from '@/lib/store'
+import { SPENDING_CATALOG } from '@/lib/spending/catalog'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { applyPriceUpdatesBatch } from '@/lib/firebase/db'
@@ -133,10 +134,13 @@ export default function PortfolioPage() {
   const {
     cards, priceHistory, applyPriceUpdates,
     setLastPriceRefresh, lastPriceRefresh,
-    purchases, soldCards, calcFloor, activeGames, timeFrame, setTimeFrame,
+    purchases, soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     priceMode, setPriceMode,
     hiddenGroups,
   } = useStore()
+  // Only games the user tracks (Inventory's game tabs) count toward anything on this page — see
+  // portfolioGames() in lib/store.ts.
+  const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
   const { user, dataLoading } = useAuth()
   const [sort, setSort] = useState<SortKey>('pnl')
   const [cardSearch, setCardSearch] = useState('')
@@ -149,14 +153,18 @@ export default function PortfolioPage() {
   // with the timeFrame it was computed under so switching timeframes hides a now-mismatched delta.
   const [refreshDelta, setRefreshDelta] = useState<{ pnl: number; pnlPct: number; timeFrame: string } | null>(null)
 
-  const totalPackSpend = useMemo(
-    () => purchases.reduce((s, p) => s + p.pricePaid * p.quantity, 0),
-    [purchases],
-  )
+  // A purchase whose product isn't in SPENDING_CATALOG anymore can't be attributed to a game, so
+  // it's kept rather than silently dropped from the cost basis.
+  const totalPackSpend = useMemo(() => {
+    const gameByProduct = new Map(SPENDING_CATALOG.map((p) => [p.id, p.game]))
+    return purchases
+      .filter((p) => { const g = gameByProduct.get(p.productId); return !g || activeGames.includes(g) })
+      .reduce((s, p) => s + p.pricePaid * p.quantity, 0)
+  }, [purchases, activeGames])
 
   const totalSoldRevenue = useMemo(
-    () => soldCards.reduce((s, c) => s + c.soldPrice, 0),
-    [soldCards],
+    () => soldCards.filter((c) => activeGames.includes(c.game)).reduce((s, c) => s + c.soldPrice, 0),
+    [soldCards, activeGames],
   )
 
   // All cards enriched + sorted (respects activeGames filter)
@@ -481,7 +489,7 @@ export default function PortfolioPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-white">Portfolio</h1>
+            <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
             <p className="text-slate-500 text-xs mt-0.5">
               {refreshing
                 ? 'Refreshing prices…'
@@ -521,10 +529,10 @@ export default function PortfolioPage() {
             </button>
           </div>
           {refreshError && (
-            <div className="flex items-start gap-2 bg-red-950/50 border border-red-800 rounded-xl px-3 py-2 text-xs text-red-300 mt-2">
-              <span className="text-red-400 flex-shrink-0">⚠</span>
+            <div className="flex items-start gap-2 bg-red-100/50 border border-red-300 rounded-xl px-3 py-2 text-xs text-red-700 mt-2">
+              <span className="text-red-600 flex-shrink-0">⚠</span>
               <span>{refreshError}</span>
-              <button onClick={() => setRefreshError(null)} className="ml-auto text-red-500 hover:text-red-300">✕</button>
+              <button onClick={() => setRefreshError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
             </div>
           )}
         </div>
@@ -536,7 +544,7 @@ export default function PortfolioPage() {
             onClick={() => router.push('/portfolio/analytics?metric=value')}
           >
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Collection Value</span>
-            <span className="text-3xl font-bold text-white">{formatCurrency(totals.value)}</span>
+            <span className="text-3xl font-bold text-ink">{formatCurrency(totals.value)}</span>
             {calcFloor > 0 && <span className="text-[10px] text-slate-600">floor {formatCurrency(calcFloor)}</span>}
           </div>
           <div
@@ -572,7 +580,7 @@ export default function PortfolioPage() {
                 </button>
               )}
             </div>
-            <span className="text-2xl font-bold text-white">{formatCurrency(totals.adjustedCost)}</span>
+            <span className="text-2xl font-bold text-ink">{formatCurrency(totals.adjustedCost)}</span>
             {(includePacks && totalPackSpend > 0 || includeSold && totalSoldRevenue > 0) && timeFrame === 'entry' && (
               <span className="text-[11px] text-slate-500 mt-0.5">
                 cards {formatCurrency(totals.cardCost)}
@@ -588,7 +596,7 @@ export default function PortfolioPage() {
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">
               {periodLabel} P&L
             </span>
-            <span className={`text-2xl font-bold ${totals.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            <span className={`text-2xl font-bold ${totals.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {formatCurrency(totals.pnl)}
             </span>
             {showHistoryNote
@@ -611,7 +619,7 @@ export default function PortfolioPage() {
             <span className={`text-2xl font-bold ${
               showHistoryNote && periodCardCount === 0
                 ? 'text-slate-600'
-                : totals.pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'
+                : totals.pnlPct >= 0 ? 'text-emerald-600' : 'text-red-600'
             }`}>
               {formatPercent(totals.pnlPct)}
             </span>
@@ -641,7 +649,7 @@ export default function PortfolioPage() {
                   >
                     {name}
                   </div>
-                  <div className="text-xl font-bold text-white">{formatCurrency(value)}</div>
+                  <div className="text-xl font-bold text-ink">{formatCurrency(value)}</div>
                   <div className="text-xs text-slate-500">{count} cards</div>
                 </div>
                 <div
@@ -665,7 +673,7 @@ export default function PortfolioPage() {
               onClick={() => setTimeFrame(value)}
               className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
                 timeFrame === value
-                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-700'
                   : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
               }`}
             >
@@ -686,7 +694,7 @@ export default function PortfolioPage() {
           <div className="card-glass p-6 lg:col-span-2">
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
               Top Performers
-              {showHistoryNote && <span className="ml-2 text-[10px] text-violet-400 font-normal normal-case">{periodLabel} change</span>}
+              {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
               {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
             </h3>
             <div className="flex flex-col gap-3">
@@ -706,7 +714,7 @@ export default function PortfolioPage() {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-white text-sm truncate">{c.name}</span>
+                      <span className="font-medium text-ink text-sm truncate">{c.name}</span>
                       {c.quantity > 1 && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 shrink-0">
                           ×{c.quantity}
@@ -718,8 +726,8 @@ export default function PortfolioPage() {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-sm font-medium text-white">{formatCurrency(c.currentVal)}</div>
-                    <div className={`text-xs font-medium ${c.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <div className="text-sm font-medium text-ink">{formatCurrency(c.currentVal)}</div>
+                    <div className={`text-xs font-medium ${c.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       {c.pnl >= 0 ? '+' : ''}{formatCurrency(c.pnl)}
                     </div>
                   </div>
@@ -747,14 +755,14 @@ export default function PortfolioPage() {
           <div className="flex flex-col gap-3 px-5 py-4 border-b border-slate-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-white">All Cards</h3>
+                <h3 className="text-sm font-semibold text-ink">All Cards</h3>
                 {hiddenCount > 0 && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/40">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/40 text-amber-600 border border-amber-300/40">
                     {hiddenCount} hidden
                   </span>
                 )}
                 {cardSearch && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-900/40 text-violet-400 border border-violet-800/40">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-200/40 text-violet-600 border border-violet-300/40">
                     {displayRows.length} result{displayRows.length !== 1 ? 's' : ''}
                   </span>
                 )}
@@ -786,10 +794,10 @@ export default function PortfolioPage() {
                 placeholder="Search by name or set…"
                 value={cardSearch}
                 onChange={(e) => setCardSearch(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-8 py-1.5 text-xs text-ink placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
               />
               {cardSearch && (
-                <button onClick={() => setCardSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors">
+                <button onClick={() => setCardSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-ink transition-colors">
                   <X size={12} />
                 </button>
               )}
@@ -798,7 +806,7 @@ export default function PortfolioPage() {
 
           {showHistoryNote && periodCardCount === 0 && displayRows.length > 0 && (
             <div className="px-5 py-3 bg-slate-900/60 border-b border-slate-800 text-xs text-slate-500 flex items-center gap-2">
-              <span className="text-amber-400">⚠</span>
+              <span className="text-amber-600">⚠</span>
               No price history yet for the {periodLabel} window — hit <span className="text-slate-300 font-medium">Refresh Prices</span> and check back after {timeFrame === '1d' ? '24 hours' : timeFrame === '7d' ? '7 days' : timeFrame === '30d' ? '30 days' : 'a year'}.
             </div>
           )}
@@ -829,7 +837,7 @@ export default function PortfolioPage() {
                 }
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-semibold text-white text-sm">{card.name}</span>
+                    <span className="font-semibold text-ink text-sm">{card.name}</span>
                     {card.quantity > 1 && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">
                         ×{card.quantity}
@@ -841,17 +849,17 @@ export default function PortfolioPage() {
                       </span>
                     )}
                     {card.group && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 border border-violet-500/20">
                         {card.group}
                       </span>
                     )}
                     {card.gradingCompany && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                         {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
                       </span>
                     )}
                     {card.nexus && (
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                         Nexus
                       </span>
                     )}
@@ -866,18 +874,18 @@ export default function PortfolioPage() {
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>{GAME_LABELS[card.game]}</span>
               </div>
               <div className="text-sm text-slate-300 flex items-center">{formatCurrency(card.cost)}</div>
-              <div className="text-sm text-white font-medium flex items-center">{formatCurrency(card.currentVal)}</div>
+              <div className="text-sm text-ink font-medium flex items-center">{formatCurrency(card.currentVal)}</div>
               <div className={`text-sm font-medium flex items-center ${
                 periodLabel && !card.hasPeriodData
                   ? 'text-slate-600'
-                  : card.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  : card.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'
               }`}>
                 {periodLabel && !card.hasPeriodData ? '—' : `${card.pnl >= 0 ? '+' : ''}${formatCurrency(card.pnl)}`}
               </div>
               <div className={`text-sm font-medium flex items-center ${
                 periodLabel && !card.hasPeriodData
                   ? 'text-slate-600'
-                  : card.pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'
+                  : card.pnlPct >= 0 ? 'text-emerald-600' : 'text-red-600'
               }`}>
                 {periodLabel && !card.hasPeriodData ? '—' : formatPercent(card.pnlPct)}
               </div>

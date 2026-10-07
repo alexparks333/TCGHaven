@@ -25,7 +25,7 @@ export function CardUnlockToast() {
 
 function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss: () => void }) {
   const [exiting, setExiting] = useState(false)
-  const color = GAME_COLORS[card.game] ?? '#8b5cf6'
+  const color = GAME_COLORS[card.game] ?? '#7a5230'
   const router = useRouter()
 
   function startExit() {
@@ -65,7 +65,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); startExit() }}
-          className="absolute top-1.5 right-1.5 p-1 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 z-10"
+          className="absolute top-1.5 right-1.5 p-1 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800 z-10"
         >
           <X size={13} />
         </button>
@@ -96,7 +96,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
             <PartyPopper size={12} />
             Card Unlocked!
           </div>
-          <div className="text-sm font-semibold text-white leading-tight truncate">{card.name}</div>
+          <div className="text-sm font-semibold text-ink leading-tight truncate">{card.name}</div>
           <div className="text-xs text-slate-500 truncate">
             {card.set}{card.number && card.number !== 'N/A' ? ` · #${card.number}` : ''}
           </div>

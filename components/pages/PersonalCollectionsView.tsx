@@ -24,11 +24,12 @@ import { cn, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 // Collections tab). See ZoomCardData's own comment in CardexPage.tsx for why the type lives there
 // and zoomGlowColor() lives in lib/utils.ts instead.
 import type { ZoomCardData } from './CardexPage'
+import { LogoLoader } from '@/components/LogoLoader'
 
 const RARITY_COLORS: Record<string, string> = {
-  Common: '#6b7280', Uncommon: '#22c55e', Rare: '#3b82f6',
-  Super_rare: '#a855f7', Legendary: '#f97316', Enchanted: '#ec4899',
-  Epic: '#06b6d4', 'Alt Art': '#fbbf24', Overnumbered: '#fbbf24', Showcase: '#fbbf24', Star: '#fbbf24', Promo: '#84cc16',
+  Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
+  Super_rare: '#7a4a5a', Legendary: '#b0602a', Enchanted: '#9a5a5a',
+  Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030',
 }
 
 function isOwned(card: PersonalCollectionCard, ownedCards: Card[]): { owned: boolean; quantity: number } {
@@ -113,17 +114,14 @@ export function PersonalCollectionsView({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 gap-3 text-slate-500">
-        <Loader2 size={24} className="animate-spin text-violet-400" />
-        <span className="text-sm">Loading your collections…</span>
-      </div>
+      <LogoLoader label="Loading your collections…" />
     )
   }
 
   return (
     <div>
       {error && (
-        <div className="mb-4 text-xs text-red-400 bg-red-950/30 border border-red-900/50 rounded-lg px-3 py-2">
+        <div className="mb-4 text-xs text-red-600 bg-red-100/30 border border-red-200/50 rounded-lg px-3 py-2">
           {error}
         </div>
       )}
@@ -180,8 +178,8 @@ export function PersonalCollectionsView({
                           className={cn(
                             'px-3 py-1.5 rounded-lg text-xs font-medium transition-all border',
                             isActive
-                              ? 'text-white border-transparent'
-                              : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800',
+                              ? 'text-ink border-transparent'
+                              : 'bg-slate-900/50 text-slate-400 border-slate-800 hover:text-ink hover:bg-slate-800',
                           )}
                           style={isActive ? { backgroundColor: color + '28', borderColor: color + '60', color } : {}}
                         >
@@ -241,7 +239,7 @@ function CreateCollectionForm({
 
   return (
     <div className="card-glass p-4 mb-6 space-y-3">
-      <div className="text-sm font-semibold text-white">New Personalized Collection</div>
+      <div className="text-sm font-semibold text-ink">New Personalized Collection</div>
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex gap-2 shrink-0">
           {(['lorcana', 'riftbound'] as const).map((g) => (
@@ -250,7 +248,7 @@ function CreateCollectionForm({
               onClick={() => setGame(g)}
               className={cn(
                 'px-3 py-2 rounded-lg text-xs font-medium transition-all border',
-                game === g ? 'text-white border-transparent' : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white',
+                game === g ? 'text-ink border-transparent' : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-ink',
               )}
               style={game === g ? { backgroundColor: GAME_COLORS[g] + '33', color: GAME_COLORS[g], borderColor: GAME_COLORS[g] + '55' } : {}}
             >
@@ -262,7 +260,7 @@ function CreateCollectionForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Collection name (e.g. Fury Runes)"
-          className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-600"
+          className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600"
         />
       </div>
       <div className="flex items-center gap-2">
@@ -274,7 +272,7 @@ function CreateCollectionForm({
           {saving ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
           Create
         </button>
-        <button onClick={onCancel} className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-white">
+        <button onClick={onCancel} className="text-xs font-medium px-3 py-1.5 rounded-lg text-slate-400 hover:text-ink">
           Cancel
         </button>
       </div>
@@ -377,7 +375,7 @@ function CollectionDetail({
           >
             {GAME_LABELS[collection.game]}
           </span>
-          <h2 className="text-lg font-bold text-white">{collection.name}</h2>
+          <h2 className="text-lg font-bold text-ink">{collection.name}</h2>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -387,8 +385,8 @@ function CollectionDetail({
             <Plus size={13} /> Add Card
           </button>
           {confirmingDelete ? (
-            <div className="flex items-center gap-2 bg-red-950/30 border border-red-900/50 rounded-lg px-2.5 py-1.5">
-              <span className="text-xs text-red-300">Delete &quot;{collection.name}&quot;? This can&apos;t be undone.</span>
+            <div className="flex items-center gap-2 bg-red-100/30 border border-red-200/50 rounded-lg px-2.5 py-1.5">
+              <span className="text-xs text-red-700">Delete &quot;{collection.name}&quot;? This can&apos;t be undone.</span>
               <button
                 onClick={onDelete}
                 className="text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-md px-2 py-1"
@@ -397,7 +395,7 @@ function CollectionDetail({
               </button>
               <button
                 onClick={() => setConfirmingDelete(false)}
-                className="text-xs font-medium text-slate-400 hover:text-white px-2 py-1"
+                className="text-xs font-medium text-slate-400 hover:text-ink px-2 py-1"
               >
                 Cancel
               </button>
@@ -405,7 +403,7 @@ function CollectionDetail({
           ) : (
             <button
               onClick={() => setConfirmingDelete(true)}
-              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-400"
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600"
             >
               <Trash2 size={13} /> Delete Collection
             </button>
@@ -413,7 +411,7 @@ function CollectionDetail({
         </div>
       </div>
 
-      {saveError && <div className="text-xs text-red-400 mb-3">{saveError}</div>}
+      {saveError && <div className="text-xs text-red-600 mb-3">{saveError}</div>}
 
       {/* Search within this collection */}
       {totalCount > 0 && (
@@ -433,7 +431,7 @@ function CollectionDetail({
       {totalCount > 0 && (
         <div className="mb-5 card-glass px-4 py-3">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-white">Progress</span>
+            <span className="text-sm font-semibold text-ink">Progress</span>
             <span className="text-sm font-bold" style={{ color }}>
               {ownedCount} / {totalCount}
               <span className="text-slate-500 font-normal text-xs ml-1">({pct}%)</span>
@@ -558,8 +556,8 @@ function AddCardToCollectionModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg card-glass rounded-2xl p-6 max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-white">Add Card to Collection</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-700">
+          <h2 className="text-lg font-bold text-ink">Add Card to Collection</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700">
             <X size={18} />
           </button>
         </div>
@@ -604,13 +602,13 @@ function AddCardToCollectionModal({
                   <div className="w-12 h-16 bg-slate-800 rounded-lg flex-shrink-0 flex items-center justify-center text-slate-600 text-xs">?</div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-white font-medium truncate">{result.name}</div>
+                  <div className="text-sm text-ink font-medium truncate">{result.name}</div>
                   <div className="text-xs text-slate-500 truncate">{result.setName} · #{result.number}</div>
                 </div>
                 {added ? (
-                  <span className="text-[10px] text-emerald-400 font-medium shrink-0">Added</span>
+                  <span className="text-[10px] text-emerald-600 font-medium shrink-0">Added</span>
                 ) : (
-                  <Plus size={16} className="text-violet-400 shrink-0" />
+                  <Plus size={16} className="text-violet-600 shrink-0" />
                 )}
               </button>
             )
@@ -665,7 +663,7 @@ function PersonalCardTile({
   onRemove: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
-  const rarityColor = RARITY_COLORS[card.rarity ?? ''] ?? '#6b7280'
+  const rarityColor = RARITY_COLORS[card.rarity ?? ''] ?? '#7a6a55'
   const ebayCard = { name: card.name, number: card.number, set: card.setName, game, isFoil: card.isFoil }
 
   return (
@@ -696,7 +694,7 @@ function PersonalCardTile({
         style={{
           aspectRatio: '5/7',
           filter: card.owned ? 'none' : 'grayscale(1)',
-          outline: card.owned ? `2px solid ${gameColor}40` : '1px solid #1e293b',
+          outline: card.owned ? `2px solid ${gameColor}40` : '1px solid #d6c49f',
           boxShadow: card.owned && isHovered ? `0 0 12px ${gameColor}60` : undefined,
         }}
       >
@@ -729,7 +727,7 @@ function PersonalCardTile({
         <button
           onClick={(e) => { e.stopPropagation(); onRemove() }}
           title="Remove from this collection"
-          className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/70 flex items-center justify-center text-white/70 hover:text-red-400 hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/70 flex items-center justify-center text-white/70 hover:text-red-600 hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <X size={10} />
         </button>
@@ -738,11 +736,11 @@ function PersonalCardTile({
       {isHovered && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-white leading-tight max-w-[140px] truncate">{card.name}</div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
             <div className="text-[10px] mt-0.5 text-slate-400">{card.setName}</div>
             {(card.marketPrice ?? 0) > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice!.toFixed(2)}</div>}
             {card.owned
-              ? <div className="text-[10px] text-emerald-400 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
+              ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
               : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
           </div>
           <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
