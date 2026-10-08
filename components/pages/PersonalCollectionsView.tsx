@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, forwardRef } from 'react'
 import {
-  DndContext, MouseSensor, TouchSensor, useSensor, useSensors, useDroppable, closestCenter, pointerWithin,
+  DndContext, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter,
   type DragEndEvent, type DragStartEvent, type CollisionDetection,
 } from '@dnd-kit/core'
 import {
@@ -329,8 +329,28 @@ function CollectionDetail({
     await setCollectionCards(user.uid, collection.id, updated).catch(() => setSaveError('Failed to save — try again.'))
   }
 
+  // The last card dragged into the trash, kept briefly so the "Removed · Undo" toast can put it
+  // back exactly where it was.
+  const [lastRemoved, setLastRemoved] = useState<{ card: PersonalCollectionCard; index: number } | null>(null)
+  useEffect(() => {
+    if (!lastRemoved) return
+    const t = setTimeout(() => setLastRemoved(null), 5000)
+    return () => clearTimeout(t)
+  }, [lastRemoved])
+
+  async function undoRemove() {
+    if (!user || !lastRemoved) return
+    const updated = [...collection.cards]
+    updated.splice(Math.min(lastRemoved.index, updated.length), 0, lastRemoved.card)
+    setLastRemoved(null)
+    onCardsChanged(updated)
+    await setCollectionCards(user.uid, collection.id, updated).catch(() => setSaveError('Failed to save — try again.'))
+  }
+
   async function removeCard(key: string) {
     if (!user) return
+    const index = collection.cards.findIndex((c) => cardKey(c) === key)
+    if (index !== -1) setLastRemoved({ card: collection.cards[index], index })
     const updated = collection.cards.filter((c) => cardKey(c) !== key)
     onCardsChanged(updated) // optimistic
     await setCollectionCards(user.uid, collection.id, updated).catch(() => setSaveError('Failed to save — try again.'))
@@ -359,29 +379,87 @@ function CollectionDetail({
   const [touchMovingId, setTouchMovingId] = useState<string | null>(null)
   // Any drag in progress (mouse or touch) — shows the trash drop zone.
   const [dragging, setDragging] = useState(false)
+  // Finger/pointer is over the trash can right now. Drives the "about to remove" look (trash
+  // grows, held card shrinks, the grid closes the gap) and decides removal on release.
+  const [overTrash, setOverTrash] = useState(false)
+  const trashElRef = useRef<HTMLDivElement | null>(null)
+  // Latest real pointer position during a drag, from our own window listeners — the trash isn't
+  // a dnd-kit droppable (see collisionDetection below), so we hit-test it ourselves.
+  const pointerRef = useRef<{ x: number; y: number } | null>(null)
+  const orderedIdsRef = useRef(orderedIds)
+  orderedIdsRef.current = orderedIds
   const lastDragEndRef = useRef(0)
   const justDragged = () => Date.now() - lastDragEndRef.current < 400
 
+  function pointerOverTrash(p: { x: number; y: number } | null) {
+    const r = trashElRef.current?.getBoundingClientRect()
+    return !!(p && r && p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom)
+  }
+
+  // Over the trash, report the LAST card as the drop target. dnd-kit only keeps the held card
+  // under the finger and shifts the others while "over" is a real item in the list — with the
+  // trash as "over" it froze everything and snapped the held card back to its slot (the old
+  // clunky feel). Targeting the last slot instead shows exactly the collection without this card:
+  // every card after it slides back one place. handleDragEnd checks the trash first, so the card
+  // is removed rather than moved to the end.
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    if (pointerOverTrash(args.pointerCoordinates)) {
+      const ids = orderedIdsRef.current
+      return [{ id: ids[ids.length - 1] }]
+    }
+    return closestCenter(args)
+  }, [])
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMouse = (e: MouseEvent) => { pointerRef.current = { x: e.clientX, y: e.clientY } }
+    const onTouch = (e: TouchEvent) => {
+      const t = e.touches[0]
+      if (t) pointerRef.current = { x: t.clientX, y: t.clientY }
+    }
+    window.addEventListener('mousemove', onMouse, { capture: true, passive: true })
+    window.addEventListener('touchmove', onTouch, { capture: true, passive: true })
+    return () => {
+      window.removeEventListener('mousemove', onMouse, { capture: true })
+      window.removeEventListener('touchmove', onTouch, { capture: true })
+    }
+  }, [dragging])
+
   function handleDragStart(event: DragStartEvent) {
+    const a = event.activatorEvent
+    if (a instanceof MouseEvent) pointerRef.current = { x: a.clientX, y: a.clientY }
+    else if (typeof TouchEvent !== 'undefined' && a instanceof TouchEvent && a.touches[0]) pointerRef.current = { x: a.touches[0].clientX, y: a.touches[0].clientY }
     setDragging(true)
-    if (typeof TouchEvent !== 'undefined' && event.activatorEvent instanceof TouchEvent) {
+    if (typeof TouchEvent !== 'undefined' && a instanceof TouchEvent) {
       setTouchMovingId(String(event.active.id))
       navigator.vibrate?.(25) // a little "you're in move mode" buzz where supported (Android)
     }
   }
 
-  function handleDragCancel() {
+  function handleDragMove() {
+    const over = pointerOverTrash(pointerRef.current)
+    if (over !== overTrash) {
+      setOverTrash(over)
+      if (over) navigator.vibrate?.(15)
+    }
+  }
+
+  function endDrag() {
+    setOverTrash(false)
     setDragging(false)
     setTouchMovingId(null)
     lastDragEndRef.current = Date.now()
   }
 
+  function handleDragCancel() {
+    endDrag()
+  }
+
   function handleDragEnd(event: DragEndEvent) {
-    setDragging(false)
-    setTouchMovingId(null)
-    lastDragEndRef.current = Date.now()
+    const droppedOnTrash = pointerOverTrash(pointerRef.current)
+    endDrag()
     const { active, over } = event
-    if (over?.id === TRASH_ID) { removeCard(String(active.id)); return }
+    if (droppedOnTrash) { removeCard(String(active.id)); return }
     if (!over || active.id === over.id) return
     const oldIndex = orderedIds.indexOf(String(active.id))
     const newIndex = orderedIds.indexOf(String(over.id))
@@ -519,11 +597,14 @@ function CollectionDetail({
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={trashThenClosestCenter}
+          collisionDetection={collisionDetection}
           // x threshold 0: dragging near the screen's left/right edge must never scroll the page
-          // sideways — only near the top/bottom edge, to reach cards further up/down.
-          autoScroll={{ threshold: { x: 0, y: 0.2 } }}
+          // sideways — only near the top/bottom edge, to reach cards further up/down. The bottom
+          // zone is kept below the trash can, and auto-scroll is off entirely while over the
+          // trash, so hovering it never drags the page along.
+          autoScroll={{ enabled: !overTrash, threshold: { x: 0, y: 0.1 } }}
           onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         >
@@ -540,13 +621,26 @@ function CollectionDetail({
                   onLeave={() => setHoveredId(null)}
                       onZoom={onZoom}
                   touchMoving={touchMovingId === cardKey(card)}
+                  overTrash={overTrash}
                   justDragged={justDragged}
                 />
               ))}
             </div>
           </SortableContext>
-          {dragging && <TrashDropZone />}
+          {dragging && <TrashDropZone ref={trashElRef} isOver={overTrash} />}
         </DndContext>
+      )}
+
+      {/* Short-lived undo for a card dropped in the trash */}
+      {lastRemoved && !dragging && (
+        <div className="trash-zone-in fixed left-1/2 z-[60] bottom-[calc(env(safe-area-inset-bottom)+84px)] md:bottom-24">
+          <div className="flex items-center gap-3 bg-slate-950 border border-slate-700 rounded-full pl-4 pr-1.5 py-1.5 shadow-xl text-sm text-slate-300 whitespace-nowrap">
+            <span>Removed <span className="font-semibold text-ink">{lastRemoved.card.name.split(',')[0]}</span></span>
+            <button onClick={undoRemove} className="px-3 py-1 rounded-full bg-violet-600 text-white text-xs font-semibold">
+              Undo
+            </button>
+          </div>
+        </div>
       )}
 
       {showAddModal && (
@@ -689,10 +783,12 @@ function SortablePersonalCardTile(props: {
   onLeave: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
   touchMoving: boolean
+  overTrash: boolean
   justDragged: () => boolean
 }) {
-  const { touchMoving, justDragged, ...tileProps } = props
+  const { touchMoving, overTrash, justDragged, ...tileProps } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cardKey(props.card) })
+  const trashing = isDragging && overTrash
 
   // Finger currently resting on this card, before move mode has started — drives the gradual
   // grow. Cleared the moment the finger lifts or drifts far enough that it's a scroll, not a hold.
@@ -705,12 +801,14 @@ function SortablePersonalCardTile(props: {
   const outerStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging && !touchMoving ? 0.4 : 1,
+    opacity: isDragging && !touchMoving && !overTrash ? 0.4 : 1,
     zIndex: isDragging || holding ? 20 : undefined,
   }
   const grown = holding || touchMoving
   const innerStyle = {
-    transform: grown ? `scale(${HOLD_GROW_SCALE})` : 'scale(1)',
+    // Over the trash, the held card shrinks and fades a little — "this one's about to go".
+    transform: trashing ? 'scale(0.72)' : grown ? `scale(${HOLD_GROW_SCALE})` : 'scale(1)',
+    opacity: trashing ? 0.55 : 1,
     filter: touchMoving
       ? 'drop-shadow(0 12px 18px rgba(60, 40, 20, 0.35))'
       : holding
@@ -719,7 +817,7 @@ function SortablePersonalCardTile(props: {
     // Slow, steady grow for the whole hold; quick settle back if the hold is abandoned.
     transition: holding && !touchMoving
       ? `transform ${MOVE_MODE_HOLD_MS}ms cubic-bezier(0.25, 0.6, 0.35, 1), filter ${MOVE_MODE_HOLD_MS}ms ease-out`
-      : 'transform 180ms ease-out, filter 180ms ease-out',
+      : 'transform 200ms cubic-bezier(0.2, 0.8, 0.3, 1), filter 200ms ease-out, opacity 200ms ease-out',
   }
 
   return (
@@ -758,35 +856,19 @@ function SortablePersonalCardTile(props: {
   )
 }
 
-// Drop target id for removing a card from a collection by dragging it onto the trash.
-const TRASH_ID = '__collection-trash__'
-
-// The trash only counts when the pointer/finger itself is over it — otherwise closestCenter would
-// happily pick it as the "nearest" target whenever a card is dragged near the bottom rows, and
-// throw the card away. Everything else reorders by closestCenter, ignoring the trash.
-const trashThenClosestCenter: CollisionDetection = (args) => {
-  const trash = args.droppableContainers.filter((c) => c.id === TRASH_ID)
-  const overTrash = pointerWithin({ ...args, droppableContainers: trash })
-  if (overTrash.length > 0) return overTrash
-  return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter((c) => c.id !== TRASH_ID) })
-}
-
 // Bottom-center trash can that appears only while a card is being dragged; dropping a card on it
 // removes the card from the collection (the only way to remove one — it replaced a hover-only ✕
-// on each tile, which also made iOS need two taps to open a card). Sits above the phone bottom bar.
-function TrashDropZone() {
-  const { setNodeRef, isOver } = useDroppable({ id: TRASH_ID })
-  useEffect(() => { if (isOver) navigator.vibrate?.(15) }, [isOver])
+// on each tile, which also made iOS need two taps to open a card). Sits above the phone bottom
+// bar. Not a dnd-kit droppable: CollectionDetail hit-tests it against the pointer itself.
+const TrashDropZone = forwardRef<HTMLDivElement, { isOver: boolean }>(function TrashDropZone({ isOver }, ref) {
   return (
-    <div
-      className="trash-zone-in fixed left-1/2 z-[60] pointer-events-none bottom-[calc(env(safe-area-inset-bottom)+84px)] md:bottom-8"
-    >
+    <div className="trash-zone-in fixed left-1/2 z-[60] pointer-events-none bottom-[calc(env(safe-area-inset-bottom)+84px)] md:bottom-24">
       <div
-        ref={setNodeRef}
+        ref={ref}
         className={cn(
-          'flex flex-col items-center justify-center gap-1 w-[72px] h-[72px] rounded-full border-2 shadow-xl transition-all duration-150',
+          'flex flex-col items-center justify-center gap-1 w-[72px] h-[72px] rounded-full border-2 shadow-xl transition-all duration-200 ease-out',
           isOver
-            ? 'scale-110 bg-red-600 border-red-700 text-white'
+            ? 'scale-125 bg-red-600 border-red-700 text-white shadow-[0_0_0_10px_rgba(168,69,42,0.18),0_12px_28px_rgba(168,69,42,0.35)]'
             : 'bg-slate-950 border-slate-700 text-slate-300',
         )}
       >
@@ -795,7 +877,7 @@ function TrashDropZone() {
       </div>
     </div>
   )
-}
+})
 
 // Four-way "move" arrows that fade in behind a card, push outward once, and vanish — a quiet
 // hint that a touch-held card is now in move mode. Larger than the card so the arrow tips peek
