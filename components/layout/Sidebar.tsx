@@ -130,20 +130,28 @@ export function Sidebar() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         {MOBILE_NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
+          // Sub-pages count too: a card's detail page and Portfolio Analytics live under
+          // /portfolio/..., which belongs to the Portfolio tab.
+          const active = href === '/'
+            ? pathname === '/' || pathname.startsWith('/portfolio')
+            : pathname === href || pathname.startsWith(href + '/')
           return (
             <Link
               key={href}
               href={href}
-              className={cn(
-                'flex-1 min-w-0 flex flex-col items-center gap-1 pt-2.5 pb-2 transition-colors',
-                active ? 'text-violet-700' : 'text-slate-300',
-              )}
+              aria-current={active ? 'page' : undefined}
+              className="flex-1 min-w-0 flex justify-center pt-1.5 pb-1.5"
             >
-              <div className="relative">
+              {/* The current tab gets a darker tinted pill so it's obvious which page you're on */}
+              <span
+                className={cn(
+                  'flex flex-col items-center gap-1 w-full max-w-[64px] py-1.5 rounded-xl transition-colors',
+                  active ? 'bg-slate-700 text-ink' : 'text-slate-300',
+                )}
+              >
                 <Icon size={22} strokeWidth={active ? 2.4 : 2} />
-              </div>
-              <span className={cn('text-[11px] leading-none', active ? 'font-bold' : 'font-semibold')}>{label}</span>
+                <span className={cn('text-[11px] leading-none', active ? 'font-bold' : 'font-semibold')}>{label}</span>
+              </span>
             </Link>
           )
         })}
