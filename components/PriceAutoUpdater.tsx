@@ -3,22 +3,22 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
-import { applyPriceUpdatesBatch } from '@/lib/firebase/db'
+import { authFetch } from '@/lib/firebase/authFetch'
 import { loadPriceStatus } from '@/lib/api/priceStatus'
 import type { Card, Game } from '@/lib/types'
 
-// Keeps every user's card prices in step with the shared catalog — there's no manual "Refresh
-// Prices" anymore, so everyone sees the same prices on the same schedule (the catalog itself is
-// refreshed 4x a day by the scheduled sync; see lib/api/priceStatus.ts).
+// Prices live ONLY in the shared catalog (refreshed 4x a day by the scheduled sync) — nothing is
+// ever copied onto a user's own cards anymore. This (mounted once in ClientWrapper, renders
+// nothing) just reads:
 //
-// Mounted once in ClientWrapper (renders nothing). After sign-in, then every CHECK_EVERY_MS and
-// whenever the tab comes back into view, it reads the price-update status (cheap: two tiny docs
-// per tracked game). If the catalog has synced since this user's cards were last priced — or
-// they switched 30d avg / Lowest NM — it copies the catalog prices onto their cards.
+//  1. Live prices for the user's cards, from app/api/prices/* — in-memory catalog lookups on the
+//     server, so zero Firestore reads — laid over each card in memory (store.applyLivePrices).
+//  2. Each card's price at the start of each Portfolio window (24h/7d/30d/365d ago), from the
+//     shared price history via app/api/price-history ("baselines").
+//  3. The shared price-update status for Portfolio's "Prices updated …" line.
 //
-// Writes are kept small: a card is only written if its price actually changed, or if it has no
-// price-history point yet today (one point per card per day, so period P&L and charts keep
-// working exactly as they did with a once-a-day manual refresh).
+// It reloads when the catalog has synced since the last load, when the set of owned cards or
+// the 30d avg / Lowest NM setting changes, every CHECK_EVERY_MS, and when the tab comes back.
 
 const CHECK_EVERY_MS = 15 * 60 * 1000
 const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -36,79 +36,85 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
 
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
-  const { cards, priceHistory, priceMode, trackedGames, lastPriceRefresh, setLastPriceRefresh, setPriceStatus, applyPriceUpdates } = useStore()
+  const { cards, priceMode, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines } = useStore()
 
-  // Latest values for the timer/visibility callbacks without re-subscribing them every render.
-  const latest = useRef({ cards, priceHistory, priceMode, trackedGames, lastPriceRefresh })
-  latest.current = { cards, priceHistory, priceMode, trackedGames, lastPriceRefresh }
+  // Latest values for the timer/visibility callbacks without re-subscribing every render.
+  const latest = useRef({ cards, priceMode, trackedGames })
+  latest.current = { cards, priceMode, trackedGames }
   const running = useRef(false)
-  const appliedMode = useRef<string | null>(null)
+  // What the last successful load was based on — reload only when one of these changes.
+  const loadedFor = useRef<{ syncAt: number; mode: string; cardsKey: string } | null>(null)
+
+  // Only cards priced from the catalog take part; manual prices / unmatched cards keep their own.
+  const cardsKey = cards.filter((c) => c.apiId && !c.priceLocked).map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
 
   const check = useCallback(async () => {
     if (!user || running.current) return
     running.current = true
     try {
-      const { cards, priceHistory, priceMode, trackedGames, lastPriceRefresh } = latest.current
+      const { cards, priceMode, trackedGames } = latest.current
       const status = await loadPriceStatus(trackedGames)
       setPriceStatus(status)
-      if (!status.latestSyncAt) return
 
-      const modeChanged = appliedMode.current !== null && appliedMode.current !== priceMode
-      const freshCatalog = !lastPriceRefresh || status.latestSyncAt.getTime() > new Date(lastPriceRefresh).getTime()
-      if (!freshCatalog && !modeChanged && appliedMode.current !== null) return
+      const syncAt = status.latestSyncAt?.getTime() ?? 0
+      const eligible = cards.filter((c) => c.apiId && !c.priceLocked)
+      const key = eligible.map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
+      const prev = loadedFor.current
+      if (prev && prev.syncAt === syncAt && prev.mode === priceMode && prev.cardsKey === key) return
 
-      const now = new Date().toISOString()
-      const today = now.slice(0, 10)
-      const cardsById = new Map(cards.map((c) => [c.id, c]))
-      const hasPointToday = new Set(
-        priceHistory.filter((h) => h.points.some((p) => p.date.slice(0, 10) === today)).map((h) => h.cardId),
-      )
-      const updates: { cardId: string; price: number; date: string }[] = []
-      let fetchFailed = false
-
+      // 1. Live prices (cheap server lookups).
+      const prices: Record<string, number> = {}
+      let failed = false
       await Promise.all(ALL_GAMES.map(async (game) => {
-        const eligible = cards.filter((c) => c.game === game && c.apiId && !c.priceLocked)
-        if (eligible.length === 0) return
+        const gameCards = eligible.filter((c) => c.game === game)
+        if (gameCards.length === 0) return
         const { url, payload } = PRICE_ROUTES[game]
         try {
           const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cards: eligible.map(payload), priceMode }),
+            body: JSON.stringify({ cards: gameCards.map(payload), priceMode }),
           })
-          if (!res.ok) { fetchFailed = true; return }
-          const prices: Record<string, number> = await res.json()
-          for (const [cardId, price] of Object.entries(prices)) {
-            const card = cardsById.get(cardId)
-            const changed = !card || Math.abs((card.currentPrice ?? -1) - price) >= 0.005
-            if (changed || !hasPointToday.has(cardId)) updates.push({ cardId, price, date: now })
-          }
+          if (!res.ok) { failed = true; return }
+          Object.assign(prices, await res.json())
         } catch {
-          fetchFailed = true
+          failed = true
         }
       }))
+      applyLivePrices(prices)
 
-      if (updates.length > 0) {
-        // History as loaded at sign-in (captured before applyPriceUpdates adds today's points),
-        // so the batch write doesn't need to read every history doc back first.
-        const knownPoints = new Map(priceHistory.map((h) => [h.cardId, h.points]))
-        applyPriceUpdates(updates)
-        await applyPriceUpdatesBatch(user.uid, updates, knownPoints)
+      // 2. Window baselines from the shared history.
+      try {
+        const res = await authFetch('/api/price-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'baselines',
+            priceMode,
+            items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil })),
+          }),
+        })
+        if (res.ok) setPriceBaselines(await res.json())
+        else failed = true
+      } catch {
+        failed = true
       }
-      // Only mark this sync as applied if every game's prices came back — otherwise the next
-      // check retries instead of silently leaving some cards on old prices.
-      if (!fetchFailed) {
-        setLastPriceRefresh(status.latestSyncAt.toISOString())
-        appliedMode.current = priceMode
+
+      // Only remember this load as complete if everything came back; otherwise the next check
+      // retries instead of leaving some cards on stale data.
+      if (!failed) {
+        loadedFor.current = { syncAt, mode: priceMode, cardsKey: key }
+        if (status.latestSyncAt) setLastPriceRefresh(status.latestSyncAt.toISOString())
       }
     } catch (err) {
-      console.error('Automatic price update failed:', err)
+      console.error('Loading prices failed:', err)
     } finally {
       running.current = false
     }
-  }, [user, setPriceStatus, applyPriceUpdates, setLastPriceRefresh])
+  }, [user, setPriceStatus, applyLivePrices, setPriceBaselines, setLastPriceRefresh])
 
-  // After sign-in + data load, on tracked-games / price-mode changes, on a timer, and on focus.
+  // After sign-in + data load, when owned cards / tracked games / price mode change, on a timer,
+  // and when the tab comes back into view.
   useEffect(() => {
     if (!user || dataLoading) return
     check()
@@ -116,10 +122,10 @@ export function PriceAutoUpdater() {
     const onVisible = () => { if (document.visibilityState === 'visible') check() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [user, dataLoading, check, trackedGames, priceMode])
+  }, [user, dataLoading, check, trackedGames, priceMode, cardsKey])
 
-  // A different user signing in on this device must get their own first apply.
-  useEffect(() => { appliedMode.current = null }, [user?.uid])
+  // A different user signing in on this device starts fresh.
+  useEffect(() => { loadedFor.current = null }, [user?.uid])
 
   return null
 }

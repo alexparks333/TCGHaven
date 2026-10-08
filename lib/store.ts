@@ -1,13 +1,19 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { Card, PriceHistory, Game, SoldCard, CatalogSyncNotice } from './types'
+import { Card, Game, SoldCard, CatalogSyncNotice } from './types'
 import type { Purchase } from './spending/types'
 import type { PriceStatus } from './api/priceStatus'
 
 interface TCGStore {
   cards: Card[]
   soldCards: SoldCard[]
-  priceHistory: PriceHistory[]
+  // Live catalog price per user card id (from app/api/prices/*), laid over each card's
+  // currentPrice in memory by withLivePrice() — never written to Firestore. Prices live only in
+  // the shared catalog; see components/PriceAutoUpdater.tsx.
+  livePrices: Record<string, number>
+  // Each card's price at the start of each Portfolio window, from the shared price history
+  // (app/api/price-history, mode "baselines"). Keyed by user card id.
+  priceBaselines: Record<string, PriceBaseline>
   activeGame: Game
   // ISO time of the catalog sync whose prices were last applied to this user's cards (see
   // components/PriceAutoUpdater.tsx) — not a manual-refresh time anymore.
@@ -33,7 +39,6 @@ interface TCGStore {
   // Populated by AuthProvider on login
   loadUserCards: (cards: Card[]) => void
   loadUserSoldCards: (cards: SoldCard[]) => void
-  loadUserPriceHistory: (history: PriceHistory[]) => void
   loadPurchases: (data: Purchase[]) => void
   clearUserData: () => void
 
@@ -44,9 +49,8 @@ interface TCGStore {
   addSoldCard: (card: SoldCard) => void
   removeSoldCard: (id: string) => void
   setActiveGame: (game: Game) => void
-  updateCardPrice: (id: string, price: number) => void
-  addPriceHistoryPoint: (cardId: string, price: number, date: string) => void
-  applyPriceUpdates: (updates: { cardId: string; price: number; date: string }[]) => void
+  applyLivePrices: (prices: Record<string, number>) => void
+  setPriceBaselines: (baselines: Record<string, PriceBaseline>) => void
   setLastPriceRefresh: (date: string) => void
   setPriceStatus: (status: PriceStatus | null) => void
   addPurchase: (purchase: Purchase) => void
@@ -67,6 +71,22 @@ interface TCGStore {
 
 export const DEFAULT_TRACKED_GAMES: Game[] = ['riftbound']
 
+export interface PriceBaseline {
+  d1: number | null
+  d7: number | null
+  d30: number | null
+  d365: number | null
+  first: number | null   // earliest recorded price
+}
+
+// A catalog-priced card shows the live catalog price; a manually priced card (priceLocked) or one
+// with no catalog match (no apiId) keeps its own stored price.
+export function withLivePrice(card: Card, prices: Record<string, number>): Card {
+  if (!card.apiId || card.priceLocked) return card
+  const live = prices[card.id]
+  return live != null && live !== card.currentPrice ? { ...card, currentPrice: live } : card
+}
+
 // Which games Portfolio actually counts: the Filters panel's game toggles, narrowed to the games
 // this user tracks. Falls back to every tracked game if that intersection is empty (e.g. the
 // filter only had a now-untracked game switched on), so Portfolio never silently shows nothing.
@@ -80,7 +100,8 @@ export const useStore = create<TCGStore>()(
     (set) => ({
   cards: [],
   soldCards: [],
-  priceHistory: [],
+  livePrices: {},
+  priceBaselines: {},
   activeGame: 'pokemon',
   lastPriceRefresh: null,
   priceStatus: null,
@@ -95,18 +116,17 @@ export const useStore = create<TCGStore>()(
   catalogSyncNotices: [] as CatalogSyncNotice[],
   cardUnlocks: [] as { id: string; card: Card }[],
 
-  loadUserCards: (cards) => set({ cards }),
+  loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
   loadUserSoldCards: (soldCards) => set({ soldCards }),
-  loadUserPriceHistory: (priceHistory) => set({ priceHistory }),
   loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], priceHistory: [], lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
+  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
-    set((state) => ({ cards: [...state.cards, card] })),
+    set((state) => ({ cards: [...state.cards, withLivePrice(card, state.livePrices)] })),
 
   updateCard: (id, updates) =>
     set((state) => ({
-      cards: state.cards.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+      cards: state.cards.map((c) => (c.id === id ? withLivePrice({ ...c, ...updates }, state.livePrices) : c)),
     })),
 
   deleteCard: (id) =>
@@ -120,58 +140,10 @@ export const useStore = create<TCGStore>()(
 
   setActiveGame: (game) => set({ activeGame: game }),
 
-  updateCardPrice: (id, price) =>
-    set((state) => ({
-      cards: state.cards.map((c) =>
-        c.id === id ? { ...c, currentPrice: price, priceUpdatedAt: new Date().toISOString() } : c
-      ),
-    })),
+  applyLivePrices: (prices) =>
+    set((state) => ({ livePrices: prices, cards: state.cards.map((c) => withLivePrice(c, prices)) })),
 
-  addPriceHistoryPoint: (cardId, price, date) =>
-    set((state) => {
-      const day = date.slice(0, 10) // YYYY-MM-DD — one point per calendar day
-      const newPoint = { date, price }
-      const existing = state.priceHistory.find((h) => h.cardId === cardId)
-      if (existing) {
-        const deduped = existing.points.filter((p) => p.date.slice(0, 10) !== day)
-        return {
-          priceHistory: state.priceHistory.map((h) =>
-            h.cardId === cardId ? { ...h, points: [...deduped, newPoint] } : h
-          ),
-        }
-      }
-      return {
-        priceHistory: [...state.priceHistory, { cardId, points: [newPoint] }],
-      }
-    }),
-
-  // Batched form of updateCardPrice + addPriceHistoryPoint — a price refresh applies one update
-  // per priced card, and each of those two single-card actions does a full O(n) map/find over
-  // `cards`/`priceHistory`. Calling them once per card in a loop is O(n²) and, for a collection
-  // in the thousands, synchronously blocks the main thread for seconds (including starving any
-  // pending route navigation waiting to commit). This does the whole batch in one O(n) pass.
-  applyPriceUpdates: (updates) =>
-    set((state) => {
-      if (updates.length === 0) return state
-      const byCard = new Map(updates.map((u) => [u.cardId, u]))
-      const cards = state.cards.map((c) => {
-        const u = byCard.get(c.id)
-        return u ? { ...c, currentPrice: u.price, priceUpdatedAt: u.date } : c
-      })
-      const historyByCard = new Map(state.priceHistory.map((h) => [h.cardId, h]))
-      for (const u of updates) {
-        const day = u.date.slice(0, 10)
-        const newPoint = { date: u.date, price: u.price }
-        const existing = historyByCard.get(u.cardId)
-        if (existing) {
-          const deduped = existing.points.filter((p) => p.date.slice(0, 10) !== day)
-          historyByCard.set(u.cardId, { ...existing, points: [...deduped, newPoint] })
-        } else {
-          historyByCard.set(u.cardId, { cardId: u.cardId, points: [newPoint] })
-        }
-      }
-      return { cards, priceHistory: Array.from(historyByCard.values()) }
-    }),
+  setPriceBaselines: (priceBaselines) => set({ priceBaselines }),
 
   setLastPriceRefresh: (date) => set({ lastPriceRefresh: date }),
   setPriceStatus: (status) => set({ priceStatus: status }),

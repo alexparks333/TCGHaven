@@ -57,6 +57,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Shared, catalog-level daily price history (scripts/lib/price-history.mjs) — one copy for
+    // every user, written by the scheduled sync. Same access as the catalog itself.
+    match /price_history/{game}/months/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Per-user inventory data — unchanged from before this migration. A user may only
     // read/write their own subtree.
     match /users/{uid}/{document=**} {

@@ -1,6 +1,6 @@
 import {
   collection, doc, updateDoc, deleteDoc,
-  getDoc, getDocs, setDoc, writeBatch,
+  getDocs, setDoc, writeBatch,
 } from 'firebase/firestore'
 import { db } from './config'
 import type { Card, PriceHistory, SoldCard } from '../types'
@@ -33,53 +33,6 @@ export async function saveCard(userId: string, cardId: string, card: Omit<Card, 
 
 export async function editCard(userId: string, cardId: string, updates: Partial<Card>): Promise<void> {
   await updateDoc(doc(db, 'users', userId, 'cards', cardId), clean(updates) as Record<string, unknown>)
-}
-
-// Bulk price-refresh write: one `updateDoc` (card) + one `setDoc` (price history point) per card
-// fired individually for a large collection (Riftbound alone can be 1000+ cards) floods the
-// Firestore SDK with thousands of concurrent writes, which was blocking the tab's main thread
-// for tens of seconds. `writeBatch` folds many writes into one commit — chunked to 250 cards
-// (500 writes) per batch, under Firestore's 500-writes-per-batch limit.
-//
-// `knownPoints` (optional): each card's current price-history points as already loaded in the
-// store. When given, the write is built from those instead of first reading every history doc
-// back from Firestore — the automatic price updater (components/PriceAutoUpdater.tsx) always has
-// them, so this saves one document read per updated card on every update.
-export async function applyPriceUpdatesBatch(
-  userId: string,
-  updates: { cardId: string; price: number; date: string }[],
-  knownPoints?: Map<string, { date: string; price: number }[]>,
-): Promise<void> {
-  const CHUNK = 250
-  for (let i = 0; i < updates.length; i += CHUNK) {
-    const slice = updates.slice(i, i + CHUNK)
-
-    // arrayUnion (the previous approach) can only ever append — it can't dedupe or replace an
-    // existing same-day point, so updating prices more than once in a day grew
-    // priceHistory.points unbounded instead of updating that day's point in place, silently
-    // diverging from the one-point-per-day rule the client-side store already enforces
-    // (addPriceHistoryPoint, lib/store.ts). Reading each card's current points first lets the
-    // write replace `points` outright with the deduped array instead.
-    const existingPointsByCard = knownPoints
-      ? new Map(slice.map(({ cardId }) => [cardId, knownPoints.get(cardId) ?? []]))
-      : await (async () => {
-          const existingDocs = await Promise.all(
-            slice.map(({ cardId }) => getDoc(doc(db, 'users', userId, 'priceHistory', cardId)))
-          )
-          return new Map(
-            slice.map(({ cardId }, idx) => [cardId, (existingDocs[idx].data()?.points ?? []) as { date: string; price: number }[]])
-          )
-        })()
-
-    const batch = writeBatch(db)
-    for (const { cardId, price, date } of slice) {
-      batch.update(doc(db, 'users', userId, 'cards', cardId), clean({ currentPrice: price, priceUpdatedAt: date }))
-      const day = date.slice(0, 10)
-      const deduped = (existingPointsByCard.get(cardId) ?? []).filter((p) => p.date.slice(0, 10) !== day)
-      batch.set(doc(db, 'users', userId, 'priceHistory', cardId), { cardId, points: [...deduped, { date, price }] }, { merge: true })
-    }
-    await batch.commit()
-  }
 }
 
 export async function removeCard(userId: string, cardId: string): Promise<void> {
@@ -122,19 +75,4 @@ export async function deleteSoldCard(userId: string, cardId: string): Promise<vo
 export async function loadPriceHistory(userId: string): Promise<PriceHistory[]> {
   const snap = await getDocs(collection(db, 'users', userId, 'priceHistory'))
   return snap.docs.map((d) => ({ cardId: d.id, ...d.data() } as PriceHistory))
-}
-
-export async function addPricePoint(
-  userId: string,
-  cardId: string,
-  price: number,
-  date: string,
-): Promise<void> {
-  // Full replace, not arrayUnion — see applyPriceUpdatesBatch's comment below for why arrayUnion
-  // can't enforce the same one-point-per-day rule the client-side store already does.
-  const ref = doc(db, 'users', userId, 'priceHistory', cardId)
-  const existing = (await getDoc(ref)).data()?.points ?? []
-  const day = date.slice(0, 10)
-  const deduped = (existing as { date: string; price: number }[]).filter((p) => p.date.slice(0, 10) !== day)
-  await setDoc(ref, { cardId, points: [...deduped, { date, price }] }, { merge: true })
 }

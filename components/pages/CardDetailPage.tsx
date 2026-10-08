@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
@@ -9,17 +9,34 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
+import { authFetch } from '@/lib/firebase/authFetch'
 
 type Range = '30d' | '90d' | '1y' | 'all'
 
 export default function CardDetailPage() {
   const { cardId } = useParams<{ cardId: string }>()
   const router = useRouter()
-  const { cards, priceHistory } = useStore()
+  const { cards, priceMode } = useStore()
   const [range, setRange] = useState<Range>('all')
 
   const card = cards.find((c) => c.id === cardId)
-  const history = priceHistory.find((h) => h.cardId === cardId)
+
+  // This card's daily prices from the shared, catalog-level history (app/api/price-history) —
+  // the same history every owner of this card sees. Manually priced / unmatched cards have none.
+  const [history, setHistory] = useState<{ date: string; price: number }[]>([])
+  useEffect(() => {
+    if (!card?.apiId || card.priceLocked) { setHistory([]); return }
+    let stale = false
+    authFetch('/api/price-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'series', priceMode, days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil }] }),
+    })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
+      .catch(() => {})
+    return () => { stale = true }
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.priceLocked, priceMode])
 
   const chartData = useMemo(() => {
     if (!card) return []
@@ -30,7 +47,11 @@ export default function CardDetailPage() {
         : range === '1y' ? now.getTime() - 365 * 86400000
         : 0
     )
-    const points = history?.points.filter((p) => new Date(p.date) >= cutoff) ?? []
+    const points = history.filter((p) => new Date(p.date) >= cutoff)
+    // End the line on today's live price (prices update during the day; history is per day).
+    if (points.length > 0 && card.currentPrice != null && points[points.length - 1].date.slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
+      points.push({ date: new Date().toISOString(), price: card.currentPrice })
+    }
     if (points.length === 0) {
       return [
         { date: card.purchaseDate, price: card.purchasePrice },
@@ -138,7 +159,7 @@ export default function CardDetailPage() {
           </div>
           <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} />
           <div className="text-center text-xs text-slate-600 mt-3">
-            {chartData.length <= 2 ? 'Price history builds as you refresh prices over time.' : `${chartData.length} data points`}
+            {chartData.length <= 2 ? 'Price history builds up automatically as prices update each day.' : `${chartData.length} data points`}
           </div>
         </div>
       </div>

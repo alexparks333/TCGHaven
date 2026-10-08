@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Search, Loader2, ChevronDown, AlertCircle, TrendingUp } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
-import { newCardRef, saveCard, editCard as editCardInFirestore, addPricePoint } from '@/lib/firebase/db'
+import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } from '@/lib/types'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
@@ -56,7 +56,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: Props) {
-  const { addCard, updateCard, deleteCard, addPriceHistoryPoint, priceMode, cards: allCards, pushCardUnlock, trackedGames } = useStore()
+  const { addCard, updateCard, deleteCard, priceMode, cards: allCards, pushCardUnlock, trackedGames } = useStore()
   const { user } = useAuth()
   useScrollLock()
 
@@ -302,10 +302,8 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
       // Fire the "Card Unlocked" celebration only for a genuinely new slot — checked against
       // `allCards` as it was before this add (addCard's own state update hasn't applied yet).
       if (isFirstCopyOfCard(newCard, allCards)) pushCardUnlock(newCard)
-      if (resolvedMarketPrice > 0) {
-        addPriceHistoryPoint(ref.id, resolvedMarketPrice, now)
-        addPricePoint(user.uid, ref.id, resolvedMarketPrice, now).catch(() => {})
-      }
+      // No per-card price history to start anymore — history is shared at the catalog level
+      // (scripts/lib/price-history.mjs) and priceAtEntry above is this card's Since-Entry baseline.
       onClose()
     } catch (err) {
       console.error('Firestore save failed:', err)

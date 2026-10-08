@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
@@ -11,6 +11,7 @@ import {
 import { useStore, portfolioGames } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
+import { authFetch } from '@/lib/firebase/authFetch'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,19 +36,6 @@ const METRICS: { key: Metric; label: string; dataKey: keyof TimelinePoint; stati
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function priceAtOrBefore(
-  points: { date: string; price: number }[],
-  day: string,
-): number | null {
-  let best: number | null = null
-  let bestDay = ''
-  for (const p of points) {
-    const d = p.date.slice(0, 10)
-    if (d <= day && d > bestDay) { best = p.price; bestDay = d }
-  }
-  return best
-}
 
 function yAxisLabel(v: number, metric: Metric): string {
   if (metric === 'return') return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`
@@ -74,7 +62,7 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceHistory, activeGames: filterGames, trackedGames, calcFloor } = useStore()
+  const { cards, priceBaselines, priceMode, activeGames: filterGames, trackedGames, calcFloor } = useStore()
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // Apply the same filters as PortfolioPage so numbers line up exactly
@@ -86,65 +74,61 @@ export default function PortfolioAnalyticsPage() {
     })
   }, [cards, activeGames, calcFloor])
 
-  // Build one timeline point per calendar day from all price history.
-  // P&L and Return use the same "Since Entry" baseline as PortfolioPage:
-  // priceAtEntry (market price when card was added) → earliest history point → purchasePrice.
-  const timeline = useMemo<TimelinePoint[]>(() => {
-    const historyMap = new Map<string, { date: string; price: number }[]>()
-    const daySet = new Set<string>()
-
-    const filteredIds = new Set(filteredCards.map((c) => c.id))
-    for (const h of priceHistory) {
-      if (!filteredIds.has(h.cardId)) continue
-      historyMap.set(h.cardId, h.points)
-      for (const p of h.points) daySet.add(p.date.slice(0, 10))
-    }
-
-    if (daySet.size === 0) return []
-
-    // Pre-compute per-card baseline (same logic as PortfolioPage "Since Entry")
-    const cardMeta = filteredCards.map((card) => {
-      const history = historyMap.get(card.id)
-      const sorted = history
-        ? Array.from(history).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        : []
-      const earliestHistPrice = sorted.length > 0 ? sorted[0].price : null
-      const baseline = card.priceAtEntry ?? earliestHistPrice ?? card.purchasePrice
-      return { card, baseline }
+  // Daily portfolio value comes from the shared, catalog-level price history, summed on the
+  // server (app/api/price-history, mode "portfolio") — only one number per day is downloaded.
+  // Cards without a catalog price (manual / unmatched) count at their own price every day.
+  const catalogCards = useMemo(() => filteredCards.filter((c) => c.apiId && !c.priceLocked), [filteredCards])
+  const fixedValue = useMemo(
+    () => filteredCards.filter((c) => !c.apiId || c.priceLocked).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
+    [filteredCards],
+  )
+  const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}`).join('|') + `#${priceMode}`
+  const [dailyValues, setDailyValues] = useState<{ day: string; value: number }[]>([])
+  useEffect(() => {
+    let stale = false
+    if (catalogCards.length === 0) { setDailyValues([]); return }
+    authFetch('/api/price-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'portfolio',
+        priceMode,
+        days: 730,
+        items: catalogCards.map((c) => ({
+          key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil,
+          qty: c.quantity, fallback: c.currentPrice ?? c.purchasePrice,
+        })),
+      }),
     })
+      .then((r) => (r.ok ? r.json() : { timeline: [] }))
+      .then((data: { timeline: { day: string; value: number }[] }) => { if (!stale) setDailyValues(data.timeline ?? []) })
+      .catch(() => {})
+    return () => { stale = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestKey])
 
-    const byDay = new Map<string, TimelinePoint>()
-
-    for (const day of Array.from(daySet).sort()) {
-      let value = 0
-      let cost = 0
-      let entryBase = 0
-
-      for (const { card, baseline } of cardMeta) {
-        const qty = card.quantity
-        const history = historyMap.get(card.id)
-        const price =
-          (history ? priceAtOrBefore(history, day) : null) ??
-          card.currentPrice ??
-          card.purchasePrice
-        value += price * qty
-        cost += card.purchasePrice * qty
-        entryBase += baseline * qty
-      }
-
+  // P&L and Return use the same "Since Entry" baseline as PortfolioPage:
+  // priceAtEntry (market price when added) → earliest shared-history price → purchasePrice.
+  const timeline = useMemo<TimelinePoint[]>(() => {
+    if (dailyValues.length === 0) return []
+    const cost = filteredCards.reduce((s, c) => s + c.purchasePrice * c.quantity, 0)
+    const entryBase = filteredCards.reduce(
+      (s, c) => s + (c.priceAtEntry ?? priceBaselines[c.id]?.first ?? c.purchasePrice) * c.quantity,
+      0,
+    )
+    return dailyValues.map(({ day, value: catalogValue }) => {
+      const value = catalogValue + fixedValue
       const pnl = value - entryBase
-      byDay.set(day, {
+      return {
         day,
         label: new Date(day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         value,
         cost,
         pnl,
         returnPct: entryBase > 0 ? (pnl / entryBase) * 100 : 0,
-      })
-    }
-
-    return Array.from(byDay.values())
-  }, [filteredCards, priceHistory])
+      }
+    })
+  }, [dailyValues, fixedValue, filteredCards, priceBaselines])
 
   const cfg = METRICS.find((m) => m.key === metric)!
   const { dataKey, staticColor } = cfg

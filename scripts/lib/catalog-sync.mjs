@@ -26,6 +26,7 @@ import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp,
 } from 'firebase/firestore'
 import { normSetName } from './text-norm.mjs'
+import { PRICE_HISTORY_COLLECTION, buildDailyEntries } from './price-history.mjs'
 
 const firebaseApp = getApps().length === 0
   ? initializeApp({
@@ -255,6 +256,15 @@ async function syncToFirestore(game, freshCards, { hideIds = [] } = {}) {
 
   await writeSnapshot(game, finalCards)
   await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp(), brokenImageIds }, { merge: true })
+  // Today's prices into the shared price history (see price-history.mjs). Non-fatal: a failure
+  // here (e.g. firestore.rules not yet deployed for price_history) must never fail the sync
+  // itself — the catalog is already fully updated by this point.
+  try {
+    const written = await writeDailyPriceHistory(game, finalCards)
+    console.log(`   Price history (${game}): ${written} set-month doc(s) updated`)
+  } catch (err) {
+    console.warn(`   ⚠️  Price history (${game}) not written: ${err.message}`)
+  }
 
   return {
     setNames: [...new Set(finalCards.map((c) => c.setName).filter(Boolean))],
@@ -264,6 +274,25 @@ async function syncToFirestore(game, freshCards, { hideIds = [] } = {}) {
     newlyBrokenImages: newlyBrokenImages.length,
     newlyFixedImages: newlyFixedImages.length,
   }
+}
+
+// Writes this sync's prices into price_history/{game}/months/* — one merged field write per set
+// (days.{DD}), batched. Returns how many set-month docs were written.
+async function writeDailyPriceHistory(game, cards) {
+  const entries = buildDailyEntries(cards)
+  const docs = [...entries.entries()]
+  for (let i = 0; i < docs.length; i += 400) {
+    const batch = writeBatch(db)
+    for (const [docId, { setKey, month, day, value }] of docs.slice(i, i + 400)) {
+      batch.set(
+        doc(db, PRICE_HISTORY_COLLECTION, game, 'months', docId),
+        { game, setKey, month, days: { [day]: value } },
+        { merge: true },
+      )
+    }
+    await batch.commit()
+  }
+  return docs.length
 }
 
 // The set registry (formerly data/set-registry.json, now Firestore's registry/main doc — see

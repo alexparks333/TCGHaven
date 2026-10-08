@@ -13,7 +13,7 @@ import {
   getAdditionalUserInfo,
 } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebase/config'
-import { loadCards, loadPriceHistory, loadSoldCards } from '@/lib/firebase/db'
+import { loadCards, loadSoldCards } from '@/lib/firebase/db'
 import { loadPurchases } from '@/lib/firebase/spending'
 import { loadTrackedGames } from '@/lib/firebase/preferences'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
@@ -38,7 +38,8 @@ export interface DataLoadProgress {
   pending: string[] // human labels of the reads still in flight, in load order
 }
 
-const DATA_STEPS = ['your cards', 'price history', 'purchases', 'sold cards', 'your games'] as const
+// Price history isn't loaded per user anymore — it's shared and served by /api/price-history.
+const DATA_STEPS = ['your cards', 'purchases', 'sold cards', 'your games'] as const
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -52,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [dataProgress, setDataProgress] = useState<DataLoadProgress>({ done: 0, total: DATA_STEPS.length, pending: [...DATA_STEPS] })
-  const { loadUserCards, loadUserSoldCards, loadUserPriceHistory, loadPurchases: storePurchases, clearUserData, setTrackedGames } = useStore()
+  const { loadUserCards, loadUserSoldCards, loadPurchases: storePurchases, clearUserData, setTrackedGames } = useStore()
 
   useEffect(() => {
     // Tracks the uid the current in-flight load belongs to, so a load that
@@ -80,23 +81,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Each read is isolated with its own .catch so one failing Firestore read (e.g. a
         // transient permission/network blip on just priceHistory) can't blank out the other
         // three — this used to be a single Promise.all with no per-call fallback, so any one
-        // rejection meant loadUserCards/loadUserPriceHistory/storePurchases never ran at all,
+        // rejection meant loadUserCards/storePurchases never ran at all,
         // landing the user on a fully empty Inventory/Portfolio/Spending with only a
         // console.error to explain it (easy to mistake for real data loss).
         Promise.all([
           track('your cards', loadCards(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return [] as Awaited<ReturnType<typeof loadCards>> })),
-          track('price history', loadPriceHistory(firebaseUser.uid).catch((err) => { console.error('Failed to load price history:', err); return [] as Awaited<ReturnType<typeof loadPriceHistory>> })),
           track('purchases', loadPurchases(firebaseUser.uid).catch((err) => { console.error('Failed to load purchases:', err); return [] as Awaited<ReturnType<typeof loadPurchases>> })),
           track('sold cards', loadSoldCards(firebaseUser.uid).catch((err) => { console.error('Failed to load sold cards:', err); return [] as Awaited<ReturnType<typeof loadSoldCards>> })),
           // undefined (read failed) leaves whatever the store already has alone, rather than
           // snapping a multi-game user back to the Riftbound-only default over a network blip.
           track('your games', loadTrackedGames(firebaseUser.uid).catch((err) => { console.error('Failed to load tracked games:', err); return undefined })),
-        ]).then(([cards, priceHistory, purchases, soldCards, trackedGames]) => {
+        ]).then(([cards, purchases, soldCards, trackedGames]) => {
           if (activeUid !== firebaseUser.uid) return // signed out mid-load
           if (trackedGames !== undefined) setTrackedGames(trackedGames ?? DEFAULT_TRACKED_GAMES)
           loadUserCards(cards)
           loadUserSoldCards(soldCards)
-          loadUserPriceHistory(priceHistory)
           storePurchases(purchases)
           setDataLoading(false)
         }).catch((err) => {

@@ -14,7 +14,6 @@ import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 type SortKey = 'pnl' | 'pnlAsc' | 'pnlPct' | 'pnlPctAsc' | 'value' | 'valueAsc' | 'name' | 'nameDesc'
 
 const TIME_LABELS: Record<string, string> = { 'entry': 'Since Entry', '1d': '24H', '7d': '7D', '30d': '30D', '365d': '1Y' }
-const TIME_DAYS: Record<string, number> = { '1d': 1, '7d': 7, '30d': 30, '365d': 365 }
 const TIME_FRAME_OPTIONS: { value: 'entry' | '1d' | '7d' | '30d' | '365d'; label: string }[] = [
   { value: 'entry', label: 'Since Entry' },
   { value: '1d', label: '24 Hours' },
@@ -23,27 +22,12 @@ const TIME_FRAME_OPTIONS: { value: 'entry' | '1d' | '7d' | '30d' | '365d'; label
   { value: '365d', label: '1 Year' },
 ]
 
-/** Returns the most-recent price recorded at or before `cutoff`, or null if none. */
-function priceAtCutoff(
-  points: { date: string; price: number }[],
-  cutoff: Date,
-): number | null {
-  const cutoffMs = cutoff.getTime()
-  let bestMs = -Infinity
-  let bestPrice: number | null = null
-  for (const p of points) {
-    const ms = new Date(p.date).getTime()
-    if (ms <= cutoffMs && ms > bestMs) {
-      bestMs = ms
-      bestPrice = p.price
-    }
-  }
-  return bestPrice
-}
+// Which shared-history baseline (store.priceBaselines, from /api/price-history) each window uses.
+const BASELINE_KEY = { '1d': 'd1', '7d': 'd7', '30d': 'd30', '365d': 'd365' } as const
 
 export default function PortfolioPage() {
   const {
-    cards, priceHistory, priceStatus,
+    cards, priceBaselines, priceStatus,
     purchases, soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     priceMode, setPriceMode,
     hiddenGroups,
@@ -72,10 +56,7 @@ export default function PortfolioPage() {
 
   // All cards enriched + sorted (respects activeGames filter)
   const enriched = useMemo(() => {
-    const cutoff = timeFrame !== 'entry'
-      ? new Date(Date.now() - TIME_DAYS[timeFrame] * 86_400_000)
-      : null
-    const historyByCard = new Map(priceHistory.map((h) => [h.cardId, h]))
+    const baselineKey = timeFrame !== 'entry' ? BASELINE_KEY[timeFrame] : null
 
     return cards
       .filter((c) => activeGames.includes(c.game) && (!c.group || !hiddenGroups.includes(c.group)))
@@ -96,11 +77,10 @@ export default function PortfolioPage() {
           pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
           periodStartVal = baseline * c.quantity
           hasPeriodData = true
-        } else if (cutoff) {
-          const history = historyByCard.get(c.id)
-          // Only use a price genuinely recorded before the window cutoff — no fallback
-          // to the oldest point, which would cause 0% P&L when the only point was just recorded
-          const baseline = history ? priceAtCutoff(history.points, cutoff) : null
+        } else if (baselineKey) {
+          // The card's shared-history price at the start of the window. No fallback to a later
+          // point (that would fake a 0% change): no price that far back → no data for this window.
+          const baseline = priceBaselines[c.id]?.[baselineKey] ?? null
           if (baseline !== null) {
             pnl = (currentPrice - baseline) * c.quantity
             pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
@@ -131,7 +111,7 @@ export default function PortfolioPage() {
         if (sort === 'nameDesc')   return b.name.localeCompare(a.name)
         return a.name.localeCompare(b.name)
       })
-  }, [cards, sort, activeGames, timeFrame, priceHistory, hiddenGroups])
+  }, [cards, sort, activeGames, timeFrame, priceBaselines, hiddenGroups])
 
   // Apply calculation floor
   const filtered = useMemo(() => {

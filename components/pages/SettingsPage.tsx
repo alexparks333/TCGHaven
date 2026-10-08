@@ -7,7 +7,7 @@ import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench, Shiel
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
-import { editCard } from '@/lib/firebase/db'
+import { editCard, loadPriceHistory } from '@/lib/firebase/db'
 import { ADMIN_UID } from '@/lib/firebase/config'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cn, riftboundDisplayNumber, riftboundInherentFoil } from '@/lib/utils'
@@ -62,9 +62,83 @@ export default function SettingsPage() {
 
         <AccountActions isAdmin={isAdmin} />
         <InventoryNumberRepairCard />
+        {isAdmin && <PriceHistoryImportCard />}
         {isAdmin && <NeedsReviewCard />}
       </div>
     </AuthGuard>
+  )
+}
+
+// ── One-time: move old per-user price history into the shared history ─────
+// Price history used to be stored per user, per card (users/{uid}/priceHistory). It's now one
+// shared, catalog-level history written by the scheduled sync (scripts/lib/price-history.mjs).
+// This copies the admin's old history into the shared one so past P&L / charts survive the move.
+// Fills gaps only, never overwrites synced prices, and is safe to run more than once. The old
+// records are left untouched.
+function PriceHistoryImportCard() {
+  const { user } = useAuth()
+  const { cards } = useStore()
+  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [progress, setProgress] = useState({ done: 0, total: 0 })
+  const [result, setResult] = useState<{ docsWritten: number; pricesAdded: number } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function run() {
+    if (!user) return
+    setState('running'); setError(null); setResult(null)
+    try {
+      const history = await loadPriceHistory(user.uid)
+      const byId = new Map(cards.map((c) => [c.id, c]))
+      const items = history
+        .map((h) => ({ h, card: byId.get(h.cardId) }))
+        .filter(({ h, card }) => card?.apiId && h.points?.length)
+        .map(({ h, card }) => ({ game: card!.game, apiId: card!.apiId!, isFoil: !!card!.isFoil, points: h.points }))
+      const CHUNK = 150
+      setProgress({ done: 0, total: items.length })
+      const totals = { docsWritten: 0, pricesAdded: 0 }
+      for (let i = 0; i < items.length; i += CHUNK) {
+        const res = await adminFetch('/api/admin/price-history/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cards: items.slice(i, i + CHUNK) }),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Import failed (${res.status})`)
+        const r = await res.json()
+        totals.docsWritten += r.docsWritten ?? 0
+        totals.pricesAdded += r.pricesAdded ?? 0
+        setProgress({ done: Math.min(i + CHUNK, items.length), total: items.length })
+      }
+      setResult(totals)
+      setState('done')
+    } catch (err) {
+      setError((err as Error).message)
+      setState('error')
+    }
+  }
+
+  return (
+    <div className="card-glass p-5 mb-6">
+      <h2 className="text-base font-semibold text-ink mb-1">Import old price history</h2>
+      <p className="text-sm text-slate-400 mb-4">
+        Price history is now shared across everyone and built automatically each day. Run this once to copy
+        your existing per-card history into it, so past P&amp;L and charts are kept. It only fills gaps and never
+        overwrites synced prices — safe to run again.
+      </p>
+      <button onClick={run} disabled={state === 'running'} className="btn-primary disabled:opacity-60">
+        {state === 'running' ? <Loader2 size={14} className="animate-spin" /> : null}
+        {state === 'running' ? `Importing… ${progress.done} / ${progress.total} cards` : 'Import my price history'}
+      </button>
+      {state === 'done' && result && (
+        <div className="flex items-center gap-1.5 text-sm text-emerald-600 mt-3">
+          <CheckCircle2 size={14} /> Done — {result.pricesAdded.toLocaleString()} prices added across {result.docsWritten} records.
+        </div>
+      )}
+      {state === 'error' && error && (
+        <div className="flex items-center gap-1.5 text-sm text-red-600 mt-3">
+          <AlertCircle size={14} /> {error}
+        </div>
+      )}
+    </div>
   )
 }
 
