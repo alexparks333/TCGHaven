@@ -17,8 +17,8 @@ import type { Card, Game } from '@/lib/types'
 //     shared price history via app/api/price-history ("baselines").
 //  3. The shared price-update status for Portfolio's "Prices updated …" line.
 //
-// It reloads when the catalog has synced since the last load, when the set of owned cards or
-// the 30d avg / Lowest NM setting changes, every CHECK_EVERY_MS, and when the tab comes back.
+// It reloads when the catalog has synced since the last load, when the set of owned cards
+// changes, every CHECK_EVERY_MS, and when the tab comes back.
 
 const CHECK_EVERY_MS = 15 * 60 * 1000
 const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -36,14 +36,14 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
 
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
-  const { cards, priceMode, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines } = useStore()
+  const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines } = useStore()
 
   // Latest values for the timer/visibility callbacks without re-subscribing every render.
-  const latest = useRef({ cards, priceMode, trackedGames })
-  latest.current = { cards, priceMode, trackedGames }
+  const latest = useRef({ cards, trackedGames })
+  latest.current = { cards, trackedGames }
   const running = useRef(false)
   // What the last successful load was based on — reload only when one of these changes.
-  const loadedFor = useRef<{ syncAt: number; mode: string; cardsKey: string } | null>(null)
+  const loadedFor = useRef<{ syncAt: number; cardsKey: string } | null>(null)
 
   // Only cards priced from the catalog take part; manual prices / unmatched cards keep their own.
   const cardsKey = cards.filter((c) => c.apiId && !c.priceLocked).map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
@@ -52,7 +52,7 @@ export function PriceAutoUpdater() {
     if (!user || running.current) return
     running.current = true
     try {
-      const { cards, priceMode, trackedGames } = latest.current
+      const { cards, trackedGames } = latest.current
       const status = await loadPriceStatus(trackedGames)
       setPriceStatus(status)
 
@@ -60,7 +60,7 @@ export function PriceAutoUpdater() {
       const eligible = cards.filter((c) => c.apiId && !c.priceLocked)
       const key = eligible.map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
       const prev = loadedFor.current
-      if (prev && prev.syncAt === syncAt && prev.mode === priceMode && prev.cardsKey === key) return
+      if (prev && prev.syncAt === syncAt && prev.cardsKey === key) return
 
       // 1. Live prices (cheap server lookups).
       const prices: Record<string, number> = {}
@@ -73,7 +73,7 @@ export function PriceAutoUpdater() {
           const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cards: gameCards.map(payload), priceMode }),
+            body: JSON.stringify({ cards: gameCards.map(payload) }),
           })
           if (!res.ok) { failed = true; return }
           Object.assign(prices, await res.json())
@@ -90,7 +90,6 @@ export function PriceAutoUpdater() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             mode: 'baselines',
-            priceMode,
             items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil })),
           }),
         })
@@ -103,7 +102,7 @@ export function PriceAutoUpdater() {
       // Only remember this load as complete if everything came back; otherwise the next check
       // retries instead of leaving some cards on stale data.
       if (!failed) {
-        loadedFor.current = { syncAt, mode: priceMode, cardsKey: key }
+        loadedFor.current = { syncAt, cardsKey: key }
         if (status.latestSyncAt) setLastPriceRefresh(status.latestSyncAt.toISOString())
       }
     } catch (err) {
@@ -113,7 +112,7 @@ export function PriceAutoUpdater() {
     }
   }, [user, setPriceStatus, applyLivePrices, setPriceBaselines, setLastPriceRefresh])
 
-  // After sign-in + data load, when owned cards / tracked games / price mode change, on a timer,
+  // After sign-in + data load, when owned cards / tracked games change, on a timer,
   // and when the tab comes back into view.
   useEffect(() => {
     if (!user || dataLoading) return
@@ -122,7 +121,7 @@ export function PriceAutoUpdater() {
     const onVisible = () => { if (document.visibilityState === 'visible') check() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [user, dataLoading, check, trackedGames, priceMode, cardsKey])
+  }, [user, dataLoading, check, trackedGames, cardsKey])
 
   // A different user signing in on this device starts fresh.
   useEffect(() => { loadedFor.current = null }, [user?.uid])

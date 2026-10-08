@@ -406,7 +406,7 @@ function matchesSearch(query: string, name: string, number: string): boolean {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CardexPage() {
-  const { cards, trackedGames, priceMode } = useStore()
+  const { cards, trackedGames } = useStore()
 
   // Deep-link support — e.g. clicking a "Card Unlocked" toast navigates to
   // /cardex?game=riftbound&set=Secret+Garden. Read once; a mid-session change to the URL isn't
@@ -691,13 +691,13 @@ export default function CardexPage() {
   }
 
   // Enrich catalog cards with owned status, and the displayed price from the same rule (and the
-  // same 30d avg / Lowest NM setting) Inventory and Portfolio use — see lib/pricing.ts.
+  // Inventory and Portfolio use — see lib/pricing.ts.
   const enriched = useMemo(
     () => catalogCards.map((cc) => {
       const owned = getOwnedInfo(cc, gameCards, catalogGame)
-      return { ...cc, ...owned, marketPrice: catalogPrice(catalogGame, cc, { isFoil: owned.ownedFoil, priceMode }) }
+      return { ...cc, ...owned, marketPrice: catalogPrice(catalogGame, cc, { isFoil: owned.ownedFoil }) }
     }),
-    [catalogCards, gameCards, catalogGame, priceMode],
+    [catalogCards, gameCards, catalogGame],
   )
 
   // Progress is always against the full set, not the filtered search view.

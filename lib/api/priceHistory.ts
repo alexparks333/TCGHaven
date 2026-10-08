@@ -1,7 +1,7 @@
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice, type PriceMode } from '@/lib/pricing'
+import { catalogPrice } from '@/lib/pricing'
 import type { Game } from '@/lib/types'
 import { PRICE_HISTORY_COLLECTION, setKeyOf, monthDocId, tupleToFields } from '@/scripts/lib/price-history.mjs'
 
@@ -61,7 +61,6 @@ function monthsBetween(from: Date, to: Date): string[] {
 export async function loadPriceSeries(
   items: HistoryItem[],
   from: Date,
-  priceMode: PriceMode,
 ): Promise<Map<string, PricePoint[]>> {
   const result = new Map<string, PricePoint[]>()
   const months = monthsBetween(from, new Date())
@@ -95,7 +94,7 @@ export async function loadPriceSeries(
           for (const { item, rarity, publicCode } of rows) {
             const tuple = entry.p[item.apiId]
             if (!tuple) continue
-            const price = catalogPrice(game, { ...tupleToFields(tuple), rarity, publicCode }, { isFoil: item.isFoil, priceMode })
+            const price = catalogPrice(game, { ...tupleToFields(tuple), rarity, publicCode }, { isFoil: item.isFoil })
             if (price <= 0) continue
             if (!result.has(item.key)) result.set(item.key, [])
             result.get(item.key)!.push({ date: entry.t, price })

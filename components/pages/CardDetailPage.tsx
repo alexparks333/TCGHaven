@@ -16,7 +16,7 @@ type Range = '30d' | '90d' | '1y' | 'all'
 export default function CardDetailPage() {
   const { cardId } = useParams<{ cardId: string }>()
   const router = useRouter()
-  const { cards, priceMode } = useStore()
+  const { cards } = useStore()
   const [range, setRange] = useState<Range>('all')
 
   const card = cards.find((c) => c.id === cardId)
@@ -30,13 +30,13 @@ export default function CardDetailPage() {
     authFetch('/api/price-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'series', priceMode, days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil }] }),
+      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil }] }),
     })
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
       .catch(() => {})
     return () => { stale = true }
-  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.priceLocked, priceMode])
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.priceLocked])
 
   const chartData = useMemo(() => {
     if (!card) return []

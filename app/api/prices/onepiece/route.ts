@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice, type PriceMode } from '@/lib/pricing'
+import { catalogPrice } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,10 +17,10 @@ interface CatalogCard {
 // Simpler than the other three games' price routes: One Piece has no foil/non-foil duality on a
 // single card — a "Parallel" print is a fully separate catalog id with its own `marketPrice`,
 // not a foil toggle of the same card (see catalog-sync.mjs's downloadOnePiece()) — so there's no
-// isFoil/priceMode branching to do here, just a direct id -> marketPrice lookup, kept fresh by
+// isFoil branching to do here, just a direct id -> marketPrice lookup, kept fresh by
 // the 6-hourly cron the same way as the other games (see CLAUDE.md "Price Data").
 export async function POST(req: NextRequest) {
-  const { cards, priceMode = 'market' }: { cards: CardInput[]; priceMode?: PriceMode } = await req.json()
+  const { cards }: { cards: CardInput[] } = await req.json()
   if (!cards.length) return NextResponse.json({})
 
   const catalog = await loadCatalog<CatalogCard>('onepiece')
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   for (const card of cards) {
     const cat = card.apiId ? byId.get(card.apiId) : undefined
     if (!cat) continue
-    const price = catalogPrice('onepiece', cat, { isFoil: (card as { isFoil?: boolean }).isFoil, priceMode })
+    const price = catalogPrice('onepiece', cat, { isFoil: (card as { isFoil?: boolean }).isFoil })
     if (price > 0) results[card.id] = price
   }
 

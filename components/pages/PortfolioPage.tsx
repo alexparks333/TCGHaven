@@ -29,7 +29,6 @@ export default function PortfolioPage() {
   const {
     cards, priceBaselines, priceStatus,
     purchases, soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
-    priceMode, setPriceMode,
     hiddenGroups,
   } = useStore()
   // Only games the user tracks (Inventory's game tabs) count toward anything on this page — see
@@ -222,38 +221,15 @@ export default function PortfolioPage() {
     <AuthGuard>
       <div>
 
-        {/* Header — stacks on phones so the price toggle and update status don't crush the title */}
+        {/* Header — stacks on phones so the update status doesn't crush the title */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
             <p className="text-slate-500 text-xs mt-0.5">
-              {priceMode === 'lowestNM' ? 'Lowest NM' : '30d avg'} prices · updated automatically 4× a day
+              TCGplayer market prices · updated automatically 4× a day
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-[11px] bg-slate-800/60 border border-slate-700/50 rounded-lg p-1">
-              <span className="text-slate-500 px-1">Price:</span>
-              <button
-                onClick={() => setPriceMode('market')}
-                className={`px-2 py-0.5 rounded-md font-medium transition-all ${
-                  priceMode === 'market'
-                    ? 'bg-violet-600 text-white'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                30d avg
-              </button>
-              <button
-                onClick={() => setPriceMode('lowestNM')}
-                className={`px-2 py-0.5 rounded-md font-medium transition-all ${
-                  priceMode === 'lowestNM'
-                    ? 'bg-violet-600 text-white'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Lowest NM
-              </button>
-            </div>
             <PriceUpdateStatus status={priceStatus} />
           </div>
         </div>

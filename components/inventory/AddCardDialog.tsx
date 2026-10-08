@@ -56,7 +56,7 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: Props) {
-  const { addCard, updateCard, deleteCard, priceMode, cards: allCards, pushCardUnlock, trackedGames } = useStore()
+  const { addCard, updateCard, deleteCard, cards: allCards, pushCardUnlock, trackedGames } = useStore()
   const { user } = useAuth()
   useScrollLock()
 
@@ -168,13 +168,8 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
 
   function selectCard(result: CardSearchResult) {
     cardJustSelectedRef.current = true
-    const useLowestNM = priceMode === 'lowestNM'
-    const rawRegular = useLowestNM
-      ? (result.lowPriceNM ?? result.marketPrice)
-      : result.marketPrice
-    const rawFoil = useLowestNM
-      ? (result.lowPriceNMFoil ?? result.marketPriceFoil)
-      : result.marketPriceFoil
+    const rawRegular = result.marketPrice
+    const rawFoil = result.marketPriceFoil
     const regular = rawRegular > 0 ? rawRegular : 0
     const foil = rawFoil > 0 ? rawFoil : regular
     setMarketPrices({ regular, foil })
@@ -420,14 +415,10 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                       <div className="text-xs text-slate-500 truncate">{result.setName} · #{result.number}</div>
                     </div>
                     {(() => {
-                      const useLowest = priceMode === 'lowestNM'
-                      const displayPrice = useLowest
-                        ? ((result.lowPriceNM ?? 0) > 0 ? result.lowPriceNM! : result.marketPrice)
-                        : result.marketPrice
+                      const displayPrice = result.marketPrice
                       return displayPrice > 0 ? (
                         <div className="text-xs text-emerald-600 font-medium flex-shrink-0 text-right">
                           <div>${displayPrice.toFixed(2)}</div>
-                          {useLowest && <div className="text-[9px] text-slate-500">low NM</div>}
                         </div>
                       ) : null
                     })()}
@@ -546,7 +537,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
             <label className="field-label">Market Price</label>
             <div className="flex gap-1.5 mb-2">
               {([
-                ['catalog', priceMode === 'lowestNM' ? 'Lowest NM' : 'TCG Market Price'],
+                ['catalog', 'TCG Market Price'],
                 ['ebay', 'eBay'],
                 ['manual', 'Manual 🔒'],
               ] as [MarketSource, string][]).map(([src, label]) => (

@@ -907,7 +907,7 @@ already models it as its own catalog `id`, so it's synced as its own independent
 its own `marketPrice`, not as a second price field on the base card. Consequences:
 
 - **No `marketPriceFoil` field** — there's nothing to put in it. `app/api/prices/onepiece/route.ts`
-  is a plain `id -> marketPrice` lookup, no `isFoil`/`priceMode` branching at all.
+  is a plain `id -> marketPrice` lookup, no `isFoil` branching at all.
 - **`AddCardDialog`'s Foil toggle is hidden for One Piece** (`form.game !== 'onepiece'` guard) —
   selecting a Parallel print from the search dropdown (labeled e.g. `"Shanks (Parallel)"`, or
   `"Shanks (Parallel 2)"` for a rarer 2nd/3rd art) is how a Parallel gets added, not a checkbox.
@@ -1181,7 +1181,8 @@ freshness as everywhere else (at most ~6 hours stale, per the cron above).
   — same shape as every other game now, including the search dropdown (see above).
 - **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`
 - **Fields in catalog:** `marketPrice`/`marketPriceFoil` (normal/holofoil) and
-  `lowPriceNM`/`lowPriceNMFoil` (lowest normal/holofoil listing — powers the "Lowest NM" price mode)
+  `lowPriceNM`/`lowPriceNMFoil` — despite the name, TCGCSV's lowest listing in ANY condition
+  (damaged included), so it's never used for pricing; the app always uses market price (see quirk #19)
 - **Price refresh:** Portfolio page → "Refresh Prices" reads `catalog/pokemon/cards/*` for just
   the apiIds in Alex's own inventory (`app/api/prices/pokemon/route.ts`) — an in-memory catalog
   lookup, no network call to pokemontcg.io
@@ -1198,7 +1199,7 @@ freshness as everywhere else (at most ~6 hours stale, per the cron above).
   reads the catalog like the other two games.
 - **To update prices:** the cron sync, or `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
 - **Fields in catalog:** `marketPrice` (non-foil) and `marketPriceFoil` (foil/cold foil) — lorcast
-  has no separate "lowest listing" price, so `priceMode: 'lowestNM'` just falls back to `marketPrice`
+  has no separate "lowest listing" price
 - **Note:** Enchanted and Epic cards may have `marketPrice: 0` because they are foil-only;
   their price is in `marketPriceFoil`
 
@@ -1227,7 +1228,7 @@ freshness as everywhere else (at most ~6 hours stale, per the cron above).
   [§10](#one-piece--data-source-schema-add-a-set-guide)'s Print Variants section.
 - **Price refresh:** Portfolio page → "Refresh Prices" reads `catalog/onepiece/cards/*` for just
   the apiIds in Alex's own inventory (`app/api/prices/onepiece/route.ts`) — plain `id ->
-  marketPrice` lookup, no `isFoil`/`priceMode` branching (nothing to branch on)
+  marketPrice` lookup, no `isFoil` branching (nothing to branch on)
 - **To update prices:** the cron sync, or `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
 
 ### Magic: The Gathering
@@ -1760,7 +1761,7 @@ login).
 always re-loaded from Firestore on login), but wrapped in Zustand's `persist` middleware with a
 `localStorage` backing (`createJSONStorage(() => localStorage)`, key `"tcghaven-filters"`) for a
 small, deliberately-scoped slice of display/filter preferences via `partialize`:
-`calcFloor`, `activeGames`, `trackedGames`, `timeFrame`, `priceMode`, `hiddenGroups`,
+`calcFloor`, `activeGames`, `trackedGames`, `timeFrame`, `hiddenGroups`,
 `lastPriceRefresh`. None of this is inventory data — it's UI state that's reasonable to survive a
 refresh/relaunch without waiting on Firestore, and none of it is per-account-sensitive enough to
 need clearing on sign-out (a shared/public-device sign-out concern worth being aware of but not
@@ -2240,7 +2241,8 @@ refresh button; Portfolio shows "Prices updated {time}" or a red "Price update f
 (`lib/api/priceStatus.ts`: `catalog_meta.lastBulkSyncAt` + `sync_status`, overdue after 9h).
 
 **One pricing rule:** `lib/pricing.ts` `catalogPrice()` (foil choice, Riftbound foil-only variants,
-Lowest NM mode) is used by the five price routes, the Cardex (client-side from the raw fields
+always TCGplayer market price — there's no price-mode toggle; the catalog's `lowPriceNM*` fields are
+lowest listings in any condition, damaged included, and are never used) is used by the five price routes, the Cardex (client-side from the raw fields
 `/api/cardex` returns), Personalized Collections and the history API — so they can't disagree.
 
 **Shared price history.** Every successful sync writes that day's prices once, for everyone, to

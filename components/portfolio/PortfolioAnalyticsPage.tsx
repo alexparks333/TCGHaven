@@ -62,7 +62,7 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceBaselines, priceMode, activeGames: filterGames, trackedGames, calcFloor } = useStore()
+  const { cards, priceBaselines, activeGames: filterGames, trackedGames, calcFloor } = useStore()
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // Apply the same filters as PortfolioPage so numbers line up exactly
@@ -82,7 +82,7 @@ export default function PortfolioAnalyticsPage() {
     () => filteredCards.filter((c) => !c.apiId || c.priceLocked).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
     [filteredCards],
   )
-  const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}`).join('|') + `#${priceMode}`
+  const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}`).join('|')
   const [dailyValues, setDailyValues] = useState<{ day: string; value: number }[]>([])
   useEffect(() => {
     let stale = false
@@ -92,7 +92,6 @@ export default function PortfolioAnalyticsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'portfolio',
-        priceMode,
         days: 730,
         items: catalogCards.map((c) => ({
           key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil,

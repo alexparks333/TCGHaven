@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verifyUserRequest } from '@/lib/firebase/verifyAdminRequest'
 import { loadPriceSeries, priceAtOrBefore, type HistoryItem } from '@/lib/api/priceHistory'
-import type { PriceMode } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -23,7 +22,6 @@ const MAX_SERIES_ITEMS = 25
 
 interface Body {
   mode: 'baselines' | 'series' | 'portfolio'
-  priceMode?: PriceMode
   days?: number
   items: (HistoryItem & { qty?: number; fallback?: number })[]
 }
@@ -34,12 +32,11 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as Body | null
   if (!body || !Array.isArray(body.items)) return NextResponse.json({ error: 'Expected { mode, items }' }, { status: 400 })
-  const priceMode: PriceMode = body.priceMode === 'lowestNM' ? 'lowestNM' : 'market'
   const items = body.items.filter((i) => i && i.key && i.apiId && i.game)
   const now = Date.now()
 
   if (body.mode === 'baselines') {
-    const series = await loadPriceSeries(items, new Date(now - 366 * DAY_MS), priceMode)
+    const series = await loadPriceSeries(items, new Date(now - 366 * DAY_MS))
     const out: Record<string, { d1: number | null; d7: number | null; d30: number | null; d365: number | null; first: number | null }> = {}
     series.forEach((points, key) => {
       out[key] = {
@@ -55,13 +52,13 @@ export async function POST(request: Request) {
 
   if (body.mode === 'series') {
     const days = Math.min(Math.max(Number(body.days) || 365, 1), 730)
-    const series = await loadPriceSeries(items.slice(0, MAX_SERIES_ITEMS), new Date(now - days * DAY_MS), priceMode)
+    const series = await loadPriceSeries(items.slice(0, MAX_SERIES_ITEMS), new Date(now - days * DAY_MS))
     return NextResponse.json(Object.fromEntries(series))
   }
 
   if (body.mode === 'portfolio') {
     const days = Math.min(Math.max(Number(body.days) || 365, 1), 730)
-    const series = await loadPriceSeries(items, new Date(now - days * DAY_MS), priceMode)
+    const series = await loadPriceSeries(items, new Date(now - days * DAY_MS))
     // One point per calendar day that has any recorded price.
     const daySet = new Set<string>()
     series.forEach((points) => points.forEach((p) => daySet.add(p.date.slice(0, 10))))

@@ -318,7 +318,6 @@ function CollectionDetail({
   // rule, lib/pricing.ts) Inventory/Portfolio prices come from — a collection card's stored
   // `marketPrice` is only a snapshot from when it was added, so it'd drift from everything else.
   // null until loaded (the stored snapshot shows briefly meanwhile).
-  const { priceMode } = useStore()
   const [livePrices, setLivePrices] = useState<Record<string, number> | null>(null)
   useEffect(() => {
     let stale = false
@@ -327,13 +326,13 @@ function CollectionDetail({
     fetch(`/api/prices/${collection.game}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cards: payload, priceMode }),
+      body: JSON.stringify({ cards: payload }),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((prices: Record<string, number> | null) => { if (!stale && prices) setLivePrices(prices) })
       .catch(() => {})
     return () => { stale = true }
-  }, [collection.cards, collection.game, priceMode])
+  }, [collection.cards, collection.game])
 
   const [orderedIds, setOrderedIds] = useState<string[]>(() => collection.cards.map(cardKey))
   useEffect(() => {

@@ -31,7 +31,6 @@ interface TCGStore {
   // localStorage below purely so the first render after a reload doesn't flash the default.
   trackedGames: Game[]
   timeFrame: 'entry' | '1d' | '7d' | '30d' | '365d'
-  priceMode: 'market' | 'lowestNM'
   hiddenGroups: string[]
   catalogSyncNotices: CatalogSyncNotice[]
   cardUnlocks: { id: string; card: Card }[]
@@ -59,7 +58,6 @@ interface TCGStore {
   setActiveGames: (games: Game[]) => void
   setTrackedGames: (games: Game[]) => void
   setTimeFrame: (frame: 'entry' | '1d' | '7d' | '30d' | '365d') => void
-  setPriceMode: (mode: 'market' | 'lowestNM') => void
   toggleHiddenGroup: (group: string) => void
   editPurchase: (id: string, updates: Partial<Purchase>) => void
   removePurchase: (id: string) => void
@@ -111,7 +109,6 @@ export const useStore = create<TCGStore>()(
   activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg'] as Game[],
   trackedGames: DEFAULT_TRACKED_GAMES,
   timeFrame: 'entry' as const,
-  priceMode: 'market' as const,
   hiddenGroups: [] as string[],
   catalogSyncNotices: [] as CatalogSyncNotice[],
   cardUnlocks: [] as { id: string; card: Card }[],
@@ -185,7 +182,6 @@ export const useStore = create<TCGStore>()(
       activeGames: Array.from(new Set([...state.activeGames, ...games.filter((g) => !state.trackedGames.includes(g))])),
     })),
   setTimeFrame: (frame) => set({ timeFrame: frame }),
-  setPriceMode: (mode) => set({ priceMode: mode }),
   toggleHiddenGroup: (group) =>
     set((state) => ({
       hiddenGroups: state.hiddenGroups.includes(group)
@@ -201,7 +197,6 @@ export const useStore = create<TCGStore>()(
         activeGames: state.activeGames,
         trackedGames: state.trackedGames,
         timeFrame: state.timeFrame,
-        priceMode: state.priceMode,
         hiddenGroups: state.hiddenGroups,
         lastPriceRefresh: state.lastPriceRefresh,
       }),

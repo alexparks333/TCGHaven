@@ -17,8 +17,7 @@ export const maxDuration = 120
 // doesn't already have — real sync data is never overwritten, and running it again is harmless.
 //
 // An old point is the price the user saw for their own copy, so a foil copy's points go in the
-// foil slot and a regular copy's in the regular slot. (Old points were "market" prices, so they
-// only show in 30d-avg mode, not Lowest NM.)
+// foil slot and a regular copy's in the regular slot.
 
 interface ImportCard {
   game: Game
