@@ -1131,7 +1131,9 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
       </div>
 
       {isHovered && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
+        // Web-only: on a phone (no real hover) the card's info lives in the tap-to-zoom view
+        // instead, so this never renders there — even if a touch somehow sets the hover state.
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
             <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
@@ -1218,7 +1220,9 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
       </div>
 
       {isHovered && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none">
+        // Web-only: on a phone (no real hover) the card's info lives in the tap-to-zoom view
+        // instead, so this never renders there — even if a touch somehow sets the hover state.
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
             <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
             {card.isFoil && <div className="text-[10px] text-amber-600 mt-0.5">✨ Foil</div>}
