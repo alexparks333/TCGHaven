@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  DndContext, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter,
-  type DragEndEvent, type DragStartEvent,
+  DndContext, MouseSensor, TouchSensor, useSensor, useSensors, useDroppable, closestCenter, pointerWithin,
+  type DragEndEvent, type DragStartEvent, type CollisionDetection,
 } from '@dnd-kit/core'
 import {
   SortableContext, rectSortingStrategy, useSortable, arrayMove,
@@ -357,10 +357,13 @@ function CollectionDetail({
   // Which card is currently being moved by touch (lifted look), and when the last drag ended —
   // lifting a finger after a move must not also count as a tap that opens the zoom view.
   const [touchMovingId, setTouchMovingId] = useState<string | null>(null)
+  // Any drag in progress (mouse or touch) — shows the trash drop zone.
+  const [dragging, setDragging] = useState(false)
   const lastDragEndRef = useRef(0)
   const justDragged = () => Date.now() - lastDragEndRef.current < 400
 
   function handleDragStart(event: DragStartEvent) {
+    setDragging(true)
     if (typeof TouchEvent !== 'undefined' && event.activatorEvent instanceof TouchEvent) {
       setTouchMovingId(String(event.active.id))
       navigator.vibrate?.(25) // a little "you're in move mode" buzz where supported (Android)
@@ -368,14 +371,17 @@ function CollectionDetail({
   }
 
   function handleDragCancel() {
+    setDragging(false)
     setTouchMovingId(null)
     lastDragEndRef.current = Date.now()
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    setDragging(false)
     setTouchMovingId(null)
     lastDragEndRef.current = Date.now()
     const { active, over } = event
+    if (over?.id === TRASH_ID) { removeCard(String(active.id)); return }
     if (!over || active.id === over.id) return
     const oldIndex = orderedIds.indexOf(String(active.id))
     const newIndex = orderedIds.indexOf(String(over.id))
@@ -506,7 +512,6 @@ function CollectionDetail({
               isHovered={hoveredId === cardKey(card)}
               onHover={() => setHoveredId(cardKey(card))}
               onLeave={() => setHoveredId(null)}
-              onRemove={() => removeCard(cardKey(card))}
               onZoom={onZoom}
             />
           ))}
@@ -514,7 +519,7 @@ function CollectionDetail({
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={trashThenClosestCenter}
           // x threshold 0: dragging near the screen's left/right edge must never scroll the page
           // sideways — only near the top/bottom edge, to reach cards further up/down.
           autoScroll={{ threshold: { x: 0, y: 0.2 } }}
@@ -533,14 +538,14 @@ function CollectionDetail({
                   isHovered={hoveredId === cardKey(card)}
                   onHover={() => setHoveredId(cardKey(card))}
                   onLeave={() => setHoveredId(null)}
-                  onRemove={() => removeCard(cardKey(card))}
-                  onZoom={onZoom}
+                      onZoom={onZoom}
                   touchMoving={touchMovingId === cardKey(card)}
                   justDragged={justDragged}
                 />
               ))}
             </div>
           </SortableContext>
+          {dragging && <TrashDropZone />}
         </DndContext>
       )}
 
@@ -682,7 +687,6 @@ function SortablePersonalCardTile(props: {
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
-  onRemove: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
   touchMoving: boolean
   justDragged: () => boolean
@@ -721,7 +725,7 @@ function SortablePersonalCardTile(props: {
   return (
     <div
       ref={setNodeRef}
-      style={outerStyle}
+      style={{ ...outerStyle, position: 'relative' }}
       {...attributes}
       {...listeners}
       // Composed with dnd-kit's own touch listener (from `listeners`) rather than replacing it.
@@ -745,17 +749,88 @@ function SortablePersonalCardTile(props: {
       onContextMenu={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === 'touch') e.preventDefault() }}
       onClickCapture={(e) => { if (justDragged()) { e.stopPropagation(); e.preventDefault() } }}
     >
-      <div style={innerStyle}>
+      {/* "You can move it now" cue: plays once behind the card the moment move mode starts */}
+      {touchMoving && <MoveCue />}
+      <div style={innerStyle} className="relative z-10">
         <PersonalCardTile {...tileProps} />
       </div>
     </div>
   )
 }
 
+// Drop target id for removing a card from a collection by dragging it onto the trash.
+const TRASH_ID = '__collection-trash__'
+
+// The trash only counts when the pointer/finger itself is over it — otherwise closestCenter would
+// happily pick it as the "nearest" target whenever a card is dragged near the bottom rows, and
+// throw the card away. Everything else reorders by closestCenter, ignoring the trash.
+const trashThenClosestCenter: CollisionDetection = (args) => {
+  const trash = args.droppableContainers.filter((c) => c.id === TRASH_ID)
+  const overTrash = pointerWithin({ ...args, droppableContainers: trash })
+  if (overTrash.length > 0) return overTrash
+  return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter((c) => c.id !== TRASH_ID) })
+}
+
+// Bottom-center trash can that appears only while a card is being dragged; dropping a card on it
+// removes the card from the collection (the only way to remove one — it replaced a hover-only ✕
+// on each tile, which also made iOS need two taps to open a card). Sits above the phone bottom bar.
+function TrashDropZone() {
+  const { setNodeRef, isOver } = useDroppable({ id: TRASH_ID })
+  useEffect(() => { if (isOver) navigator.vibrate?.(15) }, [isOver])
+  return (
+    <div
+      className="trash-zone-in fixed left-1/2 z-[60] pointer-events-none bottom-[calc(env(safe-area-inset-bottom)+84px)] md:bottom-8"
+    >
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex flex-col items-center justify-center gap-1 w-[72px] h-[72px] rounded-full border-2 shadow-xl transition-all duration-150',
+          isOver
+            ? 'scale-110 bg-red-600 border-red-700 text-white'
+            : 'bg-slate-950 border-slate-700 text-slate-300',
+        )}
+      >
+        <Trash2 size={24} />
+        <span className="text-[10px] font-semibold leading-none">{isOver ? 'Release' : 'Remove'}</span>
+      </div>
+    </div>
+  )
+}
+
+// Four-way "move" arrows that fade in behind a card, push outward once, and vanish — a quiet
+// hint that a touch-held card is now in move mode. Larger than the card so the arrow tips peek
+// out past all four of its edges; the animation lives in globals.css (.move-cue).
+function MoveCue() {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      aria-hidden
+      // Square and ~2.6× the card's width, so all four tips clear a tall 5:7 card's edges.
+      className="move-cue pointer-events-none absolute left-1/2 top-1/2 w-[260%] h-auto aspect-square text-ink"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      vectorEffect="non-scaling-stroke"
+      strokeLinejoin="round"
+      strokeLinecap="round"
+    >
+      {/* one outlined arrow, rotated four ways around the center */}
+      {[0, 90, 180, 270].map((deg) => (
+        <path
+          key={deg}
+          transform={`rotate(${deg} 50 50)`}
+          d="M46 41 L46 20 L40 20 L50 6 L60 20 L54 20 L54 41"
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
+    </svg>
+  )
+}
+
 // ── Card tile — same visual language as the main Cardex grid, plus a remove button ──
 
 function PersonalCardTile({
-  card, gameColor, game, isHovered, onHover, onLeave, onRemove, onZoom,
+  card, gameColor, game, isHovered, onHover, onLeave, onZoom,
 }: {
   card: PersonalCollectionCard & { owned: boolean; quantity: number }
   gameColor: string
@@ -763,7 +838,6 @@ function PersonalCardTile({
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
-  onRemove: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const rarityColor = RARITY_COLORS[card.rarity ?? ''] ?? '#7a6a55'
@@ -830,13 +904,6 @@ function PersonalCardTile({
           #{card.number}
         </div>
 
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove() }}
-          title="Remove from this collection"
-          className="absolute top-1 left-1 w-4 h-4 rounded-full bg-black/70 flex items-center justify-center text-white/70 hover:text-red-600 hover:bg-black/90 opacity-0 group-hover:opacity-100 transition-opacity"
-        >
-          <X size={10} />
-        </button>
       </div>
 
       {isHovered && (
