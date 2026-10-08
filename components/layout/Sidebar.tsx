@@ -17,8 +17,8 @@ const BASE_NAV = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 const ADMIN_NAV_ITEM = { href: '/admin', label: 'Admin', icon: ShieldCheck }
-// Phone bottom bar, in display order. Everything not here (Filters, Admin, Sign out) is
-// reachable from the Settings page on phones.
+// Phone bottom bar, in display order. Admin and Sign out live on the Settings page on phones;
+// Filters is a button in the phone top bar (MobileHeader).
 const MOBILE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
   { href: '/inventory', label: 'Inventory', icon: Package },
@@ -121,9 +121,10 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Mobile Bottom Nav — the six everyday pages. Filters, Admin and Sign out live on the
-          Settings page on phones (see AccountActions in SettingsPage.tsx) rather than taking a
-          bottom-bar slot each; nine-plus equal slots left every label colliding. */}
+      {/* Mobile Bottom Nav — the six everyday pages. Admin and Sign out live on the Settings
+          page on phones (see AccountActions in SettingsPage.tsx) and Filters in the top bar,
+          rather than each taking a bottom-bar slot; nine-plus equal slots left every label
+          colliding. */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950 border-t border-slate-700 shadow-[0_-4px_16px_rgba(60,40,20,0.08)] flex"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -141,9 +142,6 @@ export function Sidebar() {
             >
               <div className="relative">
                 <Icon size={22} strokeWidth={active ? 2.4 : 2} />
-                {href === '/settings' && calcFloor > 0 && (
-                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-violet-600" />
-                )}
               </div>
               <span className={cn('text-[11px] leading-none', active ? 'font-bold' : 'font-semibold')}>{label}</span>
             </Link>
@@ -159,6 +157,7 @@ export function Sidebar() {
 // status bar when installed to the home screen — see appleWebApp in app/layout.tsx).
 export function MobileHeader() {
   const pathname = usePathname()
+  const { calcFloor, showFilters, setShowFilters } = useStore()
   if (pathname === '/login' || pathname === '/signup') return null
   return (
     <header
@@ -171,6 +170,20 @@ export function MobileHeader() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-text.png" alt="TCGHaven" className="h-6 w-auto object-contain" />
       </Link>
+      {/* Portfolio Filters dropdown toggle — opens the same FilterPanel the desktop sidebar's
+          Filters button does, right under this bar */}
+      <button
+        onClick={() => setShowFilters(!showFilters)}
+        className={cn(
+          'ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[13px] font-semibold transition-colors',
+          showFilters ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800 text-slate-300',
+        )}
+        aria-expanded={showFilters}
+      >
+        <SlidersHorizontal size={15} />
+        Filters
+        {calcFloor > 0 && <span className="text-[9px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">ON</span>}
+      </button>
     </header>
   )
 }

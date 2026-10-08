@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench, SlidersHorizontal, ShieldCheck, LogOut } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench, ShieldCheck, LogOut } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
@@ -70,10 +70,10 @@ export default function SettingsPage() {
 
 // ── Account actions (phones only) ─────
 // On a phone the sidebar is hidden and the bottom bar only has room for the six main pages, so
-// Portfolio Filters, Admin and Sign out live here instead. Desktop keeps them in the sidebar.
+// Admin and Sign out live here instead (Filters is in the phone top bar). Desktop keeps them in
+// the sidebar.
 function AccountActions({ isAdmin }: { isAdmin: boolean }) {
   const { user, signOut } = useAuth()
-  const { calcFloor, setShowFilters } = useStore()
   const router = useRouter()
   if (!user) return null
   const initials = user.displayName
@@ -92,11 +92,6 @@ function AccountActions({ isAdmin }: { isAdmin: boolean }) {
           <div className="text-xs text-slate-500 truncate">{user.email}</div>
         </div>
       </div>
-      <button onClick={() => setShowFilters(true)} className={row}>
-        <SlidersHorizontal size={18} />
-        Portfolio Filters
-        {calcFloor > 0 && <span className="ml-auto text-[10px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">ON</span>}
-      </button>
       {isAdmin && (
         <Link href="/admin" className={row}>
           <ShieldCheck size={18} />
