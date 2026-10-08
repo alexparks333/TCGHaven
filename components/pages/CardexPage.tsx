@@ -11,6 +11,7 @@ import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { catalogPrice } from '@/lib/pricing'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,7 +23,13 @@ interface CatalogCard {
   setName: string
   rarity: string
   imageUrl: string
+  // Raw catalog price fields (from /api/cardex) — the price actually shown is computed from these
+  // with the shared rule in lib/pricing.ts, the same one Inventory/Portfolio prices come from.
   marketPrice: number
+  marketPriceFoil?: number
+  lowPriceNM?: number
+  lowPriceNMFoil?: number
+  publicCode?: string
 }
 
 type CatalogGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
@@ -351,7 +358,7 @@ function getOwnedInfo(
   catalogCard: CatalogCard,
   ownedCards: Card[],
   game: Game,
-): { owned: boolean; quantity: number } {
+): { owned: boolean; quantity: number; ownedFoil: boolean } {
   const matches = ownedCards.filter((c) => {
     if (c.apiId) return c.apiId === catalogCard.id
     if (game === 'riftbound') return c.setCode === catalogCard.setCode && c.number === catalogCard.number
@@ -376,7 +383,12 @@ function getOwnedInfo(
     if (game === 'mtg') return c.set === catalogCard.setName && c.number === catalogCard.number
     return false
   })
-  return { owned: matches.length > 0, quantity: matches.reduce((s, c) => s + c.quantity, 0) }
+  return {
+    owned: matches.length > 0,
+    quantity: matches.reduce((s, c) => s + c.quantity, 0),
+    // Every owned copy is foil → show the foil price, matching what Inventory shows for them.
+    ownedFoil: matches.length > 0 && matches.every((c) => c.isFoil),
+  }
 }
 
 // ── Search filtering ─────────────────────────────────────────────────────────
@@ -394,7 +406,7 @@ function matchesSearch(query: string, name: string, number: string): boolean {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CardexPage() {
-  const { cards, trackedGames } = useStore()
+  const { cards, trackedGames, priceMode } = useStore()
 
   // Deep-link support — e.g. clicking a "Card Unlocked" toast navigates to
   // /cardex?game=riftbound&set=Secret+Garden. Read once; a mid-session change to the URL isn't
@@ -678,10 +690,14 @@ export default function CardexPage() {
     })
   }
 
-  // Enrich catalog cards with owned status
+  // Enrich catalog cards with owned status, and the displayed price from the same rule (and the
+  // same 30d avg / Lowest NM setting) Inventory and Portfolio use — see lib/pricing.ts.
   const enriched = useMemo(
-    () => catalogCards.map((cc) => ({ ...cc, ...getOwnedInfo(cc, gameCards, catalogGame) })),
-    [catalogCards, gameCards, catalogGame],
+    () => catalogCards.map((cc) => {
+      const owned = getOwnedInfo(cc, gameCards, catalogGame)
+      return { ...cc, ...owned, marketPrice: catalogPrice(catalogGame, cc, { isFoil: owned.ownedFoil, priceMode }) }
+    }),
+    [catalogCards, gameCards, catalogGame, priceMode],
   )
 
   // Progress is always against the full set, not the filtered search view.

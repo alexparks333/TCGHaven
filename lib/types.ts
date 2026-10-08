@@ -23,7 +23,7 @@ export interface Card {
   gradingCompany?: string // e.g. "PSA", "CGC", "BGS", "SGC"
   grade?: string          // e.g. "10", "9.5", "Authentic"
   group?: string          // user-defined group label, e.g. "Alex & Brother's Cards"
-  priceLocked?: boolean   // when true, Refresh Prices never overwrites currentPrice
+  priceLocked?: boolean   // when true, the automatic price updates never overwrite currentPrice
   rarity?: string         // from the catalog at add time; Pokemon catalog cards don't carry one
   nexus?: boolean         // Riftbound only — user-flagged Nexus Night promo-foil variant
 }

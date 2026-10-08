@@ -2229,16 +2229,26 @@ that can only reference cards already in that shared catalog. A request to add a
 *set* other users would see, or to add a card that doesn't exist anywhere in the catalog yet,
 belongs in Admin Catalog — not Personal Collections, which has no way to do either.
 
-### 19. Portfolio price refresh is manual-only and never hits a live external API
-See [§18](#cron-driven-price-sync) for the full writeup. Short version: there is no more
-30-minute (or any) auto-refresh on Portfolio page load — prices only change when Alex clicks
-"Refresh Prices" (or toggles price mode), and that click only ever reads the catalog
-(`loadCatalog()`, already in-memory-cached per [§4](#card-catalog-system--deep-dive-firestore-backed)) —
-it never calls tcgcsv.com/lorcast/pokemontcg.io directly. The catalog itself is what stays live,
-via a 4x/day cron hitting `app/api/cron/sync-prices/route.ts`. If prices look stale, check when
-that cron last actually ran (it's triggered by an external scheduler outside this repo, not
-anything in-app) before assuming a code bug — worst case, `npm run download-cards` or the Admin
-Catalog "Sync Card Data" button both still work exactly as before for a manual catch-up.
+### 19. There is no manual price refresh — every user's prices follow the shared catalog automatically
+Portfolio's "Refresh Prices" button was removed (2026-10-08) so every user sees the same prices on
+the same schedule. `components/PriceAutoUpdater.tsx` (mounted once in `ClientWrapper.tsx`) reads
+the shared price-update status after sign-in, every 15 minutes, and on tab focus; when the catalog
+has synced since the user's cards were last priced (or they switch 30d avg / Lowest NM), it copies
+catalog prices onto their cards via `app/api/prices/{game}/route.ts` — writing only cards whose
+price changed, plus one price-history point per card per day. `store.lastPriceRefresh` now means
+"the catalog sync time last applied", not a click time.
+
+Where the button was, Portfolio shows "Prices updated {time}", or a red "Price update failed —
+showing prices from {time}" when the latest scheduled sync failed or is overdue (>9h — the GitHub
+Actions schedule is 4x/day and GitHub routinely runs it late or skips a run). Status comes from
+`lib/api/priceStatus.ts`: `catalog_meta/{game}.lastBulkSyncAt` (last success) + `sync_status/{game}`
+(last attempt). MTG is excluded from the overdue check (not on the schedule yet).
+
+**One pricing rule everywhere:** `lib/pricing.ts`'s `catalogPrice()` decides a card's price from its
+catalog fields (foil choice, Riftbound's foil-only variants, Lowest NM mode). The five price routes,
+the Cardex grid/zoom (computed client-side from the raw fields `/api/cardex` returns) and
+Personalized Collections (which fetch live prices through the same routes instead of the snapshot
+stored on each collection card) all go through it — so Cardex and Inventory/Portfolio can't disagree.
 
 ### 20. Adding a new game means updating every `GAMES`/`ALL_GAMES` array — TS won't catch all of them
 `Game` (`lib/types.ts`) is a plain string union, not something with a single source-of-truth

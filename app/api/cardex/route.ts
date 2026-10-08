@@ -15,6 +15,9 @@ interface CatalogCard {
   rarity?: string      // Pokemon catalog cards don't carry one — see CLAUDE.md's Pokemon schema note
   imageUrl: string
   marketPrice?: number
+  marketPriceFoil?: number
+  lowPriceNM?: number
+  lowPriceNMFoil?: number
   hidden?: boolean
   publicCode?: string  // Riftbound only — carries the "a"/"*" variant suffix `number` lacks
 }
@@ -45,7 +48,15 @@ export async function GET(request: Request) {
       setName:    c.setName,
       rarity:     c.rarity ?? '',
       imageUrl:   c.imageUrl,
-      marketPrice: c.marketPrice ?? 0,
+      // All the raw price fields, not one pre-picked price: the Cardex computes the shown price
+      // client-side with lib/pricing.ts's catalogPrice() — the exact rule the price routes use
+      // for Inventory/Portfolio — since only the client knows the viewer's price mode and
+      // whether their copy is foil.
+      marketPrice:     c.marketPrice ?? 0,
+      marketPriceFoil: c.marketPriceFoil ?? 0,
+      lowPriceNM:      c.lowPriceNM ?? 0,
+      lowPriceNMFoil:  c.lowPriceNMFoil ?? 0,
+      publicCode:      c.publicCode,
     }))
 
   return NextResponse.json(cards)

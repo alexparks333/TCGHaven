@@ -7,8 +7,8 @@ import { checkForNewMtgSets } from '@/lib/api/mtg'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 
 // Called by an external scheduler (cron-job.org, GitHub Actions, etc.) 4x/day to keep the shared
-// catalog's prices fresh — this is what lets Portfolio's "Refresh Prices" button and Pack
-// Analysis read prices straight from Firestore (loadCatalog(), see lib/api/catalog.ts) instead of
+// catalog's prices fresh — every user's card prices are then copied from it automatically
+// (components/PriceAutoUpdater.tsx), reading prices straight from Firestore (loadCatalog(), see lib/api/catalog.ts) instead of
 // each hitting tcgcsv/lorcast/pokemontcg.io live on every user click/page view. See CLAUDE.md
 // §"Price Data" for the full before/after.
 //

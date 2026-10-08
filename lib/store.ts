@@ -2,13 +2,18 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { Card, PriceHistory, Game, SoldCard, CatalogSyncNotice } from './types'
 import type { Purchase } from './spending/types'
+import type { PriceStatus } from './api/priceStatus'
 
 interface TCGStore {
   cards: Card[]
   soldCards: SoldCard[]
   priceHistory: PriceHistory[]
   activeGame: Game
+  // ISO time of the catalog sync whose prices were last applied to this user's cards (see
+  // components/PriceAutoUpdater.tsx) — not a manual-refresh time anymore.
   lastPriceRefresh: string | null
+  // Shared price-update health for Portfolio's "Prices updated …" line; not persisted.
+  priceStatus: PriceStatus | null
   purchases: Purchase[]
   calcFloor: number
   showFilters: boolean
@@ -43,6 +48,7 @@ interface TCGStore {
   addPriceHistoryPoint: (cardId: string, price: number, date: string) => void
   applyPriceUpdates: (updates: { cardId: string; price: number; date: string }[]) => void
   setLastPriceRefresh: (date: string) => void
+  setPriceStatus: (status: PriceStatus | null) => void
   addPurchase: (purchase: Purchase) => void
   setCalcFloor: (v: number) => void
   setShowFilters: (v: boolean) => void
@@ -77,6 +83,7 @@ export const useStore = create<TCGStore>()(
   priceHistory: [],
   activeGame: 'pokemon',
   lastPriceRefresh: null,
+  priceStatus: null,
   purchases: [],
   calcFloor: 0,
   showFilters: false,
@@ -167,6 +174,7 @@ export const useStore = create<TCGStore>()(
     }),
 
   setLastPriceRefresh: (date) => set({ lastPriceRefresh: date }),
+  setPriceStatus: (status) => set({ priceStatus: status }),
 
   addPurchase: (purchase) =>
     set((state) => ({ purchases: [purchase, ...state.purchases] })),

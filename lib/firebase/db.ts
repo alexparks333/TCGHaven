@@ -49,7 +49,7 @@ export async function applyPriceUpdatesBatch(
     const slice = updates.slice(i, i + CHUNK)
 
     // arrayUnion (the previous approach) can only ever append — it can't dedupe or replace an
-    // existing same-day point, so clicking "Refresh Prices" more than once in a day grew
+    // existing same-day point, so updating prices more than once in a day grew
     // priceHistory.points unbounded instead of updating that day's point in place, silently
     // diverging from the one-point-per-day rule the client-side store already enforces
     // (addPriceHistoryPoint, lib/store.ts). Reading each card's current points first lets the

@@ -4,6 +4,7 @@ import { AuthProvider } from '@/components/auth/AuthProvider'
 import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
 import { CardUnlockToast } from '@/components/CardUnlockToast'
+import { PriceAutoUpdater } from '@/components/PriceAutoUpdater'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -26,6 +27,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         </div>
       </div>
       <CardUnlockToast />
+      <PriceAutoUpdater />
     </AuthProvider>
   )
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
+import { catalogPrice, type PriceMode } from '@/lib/pricing'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,19 +20,20 @@ interface CatalogCard {
 // Data") rather than hitting api.scryfall.com live on every Portfolio refresh. Same shape as
 // Lorcana's price route: one market price per printing per finish, no per-set group-ID bootstrap.
 export async function POST(req: NextRequest) {
-  const { cards }: { cards: CardInput[] } = await req.json()
+  const { cards, priceMode = 'market' }: { cards: CardInput[]; priceMode?: PriceMode } = await req.json()
   if (!cards.length) return NextResponse.json({})
 
   const catalog = await loadCatalog<CatalogCard>('mtg')
   const byId = new Map(catalog.map((c) => [c.id, c]))
 
+  // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
+  // the Cardex or Personalized Collections.
   const results: Record<string, number> = {}
-  for (const { id, apiId, isFoil } of cards) {
-    if (!apiId) continue
-    const cat = byId.get(apiId)
+  for (const card of cards) {
+    const cat = card.apiId ? byId.get(card.apiId) : undefined
     if (!cat) continue
-    const price = isFoil ? (cat.marketPriceFoil || cat.marketPrice) : (cat.marketPrice || cat.marketPriceFoil)
-    if (price > 0) results[id] = price
+    const price = catalogPrice('mtg', cat, { isFoil: (card as { isFoil?: boolean }).isFoil, priceMode })
+    if (price > 0) results[card.id] = price
   }
 
   return NextResponse.json(results)

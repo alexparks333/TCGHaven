@@ -314,6 +314,27 @@ function CollectionDetail({
   // Drag-to-reorder — visual order lives here so dragging feels instant; only persisted to
   // Firestore once the drag actually ends, not on every intermediate swap. Resynced whenever
   // the collection's real card list changes (add/remove), not just on mount.
+  // Live prices for this collection's cards, from the same price routes (and the same shared
+  // rule, lib/pricing.ts) Inventory/Portfolio prices come from — a collection card's stored
+  // `marketPrice` is only a snapshot from when it was added, so it'd drift from everything else.
+  // null until loaded (the stored snapshot shows briefly meanwhile).
+  const { priceMode } = useStore()
+  const [livePrices, setLivePrices] = useState<Record<string, number> | null>(null)
+  useEffect(() => {
+    let stale = false
+    const payload = collection.cards.map((c) => ({ id: cardKey(c), apiId: c.id, isFoil: !!c.isFoil }))
+    if (payload.length === 0) { setLivePrices({}); return }
+    fetch(`/api/prices/${collection.game}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards: payload, priceMode }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((prices: Record<string, number> | null) => { if (!stale && prices) setLivePrices(prices) })
+      .catch(() => {})
+    return () => { stale = true }
+  }, [collection.cards, collection.game, priceMode])
+
   const [orderedIds, setOrderedIds] = useState<string[]>(() => collection.cards.map(cardKey))
   useEffect(() => {
     setOrderedIds(collection.cards.map(cardKey))
@@ -474,7 +495,8 @@ function CollectionDetail({
   const enriched = orderedIds
     .map((k) => cardsByKey.get(k))
     .filter((c): c is PersonalCollectionCard => !!c)
-    .map((c) => ({ ...c, ...isOwned(c, ownedCards) }))
+    // Current catalog price (once loaded), not the snapshot saved when the card was added.
+    .map((c) => ({ ...c, ...isOwned(c, ownedCards), marketPrice: livePrices ? (livePrices[cardKey(c)] ?? 0) : c.marketPrice }))
   const ownedCount = enriched.filter((c) => c.owned).length
   const totalCount = enriched.length
   const pct = totalCount > 0 ? Math.round((ownedCount / totalCount) * 100) : 0

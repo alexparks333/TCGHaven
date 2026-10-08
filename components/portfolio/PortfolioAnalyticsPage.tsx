@@ -240,7 +240,7 @@ export default function PortfolioAnalyticsPage() {
               <div className="text-3xl">📈</div>
               <div className="text-slate-400 text-sm font-medium">Not enough history yet</div>
               <div className="text-slate-600 text-xs max-w-xs">
-                Every time you hit Refresh Prices, a new data point is recorded.
+                Prices update automatically several times a day, and a data point is recorded each day.
                 Come back after a few days to see your timeline.
               </div>
             </div>
