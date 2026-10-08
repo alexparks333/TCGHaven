@@ -18,6 +18,14 @@
   * {
     @apply border-slate-800;
   }
+
+  /* The app's real scroller is <main> (see ClientWrapper.tsx); the document itself should never
+     move sideways on a phone either. */
+  html,
+  body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
 }
 
 @layer components {

@@ -507,7 +507,16 @@ function CollectionDetail({
           ))}
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          // x threshold 0: dragging near the screen's left/right edge must never scroll the page
+          // sideways — only near the top/bottom edge, to reach cards further up/down.
+          autoScroll={{ threshold: { x: 0, y: 0.2 } }}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
           <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
             <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
               {enriched.map((card) => (
