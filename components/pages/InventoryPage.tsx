@@ -666,26 +666,26 @@ export default function InventoryPage() {
                 <div key={key} className="border-b border-slate-800/50 last:border-0">
                   {/* Main row */}
                   <div
-                    className="relative grid grid-cols-[1fr_auto_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-2.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
                     onClick={(e) => {
                       if (e.ctrlKey || e.metaKey) { openEbaySearch(rep); return }
                       router.push(`/portfolio/${lots[0].id}`)
                     }}
                     title="Click to view card detail · ⌘/Ctrl+Click to search eBay"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                       <div className="relative shrink-0">
                         {rep.imageUrl ? (
-                          <img src={rep.imageUrl} alt={rep.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
+                          <img src={rep.imageUrl} alt={rep.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
                         ) : (
-                          <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
+                          <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
                         {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
                         {totalQty > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-ink text-sm">{rep.name}</span>
+                          <span className="font-semibold text-ink text-[15px] md:text-sm">{rep.name}</span>
                           {rep.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                           {rep.nexus && (
                             <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
@@ -707,10 +707,10 @@ export default function InventoryPage() {
                     </div>
                     <div className="text-sm font-semibold text-ink hidden md:flex items-center">×{totalQty}</div>
                     <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(gPaid)}</div>
-                    <div className="flex flex-col justify-center items-end md:items-start">
+                    <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
                       {marketTotal !== null ? (
                         <>
-                          <span className="text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
+                          <span className="text-[15px] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
                           {pnl !== null && (
                             <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
@@ -731,7 +731,7 @@ export default function InventoryPage() {
                         <DollarSign size={13} strokeWidth={2.5} />
                       </button>
                     )}
-                    <div className="flex items-center gap-0 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="col-start-2 md:col-start-auto self-start md:self-auto flex items-center gap-0.5 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
                       {!multiLot && (
                         <button onClick={() => openSell(lots[0])} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                           <DollarSign size={14} />
@@ -852,20 +852,20 @@ export default function InventoryPage() {
                     router.push(`/portfolio/${card.id}`)
                   }}
                   title="Click to view card detail · ⌘/Ctrl+Click to search eBay sold listings"
-                  className="relative grid grid-cols-[1fr_auto_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-2.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                  className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={card.imageUrl} alt={card.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
+                        <img src={card.imageUrl} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
                       ) : (
-                        <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                        <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
                       {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-ink text-sm">{card.name}</span>
+                        <span className="font-semibold text-ink text-[15px] md:text-sm">{card.name}</span>
                         {card.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                         {card.gradingCompany && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
@@ -889,10 +889,10 @@ export default function InventoryPage() {
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{CONDITION_LABELS[card.condition]}</div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">×{card.quantity}</div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice)}</div>
-                  <div className="flex flex-col justify-center items-end md:items-start">
+                  <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
                     {marketTotal !== null ? (
                       <>
-                        <span className="text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
+                        <span className="text-[15px] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
                         {pnl !== null && (
                           <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
@@ -911,7 +911,7 @@ export default function InventoryPage() {
                   >
                     <DollarSign size={13} strokeWidth={2.5} />
                   </button>
-                  <div className="flex items-center gap-0 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="col-start-2 md:col-start-auto self-start md:self-auto flex items-center gap-0.5 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openSell(card)} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                       <DollarSign size={14} />
                     </button>
