@@ -666,22 +666,26 @@ export default function InventoryPage() {
                 <div key={key} className="border-b border-slate-800/50 last:border-0">
                   {/* Main row */}
                   <div
-                    className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    className="relative grid grid-cols-[1fr_auto_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-2.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
                     onClick={(e) => {
                       if (e.ctrlKey || e.metaKey) { openEbaySearch(rep); return }
                       router.push(`/portfolio/${lots[0].id}`)
                     }}
                     title="Click to view card detail · ⌘/Ctrl+Click to search eBay"
                   >
-                    <div className="flex items-center gap-3 row-span-2 md:row-span-1 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
                       {rep.imageUrl ? (
-                        <img src={rep.imageUrl} alt={rep.name} className="w-10 h-14 object-contain rounded-md" />
+                        <img src={rep.imageUrl} alt={rep.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
                       ) : (
-                        <div className="w-10 h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
+                        <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                       )}
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-ink text-sm">{rep.name}</span>
+                          {/* Phone only (desktop has a Qty column) — same ×N badge as Portfolio rows */}
+                          {totalQty > 1 && (
+                            <span className="md:hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">×{totalQty}</span>
+                          )}
                           {rep.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                           {rep.nexus && (
                             <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
@@ -689,7 +693,11 @@ export default function InventoryPage() {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}<span className="md:hidden"> · {rep.set} · ×{totalQty}</span></div>
+                        {/* Phone: "Set ✨ · $X ea", matching Portfolio's rows; desktop keeps number + foil (set/qty have columns) */}
+                        <div className="md:hidden text-xs text-slate-500">
+                          {rep.set} {rep.isFoil && '✨'}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}
+                        </div>
+                        <div className="hidden md:block text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}</div>
                         {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
@@ -702,9 +710,9 @@ export default function InventoryPage() {
                     <div className="flex flex-col justify-center items-end md:items-start">
                       {marketTotal !== null ? (
                         <>
-                          <span className="text-sm text-ink font-medium">{formatCurrency(marketTotal)}</span>
+                          <span className="text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
                           {pnl !== null && (
-                            <span className={`text-xs ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                             </span>
                           )}
@@ -723,7 +731,7 @@ export default function InventoryPage() {
                         <DollarSign size={13} strokeWidth={2.5} />
                       </button>
                     )}
-                    <div className="flex items-center gap-1 md:gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-0 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
                       {!multiLot && (
                         <button onClick={() => openSell(lots[0])} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                           <DollarSign size={14} />
@@ -844,17 +852,20 @@ export default function InventoryPage() {
                     router.push(`/portfolio/${card.id}`)
                   }}
                   title="Click to view card detail · ⌘/Ctrl+Click to search eBay sold listings"
-                  className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                  className="relative grid grid-cols-[1fr_auto_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-2.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-3 row-span-2 md:row-span-1 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0">
                     {card.imageUrl ? (
-                      <img src={card.imageUrl} alt={card.name} className="w-10 h-14 object-contain rounded-md" />
+                      <img src={card.imageUrl} alt={card.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
                     ) : (
-                      <div className="w-10 h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                      <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                     )}
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-semibold text-ink text-sm">{card.name}</span>
+                        {card.quantity > 1 && (
+                          <span className="md:hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">×{card.quantity}</span>
+                        )}
                         {card.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                         {card.gradingCompany && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
@@ -867,7 +878,10 @@ export default function InventoryPage() {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}<span className="md:hidden"> · {card.set} · ×{card.quantity}</span></div>
+                      <div className="md:hidden text-xs text-slate-500">
+                        {card.set} {card.isFoil && '✨'}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}
+                      </div>
+                      <div className="hidden md:block text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
                       {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
@@ -878,9 +892,9 @@ export default function InventoryPage() {
                   <div className="flex flex-col justify-center items-end md:items-start">
                     {marketTotal !== null ? (
                       <>
-                        <span className="text-sm text-ink font-medium">{formatCurrency(marketTotal)}</span>
+                        <span className="text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
                         {pnl !== null && (
-                          <span className={`text-xs ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                           </span>
                         )}
@@ -897,7 +911,7 @@ export default function InventoryPage() {
                   >
                     <DollarSign size={13} strokeWidth={2.5} />
                   </button>
-                  <div className="flex items-center gap-1 md:gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-0 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
                     <button onClick={() => openSell(card)} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                       <DollarSign size={14} />
                     </button>

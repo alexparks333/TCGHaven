@@ -810,13 +810,11 @@ export default function PortfolioPage() {
               No price history yet for the {periodLabel} window — hit <span className="text-slate-300 font-medium">Refresh Prices</span> and check back after {timeFrame === '1d' ? '24 hours' : timeFrame === '7d' ? '7 days' : timeFrame === '30d' ? '30 days' : 'a year'}.
             </div>
           )}
-          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_40px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_40px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
             <span>Card</span>
             <span>Game</span>
             <span>Cost</span>
-            <span>Current</span>
-            <span>{periodLabel} P&L</span>
-            <span>{periodLabel} %</span>
+            <span>Value · {periodLabel} P&L</span>
             <span></span>
           </div>
 
@@ -828,7 +826,7 @@ export default function PortfolioPage() {
                 router.push(`/portfolio/${card.id}`)
               }}
               title="Click to view card · ⌘/Ctrl+Click to search eBay sold listings"
-              className="grid grid-cols-[1fr_auto] items-center md:items-stretch md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_40px] gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
+              className="grid grid-cols-[1fr_auto] items-center md:grid-cols-[2fr_1fr_1fr_1fr_40px] gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 {card.imageUrl
@@ -870,34 +868,20 @@ export default function PortfolioPage() {
                   </div>
                 </div>
               </div>
-              {/* Phone: value + P&L stacked on the right, instead of five unlabeled columns
-                  wrapping into a tall stack under the card name */}
-              <div className="md:hidden text-right">
-                <div className="text-sm text-ink font-semibold">{formatCurrency(card.currentVal)}</div>
-                <div className={`text-xs font-medium ${
-                  periodLabel && !card.hasPeriodData ? 'text-slate-600' : card.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'
-                }`}>
-                  {periodLabel && !card.hasPeriodData ? '—' : `${card.pnl >= 0 ? '+' : ''}${formatCurrency(card.pnl)} · ${formatPercent(card.pnlPct)}`}
-                </div>
-              </div>
               <div className="hidden md:flex items-center">
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>{GAME_LABELS[card.game]}</span>
               </div>
               <div className="hidden md:flex text-sm text-slate-300 items-center">{formatCurrency(card.cost)}</div>
-              <div className="hidden md:flex text-sm text-ink font-medium items-center">{formatCurrency(card.currentVal)}</div>
-              <div className={`hidden md:flex text-sm font-medium items-center ${
-                periodLabel && !card.hasPeriodData
-                  ? 'text-slate-600'
-                  : card.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'
-              }`}>
-                {periodLabel && !card.hasPeriodData ? '—' : `${card.pnl >= 0 ? '+' : ''}${formatCurrency(card.pnl)}`}
-              </div>
-              <div className={`hidden md:flex text-sm font-medium items-center ${
-                periodLabel && !card.hasPeriodData
-                  ? 'text-slate-600'
-                  : card.pnlPct >= 0 ? 'text-emerald-600' : 'text-red-600'
-              }`}>
-                {periodLabel && !card.hasPeriodData ? '—' : formatPercent(card.pnlPct)}
+              {/* Value with the $ gained/lost over the selected window underneath — the same price
+                  block Inventory uses, on phones and the web alike. On phones the columns either side
+                  are hidden, leaving just the card and this. */}
+              <div className="text-right md:text-left md:flex md:flex-col md:justify-center">
+                <div className="text-sm text-ink font-semibold">{formatCurrency(card.currentVal)}</div>
+                <div className={`text-xs font-medium ${
+                  periodLabel && !card.hasPeriodData ? 'text-slate-600' : card.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'
+                }`}>
+                  {periodLabel && !card.hasPeriodData ? '—' : `${card.pnl >= 0 ? '+' : ''}${formatCurrency(card.pnl)}`}
+                </div>
               </div>
               <div className="hidden md:flex items-center justify-end"><ArrowUpRight size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" /></div>
             </div>
