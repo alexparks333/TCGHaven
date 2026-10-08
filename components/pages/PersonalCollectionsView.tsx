@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import {
-  DndContext, PointerSensor, useSensor, useSensors, closestCenter,
-  type DragEndEvent,
+  DndContext, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter,
+  type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext, rectSortingStrategy, useSortable, arrayMove,
@@ -49,6 +49,9 @@ function cardKey(c: { id: string; isFoil?: boolean }): string {
 
 // Plain substring match against name and collector number — same shape as CardexPage's
 // matchesSearch(), filtering an already-small list rather than ranking a whole-catalog search.
+// How long a finger must rest on a collection card before it can be dragged to reorder (phones).
+const MOVE_MODE_HOLD_MS = 1500
+
 function matchesSearch(query: string, name: string, number: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
@@ -336,11 +339,37 @@ function CollectionDetail({
     await setCollectionCards(user.uid, collection.id, reordered).catch(() => setSaveError('Failed to save the new order — try again.'))
   }
 
-  // Small activation distance so a plain click (e.g. the remove-card button, or opening the
-  // hover tooltip) never gets mistaken for a drag — a real drag has to move the pointer first.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  // Mouse and touch get separate sensors on purpose. Mouse: a small activation distance, so a
+  // plain click (the remove button, opening the zoom view) never reads as a drag. Touch: nothing
+  // happens until a finger has held still on a card for 1.5s ("move mode") — before that,
+  // swiping scrolls the page normally and a tap opens the card. A single PointerSensor used to
+  // handle both, which (together with touch-action: none on every tile) turned any swipe that
+  // started on a card into an accidental reorder.
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: MOVE_MODE_HOLD_MS, tolerance: 8 } }),
+  )
+  // Which card is currently being moved by touch (lifted look), and when the last drag ended —
+  // lifting a finger after a move must not also count as a tap that opens the zoom view.
+  const [touchMovingId, setTouchMovingId] = useState<string | null>(null)
+  const lastDragEndRef = useRef(0)
+  const justDragged = () => Date.now() - lastDragEndRef.current < 400
+
+  function handleDragStart(event: DragStartEvent) {
+    if (typeof TouchEvent !== 'undefined' && event.activatorEvent instanceof TouchEvent) {
+      setTouchMovingId(String(event.active.id))
+      navigator.vibrate?.(25) // a little "you're in move mode" buzz where supported (Android)
+    }
+  }
+
+  function handleDragCancel() {
+    setTouchMovingId(null)
+    lastDragEndRef.current = Date.now()
+  }
 
   function handleDragEnd(event: DragEndEvent) {
+    setTouchMovingId(null)
+    lastDragEndRef.current = Date.now()
     const { active, over } = event
     if (!over || active.id === over.id) return
     const oldIndex = orderedIds.indexOf(String(active.id))
@@ -427,6 +456,11 @@ function CollectionDetail({
         </div>
       )}
 
+      {/* Phones only: reordering needs a press-and-hold now (see MOVE_MODE_HOLD_MS), so say so */}
+      {totalCount > 1 && !normalizedQuery && (
+        <p className="md:hidden text-[11px] text-slate-500 mb-3">Press and hold a card to move it.</p>
+      )}
+
       {/* Progress */}
       {totalCount > 0 && (
         <div className="mb-5 card-glass px-4 py-3">
@@ -473,7 +507,7 @@ function CollectionDetail({
           ))}
         </div>
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
           <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
             <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
               {enriched.map((card) => (
@@ -487,6 +521,8 @@ function CollectionDetail({
                   onLeave={() => setHoveredId(null)}
                   onRemove={() => removeCard(cardKey(card))}
                   onZoom={onZoom}
+                  touchMoving={touchMovingId === cardKey(card)}
+                  justDragged={justDragged}
                 />
               ))}
             </div>
@@ -634,17 +670,36 @@ function SortablePersonalCardTile(props: {
   onLeave: () => void
   onRemove: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
+  touchMoving: boolean
+  justDragged: () => boolean
 }) {
+  const { touchMoving, justDragged, ...tileProps } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cardKey(props.card) })
+  // Mouse drags keep the original faded look; a touch "move mode" drag lifts the card instead so
+  // it's obvious under a finger which card is moving.
+  const transformCss = CSS.Transform.toString(transform)
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: touchMoving ? `${transformCss ?? ''} scale(1.08)` : transformCss,
     transition,
-    opacity: isDragging ? 0.4 : 1,
-    zIndex: isDragging ? 10 : undefined,
+    opacity: isDragging && !touchMoving ? 0.4 : 1,
+    zIndex: isDragging ? 20 : undefined,
+    filter: touchMoving ? 'drop-shadow(0 12px 18px rgba(60, 40, 20, 0.35))' : undefined,
   }
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing touch-none">
-      <PersonalCardTile {...props} />
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      // No touch-action: none here — that's what blocked page scrolling on phones. The touch
+      // sensor stops scrolling itself, but only once move mode has actually started.
+      // select-none + no touch callout keep the 1.5s hold from popping the phone's own
+      // "Save Image" / text-selection menu.
+      className="cursor-grab active:cursor-grabbing select-none [-webkit-touch-callout:none]"
+      onContextMenu={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === 'touch') e.preventDefault() }}
+      onClickCapture={(e) => { if (justDragged()) { e.stopPropagation(); e.preventDefault() } }}
+    >
+      <PersonalCardTile {...tileProps} />
     </div>
   )
 }
