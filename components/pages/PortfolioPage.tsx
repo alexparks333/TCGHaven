@@ -829,15 +829,20 @@ export default function PortfolioPage() {
               className="grid grid-cols-[1fr_auto] items-center md:grid-cols-[2fr_1fr_1fr_1fr_40px] gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
             >
               <div className="flex items-center gap-3">
-                {card.imageUrl
-                  ? <img src={card.imageUrl} alt={card.name} className="w-8 h-11 object-contain rounded" />
-                  : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
-                }
+                {/* On phones the ×N badge sits on the thumbnail's corner, so a long name can't push it
+                    onto its own line; on the web it stays next to the name. */}
+                <div className="relative shrink-0">
+                  {card.imageUrl
+                    ? <img src={card.imageUrl} alt={card.name} className="w-8 h-11 object-contain rounded" />
+                    : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
+                  }
+                  {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                </div>
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-semibold text-ink text-sm">{card.name}</span>
                     {card.quantity > 1 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">
+                      <span className="hidden md:inline text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">
                         ×{card.quantity}
                       </span>
                     )}

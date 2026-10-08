@@ -674,18 +674,18 @@ export default function InventoryPage() {
                     title="Click to view card detail · ⌘/Ctrl+Click to search eBay"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      {rep.imageUrl ? (
-                        <img src={rep.imageUrl} alt={rep.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
-                      ) : (
-                        <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
-                      )}
+                      <div className="relative shrink-0">
+                        {rep.imageUrl ? (
+                          <img src={rep.imageUrl} alt={rep.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
+                        ) : (
+                          <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
+                        )}
+                        {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
+                        {totalQty > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
+                      </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-ink text-sm">{rep.name}</span>
-                          {/* Phone only (desktop has a Qty column) — same ×N badge as Portfolio rows */}
-                          {totalQty > 1 && (
-                            <span className="md:hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">×{totalQty}</span>
-                          )}
                           {rep.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                           {rep.nexus && (
                             <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
@@ -855,17 +855,17 @@ export default function InventoryPage() {
                   className="relative grid grid-cols-[1fr_auto_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-2.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    {card.imageUrl ? (
-                      <img src={card.imageUrl} alt={card.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
-                    ) : (
-                      <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
-                    )}
+                    <div className="relative shrink-0">
+                      {card.imageUrl ? (
+                        <img src={card.imageUrl} alt={card.name} className="w-8 h-11 md:w-10 md:h-14 object-contain rounded md:rounded-md" />
+                      ) : (
+                        <div className="w-8 h-11 md:w-10 md:h-14 rounded md:rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                      )}
+                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                    </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-semibold text-ink text-sm">{card.name}</span>
-                        {card.quantity > 1 && (
-                          <span className="md:hidden text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">×{card.quantity}</span>
-                        )}
                         {card.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                         {card.gradingCompany && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
