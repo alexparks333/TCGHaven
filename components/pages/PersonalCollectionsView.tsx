@@ -25,6 +25,7 @@ import { cn, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 // and zoomGlowColor() lives in lib/utils.ts instead.
 import type { ZoomCardData } from './CardexPage'
 import { LogoLoader } from '@/components/LogoLoader'
+import { useScrollLock } from '@/lib/useScrollLock'
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
@@ -674,6 +675,7 @@ function AddCardToCollectionModal({
   onAdd: (result: CardSearchResult) => void
   onClose: () => void
 }) {
+  useScrollLock()
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebounce(query, 300)
   const [results, setResults] = useState<CardSearchResult[]>([])
@@ -702,8 +704,8 @@ function AddCardToCollectionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg card-glass rounded-2xl p-6 max-h-[85vh] flex flex-col">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
+      <div className="relative w-full max-w-lg card-glass rounded-2xl p-5 md:p-6 max-h-[85dvh] flex flex-col overscroll-contain">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-ink">Add Card to Collection</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700">

@@ -10,6 +10,7 @@ import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
+import { useScrollLock } from '@/lib/useScrollLock'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -423,6 +424,7 @@ export default function CardexPage() {
   // the clicked tile's own bounding rect here (captured at click time) is what lets the overlay
   // fly the card from wherever it actually was in the grid rather than a fixed spot.
   const [zoomCard, setZoomCard] = useState<ZoomCardData | null>(null)
+  useScrollLock(zoomCard !== null)
   function openZoom(el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) {
     setZoomCard({ ...data, originRect: el.getBoundingClientRect() })
   }

@@ -17,6 +17,7 @@ import { regenerateSnapshot, normNum } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game, type CatalogSyncNotice } from '@/lib/types'
+import { useScrollLock } from '@/lib/useScrollLock'
 
 interface SetOption {
   code: string
@@ -1356,6 +1357,7 @@ const CROP_ZOOM_STEP = 0.25
 function ImageCropModal({
   source, uploading, onCancel, onConfirm,
 }: { source: Blob; uploading: boolean; onCancel: () => void; onConfirm: (blob: Blob) => void }) {
+  useScrollLock()
   const [src] = useState(() => URL.createObjectURL(source))
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
   const [zoom, setZoom] = useState(1)

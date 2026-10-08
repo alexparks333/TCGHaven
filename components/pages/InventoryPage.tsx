@@ -13,6 +13,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { removeCard, removeCards, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
 import { saveTrackedGames } from '@/lib/firebase/preferences'
 import { cn } from '@/lib/utils'
+import { useScrollLock } from '@/lib/useScrollLock'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
@@ -60,6 +61,7 @@ export default function InventoryPage() {
   const [showRarityFilter, setShowRarityFilter] = useState(false)
   const rarityFilterRef = useRef<HTMLDivElement>(null)
   const [sellCard, setSellCard] = useState<Card | null>(null)
+  useScrollLock(sellCard !== null)
   const [salePrice, setSalePrice] = useState('')
   const [saleDate, setSaleDate] = useState(todayISO)
   const [sellError, setSellError] = useState<string | null>(null)
@@ -945,8 +947,8 @@ export default function InventoryPage() {
           const pnl = salePriceNum > 0 ? salePriceNum - paid : null
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSellCard(null)} />
-              <div className="relative w-full max-w-sm card-glass rounded-2xl p-6 shadow-2xl">
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={() => setSellCard(null)} />
+              <div className="relative w-full max-w-sm card-glass rounded-2xl p-5 md:p-6 shadow-2xl max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
                 {/* Header */}
                 <div className="flex items-center justify-between mb-5">

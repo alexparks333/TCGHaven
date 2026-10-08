@@ -26,6 +26,25 @@
     overflow-x: hidden;
     overscroll-behavior-x: none;
   }
+
+  /* iPhone Safari auto-zooms the whole page into any form field whose text is under 16px when
+     it's focused — which knocked the Sell / Edit dialogs off-center and made them swipeable
+     sideways. 16px on touch screens stops that zoom entirely; desktop keeps the smaller sizes.
+     !important because the fields' own Tailwind text-size classes would otherwise win. */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* iOS gives date inputs an intrinsic minimum width that can push them past their container
+     (the Sell dialog's "Date Sold" field did) — keep them inside their box like other inputs. */
+  input[type='date'] {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 @layer components {

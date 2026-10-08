@@ -8,6 +8,7 @@ import { newCardRef, saveCard, editCard as editCardInFirestore, addPricePoint } 
 import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } from '@/lib/types'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
+import { useScrollLock } from '@/lib/useScrollLock'
 
 type MarketSource = 'catalog' | 'ebay' | 'manual'
 
@@ -56,6 +57,7 @@ function useDebounce<T>(value: T, delay: number): T {
 export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: Props) {
   const { addCard, updateCard, deleteCard, addPriceHistoryPoint, priceMode, cards: allCards, pushCardUnlock, trackedGames } = useStore()
   const { user } = useAuth()
+  useScrollLock()
 
   const existingGroups = Array.from(new Set(allCards.map((c) => c.group).filter(Boolean) as string[]))
 
@@ -326,8 +328,8 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg card-glass rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
+      <div className="relative w-full max-w-lg card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
