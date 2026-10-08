@@ -1063,8 +1063,11 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
   return (
     <div
       className="relative group cursor-pointer"
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
+      // Mouse only: on a phone, a tap that fires a hover handler which changes the page (this
+      // shows a tooltip) makes iOS treat that first tap as a hover and wait for a second tap
+      // before clicking — so tapping a card took two taps to open the zoom view.
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') onHover() }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
       onClick={(e) => {
         if (e.ctrlKey || e.metaKey) { openEbaySearch({ name: card.name, number: card.number, set: card.setName, game }); return }
         onZoom(e.currentTarget, {
@@ -1156,8 +1159,11 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   return (
     <div
       className="relative cursor-pointer"
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
+      // Mouse only: on a phone, a tap that fires a hover handler which changes the page (this
+      // shows a tooltip) makes iOS treat that first tap as a hover and wait for a second tap
+      // before clicking — so tapping a card took two taps to open the zoom view.
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') onHover() }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
       onClick={(e) => {
         if (e.ctrlKey || e.metaKey) { openEbaySearch(card); return }
         onZoom(e.currentTarget, {

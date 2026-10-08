@@ -50,7 +50,12 @@ function cardKey(c: { id: string; isFoil?: boolean }): string {
 // Plain substring match against name and collector number — same shape as CardexPage's
 // matchesSearch(), filtering an already-small list rather than ranking a whole-catalog search.
 // How long a finger must rest on a collection card before it can be dragged to reorder (phones).
-const MOVE_MODE_HOLD_MS = 1500
+const MOVE_MODE_HOLD_MS = 1250
+// While a finger is held on a card, it grows toward this scale over the full hold time, so the
+// hold is visibly "charging" — and it's already at full size when move mode kicks in, instead of
+// popping out all at once. Matches the TouchSensor tolerance: moving further cancels the hold.
+const HOLD_GROW_SCALE = 1.08
+const HOLD_MOVE_TOLERANCE_PX = 8
 
 function matchesSearch(query: string, name: string, number: string): boolean {
   const q = query.trim().toLowerCase()
@@ -341,13 +346,13 @@ function CollectionDetail({
 
   // Mouse and touch get separate sensors on purpose. Mouse: a small activation distance, so a
   // plain click (the remove button, opening the zoom view) never reads as a drag. Touch: nothing
-  // happens until a finger has held still on a card for 1.5s ("move mode") — before that,
+  // happens until a finger has held still on a card for 1.25s ("move mode") — before that,
   // swiping scrolls the page normally and a tap opens the card. A single PointerSensor used to
   // handle both, which (together with touch-action: none on every tile) turned any swipe that
   // started on a card into an accidental reorder.
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: MOVE_MODE_HOLD_MS, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: MOVE_MODE_HOLD_MS, tolerance: HOLD_MOVE_TOLERANCE_PX } }),
   )
   // Which card is currently being moved by touch (lifted look), and when the last drag ended —
   // lifting a finger after a move must not also count as a tap that opens the zoom view.
@@ -684,31 +689,65 @@ function SortablePersonalCardTile(props: {
 }) {
   const { touchMoving, justDragged, ...tileProps } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cardKey(props.card) })
-  // Mouse drags keep the original faded look; a touch "move mode" drag lifts the card instead so
-  // it's obvious under a finger which card is moving.
-  const transformCss = CSS.Transform.toString(transform)
-  const style = {
-    transform: touchMoving ? `${transformCss ?? ''} scale(1.08)` : transformCss,
+
+  // Finger currently resting on this card, before move mode has started — drives the gradual
+  // grow. Cleared the moment the finger lifts or drifts far enough that it's a scroll, not a hold.
+  const [holding, setHolding] = useState(false)
+  const holdStart = useRef<{ x: number; y: number } | null>(null)
+  function endHold() { holdStart.current = null; setHolding(false) }
+
+  // The outer element only carries dnd-kit's own translate (so the scale below never fights it).
+  // Mouse drags keep the original faded look; a touch drag gets the lifted shadow instead.
+  const outerStyle = {
+    transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging && !touchMoving ? 0.4 : 1,
-    zIndex: isDragging ? 20 : undefined,
-    filter: touchMoving ? 'drop-shadow(0 12px 18px rgba(60, 40, 20, 0.35))' : undefined,
+    zIndex: isDragging || holding ? 20 : undefined,
   }
+  const grown = holding || touchMoving
+  const innerStyle = {
+    transform: grown ? `scale(${HOLD_GROW_SCALE})` : 'scale(1)',
+    filter: touchMoving
+      ? 'drop-shadow(0 12px 18px rgba(60, 40, 20, 0.35))'
+      : holding
+        ? 'drop-shadow(0 8px 12px rgba(60, 40, 20, 0.22))'
+        : 'drop-shadow(0 0 0 rgba(60, 40, 20, 0))',
+    // Slow, steady grow for the whole hold; quick settle back if the hold is abandoned.
+    transition: holding && !touchMoving
+      ? `transform ${MOVE_MODE_HOLD_MS}ms cubic-bezier(0.25, 0.6, 0.35, 1), filter ${MOVE_MODE_HOLD_MS}ms ease-out`
+      : 'transform 180ms ease-out, filter 180ms ease-out',
+  }
+
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={outerStyle}
       {...attributes}
       {...listeners}
+      // Composed with dnd-kit's own touch listener (from `listeners`) rather than replacing it.
+      onTouchStart={(e) => {
+        listeners?.onTouchStart?.(e)
+        const t = e.touches[0]
+        if (e.touches.length === 1 && t) { holdStart.current = { x: t.clientX, y: t.clientY }; setHolding(true) }
+      }}
+      onTouchMove={(e) => {
+        const t = e.touches[0]
+        if (!holdStart.current || !t || touchMoving) return
+        if (Math.hypot(t.clientX - holdStart.current.x, t.clientY - holdStart.current.y) > HOLD_MOVE_TOLERANCE_PX) endHold()
+      }}
+      onTouchEnd={endHold}
+      onTouchCancel={endHold}
       // No touch-action: none here — that's what blocked page scrolling on phones. The touch
       // sensor stops scrolling itself, but only once move mode has actually started.
-      // select-none + no touch callout keep the 1.5s hold from popping the phone's own
+      // select-none + no touch callout keep the hold from popping the phone's own
       // "Save Image" / text-selection menu.
       className="cursor-grab active:cursor-grabbing select-none [-webkit-touch-callout:none]"
       onContextMenu={(e) => { if ((e.nativeEvent as PointerEvent).pointerType === 'touch') e.preventDefault() }}
       onClickCapture={(e) => { if (justDragged()) { e.stopPropagation(); e.preventDefault() } }}
     >
-      <PersonalCardTile {...tileProps} />
+      <div style={innerStyle}>
+        <PersonalCardTile {...tileProps} />
+      </div>
     </div>
   )
 }
@@ -733,8 +772,11 @@ function PersonalCardTile({
   return (
     <div
       className="relative group cursor-pointer"
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
+      // Mouse only: on a phone, a tap that fires a hover handler which changes the page (this
+      // shows a tooltip) makes iOS treat that first tap as a hover and wait for a second tap
+      // before clicking — so tapping a card took two taps to open the zoom view.
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') onHover() }}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
       onClick={(e) => {
         if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
         onZoom(e.currentTarget, {
