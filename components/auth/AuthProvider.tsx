@@ -13,7 +13,9 @@ import {
   getAdditionalUserInfo,
 } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebase/config'
-import { loadCards, loadSoldCards } from '@/lib/firebase/db'
+import { loadCards, loadCardChanges, loadSoldCards } from '@/lib/firebase/db'
+import { readInventoryCache, writeInventoryCache, clearInventoryCache, INVENTORY_FULL_SYNC_EVERY_MS } from '@/lib/inventoryCache'
+import type { Card } from '@/lib/types'
 import { loadPurchases } from '@/lib/firebase/spending'
 import { loadTrackedGames } from '@/lib/firebase/preferences'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
@@ -41,6 +43,47 @@ export interface DataLoadProgress {
 // Price history isn't loaded per user anymore — it's shared and served by /api/price-history.
 const DATA_STEPS = ['your cards', 'purchases', 'sold cards', 'your games'] as const
 
+// The user's inventory: this device's saved copy plus only what changed since it was saved
+// (lib/inventoryCache.ts + loadCardChanges), or a full read when there's no usable copy (new
+// device, cleared browser, or the weekly safety refresh). If the change check fails (e.g. a
+// flaky connection) the saved copy is shown rather than an empty inventory.
+async function loadInventory(uid: string): Promise<{ cards: Card[]; cursor: number; fullSyncAt: number }> {
+  const cached = await readInventoryCache(uid)
+  if (cached && Date.now() - cached.fullSyncAt < INVENTORY_FULL_SYNC_EVERY_MS) {
+    try {
+      const { changed, deletedIds, cursor } = await loadCardChanges(uid, cached.cursor)
+      const byId = new Map(cached.cards.map((c) => [c.id, c]))
+      deletedIds.forEach((id) => byId.delete(id))
+      changed.forEach((c) => byId.set(c.id, c))
+      const cards = Array.from(byId.values())
+      if (changed.length > 0 || deletedIds.length > 0) {
+        await writeInventoryCache(uid, { cards, cursor, fullSyncAt: cached.fullSyncAt })
+      }
+      return { cards, cursor, fullSyncAt: cached.fullSyncAt }
+    } catch (err) {
+      console.error('Checking for inventory changes failed — showing this device\'s saved copy:', err)
+      return { cards: cached.cards, cursor: cached.cursor, fullSyncAt: cached.fullSyncAt }
+    }
+  }
+  const { cards, cursor } = await loadCards(uid)
+  const fullSyncAt = Date.now()
+  await writeInventoryCache(uid, { cards, cursor, fullSyncAt })
+  return { cards, cursor, fullSyncAt }
+}
+
+// Rewrites the device's saved inventory (debounced) whenever the in-memory cards change. The
+// cursor is left as-is: local writes are server-timestamped and simply come back as harmless
+// no-op "changes" on the next open.
+function startInventoryCacheSync(uid: string, cursor: number, fullSyncAt: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const unsub = useStore.subscribe((state, prev) => {
+    if (state.cards === prev.cards) return
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => { writeInventoryCache(uid, { cards: useStore.getState().cards, cursor, fullSyncAt }) }, 1000)
+  })
+  return () => { if (timer) clearTimeout(timer); unsub() }
+}
+
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 // Set only after a successful /api/auth/verify-passcode call, for the lifetime of this browser
@@ -59,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Tracks the uid the current in-flight load belongs to, so a load that
     // resolves after sign-out (or a user switch) can't repopulate the store
     let activeUid: string | null = null
+    let stopCacheSync: (() => void) | null = null
 
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
@@ -85,16 +129,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // landing the user on a fully empty Inventory/Portfolio/Spending with only a
         // console.error to explain it (easy to mistake for real data loss).
         Promise.all([
-          track('your cards', loadCards(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return [] as Awaited<ReturnType<typeof loadCards>> })),
+          track('your cards', loadInventory(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return null })),
           track('purchases', loadPurchases(firebaseUser.uid).catch((err) => { console.error('Failed to load purchases:', err); return [] as Awaited<ReturnType<typeof loadPurchases>> })),
           track('sold cards', loadSoldCards(firebaseUser.uid).catch((err) => { console.error('Failed to load sold cards:', err); return [] as Awaited<ReturnType<typeof loadSoldCards>> })),
           // undefined (read failed) leaves whatever the store already has alone, rather than
           // snapping a multi-game user back to the Riftbound-only default over a network blip.
           track('your games', loadTrackedGames(firebaseUser.uid).catch((err) => { console.error('Failed to load tracked games:', err); return undefined })),
-        ]).then(([cards, purchases, soldCards, trackedGames]) => {
+        ]).then(([inventory, purchases, soldCards, trackedGames]) => {
           if (activeUid !== firebaseUser.uid) return // signed out mid-load
           if (trackedGames !== undefined) setTrackedGames(trackedGames ?? DEFAULT_TRACKED_GAMES)
-          loadUserCards(cards)
+          loadUserCards(inventory?.cards ?? [])
+          // Keep this device's saved copy in step with every later change (add/edit/sell/delete)
+          // so the next open only has to ask Firestore for changes made elsewhere.
+          stopCacheSync?.()
+          stopCacheSync = inventory ? startInventoryCacheSync(firebaseUser.uid, inventory.cursor, inventory.fullSyncAt) : null
           loadUserSoldCards(soldCards)
           storePurchases(purchases)
           setDataLoading(false)
@@ -106,6 +154,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
       } else {
         activeUid = null
+        stopCacheSync?.()
+        stopCacheSync = null
+        clearInventoryCache()
         setUser(null)
         clearUserData()
         setLoading(false)

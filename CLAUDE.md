@@ -2228,26 +2228,38 @@ that can only reference cards already in that shared catalog. A request to add a
 *set* other users would see, or to add a card that doesn't exist anywhere in the catalog yet,
 belongs in Admin Catalog — not Personal Collections, which has no way to do either.
 
-### 19. There is no manual price refresh — every user's prices follow the shared catalog automatically
-Portfolio's "Refresh Prices" button was removed (2026-10-08) so every user sees the same prices on
-the same schedule. `components/PriceAutoUpdater.tsx` (mounted once in `ClientWrapper.tsx`) reads
-the shared price-update status after sign-in, every 15 minutes, and on tab focus; when the catalog
-has synced since the user's cards were last priced (or they switch 30d avg / Lowest NM), it copies
-catalog prices onto their cards via `app/api/prices/{game}/route.ts` — writing only cards whose
-price changed, plus one price-history point per card per day. `store.lastPriceRefresh` now means
-"the catalog sync time last applied", not a click time.
+### 19. Prices live only in the shared catalog; inventory is cached per device
+**Prices (2026-10-08 overhaul, TCGplayer/Collectr model).** A price belongs to the card, not the
+user. Nothing is ever written onto a user's cards: `components/PriceAutoUpdater.tsx` (mounted in
+`ClientWrapper.tsx`, read-only) fetches live prices for the user's cards from
+`app/api/prices/{game}/route.ts` (in-memory catalog lookups, zero Firestore reads) and lays them
+over each card in memory (`store.applyLivePrices` / `withLivePrice` — manual `priceLocked` cards and
+cards without an `apiId` keep their own stored price). It also loads each card's price at the
+start of each Portfolio window (`store.priceBaselines`) and the update status. There is no manual
+refresh button; Portfolio shows "Prices updated {time}" or a red "Price update failed" warning
+(`lib/api/priceStatus.ts`: `catalog_meta.lastBulkSyncAt` + `sync_status`, overdue after 9h).
 
-Where the button was, Portfolio shows "Prices updated {time}", or a red "Price update failed —
-showing prices from {time}" when the latest scheduled sync failed or is overdue (>9h — the GitHub
-Actions schedule is 4x/day and GitHub routinely runs it late or skips a run). Status comes from
-`lib/api/priceStatus.ts`: `catalog_meta/{game}.lastBulkSyncAt` (last success) + `sync_status/{game}`
-(last attempt). MTG is excluded from the overdue check (not on the schedule yet).
+**One pricing rule:** `lib/pricing.ts` `catalogPrice()` (foil choice, Riftbound foil-only variants,
+Lowest NM mode) is used by the five price routes, the Cardex (client-side from the raw fields
+`/api/cardex` returns), Personalized Collections and the history API — so they can't disagree.
 
-**One pricing rule everywhere:** `lib/pricing.ts`'s `catalogPrice()` decides a card's price from its
-catalog fields (foil choice, Riftbound's foil-only variants, Lowest NM mode). The five price routes,
-the Cardex grid/zoom (computed client-side from the raw fields `/api/cardex` returns) and
-Personalized Collections (which fetch live prices through the same routes instead of the snapshot
-stored on each collection card) all go through it — so Cardex and Inventory/Portfolio can't disagree.
+**Shared price history.** Every successful sync writes that day's prices once, for everyone, to
+`price_history/{game}/months/{setKey}__{YYYY-MM}` (`scripts/lib/price-history.mjs`; written by
+`syncToFirestore()`, non-fatal). `/api/price-history` (signed-in users) computes answers from cached
+month docs: `baselines` (Portfolio windows), `series` (card detail chart), `portfolio` (Analytics
+daily totals) — the browser never downloads raw history. The old per-user
+`users/{uid}/priceHistory` is no longer read or written; Settings' admin "Import old price
+history" copied it into the shared history (gap-fill only, never overwrites synced data).
+
+**Inventory cache + change sync.** Every card write goes through `lib/firebase/db.ts`
+(`saveCard`/`editCard`/`removeCard(s)`), which stamps `updatedAt: serverTimestamp()`; deletes also
+write a tombstone at `users/{uid}/deletedCards/{cardId}` (`saveCard` clears it, for Sold → restore).
+`AuthProvider.tsx`'s `loadInventory()` keeps an IndexedDB copy per device (`lib/inventoryCache.ts`)
+and on open asks only for cards with `updatedAt` / tombstones with `deletedAt` newer than the
+cached cursor (`loadCardChanges`) — ~2 reads on a quiet day instead of one per card. Full reload
+when there's no copy, the copy's format changed (`INVENTORY_CACHE_FORMAT`), or it's >7 days old;
+if the change check fails the saved copy is shown. Signing out clears the cache. **Never write to
+`users/{uid}/cards` except through those db.ts functions**, or other devices' caches won't see it.
 
 ### 20. Adding a new game means updating every `GAMES`/`ALL_GAMES` array — TS won't catch all of them
 `Game` (`lib/types.ts`) is a plain string union, not something with a single source-of-truth

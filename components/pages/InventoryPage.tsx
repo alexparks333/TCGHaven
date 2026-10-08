@@ -73,17 +73,15 @@ export default function InventoryPage() {
   const holdStartRef = useRef<number | null>(null)
   const holdFiredRef = useRef(false)
 
-  // Background: fill in missing (or stale) market prices AND rarity (used by the rarity filter
-  // below) for cards that need them, from the same catalog lookup. Rarity was never captured
-  // before AddCardDialog started storing it, so this is what makes the rarity filter actually
-  // work on cards added before that — same shape as the price backfill it's merged into. Also
+  // Background: fill in missing rarity (used by the rarity filter below) for cards that need it,
+  // from the catalog. Rarity was never captured before AddCardDialog started storing it, so this
+  // is what makes the rarity filter actually work on cards added before that. Also
   // re-syncs a card still carrying the stale pre-rename 'Showcase' rarity value (Alt
   // Art/Overnumbered used to be flattened into it). Runs once per browser session, after the
   // Firestore load finishes — running earlier would see an empty store and never retry.
   //
   // The "once" guard MUST live outside the component (see `backfillRanThisSession` above), not
-  // in a useRef: cards whose catalog price is genuinely $0, or that have no catalog match at
-  // all, never leave `needsBackfill` (nothing to write, so `updateCard` never fires to shrink
+  // in a useRef: cards with no catalog match at all never leave `needsBackfill` (nothing to write, so `updateCard` never fires to shrink
   // it). A component-local ref resets every time InventoryPage remounts — i.e. every time you
   // navigate away and back — so on a large collection with any such cards, simply revisiting
   // this tab re-fired the *entire* unresolved batch as one uncapped `Promise.all`, hundreds of
@@ -95,11 +93,12 @@ export default function InventoryPage() {
     // 'Showcase' is a stale pre-rename rarity value (Alt Art/Overnumbered used to be flattened
     // into it) — treat it the same as missing so a card still carrying it self-heals here too,
     // not just via the Settings repair tool.
-    const needsBackfill = cards.filter((c) => c.name && ((!((c.currentPrice ?? 0) > 0) && !c.priceLocked) || !c.rarity || c.rarity === 'Showcase'))
+    // Rarity only — prices are never written onto cards anymore; they come live from the catalog
+    // (components/PriceAutoUpdater.tsx).
+    const needsBackfill = cards.filter((c) => c.name && (!c.rarity || c.rarity === 'Showcase'))
     if (!needsBackfill.length) return
     backfillRanThisSession = true
     let cancelled = false
-    const now = new Date().toISOString()
     async function backfill(card: Card) {
       if (cancelled) return
       try {
@@ -112,10 +111,6 @@ export default function InventoryPage() {
           results.find((r: { name: string }) => r.name === card.name)
         if (!match) return
         const updates: Partial<Card> = {}
-        if (!((card.currentPrice ?? 0) > 0) && !card.priceLocked) {
-          const price = card.isFoil && match.marketPriceFoil > 0 ? match.marketPriceFoil : match.marketPrice
-          if (price > 0) { updates.currentPrice = price; updates.priceUpdatedAt = now }
-        }
         if ((!card.rarity || card.rarity === 'Showcase') && match.rarity && match.rarity !== card.rarity) updates.rarity = match.rarity
         if (Object.keys(updates).length > 0 && !cancelled) {
           updateCard(card.id, updates)
