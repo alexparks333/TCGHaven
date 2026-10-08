@@ -1,7 +1,8 @@
 export default function NotFound() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 text-center px-4">
-      <div className="text-6xl">🃏</div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logo.png" alt="" className="w-20 h-20 object-contain" />
       <h1 className="text-2xl font-bold text-ink">Page not found</h1>
       <p className="text-slate-400 text-sm">This page doesn&apos;t exist.</p>
       <a href="/" className="btn-primary mt-2">Go home</a>

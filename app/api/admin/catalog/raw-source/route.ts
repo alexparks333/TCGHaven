@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
 import { getRiftboundRegistrySets } from '@/lib/api/registry'
+import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 
 export const dynamic = 'force-dynamic'
 
@@ -97,6 +98,10 @@ function localMatchKeys(card: RiftboundCatalogCard): string[] {
 const MAX_ROWS = 200
 
 export async function GET(request: Request) {
+  // Admin tool that downloads outside data (TCGCSV + the official gallery) on demand — gated like
+  // the other admin routes so it can't be used as a free fetch proxy.
+  const unauthorized = await verifyAdminRequest(request)
+  if (unauthorized) return unauthorized
   const { searchParams } = new URL(request.url)
   const game = searchParams.get('game')
   const setCode = searchParams.get('setCode')

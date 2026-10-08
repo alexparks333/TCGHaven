@@ -13,29 +13,37 @@ import { ADMIN_UID } from './config'
 // Returns an error NextResponse to send back immediately, or null if the caller is verified as
 // the admin — callers do `const unauthorized = await verifyAdminRequest(request); if
 // (unauthorized) return unauthorized`.
-export async function verifyAdminRequest(request: Request): Promise<NextResponse | null> {
+// Verifies the caller's Firebase ID token and returns their uid, or null if missing/invalid.
+async function callerUid(request: Request): Promise<string | null> {
   const authHeader = request.headers.get('authorization') || ''
   const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
-
-  if (!idToken || !apiKey || !ADMIN_UID) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+  if (!idToken || !apiKey) return null
   try {
     const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
     })
-    if (!res.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!res.ok) return null
     const data = await res.json()
-    const uid = data?.users?.[0]?.localId
-    if (uid !== ADMIN_UID) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-    return null
+    return data?.users?.[0]?.localId ?? null
   } catch {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return null
   }
+}
+
+export async function verifyAdminRequest(request: Request): Promise<NextResponse | null> {
+  if (!ADMIN_UID) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const uid = await callerUid(request)
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (uid !== ADMIN_UID) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  return null
+}
+
+// Same check, but any signed-in user passes — for routes that aren't admin-only but call a
+// paid/rate-limited outside API on the caller's behalf (e.g. the eBay price lookup), so an
+// anonymous visitor can't burn that quota just by finding the URL.
+export async function verifyUserRequest(request: Request): Promise<NextResponse | null> {
+  return (await callerUid(request)) ? null : NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }

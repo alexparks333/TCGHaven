@@ -2071,7 +2071,7 @@ function RawSourceCheckPanel({
     let stale = false
     setLoading(true)
     setError(null)
-    fetch(`/api/admin/catalog/raw-source?game=riftbound&setCode=${encodeURIComponent(setCode)}`)
+    adminFetch(`/api/admin/catalog/raw-source?game=riftbound&setCode=${encodeURIComponent(setCode)}`)
       .then(async (r) => {
         const data = await r.json()
         if (stale) return

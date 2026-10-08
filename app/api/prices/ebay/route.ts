@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { verifyUserRequest } from '@/lib/firebase/verifyAdminRequest'
 
 const TOKEN_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
 const INSIGHTS_URL = 'https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search'
@@ -166,6 +167,9 @@ async function fetchActiveListings(token: string, q: string): Promise<EbayResult
 }
 
 export async function GET(req: NextRequest) {
+  // Signed-in users only — this spends the app's eBay API quota on the caller's behalf.
+  const unauthorized = await verifyUserRequest(req)
+  if (unauthorized) return unauthorized
   const cardName = req.nextUrl.searchParams.get('q') ?? ''
   const game = req.nextUrl.searchParams.get('game') ?? 'pokemon'
 

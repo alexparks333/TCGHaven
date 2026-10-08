@@ -40,9 +40,15 @@ export async function editCard(userId: string, cardId: string, updates: Partial<
 // Firestore SDK with thousands of concurrent writes, which was blocking the tab's main thread
 // for tens of seconds. `writeBatch` folds many writes into one commit — chunked to 250 cards
 // (500 writes) per batch, under Firestore's 500-writes-per-batch limit.
+//
+// `knownPoints` (optional): each card's current price-history points as already loaded in the
+// store. When given, the write is built from those instead of first reading every history doc
+// back from Firestore — the automatic price updater (components/PriceAutoUpdater.tsx) always has
+// them, so this saves one document read per updated card on every update.
 export async function applyPriceUpdatesBatch(
   userId: string,
   updates: { cardId: string; price: number; date: string }[],
+  knownPoints?: Map<string, { date: string; price: number }[]>,
 ): Promise<void> {
   const CHUNK = 250
   for (let i = 0; i < updates.length; i += CHUNK) {
@@ -54,12 +60,16 @@ export async function applyPriceUpdatesBatch(
     // diverging from the one-point-per-day rule the client-side store already enforces
     // (addPriceHistoryPoint, lib/store.ts). Reading each card's current points first lets the
     // write replace `points` outright with the deduped array instead.
-    const existingDocs = await Promise.all(
-      slice.map(({ cardId }) => getDoc(doc(db, 'users', userId, 'priceHistory', cardId)))
-    )
-    const existingPointsByCard = new Map(
-      slice.map(({ cardId }, idx) => [cardId, (existingDocs[idx].data()?.points ?? []) as { date: string; price: number }[]])
-    )
+    const existingPointsByCard = knownPoints
+      ? new Map(slice.map(({ cardId }) => [cardId, knownPoints.get(cardId) ?? []]))
+      : await (async () => {
+          const existingDocs = await Promise.all(
+            slice.map(({ cardId }) => getDoc(doc(db, 'users', userId, 'priceHistory', cardId)))
+          )
+          return new Map(
+            slice.map(({ cardId }, idx) => [cardId, (existingDocs[idx].data()?.points ?? []) as { date: string; price: number }[]])
+          )
+        })()
 
     const batch = writeBatch(db)
     for (const { cardId, price, date } of slice) {

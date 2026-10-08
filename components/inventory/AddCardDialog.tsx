@@ -9,6 +9,7 @@ import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } f
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { authFetch } from '@/lib/firebase/authFetch'
 
 type MarketSource = 'catalog' | 'ebay' | 'manual'
 
@@ -200,7 +201,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
     if (source === 'ebay' && form.name && !ebayData) {
       setEbayLoading(true)
       try {
-        const res = await fetch(`/api/prices/ebay?q=${encodeURIComponent(form.name)}&game=${form.game}`)
+        const res = await authFetch(`/api/prices/ebay?q=${encodeURIComponent(form.name)}&game=${form.game}`)
         const data = await res.json()
         setEbayData(res.ok ? data : { avgPrice: null, count: 0, source: 'sold_5_days', error: data.error })
       } catch {

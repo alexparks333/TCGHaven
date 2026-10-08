@@ -89,8 +89,11 @@ export function PriceAutoUpdater() {
       }))
 
       if (updates.length > 0) {
+        // History as loaded at sign-in (captured before applyPriceUpdates adds today's points),
+        // so the batch write doesn't need to read every history doc back first.
+        const knownPoints = new Map(priceHistory.map((h) => [h.cardId, h.points]))
         applyPriceUpdates(updates)
-        await applyPriceUpdatesBatch(user.uid, updates)
+        await applyPriceUpdatesBatch(user.uid, updates, knownPoints)
       }
       // Only mark this sync as applied if every game's prices came back — otherwise the next
       // check retries instead of silently leaving some cards on old prices.

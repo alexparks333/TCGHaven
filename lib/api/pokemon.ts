@@ -174,25 +174,6 @@ export function invalidatePokemonSetsCache() {
   _setsCache = null
 }
 
-export async function getPokemonCardPrice(apiId: string, isFoil: boolean): Promise<number | null> {
-  try {
-    const res = await fetch(`${BASE_URL}/cards/${apiId}`, {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    const prices = data.data?.tcgplayer?.prices
-    if (!prices) return null
-    const price = isFoil
-      ? prices.holofoil?.market ?? prices.reverseHolofoil?.market
-      : prices.normal?.market ?? prices.holofoil?.market
-    return price ?? null
-  } catch {
-    return null
-  }
-}
-
 export function getPokemonCardMarketPrice(card: PokemonCard, isFoil: boolean): number {
   const prices = card.tcgplayer?.prices
   if (!prices) return 0

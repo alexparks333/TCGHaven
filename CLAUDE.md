@@ -494,10 +494,9 @@ calls `getPokemonCardMarketPrice(card, isFoil)` which reads prices directly from
 `card.tcgplayer.prices` object `searchPokemonCards()` built from the catalog doc's own
 `marketPrice`/`marketPriceFoil`. This price is stored as `purchasePrice` if Alex leaves it blank.
 
-The `apiId` stored on the Card is the catalog's `id` field (e.g. `"sv7-1"`). `getPokemonCardPrice(apiId,
-isFoil)` (`lib/api/pokemon.ts`) is dead code with zero callers — Portfolio's price refresh reads the
-catalog directly via `app/api/prices/pokemon/route.ts`, same catalog-only shape as every other
-game (see [Price Data](#price-data)), not this function.
+The `apiId` stored on the Card is the catalog's `id` field (e.g. `"sv7-1"`). Card prices are read
+from the catalog via `app/api/prices/pokemon/route.ts`, same catalog-only shape as every other game
+(see [Price Data](#price-data) and quirk #19).
 
 ---
 
@@ -1911,7 +1910,7 @@ TCGHaven/
 │   │                             registry/main doc, short in-process staleness cache (§17)
 │   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
 │   │   │                             unified entry point (§5's New Set cache note)
-│   │   ├── pokemon.ts             ← searchPokemonCards(), getPokemonCardPrice()
+│   │   ├── pokemon.ts             ← searchPokemonCards()
 │   │   ├── lorcana.ts             ← searchLorcanaCards(), getLorcanaSets() (merges in manual/
 │   │   │                             registry-only sets — §5)
 │   │   ├── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()

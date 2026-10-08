@@ -7,9 +7,13 @@ import { auth } from './config'
 // (shouldn't happen — every call site here is already behind an isAdmin-gated UI) the request
 // goes out without one and the server correctly rejects it as unauthorized rather than silently
 // succeeding. GET reads of the registry/catalog stay plain fetch() — those are public-read.
-export async function adminFetch(input: string, init: RequestInit = {}): Promise<Response> {
+export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const token = await auth.currentUser?.getIdToken().catch(() => null)
   const headers = new Headers(init.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
   return fetch(input, { ...init, headers })
 }
+
+// Same thing; the name the admin-only call sites use. Signed-in-user routes (verifyUserRequest)
+// use authFetch.
+export const adminFetch = authFetch
