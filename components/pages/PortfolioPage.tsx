@@ -10,6 +10,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
+import { LogoLoader } from '@/components/LogoLoader'
 
 type SortKey = 'pnl' | 'pnlAsc' | 'pnlPct' | 'pnlPctAsc' | 'value' | 'valueAsc' | 'name' | 'nameDesc'
 
@@ -27,7 +28,7 @@ const BASELINE_KEY = { '1d': 'd1', '7d': 'd7', '30d': 'd30', '365d': 'd365' } as
 
 export default function PortfolioPage() {
   const {
-    cards, priceBaselines, priceStatus,
+    cards, priceBaselines, priceStatus, priceLoad,
     purchases, soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     hiddenGroups,
   } = useStore()
@@ -216,6 +217,17 @@ export default function PortfolioPage() {
   const periodLabel = TIME_LABELS[timeFrame]
   const showHistoryNote = timeFrame !== 'entry'
   const periodCardCount = filtered.filter((c) => c.hasPeriodData).length
+
+  // Same logo loader every page uses, held until this session's prices and window baselines have
+  // actually arrived (components/PriceAutoUpdater.tsx) — so the page never shows stale values or
+  // a false "no price history" note that fills in a second later.
+  if (!priceLoad.complete) {
+    return (
+      <AuthGuard>
+        <LogoLoader label="Loading prices…" progress={priceLoad.total > 0 ? { done: priceLoad.done, total: priceLoad.total } : undefined} />
+      </AuthGuard>
+    )
+  }
 
   return (
     <AuthGuard>

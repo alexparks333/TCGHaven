@@ -12,6 +12,7 @@ import { useStore, portfolioGames } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { authFetch } from '@/lib/firebase/authFetch'
+import { LogoLoader } from '@/components/LogoLoader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceBaselines, activeGames: filterGames, trackedGames, calcFloor } = useStore()
+  const { cards, priceBaselines, priceLoad, activeGames: filterGames, trackedGames, calcFloor } = useStore()
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // Apply the same filters as PortfolioPage so numbers line up exactly
@@ -84,9 +85,12 @@ export default function PortfolioAnalyticsPage() {
   )
   const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}`).join('|')
   const [dailyValues, setDailyValues] = useState<{ day: string; value: number }[]>([])
+  // Which request the current dailyValues answer — the page waits behind the loader until the
+  // timeline for the current cards has actually come back.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
   useEffect(() => {
     let stale = false
-    if (catalogCards.length === 0) { setDailyValues([]); return }
+    if (catalogCards.length === 0) { setDailyValues([]); setLoadedKey(requestKey); return }
     authFetch('/api/price-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -102,6 +106,7 @@ export default function PortfolioAnalyticsPage() {
       .then((r) => (r.ok ? r.json() : { timeline: [] }))
       .then((data: { timeline: { day: string; value: number }[] }) => { if (!stale) setDailyValues(data.timeline ?? []) })
       .catch(() => {})
+      .finally(() => { if (!stale) setLoadedKey(requestKey) })
     return () => { stale = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestKey])
@@ -153,6 +158,14 @@ export default function PortfolioAnalyticsPage() {
     { label: 'All-Time High', value: allTimeHigh, isChange: false },
     { label: 'Total Change',  value: totalChange, isChange: true  },
   ]
+
+  if (!priceLoad.complete || loadedKey !== requestKey) {
+    return (
+      <AuthGuard>
+        <LogoLoader label="Loading your portfolio history…" progress={!priceLoad.complete && priceLoad.total > 0 ? { done: priceLoad.done, total: priceLoad.total } : undefined} />
+      </AuthGuard>
+    )
+  }
 
   return (
     <AuthGuard>

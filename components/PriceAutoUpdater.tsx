@@ -36,7 +36,7 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
 
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
-  const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines } = useStore()
+  const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines, setPriceLoad } = useStore()
 
   // Latest values for the timer/visibility callbacks without re-subscribing every render.
   const latest = useRef({ cards, trackedGames })
@@ -62,6 +62,16 @@ export function PriceAutoUpdater() {
       const prev = loadedFor.current
       if (prev && prev.syncAt === syncAt && prev.cardsKey === key) return
 
+      // Real progress for the logo loader on Portfolio/Analytics: one step per game's live prices,
+      // plus one for the window baselines. Only reported on the session's first load — later
+      // background reloads update prices in place without hiding the page again.
+      const firstLoad = !useStore.getState().priceLoad.complete
+      const gamesToLoad = ALL_GAMES.filter((g) => eligible.some((c) => c.game === g))
+      const total = gamesToLoad.length + 1
+      let done = 0
+      const step = () => { done += 1; if (firstLoad) setPriceLoad({ done, total, complete: false }) }
+      if (firstLoad) setPriceLoad({ done: 0, total, complete: false })
+
       // 1. Live prices (cheap server lookups).
       const prices: Record<string, number> = {}
       let failed = false
@@ -79,6 +89,8 @@ export function PriceAutoUpdater() {
           Object.assign(prices, await res.json())
         } catch {
           failed = true
+        } finally {
+          step()
         }
       }))
       applyLivePrices(prices)
@@ -97,6 +109,8 @@ export function PriceAutoUpdater() {
         else failed = true
       } catch {
         failed = true
+      } finally {
+        step()
       }
 
       // Only remember this load as complete if everything came back; otherwise the next check
@@ -109,8 +123,14 @@ export function PriceAutoUpdater() {
       console.error('Loading prices failed:', err)
     } finally {
       running.current = false
+      // Release the pages even if part of it failed — they show whatever loaded (and Portfolio's
+      // status line says so) rather than staying stuck behind the loader.
+      if (!useStore.getState().priceLoad.complete) {
+        const { total } = useStore.getState().priceLoad
+        setPriceLoad({ done: total, total, complete: true })
+      }
     }
-  }, [user, setPriceStatus, applyLivePrices, setPriceBaselines, setLastPriceRefresh])
+  }, [user, setPriceStatus, applyLivePrices, setPriceBaselines, setLastPriceRefresh, setPriceLoad])
 
   // After sign-in + data load, when owned cards / tracked games change, on a timer,
   // and when the tab comes back into view.

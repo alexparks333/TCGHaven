@@ -14,6 +14,10 @@ interface TCGStore {
   // Each card's price at the start of each Portfolio window, from the shared price history
   // (app/api/price-history, mode "baselines"). Keyed by user card id.
   priceBaselines: Record<string, PriceBaseline>
+  // Real progress of this session's first price load (live prices per game + window baselines).
+  // Portfolio / Analytics stay behind the logo loader until it's complete, so they never flash
+  // stale values or a false "no price history" note. Not persisted.
+  priceLoad: { done: number; total: number; complete: boolean }
   activeGame: Game
   // ISO time of the catalog sync whose prices were last applied to this user's cards (see
   // components/PriceAutoUpdater.tsx) — not a manual-refresh time anymore.
@@ -50,6 +54,7 @@ interface TCGStore {
   setActiveGame: (game: Game) => void
   applyLivePrices: (prices: Record<string, number>) => void
   setPriceBaselines: (baselines: Record<string, PriceBaseline>) => void
+  setPriceLoad: (load: { done: number; total: number; complete: boolean }) => void
   setLastPriceRefresh: (date: string) => void
   setPriceStatus: (status: PriceStatus | null) => void
   addPurchase: (purchase: Purchase) => void
@@ -100,6 +105,7 @@ export const useStore = create<TCGStore>()(
   soldCards: [],
   livePrices: {},
   priceBaselines: {},
+  priceLoad: { done: 0, total: 0, complete: false },
   activeGame: 'pokemon',
   lastPriceRefresh: null,
   priceStatus: null,
@@ -116,7 +122,7 @@ export const useStore = create<TCGStore>()(
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
   loadUserSoldCards: (soldCards) => set({ soldCards }),
   loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
+  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, withLivePrice(card, state.livePrices)] })),
@@ -141,6 +147,7 @@ export const useStore = create<TCGStore>()(
     set((state) => ({ livePrices: prices, cards: state.cards.map((c) => withLivePrice(c, prices)) })),
 
   setPriceBaselines: (priceBaselines) => set({ priceBaselines }),
+  setPriceLoad: (priceLoad) => set({ priceLoad }),
 
   setLastPriceRefresh: (date) => set({ lastPriceRefresh: date }),
   setPriceStatus: (status) => set({ priceStatus: status }),
