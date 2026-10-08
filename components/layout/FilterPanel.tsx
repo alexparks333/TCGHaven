@@ -217,15 +217,17 @@ export function FilterPanel() {
       {/* Active-filter banner when panel is closed */}
       {!showFilters && hasActiveFilters && (
         <div className="bg-amber-100/40 border-b border-amber-200/40 px-4 sm:px-6 lg:px-8 py-1.5">
-          <div className="max-w-7xl mx-auto flex items-center gap-3 flex-wrap">
+          {/* One line at every width — on a phone the extra items scroll sideways instead of
+              wrapping into a tall block above every page */}
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-            <div className="flex items-center gap-2 text-xs text-amber-600 flex-wrap">
+            <div className="flex items-center gap-2 text-xs text-amber-600 whitespace-nowrap overflow-x-auto min-w-0 [scrollbar-width:none]">
               {calcFloor > 0 && <span>Floor: {formatCurrency(calcFloor)}{totalHidden > 0 ? ` (${totalHidden} hidden)` : ''}</span>}
               {!allGamesActive && <span>Games: {shownGames.filter((g) => activeGames.includes(g)).map((g) => GAME_LABELS[g]).join(', ')}</span>}
               {timeFrame !== 'entry' && <span>Period: {TIME_OPTIONS.find((t) => t.value === timeFrame)?.label}</span>}
               {hiddenGroups.length > 0 && <span>Hidden: {hiddenGroups.join(', ')}</span>}
             </div>
-            <button onClick={() => setShowFilters(true)} className="ml-auto text-xs text-amber-500 hover:text-amber-700 underline underline-offset-2">
+            <button onClick={() => setShowFilters(true)} className="ml-auto shrink-0 text-xs text-amber-500 hover:text-amber-700 underline underline-offset-2">
               Edit
             </button>
           </div>

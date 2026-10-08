@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Package, TrendingUp, Layers, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings, ShieldCheck } from 'lucide-react'
+import { Package, TrendingUp, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
@@ -14,10 +14,19 @@ const BASE_NAV = [
   { href: '/sold', label: 'Sold', icon: Banknote },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
   { href: '/spending', label: 'Spending', icon: ShoppingBag },
-  { href: '/pack-analysis', label: 'Pack Analysis', icon: Layers },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 const ADMIN_NAV_ITEM = { href: '/admin', label: 'Admin', icon: ShieldCheck }
+// Phone bottom bar, in display order. Everything not here (Filters, Admin, Sign out) is
+// reachable from the Settings page on phones.
+const MOBILE_NAV = [
+  { href: '/', label: 'Portfolio', icon: TrendingUp },
+  { href: '/inventory', label: 'Inventory', icon: Package },
+  { href: '/cardex', label: 'Cardex', icon: BookOpen },
+  { href: '/sold', label: 'Sold', icon: Banknote },
+  { href: '/spending', label: 'Spending', icon: ShoppingBag },
+  { href: '/settings', label: 'Settings', icon: Settings },
+]
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -112,44 +121,56 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-slate-800 backdrop-blur-sm flex">
-        {nav.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              'flex-1 flex flex-col items-center gap-0.5 py-3 text-slate-500 transition-colors',
-              pathname === href && 'text-violet-600'
-            )}
-          >
-            <Icon size={20} />
-            <span className="text-[10px] font-medium">{label}</span>
-          </Link>
-        ))}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={cn(
-            'flex-1 flex flex-col items-center gap-0.5 py-3 transition-colors relative',
-            showFilters ? 'text-violet-600' : 'text-slate-500',
-          )}
-        >
-          <div className="relative">
-            <SlidersHorizontal size={20} />
-            {calcFloor > 0 && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-violet-500" />
-            )}
-          </div>
-          <span className="text-[10px] font-medium">Filters</span>
-        </button>
-        <button
-          onClick={handleSignOut}
-          className="flex-1 flex flex-col items-center gap-0.5 py-3 text-slate-500"
-        >
-          <LogOut size={20} />
-          <span className="text-[10px] font-medium">Sign out</span>
-        </button>
+      {/* Mobile Bottom Nav — the six everyday pages. Filters, Admin and Sign out live on the
+          Settings page on phones (see AccountActions in SettingsPage.tsx) rather than taking a
+          bottom-bar slot each; nine-plus equal slots left every label colliding. */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950 border-t border-slate-700 shadow-[0_-4px_16px_rgba(60,40,20,0.08)] flex"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        {MOBILE_NAV.map(({ href, label, icon: Icon }) => {
+          const active = pathname === href
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                'flex-1 min-w-0 flex flex-col items-center gap-1 pt-2.5 pb-2 transition-colors',
+                active ? 'text-violet-700' : 'text-slate-300',
+              )}
+            >
+              <div className="relative">
+                <Icon size={22} strokeWidth={active ? 2.4 : 2} />
+                {href === '/settings' && calcFloor > 0 && (
+                  <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-violet-600" />
+                )}
+              </div>
+              <span className={cn('text-[11px] leading-none', active ? 'font-bold' : 'font-semibold')}>{label}</span>
+            </Link>
+          )
+        })}
       </nav>
     </>
+  )
+}
+
+// Phone-only top bar — the sidebar (and its logo) is hidden below md, so this is where the
+// brand lives on a phone. Pads for the iPhone notch/status bar (the app uses a translucent
+// status bar when installed to the home screen — see appleWebApp in app/layout.tsx).
+export function MobileHeader() {
+  const pathname = usePathname()
+  if (pathname === '/login' || pathname === '/signup') return null
+  return (
+    <header
+      className="md:hidden flex items-center gap-1.5 px-4 pb-2 border-b border-slate-800 bg-slate-950/80"
+      style={{ paddingTop: 'calc(env(safe-area-inset-top) + 8px)' }}
+    >
+      <Link href="/" className="flex items-center gap-1.5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="" className="w-11 h-11 object-contain" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-text.png" alt="TCGHaven" className="h-6 w-auto object-contain" />
+      </Link>
+    </header>
   )
 }

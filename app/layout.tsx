@@ -23,6 +23,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  // Lets the page use the full screen behind the iPhone notch/home bar; the mobile header and
+  // bottom nav pad themselves with env(safe-area-inset-*) so nothing ends up under them.
+  viewportFit: 'cover',
   themeColor: '#d9c6a0',
 }
 

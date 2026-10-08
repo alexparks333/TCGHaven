@@ -60,7 +60,7 @@ export default function CardDetailPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
         <button onClick={() => router.back()} className="flex items-center gap-1.5 text-slate-400 hover:text-ink text-sm mb-6 transition-colors">
           <ArrowLeft size={14} /> Back to Portfolio
         </button>

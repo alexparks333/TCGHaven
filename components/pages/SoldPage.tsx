@@ -92,7 +92,7 @@ export default function SoldPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-ink">Sold</h1>

@@ -1,14 +1,12 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { Card, PriceHistory, PackSet, Game, SoldCard, CatalogSyncNotice } from './types'
+import { Card, PriceHistory, Game, SoldCard, CatalogSyncNotice } from './types'
 import type { Purchase } from './spending/types'
 
 interface TCGStore {
   cards: Card[]
   soldCards: SoldCard[]
   priceHistory: PriceHistory[]
-  packSets: PackSet[]
-  packPriceOverrides: Record<string, number>
   activeGame: Game
   lastPriceRefresh: string | null
   purchases: Purchase[]
@@ -45,8 +43,6 @@ interface TCGStore {
   addPriceHistoryPoint: (cardId: string, price: number, date: string) => void
   applyPriceUpdates: (updates: { cardId: string; price: number; date: string }[]) => void
   setLastPriceRefresh: (date: string) => void
-  updatePackSet: (id: string, updates: Partial<PackSet>) => void
-  setPackPriceOverride: (id: string, price: number) => void
   addPurchase: (purchase: Purchase) => void
   setCalcFloor: (v: number) => void
   setShowFilters: (v: boolean) => void
@@ -73,94 +69,12 @@ export function portfolioGames(activeGames: Game[], trackedGames: Game[]): Game[
   return both.length > 0 ? both : trackedGames
 }
 
-const defaultPackSets: PackSet[] = [
-  {
-    id: 'sv-prismatic-evolutions',
-    game: 'pokemon',
-    name: 'Prismatic Evolutions',
-    releaseDate: '2025-01-17',
-    packPrice: 4.99,
-    cardsPerPack: 10,
-    totalCards: 193,
-    expectedValue: 6.20,
-    pullRates: [
-      { rarity: 'Illustration Rare', rate: 1/8, avgValue: 12.50 },
-      { rarity: 'Special Illustration Rare', rate: 1/80, avgValue: 85.00 },
-      { rarity: 'Hyper Rare', rate: 1/150, avgValue: 120.00 },
-      { rarity: 'Rare', rate: 1/4, avgValue: 2.50 },
-    ],
-  },
-  {
-    id: 'sv-journey-together',
-    game: 'pokemon',
-    name: 'Journey Together',
-    releaseDate: '2025-03-28',
-    packPrice: 4.99,
-    cardsPerPack: 10,
-    totalCards: 190,
-    expectedValue: 4.80,
-    pullRates: [
-      { rarity: 'Illustration Rare', rate: 1/8, avgValue: 9.00 },
-      { rarity: 'Special Illustration Rare', rate: 1/80, avgValue: 60.00 },
-      { rarity: 'Hyper Rare', rate: 1/150, avgValue: 90.00 },
-      { rarity: 'Rare', rate: 1/4, avgValue: 2.00 },
-    ],
-  },
-  {
-    id: 'lorcana-azurite-sea',
-    game: 'lorcana',
-    name: 'Azurite Sea',
-    releaseDate: '2025-05-09',
-    packPrice: 5.99,
-    cardsPerPack: 12,
-    totalCards: 204,
-    expectedValue: 5.10,
-    pullRates: [
-      { rarity: 'Legendary', rate: 1/24, avgValue: 25.00 },
-      { rarity: 'Enchanted', rate: 1/72, avgValue: 45.00 },
-      { rarity: 'Super Rare', rate: 1/6, avgValue: 4.00 },
-    ],
-  },
-  {
-    id: 'lorcana-shimmering-skies',
-    game: 'lorcana',
-    name: 'Shimmering Skies',
-    releaseDate: '2024-08-09',
-    packPrice: 5.99,
-    cardsPerPack: 12,
-    totalCards: 204,
-    expectedValue: 4.50,
-    pullRates: [
-      { rarity: 'Legendary', rate: 1/24, avgValue: 18.00 },
-      { rarity: 'Enchanted', rate: 1/72, avgValue: 35.00 },
-      { rarity: 'Super Rare', rate: 1/6, avgValue: 3.50 },
-    ],
-  },
-  {
-    id: 'riftbound-core-set',
-    game: 'riftbound',
-    name: 'Riftbound Core Set',
-    releaseDate: '2025-06-01',
-    packPrice: 5.00,
-    cardsPerPack: 10,
-    totalCards: 220,
-    expectedValue: 4.20,
-    pullRates: [
-      { rarity: 'Mythic', rate: 1/20, avgValue: 30.00 },
-      { rarity: 'Legendary', rate: 1/8, avgValue: 8.00 },
-      { rarity: 'Rare', rate: 1/3, avgValue: 2.00 },
-    ],
-  },
-]
-
 export const useStore = create<TCGStore>()(
   persist(
     (set) => ({
   cards: [],
   soldCards: [],
   priceHistory: [],
-  packSets: defaultPackSets,
-  packPriceOverrides: {},
   activeGame: 'pokemon',
   lastPriceRefresh: null,
   purchases: [],
@@ -254,14 +168,6 @@ export const useStore = create<TCGStore>()(
 
   setLastPriceRefresh: (date) => set({ lastPriceRefresh: date }),
 
-  updatePackSet: (id, updates) =>
-    set((state) => ({
-      packSets: state.packSets.map((s) => (s.id === id ? { ...s, ...updates } : s)),
-    })),
-
-  setPackPriceOverride: (id, price) =>
-    set((state) => ({ packPriceOverrides: { ...state.packPriceOverrides, [id]: price } })),
-
   addPurchase: (purchase) =>
     set((state) => ({ purchases: [purchase, ...state.purchases] })),
 
@@ -315,7 +221,6 @@ export const useStore = create<TCGStore>()(
         activeGames: state.activeGames,
         trackedGames: state.trackedGames,
         timeFrame: state.timeFrame,
-        packPriceOverrides: state.packPriceOverrides,
         priceMode: state.priceMode,
         hiddenGroups: state.hiddenGroups,
         lastPriceRefresh: state.lastPriceRefresh,

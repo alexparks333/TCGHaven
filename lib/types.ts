@@ -44,25 +44,6 @@ export interface PriceHistory {
   points: PricePoint[]
 }
 
-export interface PackSet {
-  id: string
-  game: Game
-  name: string
-  releaseDate: string
-  packPrice: number
-  cardsPerPack: number
-  totalCards: number
-  imageUrl?: string
-  pullRates?: PullRate[]
-  expectedValue?: number
-}
-
-export interface PullRate {
-  rarity: string
-  rate: number
-  avgValue: number
-}
-
 // Surfaced on the Inventory page after an Admin Catalog edit auto-cascades to matching
 // inventory entries — a record of "here's what just changed," not the change itself (the
 // Firestore write already happened by the time this exists).

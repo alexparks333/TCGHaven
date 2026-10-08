@@ -21,7 +21,7 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 12. [Card Search Flow](#card-search-flow)
 13. [Price Data](#price-data)
 14. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
-15. [Pack Analysis Feature — How Sets Register](#pack-analysis-feature--how-sets-register)
+15. [Pack Analysis — Removed](#pack-analysis--removed)
 16. [Spending — Hardcoded Product Catalog](#spending--hardcoded-product-catalog)
 17. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
 18. [Cron-Driven Price Sync](#cron-driven-price-sync)
@@ -234,7 +234,7 @@ anyone can browse the table read-only; only the admin sees the write controls.
 
 - **Hide / Unhide** (`toggleHideCard`) — flips `hidden` on a card's Firestore doc. Reversible,
   never deletes data. Hidden cards stay visible in this table (greyed out, "hidden" badge) but
-  disappear from `loadVisibleCatalog()` — search, Cardex, Pack Analysis, everywhere else.
+  disappear from `loadVisibleCatalog()` — search, Cardex, everywhere else.
 - **Edit** (`saveCardEdit`) — patches a card's fields, then **cascades** `number`/`name`/
   `imageUrl` (never price) to any inventory entries across all users whose `apiId` matches, via
   `editCardInFirestore`. Auto-applies with no confirm gate — [[feedback_catalog_source_of_truth]]:
@@ -602,7 +602,7 @@ npm run download-cards   # lorcast API returns all sets automatically, syncs int
 
 No `npm run build`/restart needed for the card data itself (see
 [§4](#card-catalog-system--deep-dive-firestore-backed)) — only the registry entry below is what
-makes a set show up in the Cardex/Pack Analysis, and that's a plain Firestore write too.
+makes a set show up in the Cardex, and that's a plain Firestore write too.
 
 Then register the set in **the registry** (Firestore `registry/main` — this one doc replaced the
 three hardcoded arrays that used to need separate edits — see [§17](#automated-sync--admin-catalog)):
@@ -610,7 +610,6 @@ three hardcoded arrays that used to need separate edits — see [§17](#automate
 ```json
 { "setName": "New Set Name", "code": "XYZ", "lorcastId": "14", "releaseDate": "2026-08-01",
   "cardexGroup": "Booster Sets",
-  "packAnalysis": { "included": true, "id": "NSN", "released": "2026-08-01", "packPrice": 5.99, "hasEpic": true },
   "needsReview": false, "source": "manual" }
 ```
 
@@ -620,16 +619,11 @@ three hardcoded arrays that used to need separate edits — see [§17](#automate
 - `lorcastId` is the lorcast numeric set ID — check via `api.lorcast.com/v0/sets`.
 - `cardexGroup` must be one of the labels in `groupOrder` for the Cardex set picker to show it
   (`"Booster Sets"`, `"Special Sets"`, or `"Promos & Other"` today).
-- `packAnalysis.included: false` if it's not sold in standard booster packs (Fabled, Attack of the Vine!, etc).
-- `hasEpic: true` for any set released after Shimmering Skies (set 9+); `false` for sets 1–8. This flag
-  changes the foil pull rate calculation: `false` → foilSR = 22%, no Epic slot; `true` → foilSR = 20%,
-  foilEpic = 1/48 packs.
 - `source: "manual"` sets created via Admin Catalog's "New Set" form don't exist on lorcast at
   all — `getLorcanaSets()` (`lib/api/lorcana.ts`) specifically merges these in since the live
   lorcast `/sets` call would otherwise never include them (see [§5](#admin-catalog-page--architecture-caching--diagnostics)).
 
-`lib/api/lorcana.ts`, `components/pages/CardexPage.tsx`, and
-`app/api/pack-analysis/lorcana/route.ts` all read this file at runtime via `lib/api/registry.ts` —
+`lib/api/lorcana.ts` and `components/pages/CardexPage.tsx` both read this at runtime via `lib/api/registry.ts` —
 no code changes needed once the entry is added.
 
 ---
@@ -1167,7 +1161,7 @@ themed card).
 
 **As of the price-refresh redesign (see [§18](#cron-driven-price-sync)), live external price
 fetches for all four games happen in exactly one place: the 6-hourly cron-driven catalog sync.**
-Nothing else — not Portfolio's "Refresh Prices" button, not Pack Analysis — ever calls
+Nothing else — not Portfolio's "Refresh Prices" button — ever calls
 tcgcsv.com/lorcast/pokemontcg.io directly anymore. Both instead read whatever the catalog
 currently has (`loadCatalog()`/`loadVisibleCatalog()`, [§4](#card-catalog-system--deep-dive-firestore-backed)),
 which is therefore at most ~6 hours stale. This was a deliberate trade (see [§18](#cron-driven-price-sync)
@@ -1213,10 +1207,10 @@ freshness as everywhere else (at most ~6 hours stale, per the cron above).
 
 - **Source:** `tcgcsv.com` (TCGPlayer mirror, category 89), synced into each card's Firestore doc
 - **When fetched:** By the cron sync ([§18](#cron-driven-price-sync)), or `npm run download-cards`.
-  Portfolio's refresh and Pack Analysis used to each independently re-download and re-parse every
-  set's full `ProductsAndPrices.csv` live, on every single call — the single most expensive thing
-  in the app before this redesign, since it scaled with every set ever added, on every user's
-  every refresh/page view. Both now just read the catalog.
+  Portfolio's refresh used to independently re-download and re-parse every set's full
+  `ProductsAndPrices.csv` live, on every single call — the single most expensive thing in the app
+  before this redesign, since it scaled with every set ever added, on every user's every
+  refresh/page view. It now just reads the catalog.
 - **Alt Art/Star cards:** These are foil-only; `marketPrice` is set to the foil price,
   `marketPriceFoil` is 0 (they don't have separate foil vs non-foil listing)
 - **To update prices:** the cron sync, or `npm run download-cards` (no rebuild needed — see [§4](#card-catalog-system--deep-dive-firestore-backed))
@@ -1392,94 +1386,17 @@ pass rather than trusting this doc's own older per-game rarity lists, which caug
 
 ---
 
-## Pack Analysis Feature — How Sets Register
+## Pack Analysis — Removed
 
-The Pack Analysis (`/pack-analysis`) shows expected value (EV) per booster pack. It actually
-covers three games with three different implementations, not just Lorcana — `PackAnalysisPage.tsx`
-routes `lorcana`/`riftbound` to their own live, catalog-backed API routes (below) and `pokemon` to
-`StandardView`, driven by `store.packSets` (`lib/store.ts`'s `defaultPackSets`) instead. One Piece
-and MTG aren't in Pack Analysis at all — no pull-rate data exists for either.
-
-### Architecture
-
-1. `PackAnalysisPage` detects `activeGame === 'lorcana'`
-2. Fetches `GET /api/pack-analysis/lorcana`
-3. `app/api/pack-analysis/lorcana/route.ts` (`export const dynamic = 'force-dynamic'`, so Next
-   never pre-renders/caches this route at build time):
-   - Reads the catalog via `loadVisibleCatalog('lorcana')` (`lib/api/catalog.ts` — same
-     Firestore-backed, in-memory-cached read every other consumer uses, see [§4](#card-catalog-system--deep-dive-firestore-backed)).
-     Prices come from whatever the catalog has, kept fresh by the cron sync
-     ([§18](#cron-driven-price-sync)) — this route no longer does its own live lorcast fetch on
-     top (it used to; `app/api/pack-analysis/riftbound/route.ts` had the equivalent live tcgcsv
-     CSV fetch, also removed — see [Price Data](#price-data))
-   - Calls `getLorcanaBoosterSets()` (`lib/api/registry.ts`), which reads the registry (Firestore
-     `registry/main`) and returns every set with `packAnalysis.included: true` — this replaced the old hardcoded
-     `BOOSTER_SETS` array (see [§17](#automated-sync--admin-catalog))
-   - Groups by rarity, computes average prices, applies pull rates, returns EV breakdown
-
-### Pull Rates Used
-
-Based on community box-opening analysis (Ravensburger does not publish official rates):
-
-| Slot | Rate |
-|------|------|
-| Cold foil slot: Enchanted | 1 in 72 packs |
-| Cold foil slot: Legendary | 1 in 24 packs |
-| Cold foil slot: SR (sets without Epic) | 22% of packs |
-| Cold foil slot: SR (sets with Epic) | 20% of packs |
-| Cold foil slot: Epic | 1 in 48 packs (sets 9+ only) |
-| Non-foil SR upgrade | 25% of packs |
-
-Sets with Epic rarity (Whispers in the Well and later): `hasEpic: true`
-Sets 1–8 (The First Chapter through Reign of Jafar): `hasEpic: false`
-
-### Adding a New Lorcana Booster Set to Pack Analysis
-
-Set `packAnalysis.included: true` (with `id`, `released`, `packPrice`, `hasEpic`) on the set's
-entry in the registry (Firestore `registry/main`) — see the [Lorcana add-a-set guide](#lorcana--data-source-schema-add-a-set-guide)
-above for the exact shape. No route code changes needed; it reads the registry fresh every
-request, same as it always re-read the catalog fresh (`force-dynamic`).
-
-**Note:** Fabled and Attack of the Vine! have `packAnalysis.included: false` in the registry
-because they are not sold in standard booster packs. The Pack Analysis only covers traditional
-booster sets.
-
-### Riftbound Pack Analysis
-
-`app/api/pack-analysis/riftbound/route.ts` — same "read the catalog only, `force-dynamic`" shape
-as Lorcana's route, with its own hardcoded `SET_META`/`BOOSTER_SET_CODES` (Origins/Spiritforged/
-Unleashed only — Proving Grounds is a promo/event set, excluded) and its own `PULL_RATES`
-constant, independent of Lorcana's pack structure entirely (7 Commons + 3 Uncommons + 2 foil
-Rare-or-better slots + 1 foil wildcard slot + 1 token, per pack):
-
-| Slot | Rate | Source |
-|------|------|--------|
-| Epic (in the rare-or-better slots) | 25% | Official (playriftbound.com announcements) |
-| Alt Art (foil wildcard slot) | 8.33% (~2 per 24-pack box) | Official |
-| Overnumbered (foil wildcard slot) | 1.4% (~1 in 72) | Community |
-| Signature (foil wildcard slot) | 0.14% (~1 in 720) | Community |
-
-Sorting cards into Common/Uncommon/Rare/Epic/Alt Art/Overnumbered/Signature buckets for the EV
-math goes through the shared `riftboundVariantFlags()` helper (`lib/utils.ts`, see quirk #5's
-variant table) — this route used to have its own drifted copy of that classification logic
-(string-matching `id.includes('-star-')`, a leftover `rarity === 'Showcase'` check, etc.), the
-same duplication already fixed once in the Portfolio price route and search.
-
-`lib/pack-analysis/riftbound-ev.ts` exports this same `PULL_RATES` constant for the frontend to
-read directly — it used to also carry a large parallel EV implementation (`RIFTBOUND_EV_SETS`,
-`computeEV()`, `RIFTBOUND_EV`) with per-set data frozen at authoring time, entirely unused by
-anything (`PackAnalysisPage.tsx` only ever imported `PULL_RATES`) and already diverged from the
-real, live-computed route above — removed as dead code.
-
-### Pokémon Pack Analysis — static, not catalog-backed
-
-Unlike Lorcana/Riftbound, Pokémon has no API route at all — `lib/store.ts`'s `defaultPackSets`
-hardcodes a handful of `PackSet` entries (prices, pull rates, `expectedValue`) frozen at whatever
-date they were authored (some carry an explicit "as of" date in a comment), and
-`StandardView`/`PackAnalysisPage.tsx` just renders them. There's no refresh mechanism — these
-numbers silently go stale forever unless someone manually edits `lib/store.ts`. If this becomes a
-real pain point, the fix is the same shape as Lorcana/Riftbound's: a `force-dynamic` route reading
-`loadVisibleCatalog('pokemon')` and computing EV live.
+The `/pack-analysis` page (expected value per booster pack for Lorcana/Riftbound/Pokémon) was
+removed entirely on 2026-10-08 at the owner's request — it wasn't wanted and took up sidebar
+space. Gone: `app/pack-analysis/`, `app/api/pack-analysis/{lorcana,riftbound}/`,
+`components/pages/PackAnalysisPage.tsx`, `lib/pack-analysis/`, the store's `packSets`/
+`packPriceOverrides` (Pokémon's hardcoded EV data), the `PackSet`/`PullRate` types,
+`getLorcanaBoosterSets()`, and the registry's per-set `packAnalysis` field (no longer written by
+the sync, the New Set form, or Settings' Needs Review editor). Older `registry/main` entries may
+still carry a stale `packAnalysis` value in Firestore; nothing reads it. This section and its
+number are kept only so the doc's other `§16+` references stay valid.
 
 ---
 
@@ -1493,8 +1410,7 @@ type, name, price, imageUrl, packsIncluded, releaseDate }`, `type` one of `pack`
 product image sourced from each game's own CDN (see that file's header comments for the confirmed
 CDN URL patterns per game). A `Purchase` (`lib/spending/types.ts` — `{ id, productId, pricePaid,
 quantity, date }`, `users/{uid}/purchases/{id}` in Firestore) records what was actually paid for
-one of these products, separately from its frozen catalog `price`. Like Pokémon's Pack Analysis
-data above, `SPENDING_CATALOG`'s prices are a permanent snapshot with no update mechanism — real
+one of these products, separately from its frozen catalog `price`. `SPENDING_CATALOG`'s prices are a permanent snapshot with no update mechanism — real
 MSRPs/promos will silently drift from what's shown over time.
 
 ---
@@ -1527,7 +1443,7 @@ explanation of what each sync does under the hood.
    anything uncertain is left unmatched for manual review instead of guessing. If a match is
    found, the game re-downloads once more so that set's prices get merged in.
 4. **Registry update** — appends new sets with conservative defaults (`needsReview: true`,
-   Lorcana `packAnalysis.included: false`, Riftbound `cardexGroup: "Main Sets"`) and saves the
+   Lorcana `cardexGroup: "Special Sets"`, Riftbound `cardexGroup: "Main Sets"`) and saves the
    updated registry back to Firestore.
 
 Pokémon has no registry involvement at all (steps 2–4 don't apply) — its set list comes live from
@@ -1604,10 +1520,10 @@ visible even from the "last known status" view, not just right after clicking Sy
 - **Firestore `registry/main`** — the single source of truth this whole feature reads/writes
   (formerly `data/set-registry.json`, migrated because a Vercel serverless function can't durably
   write to a git-tracked file). Replaced the hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS`/
-  `LORCANA_KNOWN`/`RIFTBOUND_KNOWN` (`CardexPage.tsx`), `BOOSTER_SETS` (pack-analysis route),
+  `LORCANA_KNOWN`/`RIFTBOUND_KNOWN` (`CardexPage.tsx`), `BOOSTER_SETS` (the since-removed Pack Analysis route),
   `RIFTBOUND_SETS` (`lib/api/riftbound.ts`), and `LORCANA_SETS_FALLBACK` (`lib/api/lorcana.ts`).
 - `lib/api/registry.ts` — `loadSetRegistry`/`saveSetRegistry`/`invalidateRegistryCache` plus the
-  per-game `getXRegistrySets`/`getLorcanaBoosterSets` readers, all async now (a Firestore read
+  per-game `getXRegistrySets` readers, all async now (a Firestore read
   isn't free the way a local fs read was) with a short in-process staleness cache, mirroring
   `lib/api/catalog.ts`'s shape just without the chunked-snapshot machinery (this doc is tiny).
 - `scripts/lib/catalog-sync.mjs` — the actual per-game scraping + Firestore-sync logic
@@ -1845,7 +1761,7 @@ login).
 always re-loaded from Firestore on login), but wrapped in Zustand's `persist` middleware with a
 `localStorage` backing (`createJSONStorage(() => localStorage)`, key `"tcghaven-filters"`) for a
 small, deliberately-scoped slice of display/filter preferences via `partialize`:
-`calcFloor`, `activeGames`, `timeFrame`, `packPriceOverrides`, `priceMode`, `hiddenGroups`,
+`calcFloor`, `activeGames`, `trackedGames`, `timeFrame`, `priceMode`, `hiddenGroups`,
 `lastPriceRefresh`. None of this is inventory data — it's UI state that's reasonable to survive a
 refresh/relaunch without waiting on Firestore, and none of it is per-account-sensitive enough to
 need clearing on sign-out (a shared/public-device sign-out concern worth being aware of but not
@@ -1859,7 +1775,6 @@ yet addressed).
   soldCards: SoldCard[]      // see "Sold Cards" in §19
   priceHistory: PriceHistory[]
   purchases: Purchase[]      // pack purchase records from Spending page (§16)
-  packSets: PackSet[]        // Pokemon's hardcoded EV data — see §15's Pack Analysis note
   activeGame: Game           // selected game filter
   lastPriceRefresh: string | null
   cardUnlocks: Array<{ id: string; card: Card }>  // queue for CardUnlockToast, below
@@ -2004,10 +1919,6 @@ TCGHaven/
 │   │   │                             no live sets API — mirrors riftbound.ts's shape, §10)
 │   │   └── mtg.ts                 ← searchMtgCards(), getMtgSets() (live api.scryfall.com/sets +
 │   │                             manual-registry merge — mirrors pokemon.ts's shape, §11)
-│   └── pack-analysis/
-│       ├── lorcana-ev.ts          ← TypeScript interfaces for Lorcana EV data
-│       └── riftbound-ev.ts        ← PULL_RATES only (§15) — used to also carry a large dead
-│                                     parallel EV implementation, removed
 │
 ├── app/
 │   ├── layout.tsx                 ← Root HTML layout, ClientWrapper (SSR disabled)
@@ -2024,7 +1935,6 @@ TCGHaven/
 │   │                                 components/portfolio/PortfolioAnalyticsPage.tsx — linked
 │   │                                 from every Portfolio stat tile, undocumented elsewhere
 │   ├── spending/page.tsx          ← Pack spending tracker (§16)
-│   ├── pack-analysis/page.tsx     ← Pack EV analysis page (§15)
 │   ├── sold/page.tsx              ← Sold cards tracker → components/pages/SoldPage.tsx (§19)
 │   ├── login/page.tsx
 │   ├── signup/page.tsx            ← Invite-passcode-gated signup (§19)
@@ -2075,13 +1985,6 @@ TCGHaven/
 │       │                             full sync excluded on purpose, see sync/mtg above — but its
 │       │                             lightweight checkForNewMtgSets() runs here every time, see
 │       │                             §18), triggered by an external scheduler outside this repo
-│       ├── pack-analysis/
-│       │   ├── lorcana/route.ts   ← Lorcana EV calculator (force-dynamic), reads catalog only (§15)
-│       │   └── riftbound/route.ts ← Riftbound EV calculator (force-dynamic), reads catalog only,
-│       │                             its own PULL_RATES/SET_META (§15). Pokémon's own Pack
-│       │                             Analysis is NOT a route — it's lib/store.ts's hardcoded
-│       │                             defaultPackSets (§15). One Piece/MTG aren't in Pack Analysis
-│       │                             at all — no pull-rate data for either.
 │       └── prices/
 │           ├── pokemon/route.ts   ← Batch Pokémon price lookup (Portfolio refresh) — catalog-only
 │           ├── lorcana/route.ts   ← Batch Lorcana price lookup — catalog-only
@@ -2122,8 +2025,6 @@ TCGHaven/
     │   │                             (incl. whole-catalog search), CardTable, AddCardForm,
     │   │                             EditCardForm, NewSetForm, RawSourceCheckPanel
     │   ├── SpendingPage.tsx        ← Pack purchase logging against SPENDING_CATALOG (§16)
-    │   ├── PackAnalysisPage.tsx    ← Expected value analysis — routes per-game to StandardView
-    │   │                             (Pokemon) or a live catalog-backed view (Lorcana/Riftbound) (§15)
     │   └── SettingsPage.tsx        ← Inventory number repair (any signed-in user) + Needs Review
     │                                 editor (isAdmin-gated, §5, §17)
     └── portfolio/
@@ -2176,14 +2077,9 @@ by number alone will match all variants of a number.
 `cards.lorcast.io` serves AVIF images. They won't display on old browsers (pre-Safari 16,
 pre-Chrome 85, pre-Firefox 93). No workaround without changing image source.
 
-### 7. Pack Analysis route is force-dynamic
-Both `app/api/pack-analysis/{lorcana,riftbound}/route.ts` have `export const dynamic =
-'force-dynamic'` to prevent Next.js from pre-rendering them at build time. Without this, prices
-would be baked in at build time and never update. Each route reads the catalog via
-`loadVisibleCatalog()` on every request, same Firestore-backed cache as everywhere else described
-in [§4](#card-catalog-system--deep-dive-firestore-backed) — neither does its own live price fetch
-anymore (both used to; see [§18](#cron-driven-price-sync)). Freshness now comes entirely from how
-recently the cron sync last ran, not from this route.
+### 7. (Removed) Pack Analysis
+This quirk described the Pack Analysis routes, which were removed along with the whole feature
+(see [§15](#pack-analysis--removed)). Numbering kept so other references to later quirks stay valid.
 
 ### 8. `apiId` is the catalog's `id` field
 When Alex selects a card from the search dropdown in AddCardDialog, the `id` field from

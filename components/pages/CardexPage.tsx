@@ -755,7 +755,7 @@ export default function CardexPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-ink">Cardex</h1>
           <p className="text-slate-400 text-sm mt-0.5">
@@ -912,7 +912,7 @@ export default function CardexPage() {
 
             {/* Catalog-backed card grid */}
             {!catalogPending && !isSpecial && filteredEnriched.length > 0 && (
-              <div className={cn('grid gap-3', artPending && 'hidden')} style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+              <div className={cn('grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]', artPending && 'hidden')}>
                 {filteredEnriched.map((card, i) => (
                   <CardTile
                     key={card.id}
@@ -1020,7 +1020,7 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
             <span className="text-sm font-bold text-ink">{setName}</span>
             <span className="text-xs text-slate-500">{setCards.length} card{setCards.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+          <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
             {setCards.map((card) => (
               <InventoryCardTile
                 key={card.id}

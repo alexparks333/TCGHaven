@@ -2,7 +2,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 
 // Single source of truth for Lorcana/Riftbound set metadata that used to be hardcoded
-// across CardexPage.tsx, the pack-analysis route, and lib/api/{lorcana,riftbound}.ts, then
+// across CardexPage.tsx and lib/api/{lorcana,riftbound}.ts, then
 // lived in data/set-registry.json before moving to Firestore (registry/main) so the Admin
 // Catalog sync routes can write it from a Vercel serverless function, which has no writable
 // local filesystem. Reads are cached in-process with a short staleness window (like
@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase/config'
 // than the old "always re-read the file" approach, since a Firestore read isn't free the way a
 // local fs read was.
 
-// Pokemon has no cardexGroup/packAnalysis — it's not part of Pack Analysis, and unlike
+// Pokemon has no cardexGroup — and unlike
 // Lorcana/Riftbound its Cardex groups aren't registry-curated at all: CardexPage.tsx derives
 // them automatically from the live api.pokemontcg.io `series` field instead (see CLAUDE.md
 // quirk #9 for why hand-curating a cardexGroup per set isn't worth it for 170+ Pokemon sets). A
@@ -31,7 +31,6 @@ export interface LorcanaRegistrySet {
   releaseDate: string | null
   cardexGroup: string | null
   cardexLabel?: string
-  packAnalysis: { included: boolean; id?: string; released?: string; packPrice?: number; hasEpic?: boolean }
   needsReview: boolean
   source: string
 }
@@ -149,16 +148,4 @@ export async function getOnePieceRegistrySets(): Promise<OnePieceRegistrySet[]> 
 
 export async function getMtgRegistrySets(): Promise<MtgRegistrySet[]> {
   return (await loadSetRegistry()).mtg.sets
-}
-
-export async function getLorcanaBoosterSets() {
-  return (await getLorcanaRegistrySets())
-    .filter((s) => s.packAnalysis?.included)
-    .map((s) => ({
-      name: s.setName,
-      id: s.packAnalysis.id ?? s.code ?? s.setName,
-      released: s.packAnalysis.released ?? s.releaseDate ?? '',
-      packPrice: s.packAnalysis.packPrice ?? 5.99,
-      hasEpic: !!s.packAnalysis.hasEpic,
-    }))
 }

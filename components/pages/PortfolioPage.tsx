@@ -469,7 +469,7 @@ export default function PortfolioPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
 
         {/* Progress bar — fixed at very top of viewport */}
         {barWidth > 0 && (
@@ -486,8 +486,8 @@ export default function PortfolioPage() {
           </div>
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Header — stacks on phones so the price toggle and Refresh don't crush the title */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
             <p className="text-slate-500 text-xs mt-0.5">
@@ -525,7 +525,7 @@ export default function PortfolioPage() {
             </div>
             <button onClick={() => refreshPrices()} disabled={refreshing} className="btn-secondary">
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing ? 'Refreshing…' : 'Refresh Prices'}
+              <span>{refreshing ? 'Refreshing…' : <>Refresh<span className="hidden sm:inline"> Prices</span></>}</span>
             </button>
           </div>
           {refreshError && (
@@ -538,13 +538,13 @@ export default function PortfolioPage() {
         </div>
 
         {/* Stat tiles */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
           <div
-            className="stat-card col-span-2 lg:col-span-1 cursor-pointer hover:ring-1 hover:ring-violet-500/50 transition-all"
+            className="stat-card cursor-pointer hover:ring-1 hover:ring-violet-500/50 transition-all"
             onClick={() => router.push('/portfolio/analytics?metric=value')}
           >
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Collection Value</span>
-            <span className="text-3xl font-bold text-ink">{formatCurrency(totals.value)}</span>
+            <span className="text-2xl md:text-3xl font-bold text-ink">{formatCurrency(totals.value)}</span>
             {calcFloor > 0 && <span className="text-[10px] text-slate-600">floor {formatCurrency(calcFloor)}</span>}
           </div>
           <div
@@ -580,7 +580,7 @@ export default function PortfolioPage() {
                 </button>
               )}
             </div>
-            <span className="text-2xl font-bold text-ink">{formatCurrency(totals.adjustedCost)}</span>
+            <span className="text-xl md:text-2xl font-bold text-ink">{formatCurrency(totals.adjustedCost)}</span>
             {(includePacks && totalPackSpend > 0 || includeSold && totalSoldRevenue > 0) && timeFrame === 'entry' && (
               <span className="text-[11px] text-slate-500 mt-0.5">
                 cards {formatCurrency(totals.cardCost)}
@@ -596,7 +596,7 @@ export default function PortfolioPage() {
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">
               {periodLabel} P&L
             </span>
-            <span className={`text-2xl font-bold ${totals.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            <span className={`text-xl md:text-2xl font-bold ${totals.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {formatCurrency(totals.pnl)}
             </span>
             {showHistoryNote
@@ -616,7 +616,7 @@ export default function PortfolioPage() {
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">
               {periodLabel} Return
             </span>
-            <span className={`text-2xl font-bold ${
+            <span className={`text-xl md:text-2xl font-bold ${
               showHistoryNote && periodCardCount === 0
                 ? 'text-slate-600'
                 : totals.pnlPct >= 0 ? 'text-emerald-600' : 'text-red-600'
@@ -828,7 +828,7 @@ export default function PortfolioPage() {
                 router.push(`/portfolio/${card.id}`)
               }}
               title="Click to view card · ⌘/Ctrl+Click to search eBay sold listings"
-              className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_40px] gap-2 md:gap-4 px-5 py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
+              className="grid grid-cols-[1fr_auto] items-center md:items-stretch md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_40px] gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 {card.imageUrl
@@ -870,26 +870,36 @@ export default function PortfolioPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center">
+              {/* Phone: value + P&L stacked on the right, instead of five unlabeled columns
+                  wrapping into a tall stack under the card name */}
+              <div className="md:hidden text-right">
+                <div className="text-sm text-ink font-semibold">{formatCurrency(card.currentVal)}</div>
+                <div className={`text-xs font-medium ${
+                  periodLabel && !card.hasPeriodData ? 'text-slate-600' : card.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'
+                }`}>
+                  {periodLabel && !card.hasPeriodData ? '—' : `${card.pnl >= 0 ? '+' : ''}${formatCurrency(card.pnl)} · ${formatPercent(card.pnlPct)}`}
+                </div>
+              </div>
+              <div className="hidden md:flex items-center">
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>{GAME_LABELS[card.game]}</span>
               </div>
-              <div className="text-sm text-slate-300 flex items-center">{formatCurrency(card.cost)}</div>
-              <div className="text-sm text-ink font-medium flex items-center">{formatCurrency(card.currentVal)}</div>
-              <div className={`text-sm font-medium flex items-center ${
+              <div className="hidden md:flex text-sm text-slate-300 items-center">{formatCurrency(card.cost)}</div>
+              <div className="hidden md:flex text-sm text-ink font-medium items-center">{formatCurrency(card.currentVal)}</div>
+              <div className={`hidden md:flex text-sm font-medium items-center ${
                 periodLabel && !card.hasPeriodData
                   ? 'text-slate-600'
                   : card.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'
               }`}>
                 {periodLabel && !card.hasPeriodData ? '—' : `${card.pnl >= 0 ? '+' : ''}${formatCurrency(card.pnl)}`}
               </div>
-              <div className={`text-sm font-medium flex items-center ${
+              <div className={`hidden md:flex text-sm font-medium items-center ${
                 periodLabel && !card.hasPeriodData
                   ? 'text-slate-600'
                   : card.pnlPct >= 0 ? 'text-emerald-600' : 'text-red-600'
               }`}>
                 {periodLabel && !card.hasPeriodData ? '—' : formatPercent(card.pnlPct)}
               </div>
-              <div className="flex items-center justify-end"><ArrowUpRight size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" /></div>
+              <div className="hidden md:flex items-center justify-end"><ArrowUpRight size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" /></div>
             </div>
           ))}
 

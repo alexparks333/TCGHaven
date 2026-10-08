@@ -30,7 +30,6 @@ export async function runLorcanaSync(): Promise<Response> {
         registry.lorcana.sets.push({
           setName, code: null, lorcastId: null, releaseDate: null,
           cardexGroup: 'Special Sets',
-          packAnalysis: { included: false },
           needsReview: true, source: 'auto-detected', addedAt: nowIso,
         } as (typeof registry.lorcana.sets)[number])
       }

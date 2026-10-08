@@ -72,7 +72,7 @@ const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 export default function AdminCatalogPage() {
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-ink">Admin Catalog</h1>
           <p className="text-slate-400 text-sm mt-0.5">

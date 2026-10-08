@@ -386,7 +386,7 @@ export default function InventoryPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
         {saveError && (
           <div className="mb-4 flex items-center gap-3 bg-red-100/50 border border-red-300 rounded-xl px-4 py-3 text-sm text-red-700">
             <AlertTriangle size={16} className="text-red-600 flex-shrink-0" />
@@ -421,7 +421,7 @@ export default function InventoryPage() {
             ))}
           </div>
         )}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <p className="text-slate-400 text-sm mt-0.5">
@@ -429,7 +429,7 @@ export default function InventoryPage() {
               {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
             </p>
           </div>
-          <button onClick={() => setShowAdd(true)} className="btn-primary">
+          <button onClick={() => setShowAdd(true)} className="btn-primary shrink-0 whitespace-nowrap">
             <Plus size={16} />
             Add Card
           </button>
@@ -508,9 +508,9 @@ export default function InventoryPage() {
           )}
         </div>
 
-        {/* Search + Date filter */}
-        <div className="flex gap-2 mb-4">
-          <div className="relative flex-1">
+        {/* Search + Date filter — search gets its own full-width row on phones */}
+        <div className="flex flex-wrap md:flex-nowrap gap-2 mb-4">
+          <div className="relative w-full md:w-auto md:flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
@@ -666,14 +666,14 @@ export default function InventoryPage() {
                 <div key={key} className="border-b border-slate-800/50 last:border-0">
                   {/* Main row */}
                   <div
-                    className="relative grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-2 md:gap-4 px-5 py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
                     onClick={(e) => {
                       if (e.ctrlKey || e.metaKey) { openEbaySearch(rep); return }
                       router.push(`/portfolio/${lots[0].id}`)
                     }}
                     title="Click to view card detail · ⌘/Ctrl+Click to search eBay"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 row-span-2 md:row-span-1 min-w-0">
                       {rep.imageUrl ? (
                         <img src={rep.imageUrl} alt={rep.name} className="w-10 h-14 object-contain rounded-md" />
                       ) : (
@@ -689,17 +689,17 @@ export default function InventoryPage() {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}</div>
+                        <div className="text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}<span className="md:hidden"> · {rep.set} · ×{totalQty}</span></div>
                         {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
-                    <div className="text-sm text-slate-300 flex items-center">{rep.set}</div>
-                    <div className="text-sm text-slate-300 flex items-center">
+                    <div className="text-sm text-slate-300 hidden md:flex items-center">{rep.set}</div>
+                    <div className="text-sm text-slate-300 hidden md:flex items-center">
                       {multiLot ? <span className="text-slate-500 text-xs">varies</span> : CONDITION_LABELS[rep.condition]}
                     </div>
-                    <div className="text-sm font-semibold text-ink flex items-center">×{totalQty}</div>
-                    <div className="text-sm text-slate-300 flex items-center">{formatCurrency(gPaid)}</div>
-                    <div className="flex flex-col justify-center">
+                    <div className="text-sm font-semibold text-ink hidden md:flex items-center">×{totalQty}</div>
+                    <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(gPaid)}</div>
+                    <div className="flex flex-col justify-center items-end md:items-start">
                       {marketTotal !== null ? (
                         <>
                           <span className="text-sm text-ink font-medium">{formatCurrency(marketTotal)}</span>
@@ -718,12 +718,17 @@ export default function InventoryPage() {
                       <button
                         onClick={(e) => { e.stopPropagation(); openSell(lots[0]) }}
                         title="Sell"
-                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
                       >
                         <DollarSign size={13} strokeWidth={2.5} />
                       </button>
                     )}
-                    <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1 md:gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                      {!multiLot && (
+                        <button onClick={() => openSell(lots[0])} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
+                          <DollarSign size={14} />
+                        </button>
+                      )}
                       {!multiLot && (
                         <button
                           onClick={() => setEditCard(lots[0])}
@@ -753,7 +758,7 @@ export default function InventoryPage() {
 
                   {/* Expanded lots */}
                   {isExpanded && multiLot && (
-                    <div className="bg-slate-900/50 border-t border-slate-800/50 px-5 pb-2">
+                    <div className="bg-slate-900/50 border-t border-slate-800/50 px-3 md:px-5 pb-2">
                       {lots.map((lot, i) => (
                         <div
                           key={lot.id}
@@ -791,11 +796,14 @@ export default function InventoryPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); openSell(lot) }}
                             title="Sell"
-                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
                           >
                             <DollarSign size={12} strokeWidth={2.5} />
                           </button>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button onClick={() => openSell(lot)} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
+                              <DollarSign size={13} />
+                            </button>
                             <button
                               onClick={() => setEditCard(lot)}
                               className="p-1.5 rounded-lg text-slate-600 hover:text-ink hover:bg-slate-700 transition-colors"
@@ -836,9 +844,9 @@ export default function InventoryPage() {
                     router.push(`/portfolio/${card.id}`)
                   }}
                   title="Click to view card detail · ⌘/Ctrl+Click to search eBay sold listings"
-                  className="relative grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-2 md:gap-4 px-5 py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                  className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1.5 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 row-span-2 md:row-span-1 min-w-0">
                     {card.imageUrl ? (
                       <img src={card.imageUrl} alt={card.name} className="w-10 h-14 object-contain rounded-md" />
                     ) : (
@@ -859,15 +867,15 @@ export default function InventoryPage() {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
+                      <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}<span className="md:hidden"> · {card.set} · ×{card.quantity}</span></div>
                       {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
-                  <div className="text-sm text-slate-300 flex items-center">{card.set}</div>
-                  <div className="text-sm text-slate-300 flex items-center">{CONDITION_LABELS[card.condition]}</div>
-                  <div className="text-sm text-slate-300 flex items-center">×{card.quantity}</div>
-                  <div className="text-sm text-slate-300 flex items-center">{formatCurrency(card.purchasePrice)}</div>
-                  <div className="flex flex-col justify-center">
+                  <div className="text-sm text-slate-300 hidden md:flex items-center">{card.set}</div>
+                  <div className="text-sm text-slate-300 hidden md:flex items-center">{CONDITION_LABELS[card.condition]}</div>
+                  <div className="text-sm text-slate-300 hidden md:flex items-center">×{card.quantity}</div>
+                  <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice)}</div>
+                  <div className="flex flex-col justify-center items-end md:items-start">
                     {marketTotal !== null ? (
                       <>
                         <span className="text-sm text-ink font-medium">{formatCurrency(marketTotal)}</span>
@@ -885,11 +893,14 @@ export default function InventoryPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); openSell(card) }}
                     title="Sell"
-                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
                   >
                     <DollarSign size={13} strokeWidth={2.5} />
                   </button>
-                  <div className="flex items-center gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1 md:gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => openSell(card)} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
+                      <DollarSign size={14} />
+                    </button>
                     <button onClick={() => setEditCard(card)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700 transition-colors">
                       <Edit2 size={14} />
                     </button>

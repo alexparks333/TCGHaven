@@ -118,7 +118,6 @@ export async function POST(request: Request) {
         lorcastId: null,
         releaseDate,
         cardexGroup,
-        packAnalysis: { included: false },
         needsReview: false,
         source: 'manual',
       }

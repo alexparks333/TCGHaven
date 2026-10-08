@@ -457,7 +457,7 @@ function CollectionDetail({
       ) : normalizedQuery ? (
         // Drag-to-reorder is ambiguous against a filtered subset, so search results render as a
         // plain (non-sortable) grid — clear the search to go back to reordering.
-        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+        <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
           {filteredEnriched.map((card) => (
             <PersonalCardTile
               key={cardKey(card)}
@@ -475,7 +475,7 @@ function CollectionDetail({
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
-            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(112px, 1fr))' }}>
+            <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
               {enriched.map((card) => (
                 <SortablePersonalCardTile
                   key={cardKey(card)}

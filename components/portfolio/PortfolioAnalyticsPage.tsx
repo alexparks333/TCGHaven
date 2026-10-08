@@ -173,7 +173,7 @@ export default function PortfolioAnalyticsPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">

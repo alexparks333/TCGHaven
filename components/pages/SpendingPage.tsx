@@ -114,7 +114,7 @@ export default function SpendingPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0">
+      <div>
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-ink">Spending</h1>

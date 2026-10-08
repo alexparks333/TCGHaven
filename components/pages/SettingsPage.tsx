@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench, SlidersHorizontal, ShieldCheck, LogOut } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
@@ -17,7 +19,6 @@ interface LorcanaRegistrySet {
   code: string | null
   releaseDate: string | null
   cardexGroup: string | null
-  packAnalysis: { included: boolean; packPrice?: number; hasEpic?: boolean }
   needsReview: boolean
   source: string
 }
@@ -51,7 +52,7 @@ export default function SettingsPage() {
 
   return (
     <AuthGuard>
-      <div className="pb-20 md:pb-0 max-w-2xl">
+      <div className="max-w-2xl">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-ink">Settings</h1>
           <p className="text-slate-400 text-sm mt-0.5">
@@ -59,10 +60,58 @@ export default function SettingsPage() {
           </p>
         </div>
 
+        <AccountActions isAdmin={isAdmin} />
         <InventoryNumberRepairCard />
         {isAdmin && <NeedsReviewCard />}
       </div>
     </AuthGuard>
+  )
+}
+
+// ── Account actions (phones only) ─────
+// On a phone the sidebar is hidden and the bottom bar only has room for the six main pages, so
+// Portfolio Filters, Admin and Sign out live here instead. Desktop keeps them in the sidebar.
+function AccountActions({ isAdmin }: { isAdmin: boolean }) {
+  const { user, signOut } = useAuth()
+  const { calcFloor, setShowFilters } = useStore()
+  const router = useRouter()
+  if (!user) return null
+  const initials = user.displayName
+    ? user.displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    : user.email?.[0]?.toUpperCase() ?? '?'
+  const row = 'w-full flex items-center gap-3 px-4 py-3.5 text-[15px] font-medium text-slate-200 border-t border-slate-800 first:border-t-0'
+
+  return (
+    <div className="md:hidden card-glass overflow-hidden mb-6">
+      <div className="flex items-center gap-3 px-4 py-3.5 bg-slate-950/40">
+        <div className="w-9 h-9 rounded-full bg-violet-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-ink truncate">{user.displayName || 'Account'}</div>
+          <div className="text-xs text-slate-500 truncate">{user.email}</div>
+        </div>
+      </div>
+      <button onClick={() => setShowFilters(true)} className={row}>
+        <SlidersHorizontal size={18} />
+        Portfolio Filters
+        {calcFloor > 0 && <span className="ml-auto text-[10px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">ON</span>}
+      </button>
+      {isAdmin && (
+        <Link href="/admin" className={row}>
+          <ShieldCheck size={18} />
+          Admin
+          <ChevronRight size={16} className="ml-auto text-slate-500" />
+        </Link>
+      )}
+      <button
+        onClick={async () => { await signOut(); router.replace('/login') }}
+        className={cn(row, 'text-red-600')}
+      >
+        <LogOut size={18} />
+        Sign out
+      </button>
+    </div>
   )
 }
 
@@ -336,9 +385,6 @@ function LorcanaReviewRow({
   set, groupOrder, onPatch,
 }: { set: LorcanaRegistrySet; groupOrder: string[]; onPatch: (p: Record<string, unknown>) => void }) {
   const [group, setGroup] = useState(set.cardexGroup ?? groupOrder[0] ?? '')
-  const [included, setIncluded] = useState(set.packAnalysis.included)
-  const [packPrice, setPackPrice] = useState(set.packAnalysis.packPrice ?? 5.99)
-  const [hasEpic, setHasEpic] = useState(!!set.packAnalysis.hasEpic)
 
   return (
     <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
@@ -358,31 +404,10 @@ function LorcanaReviewRow({
             {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </label>
-        <label className="flex items-center gap-1.5">
-          <input type="checkbox" checked={included} onChange={(e) => setIncluded(e.target.checked)} />
-          Include in Pack Analysis
-        </label>
-        {included && (
-          <>
-            <label className="flex items-center gap-1.5">
-              Pack price $
-              <input
-                type="number" step="0.01" value={packPrice}
-                onChange={(e) => setPackPrice(parseFloat(e.target.value) || 0)}
-                className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-300"
-              />
-            </label>
-            <label className="flex items-center gap-1.5">
-              <input type="checkbox" checked={hasEpic} onChange={(e) => setHasEpic(e.target.checked)} />
-              Has Epic rarity
-            </label>
-          </>
-        )}
       </div>
       <button
         onClick={() => onPatch({
           cardexGroup: group,
-          packAnalysis: included ? { included: true, id: set.code ?? set.setName, released: set.releaseDate ?? '', packPrice, hasEpic } : { included: false },
           needsReview: false,
         })}
         className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600/20 text-violet-700 hover:bg-violet-600/30"
