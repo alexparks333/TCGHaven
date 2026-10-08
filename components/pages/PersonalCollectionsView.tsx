@@ -50,7 +50,7 @@ function cardKey(c: { id: string; isFoil?: boolean }): string {
 // Plain substring match against name and collector number — same shape as CardexPage's
 // matchesSearch(), filtering an already-small list rather than ranking a whole-catalog search.
 // How long a finger must rest on a collection card before it can be dragged to reorder (phones).
-const MOVE_MODE_HOLD_MS = 1250
+const MOVE_MODE_HOLD_MS = 1000
 // While a finger is held on a card, it grows toward this scale over the full hold time, so the
 // hold is visibly "charging" — and it's already at full size when move mode kicks in, instead of
 // popping out all at once. Matches the TouchSensor tolerance: moving further cancels the hold.
@@ -366,7 +366,7 @@ function CollectionDetail({
 
   // Mouse and touch get separate sensors on purpose. Mouse: a small activation distance, so a
   // plain click (the remove button, opening the zoom view) never reads as a drag. Touch: nothing
-  // happens until a finger has held still on a card for 1.25s ("move mode") — before that,
+  // happens until a finger has held still on a card for 1s ("move mode") — before that,
   // swiping scrolls the page normally and a tap opens the card. A single PointerSensor used to
   // handle both, which (together with touch-action: none on every tile) turned any swipe that
   // started on a card into an accidental reorder.
