@@ -1,4 +1,4 @@
-import { doc, getDoc } from 'firebase/firestore'
+import { collection, documentId, getDocs, query, where } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { loadCatalog } from '@/lib/api/catalog'
 import { catalogPrice } from '@/lib/pricing'
@@ -9,9 +9,6 @@ import { PRICE_HISTORY_COLLECTION, setKeyOf, monthDocId, tupleToFields } from '@
 // Everything a page needs is computed here and only the answer is sent to the browser — a
 // phone never downloads the raw history.
 //
-// Month docs are cached in this server process: past months basically never change (6h TTL just
-// in case of an admin backfill), the current month gains a new day each sync (15 min TTL). Since
-// every user reads the same docs, Firestore reads are shared across all of them.
 
 export interface HistoryItem {
   key: string       // the caller's id for this row (a user card id) — echoed back in results
@@ -25,35 +22,37 @@ export interface PricePoint { date: string; price: number }
 type DayEntry = { t: string; p: Record<string, number[]> }
 type MonthDoc = Map<string, DayEntry>   // 'DD' -> that day's entry, parsed
 
-const CURRENT_MONTH_TTL_MS = 15 * 60 * 1000
-const PAST_MONTH_TTL_MS = 6 * 60 * 60 * 1000
-const monthCache = new Map<string, { doc: MonthDoc; fetchedAt: number }>()
+// Per set: every month doc of that set from `fromMonth` on, cached in this server process. Since
+// every user reads the same docs, Firestore reads are shared across all of them. The cache is
+// refreshed every 15 minutes so a new sync's day shows up.
+const SET_TTL_MS = 15 * 60 * 1000
+const setCache = new Map<string, { fromMonth: string; months: Map<string, MonthDoc>; fetchedAt: number }>()
 
-async function loadMonth(game: Game, setKey: string, month: string): Promise<MonthDoc> {
-  const cacheKey = `${game}/${setKey}/${month}`
-  const ttl = month === new Date().toISOString().slice(0, 7) ? CURRENT_MONTH_TTL_MS : PAST_MONTH_TTL_MS
-  const hit = monthCache.get(cacheKey)
-  if (hit && Date.now() - hit.fetchedAt < ttl) return hit.doc
+// ONE query per set for only the month docs that actually exist (doc ids are
+// `{setKey}__{YYYY-MM}`, so a document-id range selects exactly that set's months), instead of a
+// get() per set per month — which, with history only starting recently, was ~200 lookups of
+// mostly-missing docs per request and the main reason Portfolio took so long to load.
+async function loadSetMonths(game: Game, setKey: string, fromMonth: string): Promise<Map<string, MonthDoc>> {
+  const cacheKey = `${game}/${setKey}`
+  const hit = setCache.get(cacheKey)
+  if (hit && hit.fromMonth <= fromMonth && Date.now() - hit.fetchedAt < SET_TTL_MS) return hit.months
 
-  const snap = await getDoc(doc(db, PRICE_HISTORY_COLLECTION, game, 'months', monthDocId(setKey, month)))
-  const parsed: MonthDoc = new Map()
-  const days = (snap.data()?.days ?? {}) as Record<string, string>
-  for (const [dd, raw] of Object.entries(days)) {
-    try { parsed.set(dd, JSON.parse(raw) as DayEntry) } catch { /* skip a malformed day */ }
-  }
-  monthCache.set(cacheKey, { doc: parsed, fetchedAt: Date.now() })
-  return parsed
-}
-
-function monthsBetween(from: Date, to: Date): string[] {
-  const out: string[] = []
-  const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1))
-  const end = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1)
-  while (d.getTime() <= end) {
-    out.push(d.toISOString().slice(0, 7))
-    d.setUTCMonth(d.getUTCMonth() + 1)
-  }
-  return out
+  const snap = await getDocs(query(
+    collection(db, PRICE_HISTORY_COLLECTION, game, 'months'),
+    where(documentId(), '>=', monthDocId(setKey, fromMonth)),
+    where(documentId(), '<=', monthDocId(setKey, '9999-99')),
+  ))
+  const months = new Map<string, MonthDoc>()
+  snap.forEach((d) => {
+    const parsed: MonthDoc = new Map()
+    const days = (d.data().days ?? {}) as Record<string, string>
+    for (const [dd, raw] of Object.entries(days)) {
+      try { parsed.set(dd, JSON.parse(raw) as DayEntry) } catch { /* skip a malformed day */ }
+    }
+    months.set(String(d.data().month ?? ''), parsed)
+  })
+  setCache.set(cacheKey, { fromMonth, months, fetchedAt: Date.now() })
+  return months
 }
 
 // Daily price points for each item from `from` until now, priced with the same rule every price
@@ -63,7 +62,7 @@ export async function loadPriceSeries(
   from: Date,
 ): Promise<Map<string, PricePoint[]>> {
   const result = new Map<string, PricePoint[]>()
-  const months = monthsBetween(from, new Date())
+  const fromMonth = from.toISOString().slice(0, 7)
   const fromMs = from.getTime()
 
   const byGame = new Map<Game, HistoryItem[]>()
@@ -87,8 +86,8 @@ export async function loadPriceSeries(
     }
 
     await Promise.all(Array.from(bySet.entries()).map(async ([setKey, rows]) => {
-      const docs = await Promise.all(months.map((m) => loadMonth(game, setKey, m)))
-      for (const monthDoc of docs) {
+      const monthDocs = await loadSetMonths(game, setKey, fromMonth)
+      for (const monthDoc of Array.from(monthDocs.values())) {
         for (const entry of Array.from(monthDoc.values())) {
           if (new Date(entry.t).getTime() < fromMs) continue
           for (const { item, rarity, publicCode } of rows) {

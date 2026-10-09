@@ -53,14 +53,19 @@ export function PriceAutoUpdater() {
     running.current = true
     try {
       const { cards, trackedGames } = latest.current
-      const status = await loadPriceStatus(trackedGames)
-      setPriceStatus(status)
-
-      const syncAt = status.latestSyncAt?.getTime() ?? 0
       const eligible = cards.filter((c) => c.apiId && !c.priceLocked)
       const key = eligible.map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
       const prev = loadedFor.current
-      if (prev && prev.syncAt === syncAt && prev.cardsKey === key) return
+      const statusPromise = loadPriceStatus(trackedGames)
+
+      // Later background checks: look at the (cheap) status first and only reload prices if a new
+      // sync landed or the owned cards changed. The first load of a session doesn't wait — status,
+      // live prices and baselines all go out at once (they don't depend on each other).
+      if (prev) {
+        const status = await statusPromise
+        setPriceStatus(status)
+        if (prev.syncAt === (status.latestSyncAt?.getTime() ?? 0) && prev.cardsKey === key) return
+      }
 
       // Real progress for the logo loader on Portfolio/Analytics: one step per game's live prices,
       // plus one for the window baselines. Only reported on the session's first load — later
@@ -72,51 +77,57 @@ export function PriceAutoUpdater() {
       const step = () => { done += 1; if (firstLoad) setPriceLoad({ done, total, complete: false }) }
       if (firstLoad) setPriceLoad({ done: 0, total, complete: false })
 
-      // 1. Live prices (cheap server lookups).
-      const prices: Record<string, number> = {}
       let failed = false
-      await Promise.all(ALL_GAMES.map(async (game) => {
-        const gameCards = eligible.filter((c) => c.game === game)
-        if (gameCards.length === 0) return
-        const { url, payload } = PRICE_ROUTES[game]
+
+      // 1. Live prices (cheap server lookups), one request per game, in parallel.
+      const pricesTask = (async () => {
+        const prices: Record<string, number> = {}
+        await Promise.all(gamesToLoad.map(async (game) => {
+          const { url, payload } = PRICE_ROUTES[game]
+          try {
+            const res = await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ cards: eligible.filter((c) => c.game === game).map(payload) }),
+            })
+            if (!res.ok) { failed = true; return }
+            Object.assign(prices, await res.json())
+          } catch {
+            failed = true
+          } finally {
+            step()
+          }
+        }))
+        applyLivePrices(prices)
+      })()
+
+      // 2. Window baselines from the shared history — at the same time as the live prices.
+      const baselinesTask = (async () => {
         try {
-          const res = await fetch(url, {
+          const res = await authFetch('/api/price-history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cards: gameCards.map(payload) }),
+            body: JSON.stringify({
+              mode: 'baselines',
+              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil })),
+            }),
           })
-          if (!res.ok) { failed = true; return }
-          Object.assign(prices, await res.json())
+          if (res.ok) setPriceBaselines(await res.json())
+          else failed = true
         } catch {
           failed = true
         } finally {
           step()
         }
-      }))
-      applyLivePrices(prices)
+      })()
 
-      // 2. Window baselines from the shared history.
-      try {
-        const res = await authFetch('/api/price-history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'baselines',
-            items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil })),
-          }),
-        })
-        if (res.ok) setPriceBaselines(await res.json())
-        else failed = true
-      } catch {
-        failed = true
-      } finally {
-        step()
-      }
+      const [status] = await Promise.all([statusPromise, pricesTask, baselinesTask])
+      setPriceStatus(status)
 
       // Only remember this load as complete if everything came back; otherwise the next check
       // retries instead of leaving some cards on stale data.
       if (!failed) {
-        loadedFor.current = { syncAt, cardsKey: key }
+        loadedFor.current = { syncAt: status.latestSyncAt?.getTime() ?? 0, cardsKey: key }
         if (status.latestSyncAt) setLastPriceRefresh(status.latestSyncAt.toISOString())
       }
     } catch (err) {

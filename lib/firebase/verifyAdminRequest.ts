@@ -13,12 +13,29 @@ import { ADMIN_UID } from './config'
 // Returns an error NextResponse to send back immediately, or null if the caller is verified as
 // the admin — callers do `const unauthorized = await verifyAdminRequest(request); if
 // (unauthorized) return unauthorized`.
+// Tokens this server process has already verified, so a page making several signed-in requests
+// doesn't pay Google's lookup round trip (~200-300ms) on every one. Short TTL (well inside a
+// Firebase ID token's own 1-hour life) and bounded size.
+const VERIFIED_TTL_MS = 5 * 60 * 1000
+const verified = new Map<string, { uid: string; at: number }>()
+
 // Verifies the caller's Firebase ID token and returns their uid, or null if missing/invalid.
 async function callerUid(request: Request): Promise<string | null> {
   const authHeader = request.headers.get('authorization') || ''
   const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
   if (!idToken || !apiKey) return null
+  const hit = verified.get(idToken)
+  if (hit && Date.now() - hit.at < VERIFIED_TTL_MS) return hit.uid
+  const uid = await lookupUid(idToken, apiKey)
+  if (uid) {
+    if (verified.size > 500) verified.clear()
+    verified.set(idToken, { uid, at: Date.now() })
+  }
+  return uid
+}
+
+async function lookupUid(idToken: string, apiKey: string): Promise<string | null> {
   try {
     const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
       method: 'POST',
