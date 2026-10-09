@@ -18,6 +18,7 @@ import { readInventoryCache, writeInventoryCache, clearInventoryCache, INVENTORY
 import type { Card } from '@/lib/types'
 import { loadPurchases } from '@/lib/firebase/spending'
 import { loadTrackedGames } from '@/lib/firebase/preferences'
+import { startPreferencesSync } from '@/lib/preferencesSync'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 
 interface AuthContextValue {
@@ -103,10 +104,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // resolves after sign-out (or a user switch) can't repopulate the store
     let activeUid: string | null = null
     let stopCacheSync: (() => void) | null = null
+    let stopPrefsSync: (() => void) | null = null
 
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         activeUid = firebaseUser.uid
+        // Filters follow the account across devices, live (lib/preferencesSync.ts).
+        stopPrefsSync?.()
+        stopPrefsSync = startPreferencesSync(firebaseUser.uid)
         setUser(firebaseUser)
         setLoading(false)
         setDataLoading(true)
@@ -156,6 +161,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeUid = null
         stopCacheSync?.()
         stopCacheSync = null
+        stopPrefsSync?.()
+        stopPrefsSync = null
         clearInventoryCache()
         setUser(null)
         clearUserData()

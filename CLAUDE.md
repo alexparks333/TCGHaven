@@ -1763,9 +1763,15 @@ always re-loaded from Firestore on login), but wrapped in Zustand's `persist` mi
 small, deliberately-scoped slice of display/filter preferences via `partialize`:
 `calcFloor`, `activeGames`, `trackedGames`, `timeFrame`, `hiddenGroups`,
 `lastPriceRefresh`. None of this is inventory data — it's UI state that's reasonable to survive a
-refresh/relaunch without waiting on Firestore, and none of it is per-account-sensitive enough to
-need clearing on sign-out (a shared/public-device sign-out concern worth being aware of but not
-yet addressed).
+refresh/relaunch without waiting on Firestore.
+
+**Filters follow the account, live.** The Filters panel's settings (`calcFloor`, `activeGames`,
+`timeFrame`, `hiddenGroups`) are also stored on `users/{uid}/settings/preferences` (`filters`
+field, next to `trackedGames`). `lib/preferencesSync.ts`'s `startPreferencesSync()` (started by
+`AuthProvider.tsx` on sign-in) listens to that doc with `onSnapshot` and writes local changes back
+(debounced 600ms), so a filter set on the website is the filter on the phone and vice versa, until
+either changes it. localStorage is only the first-paint copy. An account that has never saved
+filters gets the first signed-in device's.
 
 ### State Shape (abridged — see `lib/store.ts` for the full shape)
 

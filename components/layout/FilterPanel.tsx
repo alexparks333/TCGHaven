@@ -37,8 +37,14 @@ export function FilterPanel() {
   )
   const [floorInput, setFloorInput] = useState(calcFloor > 0 ? String(calcFloor) : '')
 
+  // Follow calcFloor when it changes from elsewhere (another device, via lib/preferencesSync.ts)
+  // — but leave the box alone while what's typed already means the same number ("1.50", "2.").
   useEffect(() => {
-    if (calcFloor === 0) setFloorInput('')
+    setFloorInput((typed) => {
+      const n = parseFloat(typed)
+      if ((isNaN(n) ? 0 : n) === calcFloor) return typed
+      return calcFloor === 0 ? '' : String(calcFloor)
+    })
   }, [calcFloor])
 
   const totalHidden = useMemo(

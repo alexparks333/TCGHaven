@@ -23,3 +23,37 @@ export async function loadTrackedGames(userId: string): Promise<Game[] | null> {
 export async function saveTrackedGames(userId: string, games: Game[]): Promise<void> {
   await setDoc(prefsRef(userId), { trackedGames: games }, { merge: true })
 }
+
+// ── Filters (the header's Filters panel) ─────────────────────────────────────────────────────
+// Stored on the same doc so a filter set on one device is the filter on every device, until
+// either one changes it. lib/preferencesSync.ts keeps the store and this doc in step live.
+
+export type TimeFrame = 'entry' | '1d' | '7d' | '30d' | '365d'
+const VALID_TIME_FRAMES: TimeFrame[] = ['entry', '1d', '7d', '30d', '365d']
+
+export interface FilterPrefs {
+  calcFloor: number
+  activeGames: Game[]
+  timeFrame: TimeFrame
+  hiddenGroups: string[]
+}
+
+// Anything malformed in the stored doc is dropped field-by-field rather than trusted.
+export function parseFilterPrefs(raw: unknown): Partial<FilterPrefs> | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const out: Partial<FilterPrefs> = {}
+  if (typeof r.calcFloor === 'number' && r.calcFloor >= 0) out.calcFloor = r.calcFloor
+  if (Array.isArray(r.activeGames)) out.activeGames = r.activeGames.filter((g): g is Game => VALID_GAMES.includes(g))
+  if (VALID_TIME_FRAMES.includes(r.timeFrame as TimeFrame)) out.timeFrame = r.timeFrame as TimeFrame
+  if (Array.isArray(r.hiddenGroups)) out.hiddenGroups = r.hiddenGroups.filter((g): g is string => typeof g === 'string')
+  return Object.keys(out).length > 0 ? out : null
+}
+
+export function preferencesDoc(userId: string) {
+  return prefsRef(userId)
+}
+
+export async function saveFilterPrefs(userId: string, filters: FilterPrefs): Promise<void> {
+  await setDoc(prefsRef(userId), { filters }, { merge: true })
+}
