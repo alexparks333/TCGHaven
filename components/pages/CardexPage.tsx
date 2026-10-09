@@ -169,7 +169,7 @@ function buildGroupsByGame(registry: SetRegistryResponse): Record<'lorcana' | 'r
     ),
     riftbound: buildGroups(
       registry.riftbound, 'riftbound',
-      { name: '__special__', game: 'riftbound', label: 'Metal & Special', fromInventory: true },
+      { name: '__special__', game: 'riftbound', label: 'Special', fromInventory: true },
       'Special', // its own trailing group, matching prior behavior
     ),
   }
@@ -304,7 +304,7 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
 const RARITY_COLORS: Record<string, string> = {
   Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
   Super_rare: '#7a4a5a', Legendary: '#b0602a', Enchanted: '#9a5a5a', Iconic: '#a8861e',
-  Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030', 'Event Promo': '#b5532f',
+  Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030', 'Event Promo': '#b5532f', Metal: '#6f6a5e',
   // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), T(reasure) R(are — a real
   // premium chase tier, see CARDEX_RARITY_ORDER's comment), SEC(ret rare) — "SP CARD" is a
   // further-out special/promo print tier, P/PR both promotional-card codes.
@@ -999,7 +999,8 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
           {game === 'pokemon' ? " McDonald's promos, custom sets, etc."
             : game === 'onepiece' ? ' one-off tournament promos, custom sets, etc.'
             : game === 'mtg' ? ' Secret Lairs, oddly-named promos, custom sets, etc.'
-            : ' D23, Disney Cruise, Metal cards, etc.'}
+            : game === 'riftbound' ? ' one-off promos and custom sets the catalog doesn\'t have yet.'
+            : ' D23, Disney Cruise, etc.'}
         </div>
       </div>
     )

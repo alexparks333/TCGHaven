@@ -567,6 +567,33 @@ function parseCSVLine(line) {
   return fields
 }
 
+// A whole CSV file → rows of fields, honoring quoted fields that span lines (parseCSVLine above
+// assumes one record per line, which breaks on multi-line descriptions).
+function parseCSVText(text) {
+  const rows = []
+  let row = []
+  let cur = ''
+  let inQ = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQ) {
+      if (ch === '"' && text[i + 1] === '"') { cur += '"'; i++ }
+      else if (ch === '"') inQ = false
+      else cur += ch
+    } else if (ch === '"') inQ = true
+    else if (ch === ',') { row.push(cur); cur = '' }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(cur); cur = ''
+      if (row.some((v) => v !== '')) rows.push(row)
+      row = []
+    } else cur += ch
+  }
+  row.push(cur)
+  if (row.some((v) => v !== '')) rows.push(row)
+  return rows
+}
+
 export async function downloadLorcana() {
   console.log('\n✨ Lorcana...')
 
@@ -798,6 +825,7 @@ function tcgplayerOnlyCard(set, row) {
   // the set's own name), keep what tells the versions apart.
   const setWords = new Set(set.setName.toLowerCase().split(/\s+/))
   const variant = parens
+    .filter((p) => !p.split(/\s+/).every((w) => setWords.has(w.toLowerCase())))
     .map((p) => {
       const words = p.split(/\s+/)
       while (words.length > 1 && setWords.has(words[0].toLowerCase())) words.shift()
@@ -815,7 +843,7 @@ function tcgplayerOnlyCard(set, row) {
     publicCode: /^[A-Z]/i.test(row.extNumber) ? row.extNumber.replace(/\s+/, '-') : `${set.setCode}-${row.extNumber}`,
     setCode: set.setCode,
     setName: set.setName,
-    rarity: TCGPLAYER_ONLY_RARITY,
+    rarity: set.tcgplayerRarity || TCGPLAYER_ONLY_RARITY,
     cardType: row.extCardType || '',
     tags: [baseName.split(',')[0].trim()].filter(Boolean),
     // TCGplayer's CSV links a 200px thumbnail; the same CDN serves a large version.
@@ -846,7 +874,27 @@ async function borrowMissingPhotos(setCards) {
     if (ok[i]) return
     const sibling = setCards.find((c, j) => ok[j] && c.publicCode === card.publicCode)
     if (sibling) card.imageUrl = sibling.imageUrl
+    else card.needsGalleryArt = true // see useGalleryArtForPhotoless() in downloadRiftbound
   })
+}
+
+// Last resort for a TCGplayer-only card with no photo at all (no sibling has one either — most
+// Metal cards): its collector code is the ORIGINAL card's ("247/298" = Origins #247 for Kai'Sa's
+// Metal), so show that card's gallery art. Not the metal finish, but the right card instead of a
+// blank tile. Runs once the gallery scrape is in, since that's where the art comes from.
+function useGalleryArtForPhotoless(tcgplayerOnlyCards, galleryCards) {
+  const byCode = new Map()
+  for (const c of galleryCards) {
+    const code = (c.publicCode ?? '').split('-').slice(1).join('-') // "OGN-247/298" → "247/298"
+    if (code && !byCode.has(code)) byCode.set(code, c.imageUrl)
+  }
+  for (const card of tcgplayerOnlyCards) {
+    if (!card.needsGalleryArt) continue
+    const code = card.publicCode.split('-').slice(1).join('-')
+    const art = byCode.get(code)
+    if (art) card.imageUrl = art
+    delete card.needsGalleryArt
+  }
 }
 
 async function fetchTcgplayerOnlyRiftboundSets() {
@@ -857,14 +905,17 @@ async function fetchTcgplayerOnlyRiftboundSets() {
     try {
       const res = await fetch(`https://tcgcsv.com/tcgplayer/89/${set.tcgcsvGroupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
       if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${set.setName} failed: ${res.status}`); continue }
-      const lines = (await res.text()).split('\n').filter((l) => l.trim())
-      // Column order differs between groups (some add extFlavorText), so read by header name.
-      const header = parseCSVLine(lines[0])
+      // Parsed as a whole, not line by line — some rows' descriptions contain line breaks inside
+      // quotes (the Metal cards' "only available as foil" disclaimers). Column order also differs
+      // between groups (some add extFlavorText), so fields are read by header name.
+      const [header, ...records] = parseCSVText(await res.text())
       const col = (name) => header.indexOf(name)
       const at = (f, name) => (col(name) >= 0 ? f[col(name)] ?? '' : '')
+      // Optional: only the products whose name contains this (e.g. "(Metal)" out of the much
+      // bigger Organized Play promo group).
+      const only = set.tcgplayerNameFilter ? String(set.tcgplayerNameFilter).toLowerCase() : null
       let count = 0
-      for (const line of lines.slice(1)) {
-        const f = parseCSVLine(line.trim())
+      for (const f of records) {
         const row = {
           productId: at(f, 'productId'), name: at(f, 'name'), imageUrl: at(f, 'imageUrl'),
           extNumber: at(f, 'extNumber').trim(), extCardType: at(f, 'extCardType'),
@@ -872,6 +923,7 @@ async function fetchTcgplayerOnlyRiftboundSets() {
         }
         if (!row.productId || !row.name || !row.extNumber) continue // sealed product
         if (/\(oversized\)/i.test(row.name)) continue
+        if (only && !row.name.toLowerCase().includes(only)) continue
         cards.push(tcgplayerOnlyCard(set, row))
         count++
       }
@@ -1225,6 +1277,7 @@ export async function downloadRiftbound() {
   }
   if (starCount > 0) console.log(`   Created ${starCount} Signature (Star) stubs from TCGCSV`)
 
+  useGalleryArtForPhotoless(tcgplayerOnlyCards, all)
   all.push(...tcgplayerOnlyCards)
 
   all.sort((a, b) => {

@@ -49,6 +49,10 @@ export interface RiftboundRegistrySet {
   // real products the gallery never lists (event/bundle promos). See catalog-sync.mjs's
   // fetchTcgplayerOnlyRiftboundSets().
   tcgplayerOnly?: boolean
+  // With tcgplayerOnly: only take TCGplayer products whose name contains this (e.g. "(Metal)"),
+  // and/or give the set's cards this rarity instead of "Event Promo".
+  tcgplayerNameFilter?: string
+  tcgplayerRarity?: string
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching

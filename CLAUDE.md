@@ -764,10 +764,16 @@ one card per TCGplayer product (sealed products and "(Oversized)" display cards 
 distinguishing part of its parentheticals (e.g. "Galio, Indefatigable (Signature Edition Bundle,
 Serial Numbered)"), price = market price only (no lowest-listing fallback), image = TCGplayer's
 `_in_1000x1000` photo — borrowed from the sibling with the same collector code when TCGplayer has
-none (the serial-numbered copies). These groups are kept out of the gallery price merge.
-Current: **T1 Worlds Champion 2025** (`T1`, group 24861 — 5 cards × Player Bundle / Signature
-Edition / Serial Numbered) and **Worlds Bundle 2025** (`RWB`, group 24502 — 4 foil promos), both
-`cardexGroup: "Promos"`. To add another: add a registry entry like those and run a sync.
+none (the serial-numbered copies), else the ORIGINAL card's gallery art (a Metal card's code
+"247/298" is Origins #247's). These groups are kept out of the gallery price merge, and the CSV is
+parsed as a whole (`parseCSVText`) since some descriptions contain line breaks. Optional registry
+fields: `tcgplayerNameFilter` (only products whose name contains it) and `tcgplayerRarity`
+(instead of "Event Promo"). Parentheticals that just repeat the set name ("(Metal)") are dropped.
+Current, all `cardexGroup: "Promos"`: **T1 Worlds Champion 2025** (`T1`, group 24861 — 5 cards ×
+Player Bundle / Signature Edition / Serial Numbered), **Worlds Bundle 2025** (`RWB`, group 24502 —
+4 foil promos), **Metal Cards** (`MTL`, group 24528 filtered to "(Metal)", rarity "Metal" — 86:
+Best Of foil + Prize Wall non-foil printings). The Cardex's inventory-only "Special" bucket used
+to be labeled "Metal & Special". To add another set: add a registry entry like those and sync.
 
 ### How New Riftbound Sets Are Added
 
