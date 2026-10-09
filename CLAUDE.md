@@ -754,6 +754,21 @@ price for these variants. Overnumbered prints like a regular card (not foil-only
 | VEN | Vendetta | TBD | 2026-07-31 | TBD |
 | RAD | Radiance | TBD | 2026-10-01 | TBD |
 
+### TCGplayer-only promo sets (Worlds bundles etc.)
+
+Some real Riftbound products never appear on Riot's gallery, so the gallery scrape can't create
+them. A registry set with `tcgplayerOnly: true` + `tcgcsvGroupId` is instead built straight from
+that TCGplayer group by `fetchTcgplayerOnlyRiftboundSets()` (`catalog-sync.mjs`) on every sync:
+one card per TCGplayer product (sealed products and "(Oversized)" display cards skipped), id
+`{setCode}-{productId}`, rarity `"Event Promo"`, name = TCGplayer's base name plus the
+distinguishing part of its parentheticals (e.g. "Galio, Indefatigable (Signature Edition Bundle,
+Serial Numbered)"), price = market price only (no lowest-listing fallback), image = TCGplayer's
+`_in_1000x1000` photo — borrowed from the sibling with the same collector code when TCGplayer has
+none (the serial-numbered copies). These groups are kept out of the gallery price merge.
+Current: **T1 Worlds Champion 2025** (`T1`, group 24861 — 5 cards × Player Bundle / Signature
+Edition / Serial Numbered) and **Worlds Bundle 2025** (`RWB`, group 24502 — 4 foil promos), both
+`cardexGroup: "Promos"`. To add another: add a registry entry like those and run a sync.
+
 ### How New Riftbound Sets Are Added
 
 **Four ways, in increasing order of manual effort:**

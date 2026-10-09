@@ -171,6 +171,9 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   // exceeds the set's card count) — both formerly flattened to a single 'Showcase' rarity
   // value; that key is kept as a fallback for any doc a resync hasn't touched yet.
   'Alt Art': 90, Overnumbered: 90, Showcase: 90, Star: 91,
+  // Riftbound promos built straight from TCGplayer for products Riot's gallery never lists
+  // (Worlds bundles etc. — catalog-sync.mjs's fetchTcgplayerOnlyRiftboundSets()).
+  'Event Promo': 92,
   // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), SEC(ret rare) — "SP CARD"
   // is a further-out special/promo print tier, sorted last like Riftbound's Star. TR (Treasure
   // Rare — a genuine premium chase tier, ~1 per booster box, introduced OP-06 onward, English/

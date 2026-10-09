@@ -45,6 +45,10 @@ export interface RiftboundRegistrySet {
   groupMatchConfidence: number | null
   needsReview: boolean
   source: string
+  // Built straight from its TCGplayer group (tcgcsvGroupId) instead of Riot's card gallery — for
+  // real products the gallery never lists (event/bundle promos). See catalog-sync.mjs's
+  // fetchTcgplayerOnlyRiftboundSets().
+  tcgplayerOnly?: boolean
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching

@@ -304,7 +304,7 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
 const RARITY_COLORS: Record<string, string> = {
   Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
   Super_rare: '#7a4a5a', Legendary: '#b0602a', Enchanted: '#9a5a5a', Iconic: '#a8861e',
-  Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030',
+  Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030', 'Event Promo': '#b5532f',
   // One Piece: L(eader), C(ommon), UC(ommon), R(are), S(uper) R(are), T(reasure) R(are — a real
   // premium chase tier, see CARDEX_RARITY_ORDER's comment), SEC(ret rare) — "SP CARD" is a
   // further-out special/promo print tier, P/PR both promotional-card codes.

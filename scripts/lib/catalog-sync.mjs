@@ -772,9 +772,116 @@ async function getTcgcsvGroups() {
   if (!registry?.riftbound?.sets) return TCGCSV_GROUPS
   const merged = new Map(TCGCSV_GROUPS.map((g) => [g.setCode, g.groupId]))
   for (const s of registry.riftbound.sets) {
+    // TCGplayer-only sets build their own cards (fetchTcgplayerOnlyRiftboundSets below) — their
+    // rows don't follow the main sets' numbering, so they stay out of the gallery price merge.
+    if (s.tcgplayerOnly) continue
     if (s.setCode && typeof s.tcgcsvGroupId === 'number') merged.set(s.setCode, s.tcgcsvGroupId)
   }
   return [...merged.entries()].map(([setCode, groupId]) => ({ groupId, setCode }))
+}
+
+// ── TCGplayer-only promo sets ────────────────────────────────────────────────
+// Some real Riftbound products never appear on Riot's card gallery — e.g. the T1 2025 Worlds
+// Champion bundles and the Worlds Bundle 2025 promos — so the gallery scrape can't create them.
+// A registry set marked `tcgplayerOnly: true` (with its tcgcsvGroupId) is instead built straight
+// from that TCGplayer group, one catalog card per TCGplayer product, and repriced every sync like
+// everything else. Sealed products (no extNumber) and oversized display cards are skipped. Ids use
+// TCGplayer's productId, which is stable and tells apart products that share a collector number
+// (a bundle's regular and serial-numbered copies, say).
+export const TCGPLAYER_ONLY_RARITY = 'Event Promo'
+
+function tcgplayerOnlyCard(set, row) {
+  const parens = [...row.name.matchAll(/\(([^)]*)\)/g)].map((m) => m[1].trim())
+  const baseName = row.name.replace(/\s*\([^)]*\)/g, '').trim()
+  // "(T1 Worlds Champion Signature Edition Bundle) (Serial Numbered)" → "Signature Edition
+  // Bundle, Serial Numbered": drop the leading words every product in the set repeats (they're
+  // the set's own name), keep what tells the versions apart.
+  const setWords = new Set(set.setName.toLowerCase().split(/\s+/))
+  const variant = parens
+    .map((p) => {
+      const words = p.split(/\s+/)
+      while (words.length > 1 && setWords.has(words[0].toLowerCase())) words.shift()
+      return words.join(' ')
+    })
+    .filter(Boolean)
+    .join(', ')
+  const num = row.extNumber.match(/(\d+)([a-z*]?)\s*\/\s*\d+/i)
+  return {
+    id: `${set.setCode.toLowerCase()}-${row.productId}`,
+    name: variant ? `${baseName} (${variant})` : baseName,
+    number: num ? `${parseInt(num[1], 10)}${num[2]}` : row.extNumber,
+    // Bundle codes like "T1S 001/005" already carry their own prefix; plain ones ("263a/298")
+    // get the set code, matching the gallery's "OGN-263a/298" shape.
+    publicCode: /^[A-Z]/i.test(row.extNumber) ? row.extNumber.replace(/\s+/, '-') : `${set.setCode}-${row.extNumber}`,
+    setCode: set.setCode,
+    setName: set.setName,
+    rarity: TCGPLAYER_ONLY_RARITY,
+    cardType: row.extCardType || '',
+    tags: [baseName.split(',')[0].trim()].filter(Boolean),
+    // TCGplayer's CSV links a 200px thumbnail; the same CDN serves a large version.
+    imageUrl: row.imageUrl.replace(/_200w\.jpg$/, '_in_1000x1000.jpg'),
+    // One TCGplayer product = one price: its market price (what copies actually sold for). No
+    // fallback to the lowest listing — for a one-off like a serial-numbered card that's just
+    // someone's asking price (thousands over any real sale), so no sales means no price yet.
+    marketPrice: row.marketPrice,
+    marketPriceFoil: 0,
+    lowPriceNM: row.lowPrice,
+    lowPriceNMFoil: 0,
+  }
+}
+
+// TCGplayer hasn't photographed every product — the T1 serial-numbered copies 403 at every size.
+// Such a card is the same art as its sibling sharing its collector code (the regular Signature
+// Edition copy), so borrow that sibling's photo rather than showing a blank tile.
+async function borrowMissingPhotos(setCards) {
+  const ok = await Promise.all(setCards.map(async (c) => {
+    try {
+      const res = await fetch(c.imageUrl, { method: 'HEAD', headers: { 'User-Agent': 'TCGHaven/1.0' } })
+      return res.ok
+    } catch {
+      return true // a network blip isn't a missing photo
+    }
+  }))
+  setCards.forEach((card, i) => {
+    if (ok[i]) return
+    const sibling = setCards.find((c, j) => ok[j] && c.publicCode === card.publicCode)
+    if (sibling) card.imageUrl = sibling.imageUrl
+  })
+}
+
+async function fetchTcgplayerOnlyRiftboundSets() {
+  const registry = await loadRegistry()
+  const sets = (registry?.riftbound?.sets ?? []).filter((s) => s.tcgplayerOnly && typeof s.tcgcsvGroupId === 'number' && s.setCode)
+  const cards = []
+  for (const set of sets) {
+    try {
+      const res = await fetch(`https://tcgcsv.com/tcgplayer/89/${set.tcgcsvGroupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
+      if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${set.setName} failed: ${res.status}`); continue }
+      const lines = (await res.text()).split('\n').filter((l) => l.trim())
+      // Column order differs between groups (some add extFlavorText), so read by header name.
+      const header = parseCSVLine(lines[0])
+      const col = (name) => header.indexOf(name)
+      const at = (f, name) => (col(name) >= 0 ? f[col(name)] ?? '' : '')
+      let count = 0
+      for (const line of lines.slice(1)) {
+        const f = parseCSVLine(line.trim())
+        const row = {
+          productId: at(f, 'productId'), name: at(f, 'name'), imageUrl: at(f, 'imageUrl'),
+          extNumber: at(f, 'extNumber').trim(), extCardType: at(f, 'extCardType'),
+          marketPrice: parseFloat(at(f, 'marketPrice')) || 0, lowPrice: parseFloat(at(f, 'lowPrice')) || 0,
+        }
+        if (!row.productId || !row.name || !row.extNumber) continue // sealed product
+        if (/\(oversized\)/i.test(row.name)) continue
+        cards.push(tcgplayerOnlyCard(set, row))
+        count++
+      }
+      await borrowMissingPhotos(cards.slice(cards.length - count))
+      console.log(`   TCGCSV ${set.setName}: ${count} TCGplayer-only cards`)
+    } catch (err) {
+      console.warn(`   ⚠️  TCGCSV ${set.setName} error: ${err.message}`)
+    }
+  }
+  return cards
 }
 
 // Build lookup key for a TCGPlayer product
@@ -946,7 +1053,7 @@ function findCardsInNextData(obj, depth = 0) {
 export async function downloadRiftbound() {
   console.log('\n⚡ Riftbound...')
 
-  const [galleryRes, { prices, extraCards }] = await Promise.all([
+  const [galleryRes, { prices, extraCards }, tcgplayerOnlyCards] = await Promise.all([
     fetch('https://playriftbound.com/en-us/card-gallery/', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -954,6 +1061,7 @@ export async function downloadRiftbound() {
       },
     }),
     fetchRiftboundPrices(),
+    fetchTcgplayerOnlyRiftboundSets(),
   ])
 
   if (!galleryRes.ok) throw new Error(`Gallery fetch failed: ${galleryRes.status} ${galleryRes.statusText}`)
@@ -1116,6 +1224,8 @@ export async function downloadRiftbound() {
     starCount++
   }
   if (starCount > 0) console.log(`   Created ${starCount} Signature (Star) stubs from TCGCSV`)
+
+  all.push(...tcgplayerOnlyCards)
 
   all.sort((a, b) => {
     const setDiff = (SET_ORDER[a.setCode] ?? 99) - (SET_ORDER[b.setCode] ?? 99)
