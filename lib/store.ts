@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { Card, Game, SoldCard, CatalogSyncNotice } from './types'
+import { Card, Game, SoldCard } from './types'
 import type { Purchase } from './spending/types'
 import type { PriceStatus } from './api/priceStatus'
 
@@ -36,7 +36,6 @@ interface TCGStore {
   trackedGames: Game[]
   timeFrame: 'entry' | '1d' | '7d' | '30d' | '365d'
   hiddenGroups: string[]
-  catalogSyncNotices: CatalogSyncNotice[]
   cardUnlocks: { id: string; card: Card }[]
 
   // Populated by AuthProvider on login
@@ -66,8 +65,6 @@ interface TCGStore {
   toggleHiddenGroup: (group: string) => void
   editPurchase: (id: string, updates: Partial<Purchase>) => void
   removePurchase: (id: string) => void
-  addCatalogSyncNotice: (notice: CatalogSyncNotice) => void
-  dismissCatalogSyncNotice: (id: string) => void
   pushCardUnlock: (card: Card) => void
   dismissCardUnlock: (id: string) => void
 }
@@ -116,13 +113,12 @@ export const useStore = create<TCGStore>()(
   trackedGames: DEFAULT_TRACKED_GAMES,
   timeFrame: 'entry' as const,
   hiddenGroups: [] as string[],
-  catalogSyncNotices: [] as CatalogSyncNotice[],
   cardUnlocks: [] as { id: string; card: Card }[],
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
   loadUserSoldCards: (soldCards) => set({ soldCards }),
   loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, purchases: [], catalogSyncNotices: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
+  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, purchases: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, withLivePrice(card, state.livePrices)] })),
@@ -162,12 +158,6 @@ export const useStore = create<TCGStore>()(
 
   removePurchase: (id) =>
     set((state) => ({ purchases: state.purchases.filter((p) => p.id !== id) })),
-
-  addCatalogSyncNotice: (notice) =>
-    set((state) => ({ catalogSyncNotices: [notice, ...state.catalogSyncNotices] })),
-
-  dismissCatalogSyncNotice: (id) =>
-    set((state) => ({ catalogSyncNotices: state.catalogSyncNotices.filter((n) => n.id !== id) })),
 
   // Queued rather than a single value — a fast burst of "first copy" adds (e.g. logging a whole
   // box unboxing) shouldn't clobber earlier unlocks before the user's seen them. CardUnlockToast

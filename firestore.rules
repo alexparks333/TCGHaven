@@ -2,22 +2,50 @@ rules_version = '2';
 
 // TCGHaven Firestore rules.
 //
-// Two UIDs count as admin — neither is a secret, so it's fine for them to live here as plain
-// text; the real protection is that only a signed-in session with one of these exact UIDs can
-// write to the catalog collections below:
-//   - Alex's real (Google-login) account — used when he uses the Admin Catalog page himself.
-//   - A dedicated email/password "sync" account, used only by scripts/download-card-catalog.mjs
-//     (Alex's real account has no password to sign in with from a Node script, since it's a
-//     Google-only login — this account exists purely so the script can authenticate at all).
-// Deploy via `firebase deploy --only firestore:rules` (needs `firebase login` once) or by
-// pasting this file's contents into the Console's Rules tab.
+// Who can write the shared data (catalog, registry, sync status, price history):
+//   - The Owner — Alex's account, hardcoded below as the root of trust so the Owner can never be
+//     locked out. Also the only one who can add/remove staff.
+//   - Staff — anyone with a staff/{uid} record, added by the Owner from the staff portal (/admin,
+//     lib/firebase/staff.ts). Removing the record removes their access everywhere at once.
+//   - The dedicated email/password "sync" account the scripts and server-side syncs sign in as.
+// None of these uids are secrets. Deploy via `firebase deploy --only firestore:rules` (needs
+// `firebase login` once) or by pasting this file's contents into the Console's Rules tab.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedIn() { return request.auth != null; }
+
+    function isOwner() {
+      return signedIn() && (
+        request.auth.uid == 'kOVse5dvMDOSkxlitTAh1Q99sJD3' ||
+        (exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'owner')
+      );
+    }
+
+    function isStaff() {
+      return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
     function isAdmin() {
-      return request.auth != null &&
-        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'];
+      return signedIn() && (
+        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'] ||
+        isStaff()
+      );
+    }
+
+    // Staff list. Staff can see the team; only the Owner adds or removes people (and can't
+    // remove themselves). A staff member may update only their own "must change password" flag,
+    // after choosing their own password on first sign-in.
+    match /staff/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isOwner() && request.resource.data.role in ['owner', 'staff'];
+      allow update: if isOwner() || (
+        signedIn() && request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword'])
+      );
+      allow delete: if isOwner() && request.auth.uid != uid;
     }
 
     // Card catalog — the shared source of truth. Content isn't sensitive (names, images,

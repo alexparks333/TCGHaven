@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, RefreshCw, Filter } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RARITY_LABELS_BY_GAME } from '@/lib/utils'
@@ -47,7 +47,7 @@ interface CardGroup {
 export default function InventoryPage() {
   const {
     cards, deleteCard, addSoldCard, activeGame, setActiveGame, updateCard,
-    catalogSyncNotices, dismissCatalogSyncNotice, trackedGames, setTrackedGames,
+    trackedGames, setTrackedGames,
   } = useStore()
   const { user, dataLoading } = useAuth()
   const router = useRouter()
@@ -389,33 +389,6 @@ export default function InventoryPage() {
             <AlertTriangle size={16} className="text-red-600 flex-shrink-0" />
             <span>{saveError}</span>
             <button onClick={() => setSaveError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
-          </div>
-        )}
-        {catalogSyncNotices.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {catalogSyncNotices.map((notice) => (
-              <div
-                key={notice.id}
-                className="flex items-start gap-3 bg-violet-100/40 border border-violet-300/50 rounded-xl px-4 py-3 text-sm text-violet-700"
-              >
-                <RefreshCw size={16} className="text-violet-600 flex-shrink-0 mt-0.5" />
-                <span>
-                  {notice.matchedCount} card{notice.matchedCount !== 1 ? 's were' : ' was'} updated to match a catalog
-                  correction: {notice.cardName}
-                  {notice.changedFields.length > 0 && (
-                    <span className="text-violet-600/80">
-                      {' '}({notice.changedFields.map((f) => `${f.field} ${f.from} → ${f.to}`).join(', ')})
-                    </span>
-                  )}
-                </span>
-                <button
-                  onClick={() => dismissCatalogSyncNotice(notice.id)}
-                  className="ml-auto text-violet-500 hover:text-violet-700 flex-shrink-0"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
           </div>
         )}
         <div className="flex items-center justify-between gap-3 mb-6">

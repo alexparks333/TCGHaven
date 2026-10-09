@@ -334,6 +334,34 @@ anyone can browse the table read-only; only the admin sees the write controls.
   paragraph). Any route that writes shared/admin data — not just this page's own routes, but also
   the 5 `sync/{game}` routes (§17) — goes through these.
 
+### Staff portal — `/admin` is its own app with its own sign-in
+
+`/admin` is a separate **staff portal**, not a page of the collector app: `ClientWrapper.tsx` skips
+the collector shell/session for `/admin/*`, and `app/admin/layout.tsx` renders `StaffPortal`
+(`components/admin/`) — its own dark sidebar (Catalog `/admin`, Sync `/admin/sync`, Needs Review
+`/admin/review`, Team `/admin/team`), sign-in screen, and gates.
+
+- **Separate session.** `lib/firebase/staff.ts` runs a second Firebase app instance (`'staff'`)
+  with its own `staffAuth`/`staffDb`/`staffStorage`, so a staff login never touches the collector
+  session (Alex can be signed in to both in one browser). Every portal write goes through
+  `staffDb`/`staffStorage` (AdminCatalogPage imports them as `db`/`storage`;
+  `regenerateSnapshot(game, staffDb)`), and `adminFetch()` sends the **staff** session's token.
+- **Who's staff:** `staff/{uid}` docs `{ name, email, role: 'owner'|'staff', mustChangePassword }`.
+  The Owner is `NEXT_PUBLIC_ADMIN_UID`, also hardcoded in `firestore.rules`/`storage.rules` as the
+  root of trust (never lockable-out; their record is created on first portal sign-in). Only the
+  Owner adds/removes staff (Team page). Adding someone creates a Firebase email/password login with
+  a temporary password on a throwaway app instance (so the Owner's session is untouched); the
+  employee must choose their own on first sign-in. Removing the `staff` doc revokes access
+  everywhere at once. Employee staff logins are refused by the collector app's email sign-in.
+- **Enforcement:** `firestore.rules` `isAdmin()` = Owner uid, the sync bot uid, or `isStaff()`
+  (`exists(staff/{uid})`); `storage.rules` uses `firestore.exists()` for the same check.
+  `verifyAdminRequest()` checks the caller's staff record via Firestore's REST API using the
+  caller's own ID token (rules allow reading your own staff doc) — Owner uid always passes.
+- Admin Catalog edits no longer cascade name/number/image into the editor's own inventory (the
+  portal has no inventory), so the Inventory "catalog correction" banner is gone too. The collector
+  app has no admin or sync UI at all anymore — Settings is just the account + the user's own
+  Riftbound inventory repair.
+
 ### Auth model — `isAdmin` is UX, but every write route now checks the caller too
 
 `isAdmin` (`user.uid === NEXT_PUBLIC_ADMIN_UID`) gates which controls the UI shows, and

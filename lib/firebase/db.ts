@@ -3,7 +3,7 @@ import {
   serverTimestamp, Timestamp, type QueryDocumentSnapshot, type DocumentData,
 } from 'firebase/firestore'
 import { db } from './config'
-import type { Card, PriceHistory, SoldCard } from '../types'
+import type { Card, SoldCard } from '../types'
 
 // ── Cards ──────────────────────────────────────────────────────────────────
 //
@@ -122,9 +122,3 @@ export async function deleteSoldCard(userId: string, cardId: string): Promise<vo
   await deleteDoc(doc(db, 'users', userId, 'soldCards', cardId))
 }
 
-// ── Price History ──────────────────────────────────────────────────────────
-
-export async function loadPriceHistory(userId: string): Promise<PriceHistory[]> {
-  const snap = await getDocs(collection(db, 'users', userId, 'priceHistory'))
-  return snap.docs.map((d) => ({ cardId: d.id, ...d.data() } as PriceHistory))
-}

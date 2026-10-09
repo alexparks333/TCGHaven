@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, getDocs, query, where, setDoc, writeBatch, Timestamp,
+  collection, doc, getDoc, getDocs, query, where, setDoc, writeBatch, Timestamp, type Firestore,
 } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import type { Game } from '../types'
@@ -89,21 +89,23 @@ export async function loadVisibleCatalog<T extends { hidden?: boolean }>(game: G
  * Rewrites catalog_snapshot/{game}/chunks/* from the current catalog/{game}/cards/* state.
  * Called after any write (Admin add/hide/edit/upload, or a bulk download sync) so a freshly
  * cold app instance picks up the change without waiting for the next full re-download.
- * Requires the caller to already be signed in as the admin (Firestore rules enforce this).
+ * Requires the caller to already be signed in as staff (Firestore rules enforce this) — the staff
+ * portal passes its own Firestore instance (lib/firebase/staff.ts's staffDb) so the writes run as
+ * the staff member's session rather than the collector app's.
  */
-export async function regenerateSnapshot(game: Game): Promise<void> {
-  const cardsSnap = await getDocs(collection(db, 'catalog', game, 'cards'))
+export async function regenerateSnapshot(game: Game, firestore: Firestore = db): Promise<void> {
+  const cardsSnap = await getDocs(collection(firestore, 'catalog', game, 'cards'))
   const cards = cardsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
   const chunkCount = Math.max(1, Math.ceil(cards.length / CHUNK_SIZE))
   for (let i = 0; i < chunkCount; i++) {
     const slice = cards.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-    await setDoc(doc(db, 'catalog_snapshot', game, 'chunks', String(i)), { cards: JSON.stringify(slice) })
+    await setDoc(doc(firestore, 'catalog_snapshot', game, 'chunks', String(i)), { cards: JSON.stringify(slice) })
   }
   // Remove any leftover chunk docs from a previous, larger snapshot (e.g. after hiding cards
   // shrinks the count enough to need fewer chunks than last time).
-  const existingChunks = await getDocs(collection(db, 'catalog_snapshot', game, 'chunks'))
-  const batch = writeBatch(db)
+  const existingChunks = await getDocs(collection(firestore, 'catalog_snapshot', game, 'chunks'))
+  const batch = writeBatch(firestore)
   let hasDeletes = false
   for (const chunkDoc of existingChunks.docs) {
     if (parseInt(chunkDoc.id, 10) >= chunkCount) { batch.delete(chunkDoc.ref); hasDeletes = true }

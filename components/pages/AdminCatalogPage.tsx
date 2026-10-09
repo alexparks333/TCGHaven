@@ -7,16 +7,13 @@ import {
   doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch,
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { AuthGuard } from '@/components/auth/AuthGuard'
-import { useAuth } from '@/components/auth/AuthProvider'
-import { useStore } from '@/lib/store'
-import { editCard as editCardInFirestore } from '@/lib/firebase/db'
-import { db, storage, ADMIN_UID } from '@/lib/firebase/config'
+import { useStaff } from '@/components/admin/StaffAuthProvider'
+import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { regenerateSnapshot, normNum } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
-import { GAME_COLORS, type Game, type CatalogSyncNotice } from '@/lib/types'
+import { GAME_COLORS, type Game } from '@/lib/types'
 import { useScrollLock } from '@/lib/useScrollLock'
 
 interface SetOption {
@@ -70,24 +67,6 @@ interface LookupCandidate {
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
-export default function AdminCatalogPage() {
-  return (
-    <AuthGuard>
-      <div>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-ink">Admin Catalog</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
-            Browse the full card catalog in display order. This is the shared catalog everyone&apos;s
-            copy of the app reads from — edits here apply immediately for everyone.
-          </p>
-        </div>
-        <SyncPanel />
-        <CatalogBrowser />
-      </div>
-    </AuthGuard>
-  )
-}
-
 // ── Sync Card Data ──────────────────────────────────────────────────────────
 // Runs directly against Firestore via app/api/sync/{game}/route.ts — one plain, synchronous
 // request per game, no build/restart step (see CLAUDE.md §14). Works identically against
@@ -129,9 +108,9 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)}d ago`
 }
 
-function SyncPanel() {
-  const { user } = useAuth()
-  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
+export function SyncPanel() {
+  // The staff portal only renders for staff, so this is always true here; kept as a guard.
+  const isAdmin = !!useStaff().member
   const [state, setState] = useState<Record<Game, GameSyncState>>({
     pokemon: { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' },
   })
@@ -287,10 +266,9 @@ function SyncPanel() {
   )
 }
 
-function CatalogBrowser() {
-  const { user } = useAuth()
-  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
-  const { cards: inventoryCards, updateCard: updateInventoryCard, addCatalogSyncNotice } = useStore()
+export function CatalogBrowser() {
+  // The staff portal only renders for staff, so this is always true here; kept as a guard.
+  const isAdmin = !!useStaff().member
   const [activeGame, setActiveGame] = useState<Game>('riftbound')
   const [sets, setSets] = useState<SetOption[]>([])
   const [activeSet, setActiveSet] = useState<SetOption | null>(null)
@@ -407,7 +385,7 @@ function CatalogBrowser() {
     setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: nextHidden } : c)))
     try {
       await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { hidden: nextHidden, updatedAt: serverTimestamp() })
-      await regenerateSnapshot(activeGame)
+      await regenerateSnapshot(activeGame, db)
     } catch (err) {
       setCards((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: !nextHidden } : c)))
       setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: !nextHidden } : c)))
@@ -426,7 +404,7 @@ function CatalogBrowser() {
     if (!window.confirm(`Permanently delete "${card.name}" (#${card.number}) from the catalog? This cannot be undone.`)) return
     try {
       await deleteDoc(doc(db, 'catalog', activeGame, 'cards', id))
-      await regenerateSnapshot(activeGame)
+      await regenerateSnapshot(activeGame, db)
       setCards((prev) => prev.filter((c) => c.id !== id))
       setGlobalResults((prev) => prev.filter((c) => c.id !== id))
       setActionSuccess(`Deleted "${card.name}" from the catalog.`)
@@ -435,17 +413,15 @@ function CatalogBrowser() {
     }
   }
 
-  // Saves an edit to a catalog card, then cascades the identity/display fields that changed
-  // (number, name, image — never price) to any inventory entries that reference this card's
-  // id via apiId. The Admin Catalog is the source of truth: this auto-applies, no confirm
-  // gate, followed by an immediate success note here and a banner on Inventory's next visit.
+  // Saves an edit to a catalog card. The Admin Catalog is the source of truth: it auto-applies
+  // for everyone, no confirm gate. (Edits used to also patch the editing account's OWN inventory
+  // copies of the card; the staff portal has no inventory, so that's gone.)
   async function saveCardEdit(id: string, patch: Record<string, unknown>) {
     setActionError(null)
     setActionSuccess(null)
-    const original = editingCard
     try {
       await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
-      await regenerateSnapshot(activeGame)
+      await regenerateSnapshot(activeGame, db)
     } catch (err) {
       setActionError(`Edit failed: ${(err as Error).message}`)
       return
@@ -454,35 +430,7 @@ function CatalogBrowser() {
     setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c)))
     setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c)))
 
-    const matches = inventoryCards.filter((c) => c.apiId === id)
-    const cascadeFields = ['number', 'name', 'imageUrl'] as const
-    const cascadePatch: Record<string, unknown> = {}
-    const changedFields: CatalogSyncNotice['changedFields'] = []
-    for (const field of cascadeFields) {
-      if (!(field in patch)) continue
-      const from = original ? String((original as unknown as Record<string, unknown>)[field] ?? '') : ''
-      const to = String(patch[field] ?? '')
-      if (from === to) continue
-      cascadePatch[field] = patch[field]
-      changedFields.push({ field, from, to })
-    }
-
-    if (matches.length > 0 && Object.keys(cascadePatch).length > 0 && user) {
-      for (const m of matches) {
-        await editCardInFirestore(user.uid, m.id, cascadePatch).catch(() => {})
-        updateInventoryCard(m.id, cascadePatch)
-      }
-      addCatalogSyncNotice({
-        id: `${id}-${Date.now()}`,
-        cardName: original?.name ?? String(patch.name ?? id),
-        apiId: id,
-        matchedCount: matches.length,
-        changedFields,
-      })
-      setActionSuccess(`Catalog updated. ${matches.length} inventory ${matches.length === 1 ? 'entry' : 'entries'} updated to match.`)
-    } else {
-      setActionSuccess('Catalog updated.')
-    }
+    setActionSuccess('Catalog updated.')
   }
 
   // Deletes a custom (source: "manual") set entirely: every card doc under its setName, then
@@ -511,7 +459,7 @@ function CatalogBrowser() {
         for (const ref of refs.slice(i, i + CHUNK)) batch.delete(ref)
         await batch.commit()
       }
-      await regenerateSnapshot(activeGame)
+      await regenerateSnapshot(activeGame, db)
 
       const res = await adminFetch('/api/set-registry', {
         method: 'DELETE',
@@ -1714,7 +1662,7 @@ function AddCardForm({
       if (existing.exists()) { onError(`A custom card with id "${id}" already exists`); return }
 
       await setDoc(cardRef, { ...card, id, hidden: false, source: 'manual', updatedAt: serverTimestamp() })
-      await regenerateSnapshot(game)
+      await regenerateSnapshot(game, db)
 
       const trimmedDate = releaseDate.trim()
       if (setDateEditable && trimmedDate !== (activeSet.releaseDate || '')) {

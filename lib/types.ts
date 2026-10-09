@@ -44,17 +44,6 @@ export interface PriceHistory {
   points: PricePoint[]
 }
 
-// Surfaced on the Inventory page after an Admin Catalog edit auto-cascades to matching
-// inventory entries — a record of "here's what just changed," not the change itself (the
-// Firestore write already happened by the time this exists).
-export interface CatalogSyncNotice {
-  id: string
-  cardName: string
-  apiId: string
-  matchedCount: number
-  changedFields: Array<{ field: string; from: string; to: string }>
-}
-
 export const CONDITION_LABELS: Record<Condition, string> = {
   mint: 'Mint',
   near_mint: 'Near Mint',

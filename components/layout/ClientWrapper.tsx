@@ -1,5 +1,6 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
@@ -7,6 +8,9 @@ import { CardUnlockToast } from '@/components/CardUnlockToast'
 import { PriceAutoUpdater } from '@/components/PriceAutoUpdater'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
+  // The staff portal (/admin) has its own sign-in and layout (app/admin/layout.tsx) — none of the
+  // collector app's shell, session or background price loading applies there.
+  if (usePathname()?.startsWith('/admin')) return <>{children}</>
   return (
     <AuthProvider>
       {/* 100dvh = the height actually visible right now (h-screen's 100vh is taller on iPhone — see

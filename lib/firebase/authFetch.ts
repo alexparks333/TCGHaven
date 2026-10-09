@@ -1,19 +1,25 @@
+import type { Auth } from 'firebase/auth'
 import { auth } from './config'
+import { staffAuth } from './staff'
 
-// Drop-in replacement for fetch() on every admin-only write call (set-registry PUT/POST/DELETE,
-// admin/catalog/invalidate, admin/catalog/lookup, sync/{game}) now that those routes verify the
-// caller server-side via verifyAdminRequest() instead of trusting any caller who knows the URL.
-// Attaches the signed-in user's own Firebase ID token as a Bearer header; if nobody's signed in
-// (shouldn't happen — every call site here is already behind an isAdmin-gated UI) the request
-// goes out without one and the server correctly rejects it as unauthorized rather than silently
-// succeeding. GET reads of the registry/catalog stay plain fetch() — those are public-read.
-export async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const token = await auth.currentUser?.getIdToken().catch(() => null)
+// fetch() that attaches the caller's Firebase ID token as `Authorization: Bearer <token>`, for
+// routes that verify who's calling server-side. If nobody's signed in the request goes out without
+// one and the server rejects it, rather than silently succeeding. GET reads of the registry/catalog
+// stay plain fetch() — those are public-read.
+async function withToken(from: Auth, input: string, init: RequestInit): Promise<Response> {
+  const token = await from.currentUser?.getIdToken().catch(() => null)
   const headers = new Headers(init.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
   return fetch(input, { ...init, headers })
 }
 
-// Same thing; the name the admin-only call sites use. Signed-in-user routes (verifyUserRequest)
-// use authFetch.
-export const adminFetch = authFetch
+// Signed-in collector routes (verifyUserRequest) — the collector app's own session.
+export function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  return withToken(auth, input, init)
+}
+
+// Staff-only routes (verifyAdminRequest: set-registry writes, admin/catalog/invalidate + lookup,
+// sync/{game}) — the staff portal's separate session (lib/firebase/staff.ts).
+export function adminFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  return withToken(staffAuth, input, init)
+}

@@ -12,7 +12,8 @@ import {
   deleteUser,
   getAdditionalUserInfo,
 } from 'firebase/auth'
-import { auth, googleProvider } from '@/lib/firebase/config'
+import { doc, getDoc } from 'firebase/firestore'
+import { auth, db, googleProvider } from '@/lib/firebase/config'
 import { loadCards, loadCardChanges, loadSoldCards } from '@/lib/firebase/db'
 import { readInventoryCache, writeInventoryCache, clearInventoryCache, INVENTORY_FULL_SYNC_EVERY_MS } from '@/lib/inventoryCache'
 import type { Card } from '@/lib/types'
@@ -175,7 +176,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password)
+    const { user: signedIn } = await signInWithEmailAndPassword(auth, email, password)
+    // Employee logins made on the staff portal's Team page are staff-only — they have no
+    // collection, so don't let one into the collector app. (The Owner's account is both.)
+    const staff = await getDoc(doc(db, 'staff', signedIn.uid)).catch(() => null)
+    if (staff?.exists() && staff.data().role === 'staff') {
+      await firebaseSignOut(auth)
+      throw new Error('This is a staff login. Sign in at tcghaven.org/admin instead.')
+    }
   }
 
   const verifyPasscode = async (code: string): Promise<boolean> => {

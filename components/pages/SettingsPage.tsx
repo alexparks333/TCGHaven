@@ -1,144 +1,29 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, CheckCircle2, AlertCircle, ChevronRight, Search, Wrench, ShieldCheck, LogOut } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle, Search, Wrench, LogOut } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
-import { editCard, loadPriceHistory } from '@/lib/firebase/db'
-import { ADMIN_UID } from '@/lib/firebase/config'
-import { adminFetch } from '@/lib/firebase/authFetch'
+import { editCard } from '@/lib/firebase/db'
 import { cn, riftboundDisplayNumber, riftboundInherentFoil } from '@/lib/utils'
 
-// ── Types (mirror lib/api/registry.ts shapes) ─────────
-
-interface LorcanaRegistrySet {
-  setName: string
-  code: string | null
-  releaseDate: string | null
-  cardexGroup: string | null
-  needsReview: boolean
-  source: string
-}
-
-interface RiftboundRegistrySet {
-  setName: string
-  setCode: string
-  releaseDate: string | null
-  cardCount: number
-  cardexGroup: string | null
-  tcgcsvGroupId: number | null
-  groupMatchConfidence: number | null
-  needsReview: boolean
-  source: string
-}
-
-interface SetRegistryResponse {
-  lorcana: { groupOrder: string[]; sets: LorcanaRegistrySet[] }
-  riftbound: { groupOrder: string[]; sets: RiftboundRegistrySet[] }
-}
-
 export default function SettingsPage() {
-  const { user } = useAuth()
-  // "Needs Review" writes to the shared set registry (PUT /api/set-registry) — the same
-  // admin-only action Admin Catalog's own registry editors perform, so it's gated the same way
-  // here rather than being reachable by any signed-in user just because this page isn't behind
-  // /admin. The route itself also verifies the caller server-side now (verifyAdminRequest) — this
-  // is UX only, matching the same "isAdmin is UX, firestore.rules/server checks are the real gate"
-  // pattern Admin Catalog uses.
-  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
-
   return (
     <AuthGuard>
       <div className="max-w-2xl">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-ink">Settings</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Keep card catalogs, prices, and set registrations up to date.
+            Your account, and fixes for your own inventory.
           </p>
         </div>
 
-        <AccountActions isAdmin={isAdmin} />
+        <AccountActions />
         <InventoryNumberRepairCard />
-        {isAdmin && <PriceHistoryImportCard />}
-        {isAdmin && <NeedsReviewCard />}
       </div>
     </AuthGuard>
-  )
-}
-
-// ── One-time: move old per-user price history into the shared history ─────
-// Price history used to be stored per user, per card (users/{uid}/priceHistory). It's now one
-// shared, catalog-level history written by the scheduled sync (scripts/lib/price-history.mjs).
-// This copies the admin's old history into the shared one so past P&L / charts survive the move.
-// Fills gaps only, never overwrites synced prices, and is safe to run more than once. The old
-// records are left untouched.
-function PriceHistoryImportCard() {
-  const { user } = useAuth()
-  const { cards } = useStore()
-  const [state, setState] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [progress, setProgress] = useState({ done: 0, total: 0 })
-  const [result, setResult] = useState<{ docsWritten: number; pricesAdded: number } | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function run() {
-    if (!user) return
-    setState('running'); setError(null); setResult(null)
-    try {
-      const history = await loadPriceHistory(user.uid)
-      const byId = new Map(cards.map((c) => [c.id, c]))
-      const items = history
-        .map((h) => ({ h, card: byId.get(h.cardId) }))
-        .filter(({ h, card }) => card?.apiId && h.points?.length)
-        .map(({ h, card }) => ({ game: card!.game, apiId: card!.apiId!, isFoil: !!card!.isFoil, points: h.points }))
-      const CHUNK = 150
-      setProgress({ done: 0, total: items.length })
-      const totals = { docsWritten: 0, pricesAdded: 0 }
-      for (let i = 0; i < items.length; i += CHUNK) {
-        const res = await adminFetch('/api/admin/price-history/import', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cards: items.slice(i, i + CHUNK) }),
-        })
-        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Import failed (${res.status})`)
-        const r = await res.json()
-        totals.docsWritten += r.docsWritten ?? 0
-        totals.pricesAdded += r.pricesAdded ?? 0
-        setProgress({ done: Math.min(i + CHUNK, items.length), total: items.length })
-      }
-      setResult(totals)
-      setState('done')
-    } catch (err) {
-      setError((err as Error).message)
-      setState('error')
-    }
-  }
-
-  return (
-    <div className="card-glass p-5 mb-6">
-      <h2 className="text-base font-semibold text-ink mb-1">Import old price history</h2>
-      <p className="text-sm text-slate-400 mb-4">
-        Price history is now shared across everyone and built automatically each day. Run this once to copy
-        your existing per-card history into it, so past P&amp;L and charts are kept. It only fills gaps and never
-        overwrites synced prices — safe to run again.
-      </p>
-      <button onClick={run} disabled={state === 'running'} className="btn-primary disabled:opacity-60">
-        {state === 'running' ? <Loader2 size={14} className="animate-spin" /> : null}
-        {state === 'running' ? `Importing… ${progress.done} / ${progress.total} cards` : 'Import my price history'}
-      </button>
-      {state === 'done' && result && (
-        <div className="flex items-center gap-1.5 text-sm text-emerald-600 mt-3">
-          <CheckCircle2 size={14} /> Done — {result.pricesAdded.toLocaleString()} prices added across {result.docsWritten} records.
-        </div>
-      )}
-      {state === 'error' && error && (
-        <div className="flex items-center gap-1.5 text-sm text-red-600 mt-3">
-          <AlertCircle size={14} /> {error}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -146,7 +31,7 @@ function PriceHistoryImportCard() {
 // On a phone the sidebar is hidden and the bottom bar only has room for the six main pages, so
 // Admin and Sign out live here instead (Filters is in the phone top bar). Desktop keeps them in
 // the sidebar.
-function AccountActions({ isAdmin }: { isAdmin: boolean }) {
+function AccountActions() {
   const { user, signOut } = useAuth()
   const router = useRouter()
   if (!user) return null
@@ -166,13 +51,6 @@ function AccountActions({ isAdmin }: { isAdmin: boolean }) {
           <div className="text-xs text-slate-500 truncate">{user.email}</div>
         </div>
       </div>
-      {isAdmin && (
-        <Link href="/admin" className={row}>
-          <ShieldCheck size={18} />
-          Admin
-          <ChevronRight size={16} className="ml-auto text-slate-500" />
-        </Link>
-      )}
       <button
         onClick={async () => { await signOut(); router.replace('/login') }}
         className={cn(row, 'text-red-600')}
@@ -372,169 +250,6 @@ function InventoryNumberRepairCard() {
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Needs Review ────────────────────────────────────────────────────────────
-
-function NeedsReviewCard() {
-  const [registry, setRegistry] = useState<SetRegistryResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  function load() {
-    setLoading(true)
-    fetch('/api/set-registry')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setRegistry(data))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [])
-
-  async function patch(game: 'lorcana' | 'riftbound', setName: string, p: Record<string, unknown>) {
-    await adminFetch('/api/set-registry', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game, setName, patch: p }),
-    })
-    load()
-  }
-
-  if (loading) {
-    return (
-      <div className="card-glass p-5 flex items-center gap-2 text-slate-500 text-sm">
-        <Loader2 size={14} className="animate-spin" /> Loading set registry…
-      </div>
-    )
-  }
-
-  const lorcanaReview = registry?.lorcana.sets.filter((s) => s.needsReview) ?? []
-  const riftboundReview = registry?.riftbound.sets.filter((s) => s.needsReview) ?? []
-
-  if (lorcanaReview.length === 0 && riftboundReview.length === 0) {
-    return (
-      <div className="card-glass p-5 text-sm text-slate-400">
-        No sets need review. Newly auto-discovered sets will show up here after a sync.
-      </div>
-    )
-  }
-
-  return (
-    <div className="card-glass p-5">
-      <h2 className="text-ink font-semibold mb-1">Needs Review</h2>
-      <p className="text-slate-400 text-sm mb-4">
-        These sets were auto-detected by a sync. Confirm the details before they&apos;re fully live.
-      </p>
-
-      <div className="space-y-3">
-        {lorcanaReview.map((s) => (
-          <LorcanaReviewRow
-            key={s.setName}
-            set={s}
-            groupOrder={registry?.lorcana.groupOrder ?? []}
-            onPatch={(p) => patch('lorcana', s.setName, p)}
-          />
-        ))}
-        {riftboundReview.map((s) => (
-          <RiftboundReviewRow
-            key={s.setName}
-            set={s}
-            groupOrder={registry?.riftbound.groupOrder ?? []}
-            onPatch={(p) => patch('riftbound', s.setName, p)}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function LorcanaReviewRow({
-  set, groupOrder, onPatch,
-}: { set: LorcanaRegistrySet; groupOrder: string[]; onPatch: (p: Record<string, unknown>) => void }) {
-  const [group, setGroup] = useState(set.cardexGroup ?? groupOrder[0] ?? '')
-
-  return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <ChevronRight size={14} className="text-violet-600" />
-        <span className="text-sm font-medium text-ink">{set.setName}</span>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">Lorcana</span>
-      </div>
-      <div className="flex flex-wrap gap-3 items-center text-xs text-slate-400 mb-3">
-        <label className="flex items-center gap-1.5">
-          Group
-          <select
-            value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-300"
-          >
-            {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </label>
-      </div>
-      <button
-        onClick={() => onPatch({
-          cardexGroup: group,
-          needsReview: false,
-        })}
-        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-600/20 text-violet-700 hover:bg-violet-600/30"
-      >
-        Mark reviewed
-      </button>
-    </div>
-  )
-}
-
-function RiftboundReviewRow({
-  set, groupOrder, onPatch,
-}: { set: RiftboundRegistrySet; groupOrder: string[]; onPatch: (p: Record<string, unknown>) => void }) {
-  const [group, setGroup] = useState(set.cardexGroup ?? groupOrder[0] ?? '')
-  const [groupId, setGroupId] = useState(set.tcgcsvGroupId ?? '')
-
-  return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-lg p-3">
-      <div className="flex items-center gap-2 mb-2">
-        <ChevronRight size={14} className="text-cyan-600" />
-        <span className="text-sm font-medium text-ink">{set.setName}</span>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">Riftbound</span>
-        <span className="text-[10px] text-slate-600">{set.cardCount} cards</span>
-      </div>
-      <div className="flex flex-wrap gap-3 items-center text-xs text-slate-400 mb-3">
-        <label className="flex items-center gap-1.5">
-          Group
-          <select
-            value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-300"
-          >
-            {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </label>
-        <label className="flex items-center gap-1.5">
-          TCGPlayer group ID
-          <input
-            type="number" value={groupId}
-            onChange={(e) => setGroupId(e.target.value ? parseInt(e.target.value, 10) : '')}
-            placeholder="e.g. 24344"
-            className="w-24 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-300"
-          />
-        </label>
-        {set.groupMatchConfidence != null && (
-          <span className="text-slate-600">(auto-matched at {Math.round(set.groupMatchConfidence * 100)}%)</span>
-        )}
-      </div>
-      <button
-        onClick={() => onPatch({
-          cardexGroup: group,
-          tcgcsvGroupId: groupId === '' ? null : groupId,
-          needsReview: false,
-        })}
-        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-cyan-600/20 text-cyan-700 hover:bg-cyan-600/30"
-      >
-        Mark reviewed
-      </button>
     </div>
   )
 }

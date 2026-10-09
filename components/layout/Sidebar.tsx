@@ -2,11 +2,10 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Package, TrendingUp, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings, ShieldCheck } from 'lucide-react'
+import { Package, TrendingUp, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
-import { ADMIN_UID } from '@/lib/firebase/config'
 
 const BASE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
@@ -16,8 +15,7 @@ const BASE_NAV = [
   { href: '/spending', label: 'Spending', icon: ShoppingBag },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
-const ADMIN_NAV_ITEM = { href: '/admin', label: 'Admin', icon: ShieldCheck }
-// Phone bottom bar, in display order. Admin and Sign out live on the Settings page on phones;
+// Phone bottom bar, in display order. Sign out lives on the Settings page on phones;
 // Filters is a button in the phone top bar (MobileHeader).
 const MOBILE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
@@ -37,10 +35,8 @@ export function Sidebar() {
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   if (isAuthPage) return null
 
-  // UI-level only — hides the link for non-admins, same as AdminCatalogPage.tsx hides its
-  // write controls. Real enforcement is Firestore/Storage security rules, not this check.
-  const isAdmin = !!user && !!ADMIN_UID && user.uid === ADMIN_UID
-  const nav = isAdmin ? [...BASE_NAV.slice(0, -1), ADMIN_NAV_ITEM, BASE_NAV[BASE_NAV.length - 1]] : BASE_NAV
+  // Admin isn't in the collector app anymore — it's the separate staff portal at /admin.
+  const nav = BASE_NAV
 
   async function handleSignOut() {
     await signOut()
