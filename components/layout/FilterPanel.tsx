@@ -8,25 +8,15 @@ import { GAME_LABELS, type Game } from '@/lib/types'
 
 const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
-const TIME_OPTIONS = [
-  { value: 'entry', label: 'Since Entry' },
-  { value: '1d',    label: '1 Day' },
-  { value: '7d',    label: '1 Week' },
-  { value: '30d',   label: '1 Month' },
-  { value: '365d',  label: '1 Year' },
-] as const
-
-// Pill styles — three states
+// Pill styles — on / off
 const pillOn   = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-violet-600/20 border-violet-500/40 text-violet-700 hover:bg-violet-600/30'
 const pillOff  = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-slate-900 border-slate-700 text-slate-500 line-through decoration-slate-600 hover:text-slate-300 hover:border-slate-600'
-const pillIdle = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
 
 export function FilterPanel() {
   const {
     calcFloor, setCalcFloor,
     showFilters, setShowFilters,
     activeGames, setActiveGames, trackedGames,
-    timeFrame, setTimeFrame,
     cards,
     hiddenGroups, toggleHiddenGroup,
   } = useStore()
@@ -74,7 +64,7 @@ export function FilterPanel() {
   }
 
   const allGamesActive = shownGames.every((g) => activeGames.includes(g))
-  const hasActiveFilters = calcFloor > 0 || !allGamesActive || timeFrame !== 'entry' || hiddenGroups.length > 0
+  const hasActiveFilters = calcFloor > 0 || !allGamesActive || hiddenGroups.length > 0
 
   return (
     <>
@@ -120,24 +110,6 @@ export function FilterPanel() {
                     </button>
                   )
                 })}
-              </div>
-            </div>
-
-            {/* P&L Window */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <div className="w-32 shrink-0">
-                <div className="text-xs font-semibold text-slate-400">P&amp;L Window</div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {TIME_OPTIONS.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => setTimeFrame(value)}
-                    className={timeFrame === value ? pillOn : pillIdle}
-                  >
-                    {label}
-                  </button>
-                ))}
               </div>
             </div>
 
@@ -230,7 +202,6 @@ export function FilterPanel() {
             <div className="flex items-center gap-2 text-xs text-amber-600 whitespace-nowrap overflow-x-auto min-w-0 [scrollbar-width:none]">
               {calcFloor > 0 && <span>Floor: {formatCurrency(calcFloor)}{totalHidden > 0 ? ` (${totalHidden} hidden)` : ''}</span>}
               {!allGamesActive && <span>Games: {shownGames.filter((g) => activeGames.includes(g)).map((g) => GAME_LABELS[g]).join(', ')}</span>}
-              {timeFrame !== 'entry' && <span>Period: {TIME_OPTIONS.find((t) => t.value === timeFrame)?.label}</span>}
               {hiddenGroups.length > 0 && <span>Hidden: {hiddenGroups.join(', ')}</span>}
             </div>
             <button onClick={() => setShowFilters(true)} className="ml-auto shrink-0 text-xs text-amber-500 hover:text-amber-700 underline underline-offset-2">

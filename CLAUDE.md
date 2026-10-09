@@ -1766,7 +1766,8 @@ small, deliberately-scoped slice of display/filter preferences via `partialize`:
 refresh/relaunch without waiting on Firestore.
 
 **Filters follow the account, live.** The Filters panel's settings (`calcFloor`, `activeGames`,
-`timeFrame`, `hiddenGroups`) are also stored on `users/{uid}/settings/preferences` (`filters`
+`hiddenGroups`) plus Portfolio's own P&L window (`timeFrame`, set only from Portfolio's own
+buttons — it was removed from the Filters panel as a duplicate) are also stored on `users/{uid}/settings/preferences` (`filters`
 field, next to `trackedGames`). `lib/preferencesSync.ts`'s `startPreferencesSync()` (started by
 `AuthProvider.tsx` on sign-in) listens to that doc with `onSnapshot` and writes local changes back
 (debounced 600ms), so a filter set on the website is the filter on the phone and vice versa, until
