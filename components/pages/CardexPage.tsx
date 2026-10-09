@@ -1255,6 +1255,72 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   )
 }
 
+// iOS Safari decides what a swipe scrolls at the moment the finger touches down, using its
+// compositor's picture of the page — and while the zoom overlay is fading out, that picture still
+// has a full-screen fixed layer on top (pointer-events: none or not). A swipe started then gets
+// latched to the overlay, so instead of scrolling the Cardex it just rubber-bands the whole page
+// until the finger lifts. The browser never re-targets a gesture mid-way, so the only fix is to
+// drive it ourselves: any touch that STARTS during the close animation scrolls the page's real
+// scroll container (<main>, see ClientWrapper.tsx) by hand for the rest of that gesture, with a
+// short momentum glide on release so it feels like a native flick.
+const CLOSE_ANIMATION_MS = 200 // matches card-zoom-backdrop-out / card-zoom-shrink-out's duration
+
+function scrollThroughClose() {
+  const scroller = document.querySelector('main')
+  if (!scroller) return
+  const closeEndsAt = performance.now() + CLOSE_ANIMATION_MS
+
+  let lastY = 0
+  let lastT = 0
+  let velocity = 0 // px per ms, positive = scrolling down the page
+
+  function onStart(e: TouchEvent) {
+    if (performance.now() > closeEndsAt) { stopListening(); return }
+    lastY = e.touches[0].clientY
+    lastT = performance.now()
+    velocity = 0
+    window.removeEventListener('touchstart', onStart)
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onEnd)
+    window.addEventListener('touchcancel', onEnd)
+  }
+
+  function onMove(e: TouchEvent) {
+    e.preventDefault() // stop the page rubber-banding; we're doing the scroll instead
+    const y = e.touches[0].clientY
+    const now = performance.now()
+    const dy = lastY - y
+    scroller!.scrollTop += dy
+    if (now > lastT) velocity = 0.8 * (dy / (now - lastT)) + 0.2 * velocity
+    lastY = y
+    lastT = now
+  }
+
+  function onEnd() {
+    window.removeEventListener('touchmove', onMove)
+    window.removeEventListener('touchend', onEnd)
+    window.removeEventListener('touchcancel', onEnd)
+    // A finger that paused before lifting shouldn't fling.
+    if (performance.now() - lastT > 80) return
+    let v = velocity
+    let prev = performance.now()
+    function glide(now: number) {
+      const dt = now - prev
+      prev = now
+      scroller!.scrollTop += v * dt
+      v *= Math.pow(0.995, dt) // decays like a native flick
+      if (Math.abs(v) > 0.02) requestAnimationFrame(glide)
+    }
+    requestAnimationFrame(glide)
+  }
+
+  function stopListening() { window.removeEventListener('touchstart', onStart) }
+
+  window.addEventListener('touchstart', onStart, { passive: true })
+  // No touch during the close → nothing to take over.
+  setTimeout(stopListening, CLOSE_ANIMATION_MS + 50)
+}
+
 // ── Card zoom overlay ──────────────────────────────────────────────────────────
 // Clicking a Cardex tile (without ⌘/Ctrl, which is the eBay shortcut instead) pops the card open
 // here for an isolated look: it flies from wherever it actually was in the grid to center screen
@@ -1308,6 +1374,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
 
   function handleClose() {
     setClosing(true)
+    scrollThroughClose()
     // `closing` must be reset back to false once the exit animation finishes, in the same beat as
     // telling the parent to clear `data` — otherwise `!data && !closing` never becomes true again
     // after the very first close (parent's `data` goes null, but this component's own `closing`
@@ -1318,7 +1385,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
     setTimeout(() => {
       setClosing(false)
       onClose()
-    }, 200) // matches card-zoom-backdrop-out / card-zoom-shrink-out's duration
+    }, CLOSE_ANIMATION_MS)
   }
 
   useEffect(() => {
