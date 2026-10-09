@@ -914,6 +914,8 @@ async function fetchTcgplayerOnlyRiftboundSets() {
       // Optional: only the products whose name contains this (e.g. "(Metal)" out of the much
       // bigger Organized Play promo group).
       const only = set.tcgplayerNameFilter ? String(set.tcgplayerNameFilter).toLowerCase() : null
+      // Optional: exactly these TCGplayer products (a hand-picked set, e.g. Nexus Night Grails).
+      const pick = Array.isArray(set.tcgplayerProductIds) ? new Set(set.tcgplayerProductIds.map(String)) : null
       let count = 0
       for (const f of records) {
         const row = {
@@ -924,6 +926,7 @@ async function fetchTcgplayerOnlyRiftboundSets() {
         if (!row.productId || !row.name || !row.extNumber) continue // sealed product
         if (/\(oversized\)/i.test(row.name)) continue
         if (only && !row.name.toLowerCase().includes(only)) continue
+        if (pick && !pick.has(row.productId)) continue
         cards.push(tcgplayerOnlyCard(set, row))
         count++
       }

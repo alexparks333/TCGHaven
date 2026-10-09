@@ -52,6 +52,8 @@ export interface RiftboundRegistrySet {
   // With tcgplayerOnly: only take TCGplayer products whose name contains this (e.g. "(Metal)"),
   // and/or give the set's cards this rarity instead of "Event Promo".
   tcgplayerNameFilter?: string
+  // With tcgplayerOnly: only these TCGplayer productIds — a hand-picked set out of a bigger group.
+  tcgplayerProductIds?: number[]
   tcgplayerRarity?: string
 }
 

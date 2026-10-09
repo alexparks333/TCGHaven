@@ -767,12 +767,14 @@ Serial Numbered)"), price = market price only (no lowest-listing fallback), imag
 none (the serial-numbered copies), else the ORIGINAL card's gallery art (a Metal card's code
 "247/298" is Origins #247's). These groups are kept out of the gallery price merge, and the CSV is
 parsed as a whole (`parseCSVText`) since some descriptions contain line breaks. Optional registry
-fields: `tcgplayerNameFilter` (only products whose name contains it) and `tcgplayerRarity`
-(instead of "Event Promo"). Parentheticals that just repeat the set name ("(Metal)") are dropped.
+fields: `tcgplayerNameFilter` (only products whose name contains it), `tcgplayerProductIds` (only
+exactly these products — a hand-picked set) and `tcgplayerRarity` (instead of "Event Promo"). Parentheticals that just repeat the set name ("(Metal)") are dropped.
 Current: in `"Promos"`, **T1 Worlds Champion 2025** (`T1`, group 24861 — 5 cards ×
 Player Bundle / Signature Edition / Serial Numbered), **Worlds Bundle 2025** (`RWB`, group 24502 —
 4 foil promos); in `"Special"`, **Metal Cards** (`MTL`, group 24528 filtered to "(Metal)", rarity
-"Metal" — 86: Best Of foil + Prize Wall non-foil printings). "Special" is the Riftbound Cardex's
+"Metal" — 86: Best Of foil + Prize Wall non-foil printings) and **Nexus Night Grails** (`NXG`,
+group 24528 picked by productId — the Nexus Night chase cards: GG EZ Teemo 197b/298, Lee Sin,
+Centered 151b/298, Mel, Newly Awakened 069b/166). "Special" is the Riftbound Cardex's
 trailing area: `buildGroups()` puts the inventory-only bucket (now "Other Special Cards", formerly
 "Metal & Special") into a registry group of that label when one exists, instead of a second one. To add another set: add a registry entry like those and sync.
 
