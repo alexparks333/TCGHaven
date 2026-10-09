@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { RotateCcw, Banknote } from 'lucide-react'
 import { useStore } from '@/lib/store'
-import { formatCurrency, openEbaySearch } from '@/lib/utils'
+import { formatCurrency, openEbaySearch, cardImageUrl } from '@/lib/utils'
 import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type SoldCard } from '@/lib/types'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -195,7 +195,7 @@ export default function SoldPage() {
                   <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={card.imageUrl} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
+                        <img src={cardImageUrl(card.imageUrl)} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
                       ) : (
                         <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}

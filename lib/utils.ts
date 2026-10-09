@@ -63,6 +63,20 @@ export function isFirstCopyOfCard(newCard: Card, existingCards: Card[]): boolean
 // Constructing Intl.NumberFormat is expensive — build it once, reuse everywhere
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
+// The URL to actually display for a card image. Riftbound's art (Riot's Sanity CDN,
+// cmsassets.rgpub.io/sanity/images/…) is stored as the full original PNG — ~770 KB per card, some
+// Runes ~3 MB at 1488px — which made the Cardex crawl on a phone. Sanity resizes and re-encodes
+// on request, so ask for 744px-wide WebP at 85% quality (~100 KB, sharp at zoom size on a 3x iPhone
+// screen). The stored catalog URL is left untouched; this only changes what the browser
+// downloads. Every other source's URLs pass through as-is.
+const SANITY_CARD_IMAGE = /^https:\/\/cmsassets\.rgpub\.io\/sanity\/images\//
+export function cardImageUrl(url: string): string
+export function cardImageUrl(url: string | undefined): string | undefined
+export function cardImageUrl(url: string | undefined): string | undefined {
+  if (!url || !SANITY_CARD_IMAGE.test(url) || /[?&]fm=/.test(url)) return url
+  return `${url}${url.includes('?') ? '&' : '?'}w=744&fm=webp&q=85`
+}
+
 export function formatCurrency(value: number): string {
   return USD.format(value)
 }
