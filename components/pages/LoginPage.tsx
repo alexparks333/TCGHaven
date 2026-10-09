@@ -50,7 +50,8 @@ export default function LoginPage() {
         <div className="flex flex-col items-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="" className="w-28 h-28 object-contain mb-3 drop-shadow-xl" />
-          <h1 className="text-2xl font-bold text-ink">TCGHaven</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <h1><img src="/logo-text.png" alt="TCGHaven" className="w-56 h-auto object-contain" /></h1>
           <p className="text-slate-500 text-sm mt-1">Sign in to your collection</p>
         </div>
 
@@ -58,7 +59,7 @@ export default function LoginPage() {
         <button
           onClick={handleGoogle}
           disabled={googleLoading}
-          className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-medium py-2.5 px-4 rounded-xl transition-colors mb-4 text-sm disabled:opacity-60"
+          className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-950 text-ink font-medium py-2.5 px-4 rounded-xl transition-colors mb-4 text-sm disabled:opacity-60"
         >
           {googleLoading ? (
             <Loader2 size={16} className="animate-spin" />
