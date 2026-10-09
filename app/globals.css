@@ -19,12 +19,17 @@
     @apply border-slate-800;
   }
 
-  /* The app's real scroller is <main> (see ClientWrapper.tsx); the document itself should never
-     move sideways on a phone either. */
+  /* The app's real scroller is <main> (see ClientWrapper.tsx) — the document itself must never
+     move, in either direction. On iPhone, 100vh is the height with Safari's toolbars collapsed,
+     taller than what's actually visible, which made the whole document scrollable by that gap:
+     any swipe iOS latched to the page instead of <main> (e.g. one started while the Cardex zoom
+     overlay was fading out) lifted the entire app, header and all, and cropped the bottom.
+     Locking html/body to the visible viewport makes such a swipe a no-op instead. */
   html,
   body {
-    overflow-x: hidden;
-    overscroll-behavior-x: none;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   /* iPhone Safari auto-zooms the whole page into any form field whose text is under 16px when

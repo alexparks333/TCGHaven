@@ -9,7 +9,9 @@ import { PriceAutoUpdater } from '@/components/PriceAutoUpdater'
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <div className="flex h-screen overflow-hidden">
+      {/* 100dvh = the height actually visible right now (h-screen's 100vh is taller on iPhone — see
+          the html/body note in globals.css). */}
+      <div className="flex h-dvh overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <MobileHeader />
