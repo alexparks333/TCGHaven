@@ -64,17 +64,39 @@ export function isFirstCopyOfCard(newCard: Card, existingCards: Card[]): boolean
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
 // The URL to actually display for a card image. Riftbound's art (Riot's Sanity CDN,
-// cmsassets.rgpub.io/sanity/images/…) is stored as the full original PNG — ~770 KB per card, some
-// Runes ~3 MB at 1488px — which made the Cardex crawl on a phone. Sanity resizes and re-encodes
-// on request, so ask for 744px-wide WebP at 85% quality (~100 KB, sharp at zoom size on a 3x iPhone
-// screen). The stored catalog URL is left untouched; this only changes what the browser
-// downloads. Every other source's URLs pass through as-is.
+// cmsassets.rgpub.io/sanity/images/…) is stored as the full original PNG — ~760 KB per card, Runes
+// ~1.4 MB at 1488px — which made the Cardex crawl on a phone. Sanity re-encodes on request, so ask
+// for WebP at 90% quality at the image's own original size (~120 KB a card, ~250 KB a Rune). No
+// resizing on purpose: shrinking to 744px made the double-size Runes visibly blurry when zoomed.
+// The stored catalog URL is left untouched; this only changes what the browser downloads. Every
+// other source's URLs pass through as-is.
 const SANITY_CARD_IMAGE = /^https:\/\/cmsassets\.rgpub\.io\/sanity\/images\//
 export function cardImageUrl(url: string): string
 export function cardImageUrl(url: string | undefined): string | undefined
 export function cardImageUrl(url: string | undefined): string | undefined {
   if (!url || !SANITY_CARD_IMAGE.test(url) || /[?&]fm=/.test(url)) return url
-  return `${url}${url.includes('?') ? '&' : '?'}w=744&fm=webp&q=85`
+  return `${url}${url.includes('?') ? '&' : '?'}fm=webp&q=90`
+}
+
+// onError for a card <img> showing cardImageUrl(original). The first request for a resized
+// Sanity image makes the CDN create it, and a burst of those (a whole Cardex screen at once)
+// sometimes fails — the image is fine moments later. So: retry once after a short pause, then fall
+// back to the original full-size URL. Returns true once it has given up (no more attempts left),
+// so callers that track "art finished" know when to stop waiting.
+export function retryCardImage(img: HTMLImageElement, original: string): boolean {
+  const attempt = Number(img.dataset.retry ?? 0)
+  if (attempt === 0) {
+    img.dataset.retry = '1'
+    const resized = cardImageUrl(original)
+    setTimeout(() => { img.src = `${resized}${resized.includes('?') ? '&' : '?'}retry=1` }, 800)
+    return false
+  }
+  if (attempt === 1 && cardImageUrl(original) !== original) {
+    img.dataset.retry = '2'
+    img.src = original
+    return false
+  }
+  return true
 }
 
 export function formatCurrency(value: number): string {

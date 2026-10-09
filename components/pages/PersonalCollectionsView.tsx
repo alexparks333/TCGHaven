@@ -18,7 +18,7 @@ import {
 } from '@/lib/firebase/collections'
 import type { CardSearchResult } from '@/lib/api/search'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
-import { cn, openEbaySearch, zoomGlowColor, cardImageUrl } from '@/lib/utils'
+import { cn, openEbaySearch, zoomGlowColor, cardImageUrl, retryCardImage } from '@/lib/utils'
 // Type-only import — erased at compile time, so this carries none of the runtime circular-import
 // risk a value import would (CardexPage.tsx imports THIS file to render the Personalized
 // Collections tab). See ZoomCardData's own comment in CardexPage.tsx for why the type lives there
@@ -768,7 +768,7 @@ function AddCardToCollectionModal({
               >
                 {result.imageUrl ? (
                   <div className="w-12 h-16 rounded-lg bg-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
-                    <img src={cardImageUrl(result.imageUrl)} alt={result.name} className="w-full h-full object-contain" />
+                    <img src={cardImageUrl(result.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, result.imageUrl ?? '')} alt={result.name} className="w-full h-full object-contain" />
                   </div>
                 ) : (
                   <div className="w-12 h-16 bg-slate-800 rounded-lg flex-shrink-0 flex items-center justify-center text-slate-600 text-xs">?</div>
@@ -984,7 +984,7 @@ function PersonalCardTile({
         }}
       >
         {card.imageUrl ? (
-          <img src={cardImageUrl(card.imageUrl)} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
+          <img src={cardImageUrl(card.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, card.imageUrl ?? '')} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: rarityColor + '18', color: rarityColor }}>
             #{card.number}

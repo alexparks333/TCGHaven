@@ -7,7 +7,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } from '@/lib/types'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
-import { cn, localDateString, isFirstCopyOfCard, cardImageUrl } from '@/lib/utils'
+import { cn, localDateString, isFirstCopyOfCard, cardImageUrl, retryCardImage } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { authFetch } from '@/lib/firebase/authFetch'
 
@@ -400,7 +400,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                     {result.imageUrl ? (
                       <div className="w-16 h-[88px] rounded-lg bg-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
                         <img
-                          src={cardImageUrl(result.imageUrl)}
+                          src={cardImageUrl(result.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, result.imageUrl ?? '')}
                           alt={result.name}
                           className="w-full h-full object-contain"
                         />
@@ -754,7 +754,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
           {/* Card preview */}
           {form.imageUrl && (
             <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
-              <img src={cardImageUrl(form.imageUrl)} alt={form.name} className="w-12 h-16 object-contain rounded" />
+              <img src={cardImageUrl(form.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, form.imageUrl ?? '')} alt={form.name} className="w-12 h-16 object-contain rounded" />
               <div>
                 <div className="text-sm font-medium text-ink">{form.name}</div>
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>
