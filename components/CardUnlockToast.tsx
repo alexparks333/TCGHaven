@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { PartyPopper, X, ArrowUpRight } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { GAME_COLORS, type Card } from '@/lib/types'
-import { cn, cardImageUrl, retryCardImage } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 // Auto-dismiss timing — long enough to actually notice the reveal animation (which alone takes
 // ~1.4s, see globals.css's card-unlock-* keyframes) before it starts fading.
@@ -78,7 +78,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
           />
           <div className="relative w-full h-full rounded-lg overflow-hidden" style={{ outline: `2px solid ${color}80` }}>
             {card.imageUrl ? (
-              <img src={cardImageUrl(card.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, card.imageUrl ?? '')} alt={card.name} className="w-full h-full object-cover card-unlock-image" />
+              <img src={card.imageUrl} alt={card.name} className="w-full h-full object-cover card-unlock-image" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-400 bg-slate-800 card-unlock-image">
                 #{card.number}

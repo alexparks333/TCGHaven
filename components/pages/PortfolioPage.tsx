@@ -7,7 +7,7 @@ import { useStore, portfolioGames } from '@/lib/store'
 import type { PriceStatus } from '@/lib/api/priceStatus'
 import { SPENDING_CATALOG } from '@/lib/spending/catalog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey, cardImageUrl, retryCardImage } from '@/lib/utils'
+import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -407,7 +407,7 @@ export default function PortfolioPage() {
                   className="flex items-center gap-3 hover:bg-slate-800/40 rounded-xl p-2 -mx-2 transition-colors group cursor-pointer"
                 >
                   {c.imageUrl ? (
-                    <img src={cardImageUrl(c.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, c.imageUrl ?? '')} alt={c.name} className="w-8 h-11 object-contain rounded" />
+                    <img src={c.imageUrl} alt={c.name} className="w-8 h-11 object-contain rounded" />
                   ) : (
                     <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">#{c.number}</div>
                   )}
@@ -532,7 +532,7 @@ export default function PortfolioPage() {
                     onto its own line; on the web it stays next to the name. */}
                 <div className="relative shrink-0">
                   {card.imageUrl
-                    ? <img src={cardImageUrl(card.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, card.imageUrl ?? '')} alt={card.name} className="w-8 h-11 object-contain rounded" />
+                    ? <img src={card.imageUrl} alt={card.name} className="w-8 h-11 object-contain rounded" />
                     : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
                   }
                   {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}

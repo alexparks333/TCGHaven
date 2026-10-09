@@ -6,7 +6,7 @@ import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card } from '@/lib/types'
-import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, cardImageUrl, retryCardImage } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -1114,11 +1114,11 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
       >
         {card.imageUrl ? (
           <img
-            src={cardImageUrl(card.imageUrl)}
+            src={card.imageUrl}
             alt={card.name}
             loading={eagerArt ? 'eager' : 'lazy'}
             onLoad={() => onArtDone?.(card.id)}
-            onError={(e) => { if (retryCardImage(e.currentTarget, card.imageUrl)) onArtDone?.(card.id) }}
+            onError={() => onArtDone?.(card.id)}
             // An image already in the browser cache can finish before onLoad is attached
             ref={(el) => { if (el?.complete) onArtDone?.(card.id) }}
             className="w-full h-full object-cover"
@@ -1211,7 +1211,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         }}
       >
         {card.imageUrl ? (
-          <img src={cardImageUrl(card.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, card.imageUrl ?? '')} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
+          <img src={card.imageUrl} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-400 bg-slate-800">
             {card.number ? `#${card.number}` : '?'}
@@ -1430,7 +1430,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
             >
               {d.imageUrl ? (
                 <img
-                  src={cardImageUrl(d.imageUrl)} onError={(e) => retryCardImage(e.currentTarget, d.imageUrl ?? '')}
+                  src={d.imageUrl}
                   alt={d.name}
                   className="w-full h-full object-cover"
                   style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }}
