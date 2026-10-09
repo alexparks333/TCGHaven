@@ -151,7 +151,11 @@ function buildGroups(
   }
   const groups: SetGroup[] = Array.from(byGroup.entries()).map(([label, sets]) => ({ label, sets }))
   if (specialBucketOwnGroup) {
-    groups.push({ label: specialBucketOwnGroup, sets: [specialBucket] })
+    // Registry sets can live in this area too (Riftbound's Metal Cards has cardexGroup "Special")
+    // — join that group rather than adding a second one with the same label.
+    const existing = groups.find((g) => g.label === specialBucketOwnGroup)
+    if (existing) existing.sets.push(specialBucket)
+    else groups.push({ label: specialBucketOwnGroup, sets: [specialBucket] })
   } else if (groups.length > 0) {
     groups[groups.length - 1].sets.push(specialBucket)
   } else {
@@ -169,7 +173,7 @@ function buildGroupsByGame(registry: SetRegistryResponse): Record<'lorcana' | 'r
     ),
     riftbound: buildGroups(
       registry.riftbound, 'riftbound',
-      { name: '__special__', game: 'riftbound', label: 'Special', fromInventory: true },
+      { name: '__special__', game: 'riftbound', label: 'Other Special Cards', fromInventory: true },
       'Special', // its own trailing group, matching prior behavior
     ),
   }

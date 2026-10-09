@@ -769,11 +769,12 @@ none (the serial-numbered copies), else the ORIGINAL card's gallery art (a Metal
 parsed as a whole (`parseCSVText`) since some descriptions contain line breaks. Optional registry
 fields: `tcgplayerNameFilter` (only products whose name contains it) and `tcgplayerRarity`
 (instead of "Event Promo"). Parentheticals that just repeat the set name ("(Metal)") are dropped.
-Current, all `cardexGroup: "Promos"`: **T1 Worlds Champion 2025** (`T1`, group 24861 — 5 cards ×
+Current: in `"Promos"`, **T1 Worlds Champion 2025** (`T1`, group 24861 — 5 cards ×
 Player Bundle / Signature Edition / Serial Numbered), **Worlds Bundle 2025** (`RWB`, group 24502 —
-4 foil promos), **Metal Cards** (`MTL`, group 24528 filtered to "(Metal)", rarity "Metal" — 86:
-Best Of foil + Prize Wall non-foil printings). The Cardex's inventory-only "Special" bucket used
-to be labeled "Metal & Special". To add another set: add a registry entry like those and sync.
+4 foil promos); in `"Special"`, **Metal Cards** (`MTL`, group 24528 filtered to "(Metal)", rarity
+"Metal" — 86: Best Of foil + Prize Wall non-foil printings). "Special" is the Riftbound Cardex's
+trailing area: `buildGroups()` puts the inventory-only bucket (now "Other Special Cards", formerly
+"Metal & Special") into a registry group of that label when one exists, instead of a second one. To add another set: add a registry entry like those and sync.
 
 ### How New Riftbound Sets Are Added
 
