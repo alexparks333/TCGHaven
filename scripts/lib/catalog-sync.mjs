@@ -1116,7 +1116,8 @@ async function fetchRiftboundPrices() {
         if (marketPrice === 0 && lowPrice === 0) continue
         const key = tcgKey(setCode, extNumber, name)
         if (!key) continue
-        const entry = prices.get(key) ?? { normal: 0, foil: 0, lowNormal: 0, lowFoil: 0, img: '' }
+        const entry = prices.get(key) ?? { normal: 0, foil: 0, lowNormal: 0, lowFoil: 0, img: '', rarity: '' }
+        if (extRarity) entry.rarity = extRarity
         if (subType === 'Foil') {
           entry.foil    = marketPrice
           entry.lowFoil = lowPrice
@@ -1163,6 +1164,8 @@ function findCardsInNextData(obj, depth = 0) {
   }
   return null
 }
+
+const REGULAR_RARITIES = new Set(['Common', 'Uncommon', 'Rare', 'Epic'])
 
 export async function downloadRiftbound() {
   console.log('\n⚡ Riftbound...')
@@ -1245,6 +1248,14 @@ export async function downloadRiftbound() {
         card.marketPriceFoil = isShowcaseOrStar ? 0           : p.foil
         card.lowPriceNM      = isShowcaseOrStar ? (p.lowFoil || p.lowNormal) : (p.lowNormal || p.lowFoil)
         card.lowPriceNMFoil  = isShowcaseOrStar ? 0           : p.lowFoil
+        // Riot's gallery occasionally has a regular card's rarity wrong — six Vendetta cards
+        // (Otterpus and Mask Mother/Dragon Form listed Uncommon, Lacerate/Ravenbloom Prefect/
+        // Patched Porobot listed Common), where TCGplayer and the printed cards agree on the
+        // opposite. When both sides name one of the four regular tiers and disagree, TCGplayer
+        // wins. Variant rarities (Alt Art, Overnumbered, Star) are ours and never touched.
+        if (REGULAR_RARITIES.has(card.rarity) && REGULAR_RARITIES.has(p.rarity) && card.rarity !== p.rarity) {
+          card.rarity = p.rarity
+        }
       }
       return card
     })
