@@ -889,51 +889,110 @@ function useGalleryArtForPhotoless(tcgplayerOnlyCards, galleryCards) {
     if (code && !byCode.has(code)) byCode.set(code, c.imageUrl)
   }
   for (const card of tcgplayerOnlyCards) {
+    const fallbackName = card.artFallbackName
+    delete card.artFallbackName
     if (!card.needsGalleryArt) continue
-    const code = card.publicCode.split('-').slice(1).join('-')
-    const art = byCode.get(code)
-    if (art) card.imageUrl = art
     delete card.needsGalleryArt
+    const code = card.publicCode.split('-').slice(1).join('-')
+    let art = byCode.get(code)
+    // A placed extra (a Nexus Night Rune) has a code no other card shares — use its set's own
+    // copy of the same card instead, preferring the alt-art "a" version ("Fury Rune" R01a).
+    if (!art && fallbackName) {
+      const same = galleryCards.filter((c) => c.setCode === card.setCode && c.name === fallbackName && c.imageUrl)
+      art = (same.find((c) => /a$/i.test(String(c.number))) ?? same[0])?.imageUrl
+    }
+    if (art) card.imageUrl = art
+  }
+}
+
+// One TCGplayer group's CSV as row objects, fields read by header name. Parsed as a whole, not line
+// by line — some rows' descriptions contain line breaks inside quotes (the Metal cards' "only
+// available as foil" disclaimers) — and column order differs between groups (some add
+// extFlavorText). Sealed products (no extNumber) and "(Oversized)" display cards are dropped.
+async function fetchTcgplayerGroupRows(groupId) {
+  const res = await fetch(`https://tcgcsv.com/tcgplayer/89/${groupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
+  if (!res.ok) throw new Error(`group ${groupId}: ${res.status}`)
+  const [header, ...records] = parseCSVText(await res.text())
+  const col = (name) => header.indexOf(name)
+  const at = (f, name) => (col(name) >= 0 ? f[col(name)] ?? '' : '')
+  return records
+    .map((f) => ({
+      productId: at(f, 'productId'), name: at(f, 'name'), imageUrl: at(f, 'imageUrl'),
+      extNumber: at(f, 'extNumber').trim(), extCardType: at(f, 'extCardType'),
+      marketPrice: parseFloat(at(f, 'marketPrice')) || 0, lowPrice: parseFloat(at(f, 'lowPrice')) || 0,
+    }))
+    .filter((row) => row.productId && row.name && row.extNumber && !/\(oversized\)/i.test(row.name))
+}
+
+// A TCGplayer product listed under some OTHER group (e.g. the Organized Play promos) that really
+// belongs in one of the main sets — the Nexus Night Runes, which only come in Nexus Night packs
+// but are numbered as that set's next Rune variant (Origins "007b/298", Spiritforged "R01c",
+// Vendetta "R01b"). Configured on the main set's own registry entry as `extraTcgplayerProducts:
+// [{ groupId, productIds, nameSuffix }]`, so no extra set shows up in any set picker.
+function placedExtraCard(set, row, nameSuffix) {
+  const baseName = row.name.replace(/\s*\([^)]*\)/g, '').trim()
+  const isRune = /\brune\b/i.test(baseName)
+  const rMatch = row.extNumber.match(/^(R\d+[a-z]?)$/i)
+  const nMatch = row.extNumber.match(/^(\d+)([a-z]?)\s*\/\s*\d+/i)
+  return {
+    id: `${set.setCode.toLowerCase()}-${row.extNumber.toLowerCase().replace(/\s*\/\s*/, '-')}`,
+    name: nameSuffix ? `${baseName} (${nameSuffix})` : baseName,
+    number: rMatch ? rMatch[1].toUpperCase().replace(/[A-Z]$/, (c) => c.toLowerCase()) : nMatch ? `${parseInt(nMatch[1], 10)}${nMatch[2]}` : row.extNumber,
+    publicCode: `${set.setCode}-${row.extNumber}`,
+    setCode: set.setCode,
+    setName: set.setName,
+    rarity: 'Promo',
+    cardType: isRune ? 'Rune' : (row.extCardType || ''),
+    tags: isRune ? [baseName.split(/\s+/)[0]] : [baseName.split(',')[0].trim()],
+    imageUrl: row.imageUrl.replace(/_200w\.jpg$/, '_in_1000x1000.jpg'),
+    marketPrice: row.marketPrice,
+    marketPriceFoil: 0,
+    lowPriceNM: row.lowPrice,
+    lowPriceNMFoil: 0,
+    artFallbackName: baseName, // see useGalleryArtForPhotoless
   }
 }
 
 async function fetchTcgplayerOnlyRiftboundSets() {
   const registry = await loadRegistry()
-  const sets = (registry?.riftbound?.sets ?? []).filter((s) => s.tcgplayerOnly && typeof s.tcgcsvGroupId === 'number' && s.setCode)
+  const allSets = registry?.riftbound?.sets ?? []
+  const groupCache = new Map()
+  const rowsOf = (groupId) => {
+    if (!groupCache.has(groupId)) groupCache.set(groupId, fetchTcgplayerGroupRows(groupId))
+    return groupCache.get(groupId)
+  }
   const cards = []
-  for (const set of sets) {
+
+  for (const set of allSets.filter((s) => s.tcgplayerOnly && typeof s.tcgcsvGroupId === 'number' && s.setCode)) {
     try {
-      const res = await fetch(`https://tcgcsv.com/tcgplayer/89/${set.tcgcsvGroupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
-      if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${set.setName} failed: ${res.status}`); continue }
-      // Parsed as a whole, not line by line — some rows' descriptions contain line breaks inside
-      // quotes (the Metal cards' "only available as foil" disclaimers). Column order also differs
-      // between groups (some add extFlavorText), so fields are read by header name.
-      const [header, ...records] = parseCSVText(await res.text())
-      const col = (name) => header.indexOf(name)
-      const at = (f, name) => (col(name) >= 0 ? f[col(name)] ?? '' : '')
       // Optional: only the products whose name contains this (e.g. "(Metal)" out of the much
-      // bigger Organized Play promo group).
+      // bigger Organized Play promo group), and/or exactly these products (a hand-picked set).
       const only = set.tcgplayerNameFilter ? String(set.tcgplayerNameFilter).toLowerCase() : null
-      // Optional: exactly these TCGplayer products (a hand-picked set, e.g. Nexus Night Grails).
       const pick = Array.isArray(set.tcgplayerProductIds) ? new Set(set.tcgplayerProductIds.map(String)) : null
-      let count = 0
-      for (const f of records) {
-        const row = {
-          productId: at(f, 'productId'), name: at(f, 'name'), imageUrl: at(f, 'imageUrl'),
-          extNumber: at(f, 'extNumber').trim(), extCardType: at(f, 'extCardType'),
-          marketPrice: parseFloat(at(f, 'marketPrice')) || 0, lowPrice: parseFloat(at(f, 'lowPrice')) || 0,
-        }
-        if (!row.productId || !row.name || !row.extNumber) continue // sealed product
-        if (/\(oversized\)/i.test(row.name)) continue
-        if (only && !row.name.toLowerCase().includes(only)) continue
-        if (pick && !pick.has(row.productId)) continue
-        cards.push(tcgplayerOnlyCard(set, row))
-        count++
-      }
-      await borrowMissingPhotos(cards.slice(cards.length - count))
-      console.log(`   TCGCSV ${set.setName}: ${count} TCGplayer-only cards`)
+      const setCards = (await rowsOf(set.tcgcsvGroupId))
+        .filter((row) => (!only || row.name.toLowerCase().includes(only)) && (!pick || pick.has(row.productId)))
+        .map((row) => tcgplayerOnlyCard(set, row))
+      await borrowMissingPhotos(setCards)
+      cards.push(...setCards)
+      console.log(`   TCGCSV ${set.setName}: ${setCards.length} TCGplayer-only cards`)
     } catch (err) {
       console.warn(`   ⚠️  TCGCSV ${set.setName} error: ${err.message}`)
+    }
+  }
+
+  for (const set of allSets.filter((s) => Array.isArray(s.extraTcgplayerProducts) && s.setCode)) {
+    for (const extra of set.extraTcgplayerProducts) {
+      try {
+        const pick = new Set((extra.productIds ?? []).map(String))
+        const extraCards = (await rowsOf(extra.groupId))
+          .filter((row) => pick.has(row.productId))
+          .map((row) => placedExtraCard(set, row, extra.nameSuffix))
+        await borrowMissingPhotos(extraCards)
+        cards.push(...extraCards)
+        console.log(`   TCGCSV ${set.setName}: ${extraCards.length} extra cards from group ${extra.groupId}`)
+      } catch (err) {
+        console.warn(`   ⚠️  TCGCSV ${set.setName} extras error: ${err.message}`)
+      }
     }
   }
   return cards

@@ -54,6 +54,10 @@ export interface RiftboundRegistrySet {
   tcgplayerNameFilter?: string
   // With tcgplayerOnly: only these TCGplayer productIds — a hand-picked set out of a bigger group.
   tcgplayerProductIds?: number[]
+  // On a main set: extra TCGplayer products from OTHER groups that belong in this set — e.g. the
+  // Nexus Night Runes (Organized Play promo group) numbered as this set's next Rune variant.
+  // See catalog-sync.mjs's placedExtraCard().
+  extraTcgplayerProducts?: Array<{ groupId: number; productIds: number[]; nameSuffix?: string }>
   tcgplayerRarity?: string
 }
 

@@ -774,7 +774,16 @@ Player Bundle / Signature Edition / Serial Numbered), **Worlds Bundle 2025** (`R
 4 foil promos); in `"Special"`, **Metal Cards** (`MTL`, group 24528 filtered to "(Metal)", rarity
 "Metal" — 86: Best Of foil + Prize Wall non-foil printings) and **Nexus Night Grails** (`NXG`,
 group 24528 picked by productId — the Nexus Night chase cards: GG EZ Teemo 197b/298, Lee Sin,
-Centered 151b/298, Mel, Newly Awakened 069b/166). "Special" is the Riftbound Cardex's
+Centered 151b/298, Mel, Newly Awakened 069b/166) and **Regional Promos** (`RGP`, picked by
+productId — Boneshiver 118a/221 Regional Qualifier, Poppy alt art 178a/219 Unleashed Regionals).
+
+**Extra products placed in a main set:** a main set's registry entry can list
+`extraTcgplayerProducts: [{ groupId, productIds, nameSuffix }]` — TCGplayer products filed under
+another group that really belong to that set (`placedExtraCard()`: id `{set}-{extNumber}`, rarity
+"Promo", photo → the set's own alt-art copy of the same card when TCGplayer has none). Used for
+the **Nexus Night Runes** (only in Nexus Night packs), named "X Rune (Nexus Night)": Origins
+`007b/298`-style ("b" of the alt rune), Spiritforged `R01c`–`R06c` (that set's "b" was already a
+different promo rune), Vendetta `R01b`–`R06b`. Not in Nexus Night Grails on purpose. "Special" is the Riftbound Cardex's
 trailing area: `buildGroups()` puts the inventory-only bucket (now "Other Special Cards", formerly
 "Metal & Special") into a registry group of that label when one exists, instead of a second one. To add another set: add a registry entry like those and sync.
 
