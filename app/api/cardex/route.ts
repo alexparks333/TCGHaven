@@ -20,6 +20,7 @@ interface CatalogCard {
   lowPriceNMFoil?: number
   hidden?: boolean
   publicCode?: string  // Riftbound only — carries the "a"/"*" variant suffix `number` lacks
+  cardType?: string    // Riftbound only — the Cardex zoom shows 'Battlefield' cards landscape
 }
 
 export async function GET(request: Request) {
@@ -57,6 +58,7 @@ export async function GET(request: Request) {
       lowPriceNM:      c.lowPriceNM ?? 0,
       lowPriceNMFoil:  c.lowPriceNMFoil ?? 0,
       publicCode:      c.publicCode,
+      cardType:        c.cardType,
     }))
 
   return NextResponse.json(cards)

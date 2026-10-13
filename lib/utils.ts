@@ -150,9 +150,10 @@ export function riftboundInherentFoil(rarity: string | undefined, publicCode?: s
 /**
  * Friendlier display text for a raw Riftbound rarity string than showing it verbatim — 'Star' is
  * what the catalog calls a Signature variant, and 'Showcase'/'Promo' are Rune-card print-variant
- * labels that come straight from TCGPlayer's own product listing (nothing to do with the
- * champion-card "Showcase" rarity that was renamed away, see CLAUDE.md quirk #18 — spelling that
- * out in the label itself so it doesn't look like that old value crept back in). Shared by
+ * labels that come straight from TCGPlayer's own product listing ('Showcase' has nothing to do
+ * with the champion-card "Showcase" rarity that was renamed away, see CLAUDE.md quirk #18 —
+ * spelling that out in the label so it doesn't look like that old value crept back in; 'Promo'
+ * is just "Promo", as collectors call it). Shared by
  * CardexPage's rarity toggle/tooltip and InventoryPage's rarity filter popover so both describe
  * the same raw values the same way. Keys not unique to Riftbound (Lorcana has its own real
  * 'Promo' rarity, for instance) — callers must only apply this for Riftbound cards.
@@ -160,7 +161,7 @@ export function riftboundInherentFoil(rarity: string | undefined, publicCode?: s
 export const RIFTBOUND_RARITY_LABELS: Record<string, string> = {
   Star: 'Overnumbered Signature',
   Showcase: 'Rune (Showcase)',
-  Promo: 'Rune (Promo)',
+  Promo: 'Promo',
 }
 
 // Pokemon's rarity strings are already human-readable as stored ("Special Illustration Rare",

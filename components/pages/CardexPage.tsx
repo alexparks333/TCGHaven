@@ -30,6 +30,7 @@ interface CatalogCard {
   lowPriceNM?: number
   lowPriceNMFoil?: number
   publicCode?: string
+  cardType?: string   // Riftbound only — 'Battlefield' cards are landscape (see CardZoomOverlay)
 }
 
 type CatalogGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
@@ -63,6 +64,9 @@ export interface ZoomCardData {
   owned: boolean
   quantity: number
   isFoil?: boolean
+  // Landscape card (Riftbound Battlefields): the grid tile stays portrait like every other card,
+  // but the zoom view shows it sideways, the way the real card is printed.
+  landscape?: boolean
   // The card-back/border/glow-ring accent color — rarity-based where lib/utils.ts's
   // ZOOM_GLOW_COLORS has an entry for this game+rarity, falling back to the game's own color
   // otherwise (see zoomGlowColor()). Deliberately its own field, not reusing `rarityColor` (the
@@ -442,7 +446,11 @@ export default function CardexPage() {
   const [zoomCard, setZoomCard] = useState<ZoomCardData | null>(null)
   useScrollLock(zoomCard !== null)
   function openZoom(el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) {
-    setZoomCard({ ...data, originRect: el.getBoundingClientRect() })
+    // Besides an explicit Battlefield flag, any tile whose loaded art is wider than tall is a
+    // landscape card (covers inventory and Personal Collections tiles, which carry no cardType).
+    const img = el.querySelector('img')
+    const wideArt = !!img && img.naturalWidth > img.naturalHeight
+    setZoomCard({ ...data, landscape: data.landscape || wideArt, originRect: el.getBoundingClientRect() })
   }
   const [searchQuery, setSearchQuery] = useState('')
   // Riftbound-only rarity toggle filter — persists across sets/tabs on purpose (switching from
@@ -1103,6 +1111,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
           owned: card.owned,
           quantity: card.quantity,
           glowColor: zoomGlowColor(game, card.rarity, gameColor),
+          landscape: card.cardType === 'Battlefield',
           ebayCard: { name: card.name, number: card.number, set: card.setName, game },
         })
       }}
@@ -1422,7 +1431,9 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
         <div
           ref={moverRef}
           className="relative card-zoom-mover"
-          style={{ width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
+          style={d.landscape
+            ? { width: 'min(90vw, 460px)', aspectRatio: '7 / 5', perspective: '1200px' }
+            : { width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
           <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
             {/* Front face — the real card. Not-owned cards stay dimmed/grayscale here too, same
