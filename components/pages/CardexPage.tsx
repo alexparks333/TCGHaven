@@ -1227,6 +1227,9 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
   // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
   // "Promo" tier), so relabeling must only ever use the current game's own map.
   const rarityLabel = RARITY_LABELS_BY_GAME[game]?.[card.rarity] ?? card.rarity
+  // An owned graded copy searches eBay for that slab ("… PSA 8"), not the raw card
+  const slab = card.owned ? card.slab : undefined
+  const ebayCard = { name: card.name, number: card.number, set: card.setName, game, gradingCompany: slab?.company, grade: slab?.grade }
 
   return (
     <div
@@ -1237,7 +1240,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
       onPointerEnter={(e) => { if (e.pointerType === 'mouse') onHover() }}
       onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
       onClick={(e) => {
-        if (e.ctrlKey || e.metaKey) { openEbaySearch({ name: card.name, number: card.number, set: card.setName, game }); return }
+        if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
         onZoom(e.currentTarget, {
           imageUrl: card.imageUrl,
           name: card.name,
@@ -1251,7 +1254,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
           landscape: card.cardType === 'Battlefield',
           slab: card.owned ? card.slab : undefined,
           setName: card.setName,
-          ebayCard: { name: card.name, number: card.number, set: card.setName, game },
+          ebayCard,
         })
       }}
       title="Click to view — ⌘/Ctrl+Click to search eBay sold listings"
