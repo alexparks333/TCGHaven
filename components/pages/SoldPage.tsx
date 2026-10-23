@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { RotateCcw, Banknote } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch } from '@/lib/utils'
-import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type SoldCard } from '@/lib/types'
+import { conditionLabel, GAME_COLORS, GAME_LABELS, type Game, type SoldCard } from '@/lib/types'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { saveSoldCard, deleteSoldCard, saveCard } from '@/lib/firebase/db'
@@ -204,7 +204,7 @@ export default function SoldPage() {
                     <div className="min-w-0">
                       <div className="font-semibold text-ink text-[15px] md:text-sm truncate">{card.name}</div>
                       <div className="md:hidden text-xs text-slate-500 truncate">
-                        {card.set} {card.isFoil && '✨'} · {CONDITION_LABELS[card.condition]}
+                        {card.set} {card.isFoil && '✨'} · {conditionLabel(card)}
                       </div>
                       <div className="hidden md:block text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
                       <div className="text-[10px] text-slate-600 mt-0.5">
@@ -213,7 +213,7 @@ export default function SoldPage() {
                     </div>
                   </div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{card.set}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{CONDITION_LABELS[card.condition]}</div>
+                  <div className="text-sm text-slate-300 hidden md:flex items-center">{conditionLabel(card)}</div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice * card.quantity)}</div>
                   {/* Sold for — on mobile the P&L sits under it, like Inventory's value + P&L */}
                   <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">

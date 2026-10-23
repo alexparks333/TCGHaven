@@ -52,6 +52,13 @@ export const CONDITION_LABELS: Record<Condition, string> = {
   heavily_played: 'Heavily Played',
 }
 
+// What to show in a "Condition" column: a graded card shows its slab ("PSA 9") instead of a raw
+// condition, since the grade is what actually describes it.
+export function conditionLabel(card: { condition: Condition; gradingCompany?: string; grade?: string }): string {
+  if (card.gradingCompany) return card.grade ? `${card.gradingCompany} ${card.grade}` : card.gradingCompany
+  return CONDITION_LABELS[card.condition]
+}
+
 export const GAME_LABELS: Record<Game, string> = {
   pokemon: 'Pokémon',
   lorcana: 'Lorcana',

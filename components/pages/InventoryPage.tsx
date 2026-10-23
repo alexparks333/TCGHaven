@@ -5,7 +5,7 @@ import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDow
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RARITY_LABELS_BY_GAME } from '@/lib/utils'
-import { CONDITION_LABELS, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
+import { conditionLabel, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -673,7 +673,8 @@ export default function InventoryPage() {
                     </div>
                     <div className="text-sm text-slate-300 hidden md:flex items-center">{rep.set}</div>
                     <div className="text-sm text-slate-300 hidden md:flex items-center">
-                      {multiLot ? <span className="text-slate-500 text-xs">varies</span> : CONDITION_LABELS[rep.condition]}
+                      {/* lots of a graded card share its grade (cardIdentityKey groups by it), so the slab label never "varies" */}
+                      {multiLot && !rep.gradingCompany ? <span className="text-slate-500 text-xs">varies</span> : conditionLabel(rep)}
                     </div>
                     <div className="text-sm font-semibold text-ink hidden md:flex items-center">×{totalQty}</div>
                     <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(gPaid)}</div>
@@ -768,7 +769,7 @@ export default function InventoryPage() {
                               <span className="text-slate-300">{formatCurrency(lot.purchasePrice)}/ea</span>
                             </span>
                             <span className="text-slate-500">·</span>
-                            <span className="text-slate-400">{CONDITION_LABELS[lot.condition]}</span>
+                            <span className="text-slate-400">{conditionLabel(lot)}</span>
                           </div>
                           {/* Pull-out sell tab */}
                           <button
@@ -856,7 +857,7 @@ export default function InventoryPage() {
                     </div>
                   </div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{card.set}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{CONDITION_LABELS[card.condition]}</div>
+                  <div className="text-sm text-slate-300 hidden md:flex items-center">{conditionLabel(card)}</div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">×{card.quantity}</div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice)}</div>
                   <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
@@ -942,8 +943,7 @@ export default function InventoryPage() {
                     <div className="font-semibold text-ink text-sm truncate">{sellCard.name}</div>
                     <div className="text-xs text-slate-400 mt-0.5">{sellCard.set} · #{sellCard.number}</div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      {sellCard.isFoil ? '✨ Foil · ' : ''}{CONDITION_LABELS[sellCard.condition]}
-                      {sellCard.gradingCompany && ` · ${sellCard.gradingCompany}${sellCard.grade ? ` ${sellCard.grade}` : ''}`}
+                      {sellCard.isFoil ? '✨ Foil · ' : ''}{conditionLabel(sellCard)}
                     </div>
                   </div>
                 </div>

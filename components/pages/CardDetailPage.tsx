@@ -7,7 +7,7 @@ import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch } from '@/lib/utils'
-import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS } from '@/lib/types'
+import { conditionLabel, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 import { authFetch } from '@/lib/firebase/authFetch'
 
@@ -109,7 +109,7 @@ export default function CardDetailPage() {
               )}
               <div className="text-sm text-slate-400">{card.set}</div>
               <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
-              <div className="text-xs text-slate-500">{CONDITION_LABELS[card.condition]}</div>
+              <div className="text-xs text-slate-500">{conditionLabel(card)}</div>
               <div className="text-xs text-slate-500">Qty: {card.quantity}</div>
               <div className="text-xs text-slate-500">Bought: {formatDate(card.purchaseDate)}</div>
             </div>

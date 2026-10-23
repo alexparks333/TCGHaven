@@ -67,6 +67,9 @@ export interface ZoomCardData {
   // Landscape card (Riftbound Battlefields): the grid tile stays portrait like every other card,
   // but the zoom view shows it sideways, the way the real card is printed.
   landscape?: boolean
+  // Owned graded copy → the zoom view shows the card in a full slab
+  slab?: SlabInfo
+  setName?: string
   // The card-back/border/glow-ring accent color — rarity-based where lib/utils.ts's
   // ZOOM_GLOW_COLORS has an entry for this game+rarity, falling back to the game's own color
   // otherwise (see zoomGlowColor()). Deliberately its own field, not reusing `rarityColor` (the
@@ -366,7 +369,7 @@ function getOwnedInfo(
   catalogCard: CatalogCard,
   ownedCards: Card[],
   game: Game,
-): { owned: boolean; quantity: number; ownedFoil: boolean } {
+): { owned: boolean; quantity: number; ownedFoil: boolean; slab?: SlabInfo } {
   const matches = ownedCards.filter((c) => {
     if (c.apiId) return c.apiId === catalogCard.id
     if (game === 'riftbound') return c.setCode === catalogCard.setCode && c.number === catalogCard.number
@@ -396,7 +399,141 @@ function getOwnedInfo(
     quantity: matches.reduce((s, c) => s + c.quantity, 0),
     // Every owned copy is foil → show the foil price, matching what Inventory shows for them.
     ownedFoil: matches.length > 0 && matches.every((c) => c.isFoil),
+    slab: bestSlab(matches),
   }
+}
+
+// ── Graded slabs ──────────────────────────────────────────────────────────────
+
+export type SlabInfo = { company: string; grade: string }
+
+// The best graded copy among the owned ones (highest numeric grade), so the tile shows the slab
+// you'd actually show off. Undefined when no owned copy is graded.
+function bestSlab(cards: Card[]): SlabInfo | undefined {
+  let best: SlabInfo | undefined
+  let bestN = -1
+  for (const c of cards) {
+    if (!c.gradingCompany) continue
+    const n = parseFloat(c.grade ?? '')
+    const score = Number.isFinite(n) ? n : 0
+    if (!best || score > bestN) { best = { company: c.gradingCompany, grade: c.grade ?? '' }; bestN = score }
+  }
+  return best
+}
+
+// Label colors roughly matching each grader's real slab label.
+const SLAB_LABEL: Record<string, { bg: string; fg: string; accent: string }> = {
+  PSA: { bg: '#ffffff', fg: '#1a1a1a', accent: '#c8102e' },
+  BGS: { bg: '#d9dce1', fg: '#111827', accent: '#9a7b2f' },
+  CGC: { bg: '#1f3a68', fg: '#ffffff', accent: '#8fb3e8' },
+  SGC: { bg: '#141414', fg: '#ffffff', accent: '#d4af37' },
+  TAG: { bg: '#0b0b0b', fg: '#e5e5e5', accent: '#9ca3af' },
+}
+const SLAB_LABEL_FALLBACK = { bg: '#374151', fg: '#ffffff', accent: '#9ca3af' }
+
+function slabStyle(company: string) {
+  return SLAB_LABEL[company.toUpperCase()] ?? SLAB_LABEL_FALLBACK
+}
+
+// The word each grader prints next to the number ("MINT 9", "GEM MT 10").
+function gradeWord(company: string, grade: string): string {
+  const n = parseFloat(grade)
+  if (!Number.isFinite(n)) return grade.toUpperCase()
+  if (company.toUpperCase() === 'PSA') {
+    const psa: Record<number, string> = { 10: 'GEM MT', 9: 'MINT', 8: 'NM-MT', 7: 'NM', 6: 'EX-MT', 5: 'EX', 4: 'VG-EX', 3: 'VG', 2: 'GOOD', 1.5: 'FR', 1: 'PR' }
+    return psa[n] ?? ''
+  }
+  if (n >= 10) return 'PRISTINE'
+  if (n >= 9.5) return 'GEM MINT'
+  if (n >= 9) return 'MINT'
+  if (n >= 8) return 'NM-MT'
+  if (n >= 7) return 'NM'
+  return ''
+}
+
+// Grid-tile slab treatment: drawn over the normal full-size card art. A thin clear-acrylic rim and
+// sheen, plus a see-through grade banner across the top that fills in when the tile is hovered
+// (the tile's root carries `group`).
+function SlabTileOverlay({ slab }: { slab: SlabInfo }) {
+  const label = slabStyle(slab.company)
+  return (
+    <>
+      <div
+        className="absolute inset-0 rounded-lg pointer-events-none"
+        style={{
+          boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.75), inset 0 0 0 3px rgba(120,130,145,0.45)',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 32%, rgba(255,255,255,0) 68%, rgba(255,255,255,0.14) 100%)',
+        }}
+      />
+      <div
+        className="absolute top-[3px] inset-x-[3px] flex items-center justify-between px-1.5 rounded-t-[6px] font-black leading-none pointer-events-none transition-all duration-200 opacity-60 backdrop-blur-[2px] group-hover:opacity-100"
+        style={{
+          height: '14%',
+          fontSize: 'clamp(8px, 9cqw, 14px)',
+          backgroundColor: label.bg + 'cc',
+          color: label.fg,
+          borderBottom: `2px solid ${label.accent}`,
+        }}
+      >
+        <span style={{ color: label.accent }} className="tracking-wide">{slab.company}</span>
+        {slab.grade && <span>{slab.grade}</span>}
+      </div>
+    </>
+  )
+}
+
+// Zoom-view slab: the full graded case — acrylic shell, grader label up top (card name, set,
+// grade word + number), and the card sitting in its own inner window below.
+function FullSlab({ slab, name, number, setName, children }: {
+  slab: SlabInfo; name: string; number: string; setName?: string; children: React.ReactNode
+}) {
+  const label = slabStyle(slab.company)
+  const word = gradeWord(slab.company, slab.grade)
+  return (
+    <div
+      className="relative w-full h-full rounded-[18px] p-[5%] flex flex-col gap-[3.5%] overflow-hidden"
+      style={{
+        background: 'linear-gradient(160deg, rgba(250,252,255,0.97) 0%, rgba(214,222,232,0.95) 40%, rgba(236,241,247,0.97) 70%, rgba(196,205,217,0.95) 100%)',
+        boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.95), inset 0 0 0 4px rgba(160,172,188,0.55), inset 0 2px 14px rgba(255,255,255,0.8), inset 0 -6px 18px rgba(90,104,124,0.25)',
+      }}
+    >
+      {/* Label */}
+      <div
+        className="relative shrink-0 rounded-[6px] flex items-stretch overflow-hidden"
+        style={{ height: '21%', backgroundColor: label.bg, color: label.fg, boxShadow: `inset 0 0 0 2px ${label.accent}, 0 1px 3px rgba(0,0,0,0.25)` }}
+      >
+        <div className="flex-1 min-w-0 flex flex-col justify-center pl-3 pr-1 py-1.5 gap-[2px]">
+          <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70 truncate">{setName ?? ''}</div>
+          <div className="text-[13px] font-extrabold uppercase leading-tight truncate">{name}</div>
+          <div className="flex items-center gap-1.5 mt-[2px]">
+            <span className="text-[11px] font-black italic tracking-wider px-1 rounded-[2px]" style={{ backgroundColor: label.accent, color: label.bg }}>{slab.company}</span>
+            <span className="text-[10px] font-semibold opacity-70">#{number}</span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end justify-center pr-3 pl-2 shrink-0">
+          {word && <div className="text-[11px] font-extrabold tracking-wide leading-none">{word}</div>}
+          <div className="text-[30px] font-black leading-none mt-0.5">{slab.grade}</div>
+          {/* decorative barcode */}
+          <div className="flex items-end gap-[1px] h-[7px] mt-1 opacity-70">
+            {[2, 1, 1, 3, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 3, 1, 2].map((w, i) => (
+              <span key={i} style={{ width: w, height: '100%', backgroundColor: label.fg }} />
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* Card window */}
+      <div
+        className="relative flex-1 min-h-0 rounded-[8px] p-[3%] flex items-center justify-center"
+        style={{ background: 'rgba(255,255,255,0.35)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.9), inset 0 1px 8px rgba(80,94,112,0.35)' }}
+      >
+        <div className="relative h-full rounded-[6px] overflow-hidden" style={{ aspectRatio: '5 / 7', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>
+          {children}
+        </div>
+      </div>
+      {/* Acrylic glare sweeping across the whole case */}
+      <div className="slab-glare absolute inset-0 pointer-events-none" />
+    </div>
+  )
 }
 
 // ── Search filtering ─────────────────────────────────────────────────────────
@@ -1073,7 +1210,7 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
 // ── Card tile (catalog-backed) ────────────────────────────────────────────────
 
 interface CardTileProps {
-  card: CatalogCard & { owned: boolean; quantity: number }
+  card: CatalogCard & { owned: boolean; quantity: number; slab?: SlabInfo }
   gameColor: string
   game: CatalogGame
   isHovered: boolean
@@ -1112,6 +1249,8 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
           quantity: card.quantity,
           glowColor: zoomGlowColor(game, card.rarity, gameColor),
           landscape: card.cardType === 'Battlefield',
+          slab: card.owned ? card.slab : undefined,
+          setName: card.setName,
           ebayCard: { name: card.name, number: card.number, set: card.setName, game },
         })
       }}
@@ -1121,8 +1260,9 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
         style={{
           aspectRatio: '5/7',
+          containerType: 'inline-size',
           filter: card.owned ? 'none' : 'grayscale(1)',
-          outline: card.owned ? `2px solid ${gameColor}40` : '1px solid #d6c49f',
+          outline: card.owned ? (card.slab ? '1px solid #9aa4b1' : `2px solid ${gameColor}40`) : '1px solid #d6c49f',
           boxShadow: card.owned && isHovered ? `0 0 12px ${gameColor}60` : undefined,
         }}
       >
@@ -1142,14 +1282,16 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
             #{card.number}
           </div>
         )}
+        {card.owned && card.slab && <SlabTileOverlay slab={card.slab} />}
 
+        {/* A slab's grade banner owns the top edge, so its owned badge drops to the bottom corner */}
         {card.owned && (
           card.quantity > 1 ? (
-            <div className="absolute top-1 right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none" style={{ backgroundColor: gameColor }}>
+            <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none', card.slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
               ×{card.quantity > 99 ? '99+' : card.quantity}
             </div>
           ) : (
-            <div className="absolute top-1 right-1 w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: gameColor + 'cc' }}>
+            <div className={cn('absolute right-1 w-4 h-4 rounded-full flex items-center justify-center', card.slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor + 'cc' }}>
               <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
                 <path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -1171,6 +1313,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
             {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
             {card.marketPrice > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice.toFixed(2)}</div>}
+            {card.owned && card.slab && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.slab.company}{card.slab.grade ? ` ${card.slab.grade}` : ''}</div>}
             {card.owned
               ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
               : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
@@ -1189,10 +1332,11 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#7a6a55') : '#7a6a55'
+  const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '' } : undefined
 
   return (
     <div
-      className="relative cursor-pointer"
+      className="relative group cursor-pointer"
       // Mouse only: on a phone, a tap that fires a hover handler which changes the page (this
       // shows a tooltip) makes iOS treat that first tap as a hover and wait for a second tap
       // before clicking — so tapping a card took two taps to open the zoom view.
@@ -1211,6 +1355,8 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
           quantity: card.quantity,
           isFoil: card.isFoil,
           glowColor: zoomGlowColor(card.game, card.rarity ?? '', gameColor),
+          slab: slab,
+          setName: card.set,
           ebayCard: card,
         })
       }}
@@ -1220,7 +1366,8 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         className="relative w-full rounded-lg overflow-hidden shadow-lg transition-all duration-200"
         style={{
           aspectRatio: '5/7',
-          outline: `2px solid ${gameColor}40`,
+          containerType: 'inline-size',
+          outline: slab ? '1px solid #9aa4b1' : `2px solid ${gameColor}40`,
           boxShadow: isHovered ? `0 0 12px ${gameColor}60` : undefined,
         }}
       >
@@ -1231,13 +1378,14 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
             {card.number ? `#${card.number}` : '?'}
           </div>
         )}
+        {slab && <SlabTileOverlay slab={slab} />}
 
         {card.quantity > 1 ? (
-          <div className="absolute top-1 right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none" style={{ backgroundColor: gameColor }}>
+          <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none', slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
             ×{card.quantity > 99 ? '99+' : card.quantity}
           </div>
         ) : (
-          <div className="absolute top-1 right-1 w-4 h-4 rounded-full flex items-center justify-center" style={{ backgroundColor: gameColor + 'cc' }}>
+          <div className={cn('absolute right-1 w-4 h-4 rounded-full flex items-center justify-center', slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor + 'cc' }}>
             <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
               <path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -1257,6 +1405,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
             <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
+            {card.gradingCompany && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}</div>}
             {card.isFoil && <div className="text-[10px] text-amber-600 mt-0.5">✨ Foil</div>}
             <div className="text-[10px] text-emerald-600 mt-0.5">
               ✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}
@@ -1431,7 +1580,10 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
         <div
           ref={moverRef}
           className="relative card-zoom-mover"
-          style={d.landscape
+          style={d.slab
+            // A real slab is taller than the card it holds (label on top, case border all round)
+            ? { width: 'min(82vw, 330px, calc(62vh * 0.64))', aspectRatio: '0.64', perspective: '1200px' }
+            : d.landscape
             ? { width: 'min(90vw, 460px)', aspectRatio: '7 / 5', perspective: '1200px' }
             : { width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
@@ -1440,6 +1592,18 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                 treatment as their grid tile (grayscale(1) + darkened, not just desaturated —
                 matches card-unlock-reveal's own "before reveal" brightness elsewhere in this
                 file), rather than "revealing" full color/brightness on zoom. */}
+            {d.slab ? (
+              <div
+                className="card-zoom-face absolute inset-0 rounded-[18px]"
+                style={{ boxShadow: `0 0 0 1px rgba(255,255,255,0.6), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)` }}
+              >
+                <FullSlab slab={d.slab} name={d.name} number={d.number} setName={d.setName}>
+                  {d.imageUrl
+                    ? <img src={d.imageUrl} alt={d.name} className="w-full h-full object-cover" />
+                    : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
+                </FullSlab>
+              </div>
+            ) : (
             <div
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
               style={{ boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
@@ -1460,10 +1624,11 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                 </div>
               )}
             </div>
+            )}
             {/* Back face — a generic card back (no real per-game back art exists), briefly visible
                 twice mid-flip since it never actually shows for more than an instant */}
             <div
-              className="card-zoom-face card-zoom-face-back absolute inset-0 rounded-2xl overflow-hidden flex items-center justify-center"
+              className={cn('card-zoom-face card-zoom-face-back absolute inset-0 overflow-hidden flex items-center justify-center', d.slab ? 'rounded-[18px]' : 'rounded-2xl')}
               style={{
                 background: `radial-gradient(circle at 50% 40%, ${d.glowColor}33, #0a0a0f 70%)`,
                 boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
@@ -1476,7 +1641,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
           </div>
 
           {visible && (
-            <div className="card-zoom-glow-ring absolute inset-0 rounded-2xl pointer-events-none" style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
+            <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', d.slab ? 'rounded-[18px]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
           )}
         </div>
 
@@ -1502,6 +1667,11 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                 </span>
               )}
               {d.isFoil && <span className="text-[11px] font-medium text-amber-600">✨ Foil</span>}
+              {d.slab && (
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 border border-amber-500/30">
+                  {d.slab.company}{d.slab.grade ? ` ${d.slab.grade}` : ''}
+                </span>
+              )}
             </div>
             {d.marketPrice > 0 && <div className="text-sm font-semibold text-ink">${d.marketPrice.toFixed(2)}</div>}
             <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
