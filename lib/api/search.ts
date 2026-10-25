@@ -48,6 +48,16 @@ export async function searchCards(game: Game, query: string): Promise<CardSearch
   return results.slice(0, MAX_SEARCH_RESULTS)
 }
 
+// One exact catalog card, built the same way a search dropdown row is (variant suffixes,
+// foil-only handling, prices) — used when the Cardex opens Add Card for a card it already knows,
+// so the added card is identical to one picked from the dropdown. Searches the card's own name
+// uncapped (a name always matches itself), then keeps just that id's row(s) — a foil row too when
+// the card is priced both ways.
+export async function findCardById(game: Game, id: string, name: string): Promise<CardSearchResult[]> {
+  const results = await searchCardsUncapped(game, name)
+  return results.filter((r) => r.id === id)
+}
+
 async function searchCardsUncapped(game: Game, query: string): Promise<CardSearchResult[]> {
   if (!query || query.length < 2) return []
 

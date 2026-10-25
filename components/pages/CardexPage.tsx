@@ -12,6 +12,8 @@ import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { catalogPrice } from '@/lib/pricing'
+import { AddCardDialog } from '@/components/inventory/AddCardDialog'
+import type { CardSearchResult } from '@/lib/api/search'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -565,7 +567,9 @@ export default function CardexPage() {
 
   // Starts on the deep-linked game if there is one, else the first game this user tracks
   // (trackedGames is already hydrated from localStorage by the time this first renders).
-  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>(isCatalogGame(urlGame) ? urlGame : trackedGames[0])
+  const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>(
+    isCatalogGame(urlGame) || urlGame === 'personal' ? urlGame : trackedGames[0],
+  )
   const [activeSet, setActiveSet] = useState<SetMeta>(PLACEHOLDER_SET)
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
   const [loading, setLoading] = useState(false)
@@ -592,6 +596,9 @@ export default function CardexPage() {
     const wideArt = !!img && img.naturalWidth > img.naturalHeight
     setZoomCard({ ...data, landscape: data.landscape || wideArt, originRect: el.getBoundingClientRect() })
   }
+  // Shift+Click / double-tap on a catalog tile → the same Add Card dialog Inventory uses, opened
+  // on that card
+  const [addPrefill, setAddPrefill] = useState<CardSearchResult | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   // Riftbound-only rarity toggle filter — persists across sets/tabs on purpose (switching from
   // Origins to Spiritforged with "Alt Art" toggled off should keep it off), so this isn't reset
@@ -618,7 +625,9 @@ export default function CardexPage() {
   // of the four generic pickers below fire — the dedicated effect further down handles picking
   // the actual set (by name, or falling back to the Special bucket) once that game's groups load.
   const initialSetPicked = useRef(isCatalogGame(urlGame))
-  const urlSetApplied = useRef(false)
+  // Nothing to apply without a deep link — and claimed up front then, because the page writes its
+  // own ?game=&set= into the URL as you browse (see below), which must not re-trigger this.
+  const urlSetApplied = useRef(!isCatalogGame(urlGame))
 
   // "Personalized Collections" isn't a catalog game — fall back to a safe key for the
   // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
@@ -750,6 +759,22 @@ export default function CardexPage() {
       setActiveCategoryByGame((c) => ({ ...c, [urlGame]: chosenGroupLabel! }))
     }
   }, [urlGame, urlSet, activeGame, groupsByGame])
+
+  // Mirror the current game + set into the URL (?game=&set=), so a refresh lands back on the same
+  // set through the deep-link path above instead of resetting to the game's first set. Waits for
+  // a deep link to be resolved first, so it never overwrites one with the placeholder set.
+  useEffect(() => {
+    if (activeGame !== 'personal' && !activeSet.name) return
+    if (!urlSetApplied.current) return
+    const params = new URLSearchParams(window.location.search)
+    params.set('game', activeGame)
+    if (activeGame === 'personal') params.delete('set')
+    else params.set('set', activeSet.name)
+    const next = `${window.location.pathname}?${params}`
+    if (next !== window.location.pathname + window.location.search) {
+      window.history.replaceState(window.history.state, '', next)
+    }
+  }, [activeGame, activeSet])
 
   const knownSets = useMemo(() => {
     const s = new Set<string>()
@@ -1095,6 +1120,7 @@ export default function CardexPage() {
                     onHover={() => setHoveredId(card.id)}
                     onLeave={() => setHoveredId(null)}
                     onZoom={openZoom}
+                    onAdd={setAddPrefill}
                   />
                 ))}
               </div>
@@ -1129,6 +1155,14 @@ export default function CardexPage() {
         )}
       </div>
       <CardZoomOverlay data={zoomCard} onClose={() => setZoomCard(null)} />
+      {addPrefill && (
+        <AddCardDialog
+          key={`${addPrefill.game}:${addPrefill.id}`}
+          defaultGame={addPrefill.game}
+          prefill={addPrefill}
+          onClose={() => setAddPrefill(null)}
+        />
+      )}
     </AuthGuard>
   )
 }
@@ -1220,11 +1254,15 @@ interface CardTileProps {
   onHover: () => void
   onLeave: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
+  onAdd: (card: CardSearchResult) => void
   eagerArt?: boolean
   onArtDone?: (id: string) => void
 }
 
-function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, eagerArt, onArtDone }: CardTileProps) {
+// How long a tap waits for a second one before it counts as a single tap (opening the zoom view)
+const DOUBLE_TAP_MS = 260
+
+function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#7a6a55'
   // RARITY_LABELS_BY_GAME is keyed per-game (lib/utils.ts) — the same raw string can mean
   // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
@@ -1233,34 +1271,64 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
   // An owned graded copy searches eBay for that slab ("… PSA 8"), not the raw card
   const slab = card.owned ? card.slab : undefined
   const ebayCard = { name: card.name, number: card.number, set: card.setName, game, gradingCompany: slab?.company, grade: slab?.grade }
+  const lastPointerType = useRef('')
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
+
+  // Shift+Click / double-tap: open Add Card on this exact card. AddCardDialog re-fetches it as a
+  // search row; this copy is only its fallback.
+  function addToInventory() {
+    onAdd({
+      id: card.id, name: card.name, set: card.setCode, setName: card.setName, number: card.number,
+      imageUrl: card.imageUrl, marketPrice: card.marketPrice, marketPriceFoil: card.marketPriceFoil ?? 0,
+      isFoil: false, game, rarity: card.rarity || undefined,
+    })
+  }
+
+  function zoom(el: HTMLElement) {
+    onZoom(el, {
+      imageUrl: card.imageUrl,
+      name: card.name,
+      number: card.number,
+      rarityLabel: rarityLabel.replace('_', ' '),
+      rarityColor,
+      marketPrice: card.marketPrice,
+      owned: card.owned,
+      quantity: card.quantity,
+      glowColor: zoomGlowColor(game, card.rarity, gameColor),
+      landscape: card.cardType === 'Battlefield',
+      slab: card.owned ? card.slab : undefined,
+      setName: card.setName,
+      ebayCard,
+    })
+  }
 
   return (
     <div
-      className="relative group cursor-pointer"
+      className="relative group cursor-pointer select-none"
+      // No double-tap page zoom on phones — a double tap here means "add this card"
+      style={{ touchAction: 'manipulation' }}
       // Mouse only: on a phone, a tap that fires a hover handler which changes the page (this
       // shows a tooltip) makes iOS treat that first tap as a hover and wait for a second tap
       // before clicking — so tapping a card took two taps to open the zoom view.
       onPointerEnter={(e) => { if (e.pointerType === 'mouse') onHover() }}
       onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
+      onPointerDown={(e) => { lastPointerType.current = e.pointerType }}
       onClick={(e) => {
         if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
-        onZoom(e.currentTarget, {
-          imageUrl: card.imageUrl,
-          name: card.name,
-          number: card.number,
-          rarityLabel: rarityLabel.replace('_', ' '),
-          rarityColor,
-          marketPrice: card.marketPrice,
-          owned: card.owned,
-          quantity: card.quantity,
-          glowColor: zoomGlowColor(game, card.rarity, gameColor),
-          landscape: card.cardType === 'Battlefield',
-          slab: card.owned ? card.slab : undefined,
-          setName: card.setName,
-          ebayCard,
-        })
+        if (e.shiftKey) { addToInventory(); return }
+        if (lastPointerType.current !== 'touch') { zoom(e.currentTarget); return }
+        // Touch: a second tap in time is a double tap (add); otherwise the first one zooms
+        if (tapTimer.current) {
+          clearTimeout(tapTimer.current)
+          tapTimer.current = null
+          addToInventory()
+          return
+        }
+        const el = e.currentTarget
+        tapTimer.current = setTimeout(() => { tapTimer.current = null; zoom(el) }, DOUBLE_TAP_MS)
       }}
-      title="Click to view — ⌘/Ctrl+Click to search eBay sold listings"
+      title="Click to view — Shift+Click to add to inventory — ⌘/Ctrl+Click to search eBay sold listings"
     >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}

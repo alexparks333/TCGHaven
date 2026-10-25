@@ -22,7 +22,7 @@ TypeScript, Tailwind CSS v3, Firebase Auth + Firestore, Zustand.
 13. [Price Data](#price-data)
 14. [Cardex Feature — How Sets Register](#cardex-feature--how-sets-register)
 15. [Pack Analysis — Removed](#pack-analysis--removed)
-16. [Spending — Hardcoded Product Catalog](#spending--hardcoded-product-catalog)
+16. [Spending — Removed](#spending--removed)
 17. [Automated Sync — Admin Catalog](#automated-sync--admin-catalog)
 18. [Cron-Driven Price Sync](#cron-driven-price-sync)
 19. [Firestore / User Data](#firestore--user-data)
@@ -1461,18 +1461,15 @@ number are kept only so the doc's other `§16+` references stay valid.
 
 ---
 
-## Spending — Hardcoded Product Catalog
+## Spending — Removed
 
-`/spending` (`components/pages/SpendingPage.tsx`, backed by `lib/firebase/spending.ts`) logs pack
-purchases against a **hardcoded product catalog**, not the card catalog — `lib/spending/catalog.ts`'s
-`SPENDING_CATALOG` is a hand-maintained array of `SpendingProduct` (`{ id, game, setCode, setName,
-type, name, price, imageUrl, packsIncluded, releaseDate }`, `type` one of `pack` | `booster-box` |
-`etb` | `bundle` | `case` | `pre-rift` | `vault-box`), each with a frozen MSRP `price` and a
-product image sourced from each game's own CDN (see that file's header comments for the confirmed
-CDN URL patterns per game). A `Purchase` (`lib/spending/types.ts` — `{ id, productId, pricePaid,
-quantity, date }`, `users/{uid}/purchases/{id}` in Firestore) records what was actually paid for
-one of these products, separately from its frozen catalog `price`. `SPENDING_CATALOG`'s prices are a permanent snapshot with no update mechanism — real
-MSRPs/promos will silently drift from what's shown over time.
+The `/spending` page (pack-purchase logging against a hardcoded product catalog) was removed
+entirely on 2026-10-24 at the owner's request, along with Portfolio's "+ packs" Total Invested
+toggle that added that spend to the cost basis. Gone: `app/spending/`,
+`components/pages/SpendingPage.tsx`, `lib/firebase/spending.ts`, `lib/spending/`, the store's
+`purchases` and its actions, and the purchases read on sign-in. Existing
+`users/{uid}/purchases/*` docs are left in Firestore; nothing reads them. This section and its
+number are kept only so the doc's other `§16+` references stay valid.
 
 ---
 
@@ -1721,8 +1718,8 @@ users/{uid}/
   soldCards/{cardId}     — Sold-card records (see "Sold Cards" below) — same shape as Card plus
                             soldDate/soldPrice/soldAt
   priceHistory/{cardId} — Price history points per card
-  purchases/{id}        — Pack purchase records (Spending page — see [§16](#spending--hardcoded-product-catalog)
-                            for the current `{ id, productId, pricePaid, quantity, date }` shape)
+  purchases/{id}        — Legacy pack purchase records from the removed Spending page (§16) —
+                            no longer read or written
   collections/{id}      — Personal Collections (§6) — { game, name, cards: [...], createdAt }
 ```
 
@@ -1842,7 +1839,6 @@ filters gets the first signed-in device's.
   cards: Card[]              // all user's cards, loaded from Firestore on login
   soldCards: SoldCard[]      // see "Sold Cards" in §19
   priceHistory: PriceHistory[]
-  purchases: Purchase[]      // pack purchase records from Spending page (§16)
   activeGame: Game           // selected game filter
   lastPriceRefresh: string | null
   cardUnlocks: Array<{ id: string; card: Card }>  // queue for CardUnlockToast, below
@@ -1851,7 +1847,6 @@ filters gets the first signed-in device's.
   loadUserCards(cards)
   loadUserSoldCards(cards)
   loadUserPriceHistory(history)
-  loadPurchases(purchases)
   addCard(card)
   updateCard(cardId, updates)
   removeCard(cardId)
@@ -1860,8 +1855,8 @@ filters gets the first signed-in device's.
   applyPriceUpdates(updates)                   // batched form of the above two, O(n) not O(n²)
   setLastPriceRefresh(date)
   pushCardUnlock(card) / dismissCardUnlock(id)
-  clearUserData()            // called on sign out — clears cards/priceHistory/purchases/
-                              // soldCards but NOT the persisted filter/display prefs above
+  clearUserData()            // called on sign out — clears cards/priceHistory/soldCards
+                              // but NOT the persisted filter/display prefs above
 }
 ```
 
@@ -1886,7 +1881,6 @@ unlock. Clicking the toast deep-links to that card's Cardex set.
 Promise.all([
   loadCards(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
   loadPriceHistory(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
-  loadPurchases(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
   loadSoldCards(firebaseUser.uid).catch((err) => { console.error(...); return [] }),
 ])
 ```
@@ -1959,13 +1953,8 @@ TCGHaven/
 │   │   │                             newCardRef, loadSoldCards/saveSoldCard/deleteSoldCard (§19),
 │   │   │                             addPricePoint/applyPriceUpdatesBatch (dedupe to one
 │   │   │                             price-history point per day — §13, §18)
-│   │   ├── spending.ts            ← loadPurchases, savePurchase, updatePurchase, deletePurchase
-│   │   │                             (§16 — Spending's actual product-catalog redesign)
 │   │   └── collections.ts         ← Personal Collections CRUD (§6) — users/{uid}/collections/*
 │   ├── auth-errors.ts             ← friendlyAuthError() — shared Firebase error messages
-│   ├── spending/
-│   │   ├── catalog.ts             ← SPENDING_CATALOG — hardcoded product list (§16)
-│   │   └── types.ts               ← Purchase, ProductType (§16)
 │   ├── api/
 │   │   ├── syncStatus.ts          ← recordSyncStatus()/getSyncStatus()/getAllSyncStatuses() —
 │   │   │                             durable per-job success/failure record at sync_status/{id},
@@ -2002,7 +1991,6 @@ TCGHaven/
 │   │   └── analytics/page.tsx     ← Portfolio analytics (dynamic-imported, ssr:false) →
 │   │                                 components/portfolio/PortfolioAnalyticsPage.tsx — linked
 │   │                                 from every Portfolio stat tile, undocumented elsewhere
-│   ├── spending/page.tsx          ← Pack spending tracker (§16)
 │   ├── sold/page.tsx              ← Sold cards tracker → components/pages/SoldPage.tsx (§19)
 │   ├── login/page.tsx
 │   ├── signup/page.tsx            ← Invite-passcode-gated signup (§19)
@@ -2092,7 +2080,6 @@ TCGHaven/
     │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§17), CatalogBrowser
     │   │                             (incl. whole-catalog search), CardTable, AddCardForm,
     │   │                             EditCardForm, NewSetForm, RawSourceCheckPanel
-    │   ├── SpendingPage.tsx        ← Pack purchase logging against SPENDING_CATALOG (§16)
     │   └── SettingsPage.tsx        ← Inventory number repair (any signed-in user) + Needs Review
     │                                 editor (isAdmin-gated, §5, §17)
     └── portfolio/
@@ -2237,11 +2224,9 @@ Cards are matched between the catalog and user inventory using the full set name
 is the numeric code (e.g. `"5"`) but the Cardex and all matching logic uses `set` (the
 name string). Make sure both fields are stored correctly when adding cards.
 
-### 13. Portfolio "Total Invested" pack toggle
-The `+ packs` toggle in Portfolio adds the Spending page's total pack purchases to the
-cost basis for P&L calculations. The `purchases` state is loaded in `AuthProvider.tsx`
-alongside cards and price history. If `purchases` is empty when toggling, check that
-`loadPurchases` is being called in the `Promise.all` in `AuthProvider.tsx`.
+### 13. (Removed) Portfolio "+ packs" toggle
+This quirk described the "+ packs" Total Invested toggle, removed along with the Spending page
+(see [§16](#spending--removed)). Numbering kept so other references to later quirks stay valid.
 
 ### 14. A catalog write from client code needs a server round-trip to actually be seen
 `regenerateSnapshot()` (`lib/api/catalog.ts`) is called from Admin Catalog's client-side code

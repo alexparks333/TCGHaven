@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { Card, Game, SoldCard } from './types'
-import type { Purchase } from './spending/types'
 import type { PriceStatus } from './api/priceStatus'
 
 interface TCGStore {
@@ -24,7 +23,6 @@ interface TCGStore {
   lastPriceRefresh: string | null
   // Shared price-update health for Portfolio's "Prices updated …" line; not persisted.
   priceStatus: PriceStatus | null
-  purchases: Purchase[]
   calcFloor: number
   showFilters: boolean
   activeGames: Game[]
@@ -41,7 +39,6 @@ interface TCGStore {
   // Populated by AuthProvider on login
   loadUserCards: (cards: Card[]) => void
   loadUserSoldCards: (cards: SoldCard[]) => void
-  loadPurchases: (data: Purchase[]) => void
   clearUserData: () => void
 
   // Local state mutations (caller is responsible for Firestore sync)
@@ -56,15 +53,12 @@ interface TCGStore {
   setPriceLoad: (load: { done: number; total: number; complete: boolean }) => void
   setLastPriceRefresh: (date: string) => void
   setPriceStatus: (status: PriceStatus | null) => void
-  addPurchase: (purchase: Purchase) => void
   setCalcFloor: (v: number) => void
   setShowFilters: (v: boolean) => void
   setActiveGames: (games: Game[]) => void
   setTrackedGames: (games: Game[]) => void
   setTimeFrame: (frame: 'entry' | '1d' | '7d' | '30d' | '365d') => void
   toggleHiddenGroup: (group: string) => void
-  editPurchase: (id: string, updates: Partial<Purchase>) => void
-  removePurchase: (id: string) => void
   pushCardUnlock: (card: Card) => void
   dismissCardUnlock: (id: string) => void
 }
@@ -106,7 +100,6 @@ export const useStore = create<TCGStore>()(
   activeGame: 'pokemon',
   lastPriceRefresh: null,
   priceStatus: null,
-  purchases: [],
   calcFloor: 0,
   showFilters: false,
   activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg'] as Game[],
@@ -117,8 +110,7 @@ export const useStore = create<TCGStore>()(
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
   loadUserSoldCards: (soldCards) => set({ soldCards }),
-  loadPurchases: (data) => set({ purchases: data }),
-  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, purchases: [], cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
+  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, withLivePrice(card, state.livePrices)] })),
@@ -147,17 +139,6 @@ export const useStore = create<TCGStore>()(
 
   setLastPriceRefresh: (date) => set({ lastPriceRefresh: date }),
   setPriceStatus: (status) => set({ priceStatus: status }),
-
-  addPurchase: (purchase) =>
-    set((state) => ({ purchases: [purchase, ...state.purchases] })),
-
-  editPurchase: (id, updates) =>
-    set((state) => ({
-      purchases: state.purchases.map((p) => (p.id === id ? { ...p, ...updates } : p)),
-    })),
-
-  removePurchase: (id) =>
-    set((state) => ({ purchases: state.purchases.filter((p) => p.id !== id) })),
 
   // Queued rather than a single value — a fast burst of "first copy" adds (e.g. logging a whole
   // box unboxing) shouldn't clobber earlier unlocks before the user's seen them. CardUnlockToast

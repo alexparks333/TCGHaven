@@ -13,7 +13,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!loading && !user) router.replace('/login')
   }, [user, loading, router])
 
-  // Held until the user's cards/prices/purchases have actually arrived from Firestore, not just
+  // Held until the user's cards/sold cards/games have actually arrived from Firestore, not just
   // until sign-in resolves — otherwise every page briefly renders an empty store (Portfolio at
   // $0, Inventory at 0 cards), which looks exactly like lost data.
   if (loading) return <LogoLoader fullScreen />

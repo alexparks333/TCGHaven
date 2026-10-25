@@ -17,7 +17,6 @@ import { auth, db, googleProvider } from '@/lib/firebase/config'
 import { loadCards, loadCardChanges, loadSoldCards } from '@/lib/firebase/db'
 import { readInventoryCache, writeInventoryCache, clearInventoryCache, INVENTORY_FULL_SYNC_EVERY_MS } from '@/lib/inventoryCache'
 import type { Card } from '@/lib/types'
-import { loadPurchases } from '@/lib/firebase/spending'
 import { loadTrackedGames } from '@/lib/firebase/preferences'
 import { startPreferencesSync } from '@/lib/preferencesSync'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
@@ -43,7 +42,7 @@ export interface DataLoadProgress {
 }
 
 // Price history isn't loaded per user anymore — it's shared and served by /api/price-history.
-const DATA_STEPS = ['your cards', 'purchases', 'sold cards', 'your games'] as const
+const DATA_STEPS = ['your cards', 'sold cards', 'your games'] as const
 
 // The user's inventory: this device's saved copy plus only what changed since it was saved
 // (lib/inventoryCache.ts + loadCardChanges), or a full read when there's no usable copy (new
@@ -98,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [dataProgress, setDataProgress] = useState<DataLoadProgress>({ done: 0, total: DATA_STEPS.length, pending: [...DATA_STEPS] })
-  const { loadUserCards, loadUserSoldCards, loadPurchases: storePurchases, clearUserData, setTrackedGames } = useStore()
+  const { loadUserCards, loadUserSoldCards, clearUserData, setTrackedGames } = useStore()
 
   useEffect(() => {
     // Tracks the uid the current in-flight load belongs to, so a load that
@@ -129,19 +128,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
 
         // Each read is isolated with its own .catch so one failing Firestore read (e.g. a
-        // transient permission/network blip on just priceHistory) can't blank out the other
-        // three — this used to be a single Promise.all with no per-call fallback, so any one
-        // rejection meant loadUserCards/storePurchases never ran at all,
-        // landing the user on a fully empty Inventory/Portfolio/Spending with only a
-        // console.error to explain it (easy to mistake for real data loss).
+        // transient permission/network blip on just sold cards) can't blank out the others —
+        // this used to be a single Promise.all with no per-call fallback, so any one rejection
+        // meant loadUserCards never ran at all, landing the user on a fully empty
+        // Inventory/Portfolio with only a console.error to explain it (easy to mistake for real
+        // data loss).
         Promise.all([
           track('your cards', loadInventory(firebaseUser.uid).catch((err) => { console.error('Failed to load cards:', err); return null })),
-          track('purchases', loadPurchases(firebaseUser.uid).catch((err) => { console.error('Failed to load purchases:', err); return [] as Awaited<ReturnType<typeof loadPurchases>> })),
           track('sold cards', loadSoldCards(firebaseUser.uid).catch((err) => { console.error('Failed to load sold cards:', err); return [] as Awaited<ReturnType<typeof loadSoldCards>> })),
           // undefined (read failed) leaves whatever the store already has alone, rather than
           // snapping a multi-game user back to the Riftbound-only default over a network blip.
           track('your games', loadTrackedGames(firebaseUser.uid).catch((err) => { console.error('Failed to load tracked games:', err); return undefined })),
-        ]).then(([inventory, purchases, soldCards, trackedGames]) => {
+        ]).then(([inventory, soldCards, trackedGames]) => {
           if (activeUid !== firebaseUser.uid) return // signed out mid-load
           if (trackedGames !== undefined) setTrackedGames(trackedGames ?? DEFAULT_TRACKED_GAMES)
           loadUserCards(inventory?.cards ?? [])
@@ -150,10 +148,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           stopCacheSync?.()
           stopCacheSync = inventory ? startInventoryCacheSync(firebaseUser.uid, inventory.cursor, inventory.fullSyncAt) : null
           loadUserSoldCards(soldCards)
-          storePurchases(purchases)
           setDataLoading(false)
         }).catch((err) => {
-          // Only reachable now for something outside the four reads above (e.g. a synchronous
+          // Only reachable now for something outside the reads above (e.g. a synchronous
           // throw in one of the store setters) — each read's own rejection is already handled.
           console.error('Failed to load collection from Firestore:', err)
           if (activeUid === firebaseUser.uid) setDataLoading(false)

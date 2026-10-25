@@ -19,6 +19,9 @@ const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
 interface Props {
   defaultGame: Game
   editCard?: Card
+  // Open on this exact catalog card, already selected (the Cardex's Shift+Click / double-tap).
+  // Used as-is if the search route can't find that id.
+  prefill?: CardSearchResult
   onClose: () => void
   onSaveError?: (msg: string) => void
 }
@@ -55,14 +58,14 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced
 }
 
-export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: Props) {
+export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveError }: Props) {
   const { addCard, updateCard, deleteCard, cards: allCards, pushCardUnlock, trackedGames } = useStore()
   const { user } = useAuth()
   useScrollLock()
 
   const existingGroups = Array.from(new Set(allCards.map((c) => c.group).filter(Boolean) as string[]))
 
-  const [form, setForm] = useState<CardForm>(editCard ? { ...editCard } : emptyForm(defaultGame))
+  const [form, setForm] = useState<CardForm>(editCard ? { ...editCard } : emptyForm(prefill?.game ?? defaultGame))
   // Only offer the games this user tracks — a card added to an untracked game would vanish from
   // Inventory the moment it saved. An edited card's own game always stays selectable.
   const gameChoices = GAMES.filter((g) => trackedGames.includes(g) || g === form.game)
@@ -102,13 +105,34 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
   const setDropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const cardJustSelectedRef = useRef(false)
-  // In edit mode, suppress the search dropdown until the user actually types
-  const searchEnabledRef = useRef(!editCard)
+  // In edit mode (or opened on a card), suppress the search dropdown until the user actually types
+  const searchEnabledRef = useRef(!editCard && !prefill)
+  const [prefillLoading, setPrefillLoading] = useState(!!prefill)
 
-  // Auto-focus the search input when the dialog opens
+  // Auto-focus the search input when the dialog opens — not when it opens on a card already
+  // picked (on a phone that would just throw the keyboard up over it)
   useEffect(() => {
+    if (prefill) return
     const t = setTimeout(() => searchInputRef.current?.focus(), 50)
     return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Opened on a card: fetch it as a search row (same name/variant/price handling as picking it
+  // from the dropdown), preferring its regular print; the caller's copy if the lookup fails.
+  useEffect(() => {
+    if (!prefill) return
+    let stale = false
+    fetch(`/api/cards/search?game=${prefill.game}&id=${encodeURIComponent(prefill.id)}&q=${encodeURIComponent(prefill.name)}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => [])
+      .then((rows: CardSearchResult[]) => {
+        if (stale) return
+        selectCard(rows.find((r) => !r.isFoil) ?? rows[0] ?? prefill)
+        setPrefillLoading(false)
+      })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const setField = (key: keyof CardForm, value: unknown) =>
@@ -322,8 +346,8 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
-      <div className="relative w-full max-w-lg card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
+      <div className="add-card-panel relative w-full max-w-lg card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -382,7 +406,7 @@ export function AddCardDialog({ defaultGame, editCard, onClose, onSaveError }: P
                 placeholder={`Type a card name…`}
                 className="input-field pl-9 pr-9"
               />
-              {cardSearching && (
+              {(cardSearching || prefillLoading) && (
                 <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 animate-spin" />
               )}
             </div>

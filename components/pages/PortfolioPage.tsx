@@ -5,7 +5,6 @@ import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle
 import { useRouter } from 'next/navigation'
 import { useStore, portfolioGames } from '@/lib/store'
 import type { PriceStatus } from '@/lib/api/priceStatus'
-import { SPENDING_CATALOG } from '@/lib/spending/catalog'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
@@ -29,7 +28,7 @@ const BASELINE_KEY = { '1d': 'd1', '7d': 'd7', '30d': 'd30', '365d': 'd365' } as
 export default function PortfolioPage() {
   const {
     cards, priceBaselines, priceStatus, priceLoad,
-    purchases, soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
+    soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     hiddenGroups,
   } = useStore()
   // Only games the user tracks (Inventory's game tabs) count toward anything on this page — see
@@ -37,17 +36,7 @@ export default function PortfolioPage() {
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
   const [sort, setSort] = useState<SortKey>('pnl')
   const [cardSearch, setCardSearch] = useState('')
-  const [includePacks, setIncludePacks] = useState(false)
   const [includeSold, setIncludeSold] = useState(false)
-
-  // A purchase whose product isn't in SPENDING_CATALOG anymore can't be attributed to a game, so
-  // it's kept rather than silently dropped from the cost basis.
-  const totalPackSpend = useMemo(() => {
-    const gameByProduct = new Map(SPENDING_CATALOG.map((p) => [p.id, p.game]))
-    return purchases
-      .filter((p) => { const g = gameByProduct.get(p.productId); return !g || activeGames.includes(g) })
-      .reduce((s, p) => s + p.pricePaid * p.quantity, 0)
-  }, [purchases, activeGames])
 
   const totalSoldRevenue = useMemo(
     () => soldCards.filter((c) => activeGames.includes(c.game)).reduce((s, c) => s + c.soldPrice, 0),
@@ -175,7 +164,7 @@ export default function PortfolioPage() {
   const totals = useMemo(() => {
     const value = filtered.reduce((s, c) => s + c.currentVal, 0)
     const cardCost = filtered.reduce((s, c) => s + c.cost, 0)
-    const adjustedCost = cardCost + (includePacks ? totalPackSpend : 0) - (includeSold ? totalSoldRevenue : 0)
+    const adjustedCost = cardCost - (includeSold ? totalSoldRevenue : 0)
 
     let pnl: number
     let pnlPct: number
@@ -195,7 +184,7 @@ export default function PortfolioPage() {
     }
 
     return { value, cardCost, adjustedCost, pnl, pnlPct }
-  }, [filtered, includePacks, totalPackSpend, includeSold, totalSoldRevenue, timeFrame])
+  }, [filtered, includeSold, totalSoldRevenue, timeFrame])
 
   // By-game breakdown — respects floor + activeGames but always shows selected games
   const byGame = useMemo(() => {
@@ -264,19 +253,6 @@ export default function PortfolioPage() {
               <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Total Invested</span>
               {timeFrame === 'entry' && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); setIncludePacks((v) => !v) }}
-                  title={includePacks ? 'Click to remove pack spend' : 'Click to add pack spend to cost basis'}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
-                    includePacks
-                      ? 'bg-violet-600 border-violet-500 text-white'
-                      : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
-                  }`}
-                >
-                  + packs
-                </button>
-              )}
-              {timeFrame === 'entry' && (
-                <button
                   onClick={(e) => { e.stopPropagation(); setIncludeSold((v) => !v) }}
                   title={includeSold ? 'Click to remove sold proceeds' : 'Click to subtract sold proceeds from cost basis'}
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
@@ -290,11 +266,9 @@ export default function PortfolioPage() {
               )}
             </div>
             <span className="text-xl md:text-2xl font-bold text-ink">{formatCurrency(totals.adjustedCost)}</span>
-            {(includePacks && totalPackSpend > 0 || includeSold && totalSoldRevenue > 0) && timeFrame === 'entry' && (
+            {includeSold && totalSoldRevenue > 0 && timeFrame === 'entry' && (
               <span className="text-[11px] text-slate-500 mt-0.5">
-                cards {formatCurrency(totals.cardCost)}
-                {includePacks && totalPackSpend > 0 && <> · packs {formatCurrency(totalPackSpend)}</>}
-                {includeSold && totalSoldRevenue > 0 && <> · sold -{formatCurrency(totalSoldRevenue)}</>}
+                cards {formatCurrency(totals.cardCost)} · sold -{formatCurrency(totalSoldRevenue)}
               </span>
             )}
           </div>

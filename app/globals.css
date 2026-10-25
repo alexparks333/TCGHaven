@@ -319,6 +319,25 @@
   animation: crop-modal-frame-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
+/* Add Card dialog (AddCardDialog.tsx): backdrop fades in while the panel grows into place from
+   slightly small and low, settling with the same gentle overshoot as the other pop-ins here. */
+@keyframes add-card-panel-in {
+  0%   { transform: translateY(12px) scale(0.9); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.add-card-backdrop {
+  animation: crop-modal-backdrop-in 0.2s ease-out both;
+}
+
+.add-card-panel {
+  animation: add-card-panel-in 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .add-card-panel { animation: crop-modal-backdrop-in 0.15s ease-out both; }
+}
+
 /* Personalized Collections move-mode cue (MoveCue in PersonalCollectionsView.tsx): fades in behind
    the held card, swells outward once, and fades away. Kept faint on purpose. */
 @keyframes move-cue {

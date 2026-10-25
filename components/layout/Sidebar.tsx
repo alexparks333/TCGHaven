@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Package, TrendingUp, LogOut, ShoppingBag, BookOpen, SlidersHorizontal, Banknote, Settings } from 'lucide-react'
+import { Package, TrendingUp, LogOut, BookOpen, SlidersHorizontal, Banknote, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
@@ -12,7 +12,6 @@ const BASE_NAV = [
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/sold', label: 'Sold', icon: Banknote },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
-  { href: '/spending', label: 'Spending', icon: ShoppingBag },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 // Phone bottom bar, in display order. Sign out lives on the Settings page on phones;
@@ -22,7 +21,6 @@ const MOBILE_NAV = [
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
   { href: '/sold', label: 'Sold', icon: Banknote },
-  { href: '/spending', label: 'Spending', icon: ShoppingBag },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
@@ -117,7 +115,7 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Mobile Bottom Nav — the six everyday pages. Admin and Sign out live on the Settings
+      {/* Mobile Bottom Nav — the five everyday pages. Admin and Sign out live on the Settings
           page on phones (see AccountActions in SettingsPage.tsx) and Filters in the top bar,
           rather than each taking a bottom-bar slot; nine-plus equal slots left every label
           colliding. */}
