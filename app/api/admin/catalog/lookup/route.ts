@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getRiftboundRegistrySets } from '@/lib/api/registry'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
+import { parseCsvRecords } from '@/lib/csv'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,7 +10,8 @@ export const dynamic = 'force-dynamic'
 // review and edit before saving — this route never writes anything.
 
 const TCGCSV_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+  'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
   'Referer': 'https://tcgcsv.com/',
   'Accept': 'text/csv,*/*',
 }
@@ -22,27 +24,6 @@ interface LookupCandidate {
   rarity?: string
   source: string
   note?: string
-}
-
-// Minimal CSV line parser — duplicated from download-card-catalog.mjs rather than imported,
-// since that script runs mkdirSync at import time and isn't safe to import from a route.
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = []
-  let cur = ''
-  let inQ = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
-      else inQ = !inQ
-    } else if (ch === ',' && !inQ) {
-      fields.push(cur); cur = ''
-    } else {
-      cur += ch
-    }
-  }
-  fields.push(cur)
-  return fields
 }
 
 // "21b/166" or "21b" or "21" -> { num: 21, suffix: 'b' } — mirrors tcgKey()'s number handling
@@ -66,17 +47,13 @@ async function lookupRiftbound(setCode: string, number: string): Promise<LookupC
   try {
     const res = await fetch(`https://tcgcsv.com/tcgplayer/89/${set.tcgcsvGroupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
     if (!res.ok) return [{ source: 'tcgcsv', note: `tcgcsv request failed: ${res.status}` }]
-    const lines = (await res.text()).split('\n')
     const candidates: LookupCandidate[] = []
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      const f = parseCSVLine(line)
-      const name = f[1] ?? ''
-      const imageUrl = f[3] ?? ''
-      const marketPrice = parseFloat(f[12]) || 0
-      const subType = f[14] ?? '' // 'Normal' or 'Foil'
-      const extNumber = f[16] ?? ''
+    for (const row of parseCsvRecords(await res.text())) {
+      const name = row.name ?? ''
+      const imageUrl = row.imageUrl ?? ''
+      const marketPrice = parseFloat(row.marketPrice) || 0
+      const subType = row.subTypeName ?? '' // 'Normal' or 'Foil'
+      const extNumber = row.extNumber ?? ''
       if (!extNumber) continue
       // extNumber is formatted like "021/166" (zero-padded, slash-suffixed with set size) —
       // strip the "/166" the same way normalizeRiftboundNumber() does for the admin's input.
@@ -177,17 +154,13 @@ async function lookupOnePiece(setCode: string, number: string): Promise<LookupCa
 
     const res = await fetch(`https://tcgcsv.com/tcgplayer/68/${group.groupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS })
     if (!res.ok) return [{ source: 'tcgcsv', note: `tcgcsv request failed: ${res.status}` }]
-    const lines = (await res.text()).split('\n')
     const candidates: LookupCandidate[] = []
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      const f = parseCSVLine(line)
-      const name = f[1] ?? ''
-      const imageUrl = f[3] ?? ''
-      const marketPrice = parseFloat(f[12]) || 0
-      const rarity = f[15] ?? ''
-      const extNumber = f[16] ?? ''
+    for (const row of parseCsvRecords(await res.text())) {
+      const name = row.name ?? ''
+      const imageUrl = row.imageUrl ?? ''
+      const marketPrice = parseFloat(row.marketPrice) || 0
+      const rarity = row.extRarity ?? ''
+      const extNumber = row.extNumber ?? ''
       if (!extNumber) continue
       // extNumber is the full card code (e.g. "OP01-024") — pull just the numeric suffix so an
       // admin-typed "24" matches the zero-padded "024" the same way normNum() does elsewhere.

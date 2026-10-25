@@ -46,6 +46,9 @@ export function buildDailyEntries(cards, when = new Date()) {
   const day = iso.slice(8, 10)
   const bySet = new Map()
   for (const card of cards) {
+    // Cardmarket estimates (EUR → USD backup prices, price-fallback.mjs) stay out of history:
+    // exchange-rate moves would show up as fake price changes.
+    if (card.priceSource === 'cardmarket') continue
     const tuple = priceTuple(card)
     if (!tuple) continue
     const key = setKeyOf(card)

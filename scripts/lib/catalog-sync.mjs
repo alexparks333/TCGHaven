@@ -27,6 +27,8 @@ import {
 } from 'firebase/firestore'
 import { normSetName } from './text-norm.mjs'
 import { PRICE_HISTORY_COLLECTION, buildDailyEntries } from './price-history.mjs'
+import { fillPokemonPriceGaps } from './price-fallback.mjs'
+import { fallbackPokemonSetId } from './pokemon-groups.mjs'
 
 const firebaseApp = getApps().length === 0
   ? initializeApp({
@@ -140,7 +142,11 @@ export async function findBrokenImageUrls(candidates, { concurrency = 20, timeou
   return { broken, suspicious }
 }
 
-async function syncToFirestore(game, freshCards, { hideIds = [] } = {}) {
+// `fieldDefaults`: fields only some fresh cards carry (e.g. Pokémon's priceSource, set only on
+// backup-priced cards). A fresh card without one is compared as having the default, so a field
+// set by an earlier sync gets reset when it no longer applies — while cards that never had it
+// (undefined in Firestore) aren't rewritten just to add the default.
+async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults = {} } = {}) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
   const meta = metaSnap.exists() ? metaSnap.data() : {}
@@ -179,6 +185,10 @@ async function syncToFirestore(game, freshCards, { hideIds = [] } = {}) {
     const changed = {}
     for (const key of Object.keys(card)) {
       if (JSON.stringify(existing[key]) !== JSON.stringify(card[key])) changed[key] = card[key]
+    }
+    for (const [key, def] of Object.entries(fieldDefaults)) {
+      if (key in card || existing[key] === undefined || existing[key] === def) continue
+      changed[key] = def
     }
     if (Object.keys(changed).length === 0) continue // nothing real changed — no write, no timestamp churn
 
@@ -338,19 +348,18 @@ async function fetchText(url, headers = {}) {
   return res.text()
 }
 
-// Parse a tcgcsv CSV text into row objects using the header row. Delegates the actual field
-// splitting to parseCSVLine (defined below, hoisted — this is an .mjs file, function
-// declarations hoist the same as CommonJS) rather than its own copy of the same state machine:
-// this one used to just toggle on every `"`, which misaligns columns on any field containing an
-// escaped `""` (TCGPlayer product names occasionally have one) — parseCSVLine already handles
-// that correctly, so there's no reason for two parsers with different correctness here.
+// Parse a tcgcsv CSV text into row objects keyed by the header row. Every tcgcsv CSV read in this
+// file goes through parseCSVText (defined below, hoisted): quoted fields can contain escaped `""`
+// and line breaks (multi-line rules text), and splitting the file on '\n' first shifted every
+// later column — that silently dropped ~40% of TCGplayer's Pokémon prices (e.g. most of Crown
+// Zenith and its Galarian Gallery) and affected the other games' card-text rows too.
 function parseCsv(text) {
-  const lines = text.split('\n').filter(Boolean)
+  const lines = parseCSVText(text)
   if (lines.length < 2) return []
-  const headers = parseCSVLine(lines[0])
+  const headers = lines[0]
   const rows = []
   for (let i = 1; i < lines.length; i++) {
-    const cols = parseCSVLine(lines[i])
+    const cols = lines[i]
     const row = {}
     for (let j = 0; j < headers.length; j++) row[headers[j]] = (cols[j] ?? '').trim()
     rows.push(row)
@@ -423,7 +432,8 @@ export async function downloadPokemon() {
 
   // ── Phase 2: Prices from tcgcsv.com (category 3 = Pokemon) ─────────────────
   const TCGP_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+    'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
     'Referer': 'https://tcgcsv.com/',
     'Accept': 'application/json,text/csv,*/*',
   }
@@ -470,6 +480,12 @@ export async function downloadPokemon() {
           matched = true
         }
       }
+      // Strategy 3: TCGplayer's older naming ("XY - Flashfire", "EX Emerald", ...) — see
+      // pokemon-groups.mjs. Only for groups nothing above matched.
+      if (!matched) {
+        const id = fallbackPokemonSetId(g.name, nameToSetId, setIdSet)
+        if (id) groupToSetId.set(g.groupId, id)
+      }
     }
     console.log(`   Matched ${groupToSetId.size}/${groups.length} TCGPlayer groups to GitHub sets`)
 
@@ -490,11 +506,18 @@ export async function downloadPokemon() {
               if (!extNum || !/^[A-Z0-9]*\d/.test(extNum)) continue
               const num = normCardNum(extNum)
               const key = `${setId}:${num}`
-              if (!priceMap.has(key)) priceMap.set(key, { normal: 0, holofoil: 0, reverseHolo: 0, lowNormal: 0, lowHolofoil: 0, lowReverseHolo: 0 })
+              if (!priceMap.has(key)) priceMap.set(key, { normal: 0, holofoil: 0, reverseHolo: 0, lowNormal: 0, lowHolofoil: 0, lowReverseHolo: 0, plain: new Set() })
               const entry = priceMap.get(key)
               const price    = parseFloat(row.marketPrice) || parseFloat(row.midPrice) || 0
               const lowPrice = parseFloat(row.lowPrice) || 0
               const sub = row.subTypeName ?? ''
+              // TCGplayer files variants under the card's own number — "Charizard (Black Dot
+              // Error)" shares 004/102 with Charizard, as do stamped/staff/prerelease copies. The
+              // plain-named product is the card itself: once it has set a price, a variant row
+              // never overwrites it (whichever row came last used to win).
+              const isVariant = /\(/.test(row.name ?? '')
+              if (isVariant && entry.plain.has(sub)) continue
+              if (!isVariant && price > 0) entry.plain.add(sub)
               if (sub === 'Normal') { if (price > 0) entry.normal = price; if (lowPrice > 0) entry.lowNormal = lowPrice }
               else if (sub === 'Holofoil') { if (price > 0) entry.holofoil = price; if (lowPrice > 0) entry.lowHolofoil = lowPrice }
               else if (sub === 'Reverse Holofoil') { if (price > 0) entry.reverseHolo = price; if (lowPrice > 0) entry.lowReverseHolo = lowPrice }
@@ -527,8 +550,21 @@ export async function downloadPokemon() {
     console.warn(`   ⚠️  Price fetch failed: ${err.message} — catalog saved without prices`)
   }
 
+  // ── Phase 3: backup prices, only for cards TCGplayer's feed left unpriced ──
+  // See price-fallback.mjs. Non-fatal: any failure just leaves those cards at $0 this run.
+  const backupRef = doc(db, 'catalog_meta', 'pokemon-price-backup')
+  try {
+    await ensureSignedIn()
+    await fillPokemonPriceGaps(all, {
+      loadCache: async () => { const snap = await getDoc(backupRef); return snap.exists() ? snap.data() : null },
+      saveCache: (data) => setDoc(backupRef, { ...data, updatedAt: serverTimestamp() }),
+    })
+  } catch (err) {
+    console.warn(`   ⚠️  Backup prices skipped: ${err.message}`)
+  }
+
   all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
-  return syncToFirestore('pokemon', all)
+  return syncToFirestore('pokemon', all, { fieldDefaults: { priceSource: '' } })
 }
 
 // ── Lorcana ───────────────────────────────────────────────────────────────────
@@ -542,33 +578,14 @@ export async function downloadPokemon() {
 // Without the rarity queries, they are completely missing from the catalog.
 
 const TCGCSV_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+  'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
   'Referer': 'https://tcgcsv.com/',
   'Accept': 'text/csv,*/*',
 }
 
-// Minimal CSV parser that handles quoted fields
-function parseCSVLine(line) {
-  const fields = []
-  let cur = ''
-  let inQ = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
-      else inQ = !inQ
-    } else if (ch === ',' && !inQ) {
-      fields.push(cur); cur = ''
-    } else {
-      cur += ch
-    }
-  }
-  fields.push(cur)
-  return fields
-}
-
-// A whole CSV file → rows of fields, honoring quoted fields that span lines (parseCSVLine above
-// assumes one record per line, which breaks on multi-line descriptions).
+// A whole CSV file → rows of fields, honoring escaped `""` and quoted fields that span lines.
+// Never split a tcgcsv file on '\n' first: card text often contains line breaks.
 function parseCSVText(text) {
   const rows = []
   let row = []
@@ -690,7 +707,7 @@ export async function downloadLorcana() {
         { headers: TCGCSV_HEADERS }
       )
       if (!res.ok) { console.warn(`   ⚠️  ${setName}: ${res.status}`); return }
-      const lines = (await res.text()).split('\n')
+      const lines = parseCSVText(await res.text())
       if (lines.length === 0) return
       // TCGPlayer's CSV column layout is NOT fixed across groups — a group containing only
       // sealed product (booster boxes, cases, troves — no actual cards, e.g. "Hyperia City")
@@ -699,7 +716,7 @@ export async function downloadLorcana() {
       // values like "199.62" ended up in the `rarity` field). Look columns up by header name
       // instead: real card groups resolve every name below; sealed-goods-only groups resolve
       // extRarity/extNumber to -1, so every row in them is skipped by the guard further down.
-      const header = parseCSVLine(lines[0]).map((h) => h.trim())
+      const header = lines[0].map((h) => h.trim())
       const col = (name) => header.indexOf(name)
       const idx = {
         productId: col('productId'), name: col('name'), imageUrl: col('imageUrl'),
@@ -710,9 +727,7 @@ export async function downloadLorcana() {
       // depends on the group-wide ratio computed after this loop, not decided per-row.
       const candidates = []
       for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim()
-        if (!line) continue
-        const f = parseCSVLine(line)
+        const f = lines[i]
         const get = (i) => (i >= 0 ? f[i]?.trim() ?? '' : '')
         const productId   = get(idx.productId)
         const name        = get(idx.name)
@@ -1059,21 +1074,15 @@ async function fetchRiftboundPrices() {
       const res = await fetch(url, { headers: TCGCSV_HEADERS })
       if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${setCode} failed: ${res.status}`); continue }
       const text = await res.text()
-      const lines = text.split('\n')
-      // header: productId,name,cleanName,imageUrl,categoryId,groupId,url,modifiedOn,
-      //         imageCount,lowPrice,midPrice,highPrice,marketPrice,directLowPrice,
-      //         subTypeName,extRarity,extNumber,...
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim()
-        if (!line) continue
-        const f = parseCSVLine(line)
-        const name       = f[1]  ?? ''
-        const tcgImg     = f[3]  ?? ''
-        const lowPrice    = parseFloat(f[9])  || 0
-        const marketPrice = parseFloat(f[12]) || 0
-        const subType    = f[14] ?? ''   // 'Normal' or 'Foil'
-        const extRarity  = f[15] ?? ''
-        const extNumber  = f[16] ?? ''
+      // Read by column name, not position — TCGplayer's column order isn't fixed across groups.
+      for (const row of parseCsv(text)) {
+        const name       = row.name ?? ''
+        const tcgImg     = row.imageUrl ?? ''
+        const lowPrice    = parseFloat(row.lowPrice) || 0
+        const marketPrice = parseFloat(row.marketPrice) || 0
+        const subType    = row.subTypeName ?? ''   // 'Normal' or 'Foil'
+        const extRarity  = row.extRarity ?? ''
+        const extNumber  = row.extNumber ?? ''
         if (!extNumber || !name) continue
 
         // Rune cards: R01, R01a, R01b, R02, ... R06b
@@ -1401,7 +1410,8 @@ export async function downloadRiftbound() {
 // wrong print variant, that remaining approximation is the place to look.
 
 const ONEPIECE_TCGCSV_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+  'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
   'Referer': 'https://tcgcsv.com/',
   'Accept': 'text/csv,*/*',
 }
@@ -1445,42 +1455,52 @@ export async function downloadOnePiece() {
   // "sets" in the Cardex's Main Sets group alongside the real numbered boosters. See
   // app/api/sync/onepiece/route.ts, which reads this map for the registry's `code` field.
   const setBracketCodes = new Map()
-  let done = 0
-  await Promise.all(
+  // Downloaded in parallel, but processed in file-name order below: apitcg repeats cards across
+  // files (general.json re-lists all of EB-01, 140 ids at once), and a code's variants span files
+  // (EB01-006_p3 is a Treasure Cup promo, _p5 is in prb01.json). Processing in download-finish
+  // order made which duplicate won — and the base/_p1/_p2 price pairing below — change from run
+  // to run, flipping hundreds of prices between syncs.
+  const fileResults = await Promise.all(
     files.filter((f) => f.name.endsWith('.json')).map(async (file) => {
       try {
-        const cards = await fetchJSON(file.download_url)
-        for (const c of cards) {
-          if (!c?.name || !c?.code || !c?.images?.large && !c?.images?.small) continue
-          const numMatch = c.code.match(/-(\d+)$/)
-          if (!numMatch) continue // every real card code ends "-<digits>"; skip anything malformed
-          const { code: bracketCode, name: setName } = parseOnePieceSetName(c.set?.name ?? '')
-          if (!setBracketCodes.has(setName)) setBracketCodes.set(setName, bracketCode)
-          all.push({
-            id: c.id,
-            name: c.name,
-            // Prefer the official bracketed set code; a promo "set" with no bracket (e.g. a
-            // one-off tournament giveaway) falls back to the card's own print-numbering prefix,
-            // e.g. "EB02" — that's still meaningful for an individual card (it says which real
-            // print run the card belongs to) and keeps this field non-empty always, no
-            // nullability to thread through the rest of the app the way Riftbound's setCode
-            // never is either. It is NOT what the registry's set-level `code` uses, precisely
-            // because it conflates real sets and promo fallbacks — see setBracketCodes above.
-            set: bracketCode ?? c.code.split('-')[0],
-            setName,
-            number: numMatch[1],
-            rarity: c.rarity ?? '',
-            imageUrl: c.images.large ?? c.images.small,
-            marketPrice: 0,
-            _code: c.code, // scratch field for the price-merge pass below — stripped before sync
-          })
-        }
+        return [file.name, await fetchJSON(file.download_url)]
       } catch (err) {
         console.warn(`   ⚠️  Skipped ${file.name}: ${err.message}`)
+        return [file.name, []]
       }
-      done++
     })
   )
+  fileResults.sort((a, b) => a[0].localeCompare(b[0]))
+  const seenIds = new Set()
+  for (const [, cards] of fileResults) {
+    for (const c of cards) {
+      if (seenIds.has(c?.id)) continue // same card listed in another file — keep the first
+      if (!c?.name || !c?.code || !c?.images?.large && !c?.images?.small) continue
+      const numMatch = c.code.match(/-(\d+)$/)
+      if (!numMatch) continue // every real card code ends "-<digits>"; skip anything malformed
+      const { code: bracketCode, name: setName } = parseOnePieceSetName(c.set?.name ?? '')
+      if (!setBracketCodes.has(setName)) setBracketCodes.set(setName, bracketCode)
+      all.push({
+        id: c.id,
+        name: c.name,
+        // Prefer the official bracketed set code; a promo "set" with no bracket (e.g. a
+        // one-off tournament giveaway) falls back to the card's own print-numbering prefix,
+        // e.g. "EB02" — that's still meaningful for an individual card (it says which real
+        // print run the card belongs to) and keeps this field non-empty always, no
+        // nullability to thread through the rest of the app the way Riftbound's setCode
+        // never is either. It is NOT what the registry's set-level `code` uses, precisely
+        // because it conflates real sets and promo fallbacks — see setBracketCodes above.
+        set: bracketCode ?? c.code.split('-')[0],
+        setName,
+        number: numMatch[1],
+        rarity: c.rarity ?? '',
+        imageUrl: c.images.large ?? c.images.small,
+        marketPrice: 0,
+        _code: c.code, // scratch field for the price-merge pass below — stripped before sync
+      })
+      seenIds.add(c.id)
+    }
+  }
   console.log(`   ${all.length} cards from GitHub (every print variant counted separately)`)
 
   // ── Phase 2: Prices from tcgcsv.com (category 68) ──────────────────────────
@@ -1515,7 +1535,7 @@ export async function downloadOnePiece() {
               const isParallel = /\(Parallel\)/i.test(row.name ?? '')
               if (!rowsByCode.has(code)) rowsByCode.set(code, [])
               rowsByCode.get(code).push({
-                productId, marketPrice: price, imageUrl: row.imageUrl ?? '', isParallel,
+                productId, marketPrice: price, imageUrl: row.imageUrl ?? '', isParallel, groupName: g.name,
                 name: row.name ?? '', rarity: row.extRarity ?? '', // only used by Phase 3 below,
                                                                     // for codes apitcg never scraped
               })
@@ -1627,9 +1647,34 @@ export async function downloadOnePiece() {
       if (!byCode.has(card._code)) byCode.set(card._code, [])
       byCode.get(card._code).push(card)
     }
+    // apitcg's own variant order — base, then _p1, _p2, ... by number — never list order.
+    const variantNo = (id) => { const m = String(id).match(/_p(\d+)$/); return m ? parseInt(m[1], 10) : 0 }
+    for (const variants of byCode.values()) variants.sort((a, b) => variantNo(a.id) - variantNo(b.id))
+    // Which TCGplayer row goes to which apitcg variant (scraped codes only — synthesized cards
+    // already took their ids from `rows`' own order in Phase 3, so they keep it). Pure productId
+    // order over every row broke once reprints were parsed correctly — OP01-003's "One Piece Demo
+    // Deck Cards" reprint ($8.89) took the Parallel's slot ($1,023) — and was already wrong
+    // whenever TCGplayer created a Manga product before the Alt Art (OP05-119: _p1 is the Alt Art,
+    // _p2 the Manga, but the Manga has the lower productId). Order instead, the way apitcg numbers
+    // variants: the plain card, then the card's own set's group before reprints elsewhere, and
+    // within that Parallel/Alt Art → Manga → SP/Gold/other specials, then productId.
+    const variantTier = (name) =>
+      /\((SP|Gold|Serial|Pre-?Release|Championship|Winner|Judge|Wanted Poster)\b/i.test(name) ? 3
+      : /Manga/i.test(name) ? 2
+      : /\((Parallel|Alternate Art)\)/i.test(name) ? 1
+      : 0
+    const pairingRows = (code, rows) => {
+      if (!scrapedCodes.has(code)) return rows
+      const home = groupNameByPrefix.get(code.split('-')[0])
+      const order = (a, b) => (Number(a.groupName !== home) - Number(b.groupName !== home))
+        || (variantTier(a.name) - variantTier(b.name)) || (a.productId - b.productId)
+      const sorted = [...rows].sort(order)
+      const base = sorted.find((r) => variantTier(r.name) === 0) ?? sorted[0]
+      return [base, ...sorted.filter((r) => r !== base)]
+    }
     let priced = 0
     for (const [code, variants] of byCode) {
-      const rows = rowsByCode.get(code)
+      const rows = rowsByCode.get(code) && pairingRows(code, rowsByCode.get(code))
       if (!rows) continue
       variants.forEach((card, i) => {
         const row = rows[i] ?? rows[rows.length - 1] // more tcgcsv rows than known variants

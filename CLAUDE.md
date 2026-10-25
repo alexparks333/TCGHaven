@@ -1249,6 +1249,27 @@ freshness as everywhere else (at most ~6 hours stale, per the cron above).
   lookup, no network call to pokemontcg.io
 - **Foil logic:** `isFoil=true` → holofoil market price; `isFoil=false` → normal market price
 - **Stored on Card:** `currentPrice` field updated by refresh; `purchasePrice` set when card added
+- **Set matching:** each tcgcsv group is matched to a pokemon-tcg-data set by exact name, then
+  abbreviation, then `scripts/lib/pokemon-groups.mjs` (TCGplayer's older naming — "XY - Flashfire",
+  "EX Emerald", "SV01: Scarlet & Violet Base Set", "SV: Scarlet & Violet 151", McDonald's years,
+  Black Star promo sets). Before that third step ~60 whole sets never got a TCGplayer price.
+- **Variants sharing a number:** TCGplayer files "Charizard (Black Dot Error)", Master Ball
+  Pattern reverse holos, Pokémon Center stamps etc. under the card's own number. The plain-named
+  product always wins; a "(...)" variant only fills a price nothing plain set.
+- **Backup prices (gap-only, 2026-10-25)** — `scripts/lib/price-fallback.mjs`, Phase 3 of
+  `downloadPokemon()`. Only cards still at $0 after TCGplayer are looked up, never whole sets:
+  layer 2 api.pokemontcg.io (TCGplayer's price for the exact catalog id, 40 ids per request,
+  retried — that API is flaky), layer 3 api.tcgdex.net per card (its TCGplayer block, else
+  Cardmarket EUR→USD via frankfurter.app). Each gap is checked at most once a day; results
+  (including "nothing found", but only when both sources actually answered) are cached in
+  `catalog_meta/pokemon-price-backup` and reused by the other syncs that day (`CACHE_VERSION` —
+  bump it when the rules change). Capped at 1,500 lookups / 90s per run. A backup-priced card
+  carries `priceSource` (`tcgplayer-backup` | `cardmarket`); `syncToFirestore`'s `fieldDefaults`
+  resets it to `''` once TCGplayer prices the card again, without rewriting every other doc.
+  `cardmarket` estimates show "Est." in the Cardex and are left out of price history (exchange-rate
+  moves would look like price changes). Cardmarket's normal/holo split is unreliable for single-print
+  rarities, so those take the higher of the two. As of this writing: TCGplayer prices 20,388 of
+  20,635 cards; backups cover most of the remaining ~250.
 
 ### Lorcana
 
@@ -1927,14 +1948,19 @@ TCGHaven/
 │       │                             shared by both the CLI script and each
 │       │                             app/api/sync/{game}/sync.ts (§17 — not route.ts directly,
 │       │                             see §5's "Auth model" note for why that split exists)
-│       └── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set
-│                                     matching (Riftbound only — One Piece needs none, §10)
+│       ├── text-norm.mjs          ← normSetName(), levenshtein(), matchSetName() — fuzzy set
+│       │                             matching (Riftbound only — One Piece needs none, §10)
+│       ├── pokemon-groups.mjs     ← fallbackPokemonSetId() — TCGplayer's older Pokémon group
+│       │                             names → set ids (§13 Pokémon)
+│       └── price-fallback.mjs     ← fillPokemonPriceGaps() — gap-only backup prices from
+│                                     pokemontcg.io / tcgdex (§13 Pokémon)
 │
 ├── lib/
 │   ├── types.ts                   ← Card, SoldCard, Game, Condition, GAME_COLORS, etc. — §19 has
 │   │                                 the full current Card shape
 │   ├── store.ts                   ← Zustand store — mostly in-memory, persists a small
 │   │                                 filter/display-prefs slice to localStorage (§20)
+│   ├── csv.ts                     ← parseCSVText()/parseCsvRecords() for API routes (quirk #28)
 │   ├── utils.ts                   ← cn(), formatCurrency(), cardIdentityKey()/isFirstCopyOfCard()
 │   │                                 (inventory grouping + "Card Unlocked" detection — §19, §20),
 │   │                                 riftboundVariantFlags()/riftboundInherentFoil() (the shared
@@ -2500,3 +2526,24 @@ CDN — they just weren't what caused *this* particular 100%-failure run. If a f
 CDN ever shows the same "every single check fails, including retries" pattern, suspect a missing
 required header (User-Agent, Referer, etc.) before assuming rate-limiting — a real rate limit
 usually degrades gradually or recovers on retry; a header-rejection failure is 100% and deterministic.
+
+### 28. Never split a tcgcsv CSV on newlines — and read its columns by name
+TCGplayer's rules text (`extCardText`) contains line breaks inside quoted fields. Every tcgcsv
+parse used to split the file on `'\n'` first, which cut those rows apart and shifted their later
+columns; for Pokémon (where card text comes *before* `extNumber`/prices) that silently dropped
+~40% of all prices — most of Crown Zenith and its Galarian Gallery, Scarlet & Violet base, etc.
+Every parse now goes through a whole-file parser (`parseCSVText`/`parseCsv` in
+`catalog-sync.mjs`, `lib/csv.ts` for API routes) and looks columns up by header name, since the
+column order differs between games and groups. Also: send tcgcsv an honest `User-Agent`
+(`TCGHaven/1.0 …`) — it blocks disguised browser User-Agents with a 401 ("Please identify your
+application").
+
+Parsing correctly surfaced reprint rows One Piece's price pairing had never seen, so that pairing
+changed too (`pairingRows()` in `downloadOnePiece()`): apitcg lists cards in several files
+(`general.json` repeats all of EB-01), so files are processed in name order and each id kept once
+(download-finish order used to flip hundreds of prices between syncs); variants pair in `_pN`
+order with the base card's best plain row, the card's own set group before reprints elsewhere, and
+Parallel/Alt Art → Manga → SP/Gold within it (TCGplayer sometimes creates the Manga product before
+the Alt Art — OP05-119). Synthesized (TCGplayer-only) codes keep their original row order so their
+ids never shift.
+

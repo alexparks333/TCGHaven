@@ -33,6 +33,9 @@ interface CatalogCard {
   lowPriceNMFoil?: number
   publicCode?: string
   cardType?: string   // Riftbound only — 'Battlefield' cards are landscape (see CardZoomOverlay)
+  // Set when the price isn't from TCGplayer's own feed (scripts/lib/price-fallback.mjs);
+  // 'cardmarket' is an EUR→USD estimate and is labeled Est.
+  priceSource?: string
 }
 
 type CatalogGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
@@ -63,6 +66,7 @@ export interface ZoomCardData {
   rarityLabel: string
   rarityColor: string
   marketPrice: number
+  priceEstimated?: boolean   // Cardmarket EUR→USD backup price — shown with an Est. label
   owned: boolean
   quantity: number
   isFoil?: boolean
@@ -1293,6 +1297,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
       rarityLabel: rarityLabel.replace('_', ' '),
       rarityColor,
       marketPrice: card.marketPrice,
+      priceEstimated: card.priceSource === 'cardmarket',
       owned: card.owned,
       quantity: card.quantity,
       glowColor: zoomGlowColor(game, card.rarity, gameColor),
@@ -1386,7 +1391,11 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
             <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
             {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
-            {card.marketPrice > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice.toFixed(2)}</div>}
+            {card.marketPrice > 0 && (
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                ${card.marketPrice.toFixed(2)}{card.priceSource === 'cardmarket' && <span className="ml-1 font-semibold">Est.</span>}
+              </div>
+            )}
             {card.owned && card.slab && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.slab.company}{card.slab.grade ? ` ${card.slab.grade}` : ''}</div>}
             {card.owned
               ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
@@ -1906,7 +1915,16 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                 </span>
               )}
             </div>
-            {d.marketPrice > 0 && <div className="text-sm font-semibold text-ink">${d.marketPrice.toFixed(2)}</div>}
+            {d.marketPrice > 0 && (
+              <div className="text-sm font-semibold text-ink">
+                ${d.marketPrice.toFixed(2)}
+                {d.priceEstimated && (
+                  <span className="ml-1.5 text-[11px] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
+                    Est.
+                  </span>
+                )}
+              </div>
+            )}
             <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
               {d.owned ? `✓ ${d.quantity > 1 ? `×${d.quantity} owned` : 'owned'}` : 'not collected'}
             </div>

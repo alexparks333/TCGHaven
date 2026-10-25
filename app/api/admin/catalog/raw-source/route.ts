@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
 import { getRiftboundRegistrySets } from '@/lib/api/registry'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
+import { parseCsvRecords } from '@/lib/csv'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +27,8 @@ const GALLERY_HEADERS = {
   'Accept': 'text/html,application/xhtml+xml',
 }
 const TCGCSV_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+  'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
   'Referer': 'https://tcgcsv.com/',
   'Accept': 'text/csv,*/*',
 }
@@ -48,25 +50,6 @@ function findCardsInNextData(obj: unknown, depth = 0): Array<Record<string, unkn
     }
   }
   return null
-}
-
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = []
-  let cur = ''
-  let inQ = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
-      else inQ = !inQ
-    } else if (ch === ',' && !inQ) {
-      fields.push(cur); cur = ''
-    } else {
-      cur += ch
-    }
-  }
-  fields.push(cur)
-  return fields
 }
 
 function normalizeNumber(raw: string): string | null {
@@ -203,14 +186,10 @@ async function fetchTcgcsv(groupId: number): Promise<{ rows: Array<{ name: strin
   try {
     const res = await fetch(`https://tcgcsv.com/tcgplayer/89/${groupId}/ProductsAndPrices.csv`, { headers: TCGCSV_HEADERS, cache: 'no-store' })
     if (!res.ok) return { rows: [], error: `tcgcsv request failed: ${res.status}` }
-    const lines = (await res.text()).split('\n')
     const rows: Array<{ name: string; number: string }> = []
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      const f = parseCSVLine(line)
-      const name = f[1] ?? ''
-      const extNumber = f[16] ?? ''
+    for (const row of parseCsvRecords(await res.text())) {
+      const name = row.name ?? ''
+      const extNumber = row.extNumber ?? ''
       if (!extNumber || !name) continue
       // Runes (R01-R06[a|b]) aren't collector numbers this tool diffs against — the local
       // catalog stores them under a synthetic id, not a plain number, so skip them here.

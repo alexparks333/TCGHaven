@@ -8,7 +8,8 @@ import { ensureSignedIn, downloadRiftbound } from '@/scripts/lib/catalog-sync.mj
 import { findNewRarities } from '@/lib/api/syncHealth'
 
 const TCGCSV_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+  'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
   'Referer': 'https://tcgcsv.com/',
 }
 

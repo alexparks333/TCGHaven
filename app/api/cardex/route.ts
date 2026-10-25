@@ -21,6 +21,7 @@ interface CatalogCard {
   hidden?: boolean
   publicCode?: string  // Riftbound only — carries the "a"/"*" variant suffix `number` lacks
   cardType?: string    // Riftbound only — the Cardex zoom shows 'Battlefield' cards landscape
+  priceSource?: string // Pokémon backup price — see scripts/lib/price-fallback.mjs
 }
 
 export async function GET(request: Request) {
@@ -59,6 +60,8 @@ export async function GET(request: Request) {
       lowPriceNMFoil:  c.lowPriceNMFoil ?? 0,
       publicCode:      c.publicCode,
       cardType:        c.cardType,
+      // '' / absent = TCGplayer's own feed; 'cardmarket' = an EUR→USD estimate (shown as Est.)
+      priceSource:     c.priceSource || undefined,
     }))
 
   return NextResponse.json(cards)
