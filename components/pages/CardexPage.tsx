@@ -491,16 +491,18 @@ function FullSlab({ slab, name, number, setName, children }: {
   const word = gradeWord(slab.company, slab.grade)
   return (
     <div
-      className="relative w-full h-full rounded-[18px] p-[5%] flex flex-col gap-[3.5%] overflow-hidden"
+      className="relative w-full h-full rounded-[18px] p-[4%] flex flex-col gap-[3%] overflow-hidden"
+      // Clear acrylic: barely-tinted see-through body, with the light caught at the thick polished
+      // edges (bright outer rim, a softer inner bevel) the way a real slab reads.
       style={{
-        background: 'linear-gradient(160deg, rgba(250,252,255,0.97) 0%, rgba(214,222,232,0.95) 40%, rgba(236,241,247,0.97) 70%, rgba(196,205,217,0.95) 100%)',
-        boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.95), inset 0 0 0 4px rgba(160,172,188,0.55), inset 0 2px 14px rgba(255,255,255,0.8), inset 0 -6px 18px rgba(90,104,124,0.25)',
+        background: 'linear-gradient(160deg, rgba(235,244,255,0.20) 0%, rgba(220,232,245,0.07) 32%, rgba(220,232,245,0.04) 68%, rgba(235,244,255,0.15) 100%)',
+        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.85), inset 0 0 0 3px rgba(225,235,248,0.22), inset 0 0 0 4px rgba(255,255,255,0.4), inset 0 0 0 9px rgba(225,235,248,0.07), inset 0 2px 12px rgba(255,255,255,0.22), inset 0 -8px 20px rgba(150,170,195,0.14)',
       }}
     >
       {/* Label */}
       <div
         className="relative shrink-0 rounded-[6px] flex items-stretch overflow-hidden"
-        style={{ height: '21%', backgroundColor: label.bg, color: label.fg, boxShadow: `inset 0 0 0 2px ${label.accent}, 0 1px 3px rgba(0,0,0,0.25)` }}
+        style={{ height: '17%', backgroundColor: label.bg, color: label.fg, boxShadow: `inset 0 0 0 2px ${label.accent}, 0 1px 3px rgba(0,0,0,0.25)` }}
       >
         <div className="flex-1 min-w-0 flex flex-col justify-center pl-3 pr-1 py-1.5 gap-[2px]">
           <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70 truncate">{setName ?? ''}</div>
@@ -523,8 +525,9 @@ function FullSlab({ slab, name, number, setName, children }: {
       </div>
       {/* Card window */}
       <div
-        className="relative flex-1 min-h-0 rounded-[8px] p-[3%] flex items-center justify-center"
-        style={{ background: 'rgba(255,255,255,0.35)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.9), inset 0 1px 8px rgba(80,94,112,0.35)' }}
+        className="relative flex-1 min-h-0 rounded-[8px] p-[2%] flex items-center justify-center"
+        // The recessed well the card sits in — a raised clear frame around it, darker inside
+        style={{ background: 'rgba(200,215,232,0.05)', boxShadow: '0 0 0 1px rgba(255,255,255,0.28), inset 0 0 0 1px rgba(255,255,255,0.55), inset 0 0 0 4px rgba(225,235,248,0.09), inset 0 2px 10px rgba(0,0,0,0.35)' }}
       >
         <div className="relative h-full rounded-[6px] overflow-hidden" style={{ aspectRatio: '5 / 7', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>
           {children}
@@ -1487,6 +1490,126 @@ function scrollThroughClose() {
   setTimeout(stopListening, CLOSE_ANIMATION_MS + 50)
 }
 
+// ── Zoom-view 3D inspect ──────────────────────────────────────────────────────
+
+// Depth of the zoomed card in px — a slab is a thick clear block, a raw card a sliver.
+const SLAB_DEPTH = 16
+const SLAB_EDGE_LAYERS = 10
+const CARD_DEPTH = 3
+const CARD_EDGE_LAYERS = 3
+
+const FLIP_MS = 650             // card-zoom-flip's duration in globals.css
+const INSPECT_DEG_PER_PX = 0.45
+const INSPECT_MAX_TILT_X = 55   // up/down is limited; left/right spins all the way round
+const SPRING_STIFFNESS = 120    // with this damping: settles fast with one small overshoot
+const SPRING_DAMPING = 14
+
+// Drag-to-rotate for the zoomed card, like inspecting a skin in Counter-Strike: press and move to
+// turn it around its center, let go and it springs back to face the camera (to the nearest full
+// turn, so a card spun past halfway keeps going round rather than unwinding). The release carries
+// the drag's speed into the spring, which is what makes it feel thrown rather than reset.
+// Everything runs on refs + direct style writes (no React renders per frame). The glint position
+// is handed to CSS via --glint-x/--glint-y/--glint-o (see .card-zoom-glint in globals.css).
+function useCardInspect() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [ready, setReady] = useState(false)
+  const rot = useRef({ x: 0, y: 0 })
+  const vel = useRef({ x: 0, y: 0 })   // deg/s
+  const drag = useRef<{ id: number; x: number; y: number; t: number } | null>(null)
+  const raf = useRef(0)
+
+  const apply = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    const { x, y } = rot.current
+    el.style.transform = x || y ? `rotateX(${x}deg) rotateY(${y}deg)` : ''
+    // Facing angle, -180..180, for where the light catches the surface
+    const yn = ((((y + 180) % 360) + 360) % 360) - 180
+    const face = Math.abs(yn) > 90 ? Math.sign(yn) * 180 - yn : yn
+    el.style.setProperty('--glint-x', `${50 - face * 1.6}%`)
+    el.style.setProperty('--glint-y', `${50 + x * 1.6}%`)
+    el.style.setProperty('--glint-o', String(Math.min(1, (Math.abs(face) + Math.abs(x)) / 35)))
+  }, [])
+
+  const stop = useCallback(() => { cancelAnimationFrame(raf.current); raf.current = 0 }, [])
+
+  const springHome = useCallback(() => {
+    stop()
+    const target = { x: 0, y: Math.round(rot.current.y / 360) * 360 }
+    let last = performance.now()
+    const step = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 1 / 30)
+      last = now
+      for (const k of ['x', 'y'] as const) {
+        const a = -SPRING_STIFFNESS * (rot.current[k] - target[k]) - SPRING_DAMPING * vel.current[k]
+        vel.current[k] += a * dt
+        rot.current[k] += vel.current[k] * dt
+      }
+      const settled = (['x', 'y'] as const).every(k => Math.abs(rot.current[k] - target[k]) < 0.05 && Math.abs(vel.current[k]) < 0.5)
+      if (settled) {
+        rot.current = { x: 0, y: 0 }
+        vel.current = { x: 0, y: 0 }
+        raf.current = 0
+      } else {
+        raf.current = requestAnimationFrame(step)
+      }
+      apply()
+    }
+    raf.current = requestAnimationFrame(step)
+  }, [apply, stop])
+
+  const reset = useCallback(() => {
+    stop()
+    drag.current = null
+    rot.current = { x: 0, y: 0 }
+    vel.current = { x: 0, y: 0 }
+    setReady(false)
+    apply()
+  }, [apply, stop])
+
+  useEffect(() => stop, [stop])
+
+  const handlers = {
+    onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+      if (!ready || drag.current || e.button !== 0) return
+      e.preventDefault()
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* pointer already gone */ }
+      stop()
+      vel.current = { x: 0, y: 0 }
+      drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }
+      e.currentTarget.classList.add('dragging')
+    },
+    onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+      const g = drag.current
+      if (!g || g.id !== e.pointerId) return
+      const now = performance.now()
+      const dx = e.clientX - g.x
+      const dy = e.clientY - g.y
+      const dt = Math.max((now - g.t) / 1000, 1 / 240)
+      const prevX = rot.current.x
+      rot.current.y += dx * INSPECT_DEG_PER_PX
+      rot.current.x = Math.max(-INSPECT_MAX_TILT_X, Math.min(INSPECT_MAX_TILT_X, prevX - dy * INSPECT_DEG_PER_PX))
+      // Smoothed so the last few moves (not one jittery sample) decide the throw on release
+      vel.current.y = vel.current.y * 0.6 + ((dx * INSPECT_DEG_PER_PX) / dt) * 0.4
+      vel.current.x = vel.current.x * 0.6 + ((rot.current.x - prevX) / dt) * 0.4
+      g.x = e.clientX; g.y = e.clientY; g.t = now
+      apply()
+    },
+    onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+      const g = drag.current
+      if (!g || g.id !== e.pointerId) return
+      drag.current = null
+      e.currentTarget.classList.remove('dragging')
+      // Held still before letting go → no throw
+      if (performance.now() - g.t > 80) vel.current = { x: 0, y: 0 }
+      springHome()
+    },
+    onPointerCancel(e: React.PointerEvent<HTMLDivElement>) { handlers.onPointerUp(e) },
+  }
+
+  return { ref, ready, setReady, reset, handlers }
+}
+
 // ── Card zoom overlay ──────────────────────────────────────────────────────────
 // Clicking a Cardex tile (without ⌘/Ctrl, which is the eBay shortcut instead) pops the card open
 // here for an isolated look: it flies from wherever it actually was in the grid to center screen
@@ -1513,12 +1636,22 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
   // immediately on close, but the fade/shrink-out still needs something to fade out.
   const lastData = useRef<ZoomCardData | null>(null)
   if (data) lastData.current = data
+  const inspect = useCardInspect()
+  const resetInspect = inspect.reset
+  const setInspectReady = inspect.setReady
+  // Grabbable once the fly-in flip (card-zoom-flip, 0.65s) has played out
+  useEffect(() => {
+    if (!visible) return
+    const t = setTimeout(() => setInspectReady(true), FLIP_MS)
+    return () => clearTimeout(t)
+  }, [visible, setInspectReady])
 
   useLayoutEffect(() => {
     if (!data || !moverRef.current) return
     const el = moverRef.current
     setVisible(false)
     setClosing(false)
+    resetInspect()
     const finalRect = el.getBoundingClientRect()
     const origin = data.originRect
     const dx = (origin.left + origin.width / 2) - (finalRect.left + finalRect.width / 2)
@@ -1536,7 +1669,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
         setVisible(true)
       })
     })
-  }, [data])
+  }, [data, resetInspect])
 
   function handleClose() {
     setClosing(true)
@@ -1584,13 +1717,37 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
           ref={moverRef}
           className="relative card-zoom-mover"
           style={d.slab
-            // A real slab is taller than the card it holds (label on top, case border all round)
-            ? { width: 'min(82vw, 330px, calc(62vh * 0.64))', aspectRatio: '0.64', perspective: '1200px' }
+            // A real slab is the card plus a case: sized so the card inside comes out about as big
+            // as a raw card's own zoom (300px), with the label and acrylic border on top of that
+            ? { width: 'min(86vw, 370px, calc(68vh * 0.64))', aspectRatio: '0.64', perspective: '1200px' }
             : d.landscape
             ? { width: 'min(90vw, 460px)', aspectRatio: '7 / 5', perspective: '1200px' }
             : { width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
+          {/* Inspect layer — drag to turn the card in 3D (useCardInspect). Its own element because
+              the flip animation below owns the flipper's transform. */}
+          <div
+            ref={inspect.ref}
+            className={cn('card-zoom-tilter relative w-full h-full select-none', inspect.ready && 'ready')}
+            {...inspect.handlers}
+          >
           <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
+            {/* Edge thickness: thin outlines stacked through the card's depth, so it has real sides
+                when turned. A slab is a thick clear block; a raw card is a sliver. */}
+            {Array.from({ length: d.slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS }, (_, i) => {
+              const depth = d.slab ? SLAB_DEPTH : CARD_DEPTH
+              const layers = d.slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS
+              const z = -depth / 2 + (depth * (i + 1)) / (layers + 1)
+              return (
+                <div
+                  key={i}
+                  className={cn('absolute inset-0 pointer-events-none', d.slab ? 'rounded-[18px]' : 'rounded-2xl')}
+                  style={d.slab
+                    ? { transform: `translateZ(${z}px)`, border: '1.5px solid rgba(220,232,246,0.3)' }
+                    : { transform: `translateZ(${z}px)`, backgroundColor: '#1b1b22' }}
+                />
+              )
+            })}
             {/* Front face — the real card. Not-owned cards stay dimmed/grayscale here too, same
                 treatment as their grid tile (grayscale(1) + darkened, not just desaturated —
                 matches card-unlock-reveal's own "before reveal" brightness elsewhere in this
@@ -1598,23 +1755,25 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
             {d.slab ? (
               <div
                 className="card-zoom-face absolute inset-0 rounded-[18px]"
-                style={{ boxShadow: `0 0 0 1px rgba(255,255,255,0.6), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)` }}
+                style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)` }}
               >
                 <FullSlab slab={d.slab} name={d.name} number={d.number} setName={d.setName}>
                   {d.imageUrl
-                    ? <img src={d.imageUrl} alt={d.name} className="w-full h-full object-cover" />
+                    ? <img src={d.imageUrl} alt={d.name} draggable={false} className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
                 </FullSlab>
+                <div className="card-zoom-glint absolute inset-0 rounded-[18px] pointer-events-none" />
               </div>
             ) : (
             <div
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
-              style={{ boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
+              style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
             >
               {d.imageUrl ? (
                 <img
                   src={d.imageUrl}
                   alt={d.name}
+                  draggable={false}
                   className="w-full h-full object-cover"
                   style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }}
                 />
@@ -1626,6 +1785,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                   #{d.number}
                 </div>
               )}
+              <div className="card-zoom-glint absolute inset-0 pointer-events-none" />
             </div>
             )}
             {/* Back face — a generic card back (no real per-game back art exists), briefly visible
@@ -1633,6 +1793,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
             <div
               className={cn('card-zoom-face card-zoom-face-back absolute inset-0 overflow-hidden flex items-center justify-center', d.slab ? 'rounded-[18px]' : 'rounded-2xl')}
               style={{
+                transform: `rotateY(180deg) translateZ(${(d.slab ? SLAB_DEPTH : CARD_DEPTH) / 2}px)`,
                 background: `radial-gradient(circle at 50% 40%, ${d.glowColor}33, #0a0a0f 70%)`,
                 boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
               }}
@@ -1641,6 +1802,7 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                 <Sparkles size={32} style={{ color: d.glowColor }} />
               </div>
             </div>
+          </div>
           </div>
 
           {visible && (

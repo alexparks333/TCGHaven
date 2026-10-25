@@ -256,6 +256,34 @@
   backface-visibility: hidden;
 }
 
+/* Drag-to-rotate layer (useCardInspect in CardexPage.tsx). Its rotation is written inline per
+   frame; it only becomes grabbable once the fly-in flip has finished. */
+.card-zoom-tilter {
+  transform-style: preserve-3d;
+  will-change: transform;
+  --glint-x: 50%;
+  --glint-y: 50%;
+  --glint-o: 0;
+}
+.card-zoom-tilter.ready {
+  cursor: grab;
+  touch-action: none;
+}
+.card-zoom-tilter.dragging {
+  cursor: grabbing;
+}
+
+/* Light catching the surface as the card turns — slides opposite the tilt and brightens with it */
+.card-zoom-glint {
+  background:
+    radial-gradient(circle at var(--glint-x) var(--glint-y), rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 28%, rgba(255,255,255,0) 55%),
+    linear-gradient(115deg, rgba(255,255,255,0) 35%, rgba(255,255,255,0.12) 48%, rgba(255,255,255,0) 60%);
+  background-size: 100% 100%, 250% 250%;
+  background-position: 0 0, var(--glint-x) var(--glint-y);
+  mix-blend-mode: soft-light;
+  opacity: var(--glint-o);
+}
+
 .card-zoom-face-back {
   transform: rotateY(180deg);
 }
