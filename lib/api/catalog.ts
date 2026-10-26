@@ -2,7 +2,8 @@ import {
   collection, doc, getDoc, getDocs, query, where, setDoc, writeBatch, Timestamp, type Firestore,
 } from 'firebase/firestore'
 import { db } from '../firebase/config'
-import type { Game } from '../types'
+import type { CatalogKey } from '../types'
+import { readCompressedSnapshot, writeCompressedSnapshot } from '@/scripts/lib/snapshot-codec.mjs'
 
 /**
  * Shared catalog helpers for the three game modules. Firestore is the source of truth
@@ -20,12 +21,34 @@ const STALE_MS = 2 * 60 * 1000   // how long a warm cache is trusted before chec
 interface CacheEntry {
   cards: Map<string, Record<string, unknown>>
   lastSyncAt: Date
+  refreshing?: Promise<void>   // a background delta pull in flight
 }
 
-const _cache = new Map<Game, CacheEntry>()
+const _cache = new Map<CatalogKey, CacheEntry>()
+// One cold load per game at a time: concurrent requests on a cold instance (Add Card fires the
+// set list and a search together) share it instead of each downloading the whole snapshot.
+const _loading = new Map<CatalogKey, Promise<CacheEntry>>()
+// Bumped by invalidateCatalogCache() so a load that started before an invalidation can't put its
+// now-outdated result back into the cache.
+const _generation = new Map<CatalogKey, number>()
 
-async function loadFromSnapshot(game: Game): Promise<Map<string, Record<string, unknown>>> {
+async function loadFromSnapshot(game: CatalogKey): Promise<CacheEntry> {
   const map = new Map<string, Record<string, unknown>>()
+  // The compressed snapshot (scripts/lib/snapshot-codec.mjs) — ~1MB instead of ~9MB for Pokémon.
+  // Then pull only the cards changed since it was taken, so a snapshot that's behind still
+  // yields the current catalog.
+  try {
+    const compressed = await readCompressedSnapshot(db, game)
+    if (compressed) {
+      for (const c of compressed.cards) map.set(c.id, c)
+      const syncedAt = new Date()
+      for (const card of await pullDeltas(game, compressed.asOf)) map.set(card.id, card)
+      return { cards: map, lastSyncAt: syncedAt }
+    }
+  } catch (err) {
+    console.warn(`Compressed snapshot for ${game} unreadable, using the original format:`, (err as Error).message)
+    map.clear()
+  }
   try {
     const chunksSnap = await getDocs(collection(db, 'catalog_snapshot', game, 'chunks'))
     for (const chunkDoc of chunksSnap.docs) {
@@ -37,41 +60,63 @@ async function loadFromSnapshot(game: Game): Promise<Map<string, Record<string, 
   } catch {
     // No snapshot yet (e.g. before the first sync has ever run) — start empty rather than throw.
   }
-  return map
+  return { cards: map, lastSyncAt: new Date() }
 }
 
-async function pullDeltas(game: Game, since: Date): Promise<Array<Record<string, unknown> & { id: string }>> {
+async function pullDeltas(game: CatalogKey, since: Date): Promise<Array<Record<string, unknown> & { id: string }>> {
   const sinceTs = Timestamp.fromDate(since)
   const q = query(collection(db, 'catalog', game, 'cards'), where('updatedAt', '>', sinceTs))
   const snap = await getDocs(q)
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
 }
 
-/** Loads the full catalog (including hidden cards) for one game, from the in-memory cache. */
-export async function loadCatalog<T>(game: Game): Promise<T[]> {
-  const now = new Date()
+/**
+ * Loads the full catalog (including hidden cards) for one game, from the in-memory cache.
+ *
+ * Cold: one shared snapshot load. Warm: answered from memory immediately — when the cache is
+ * more than STALE_MS old, the changed cards are pulled in the background (stale-while-
+ * revalidate) instead of making this request wait on a Firestore query.
+ */
+export async function loadCatalog<T>(game: CatalogKey): Promise<T[]> {
   let entry = _cache.get(game)
 
   if (!entry) {
-    const cards = await loadFromSnapshot(game)
-    entry = { cards, lastSyncAt: now }
-    _cache.set(game, entry)
+    let loading = _loading.get(game)
+    if (!loading) {
+      const gen = _generation.get(game) ?? 0
+      loading = loadFromSnapshot(game).then((loaded) => {
+        if ((_generation.get(game) ?? 0) === gen) _cache.set(game, loaded)
+        return loaded
+      }).finally(() => _loading.delete(game))
+      _loading.set(game, loading)
+    }
+    entry = await loading
     return Array.from(entry.cards.values()) as T[]
   }
 
-  if (now.getTime() - entry.lastSyncAt.getTime() > STALE_MS) {
-    const deltas = await pullDeltas(game, entry.lastSyncAt)
-    for (const card of deltas) entry.cards.set(card.id, card)
-    entry.lastSyncAt = now
+  if (!entry.refreshing && Date.now() - entry.lastSyncAt.getTime() > STALE_MS) {
+    const target = entry
+    const startedAt = new Date()
+    target.refreshing = pullDeltas(game, target.lastSyncAt)
+      .then((deltas) => {
+        for (const card of deltas) target.cards.set(card.id, card)
+        target.lastSyncAt = startedAt
+      })
+      .catch((err) => console.warn(`Catalog refresh for ${game} failed:`, (err as Error).message))
+      .finally(() => { target.refreshing = undefined })
   }
 
   return Array.from(entry.cards.values()) as T[]
 }
 
 /** Clears the in-memory cache for a game (or every game) — forces the next read to refetch. */
-export function invalidateCatalogCache(game?: Game) {
-  if (game) _cache.delete(game)
-  else _cache.clear()
+export function invalidateCatalogCache(game?: CatalogKey) {
+  const games = game ? [game] : Array.from(new Set(Array.from(_cache.keys()).concat(Array.from(_loading.keys()))))
+  for (const g of games) {
+    _cache.delete(g)
+    _loading.delete(g)
+    _generation.set(g, (_generation.get(g) ?? 0) + 1)
+  }
 }
 
 /**
@@ -80,7 +125,7 @@ export function invalidateCatalogCache(game?: Game) {
  * Cardex, Pack Analysis) should read through — hidden cards stay in Firestore (so the Admin
  * browse table can keep showing and un-hiding them) and are only ever filtered out here.
  */
-export async function loadVisibleCatalog<T extends { hidden?: boolean }>(game: Game): Promise<T[]> {
+export async function loadVisibleCatalog<T extends { hidden?: boolean }>(game: CatalogKey): Promise<T[]> {
   const all = await loadCatalog<T>(game)
   return all.filter((c) => !c.hidden)
 }
@@ -93,7 +138,8 @@ export async function loadVisibleCatalog<T extends { hidden?: boolean }>(game: G
  * portal passes its own Firestore instance (lib/firebase/staff.ts's staffDb) so the writes run as
  * the staff member's session rather than the collector app's.
  */
-export async function regenerateSnapshot(game: Game, firestore: Firestore = db): Promise<void> {
+export async function regenerateSnapshot(game: CatalogKey, firestore: Firestore = db): Promise<void> {
+  const readAt = new Date()
   const cardsSnap = await getDocs(collection(firestore, 'catalog', game, 'cards'))
   const cards = cardsSnap.docs.map((d) => ({ id: d.id, ...d.data() }))
 
@@ -111,6 +157,9 @@ export async function regenerateSnapshot(game: Game, firestore: Firestore = db):
     if (parseInt(chunkDoc.id, 10) >= chunkCount) { batch.delete(chunkDoc.ref); hasDeletes = true }
   }
   if (hasDeletes) await batch.commit()
+  // The compressed copy cold server instances actually load (the plain chunks above stay for any
+  // older deployment) — see scripts/lib/snapshot-codec.mjs.
+  await writeCompressedSnapshot(firestore, game, cards, readAt)
 
   invalidateCatalogCache(game) // this instance's own cache should reflect the change immediately too
 
@@ -129,7 +178,7 @@ export async function regenerateSnapshot(game: Game, firestore: Firestore = db):
 }
 
 /** Reads catalog_meta/{game}.lastBulkSyncAt, or null if a bulk sync has never run. */
-export async function getLastBulkSyncAt(game: Game): Promise<Date | null> {
+export async function getLastBulkSyncAt(game: CatalogKey): Promise<Date | null> {
   const snap = await getDoc(doc(db, 'catalog_meta', game))
   const ts = snap.data()?.lastBulkSyncAt as Timestamp | undefined
   return ts ? ts.toDate() : null
@@ -209,54 +258,5 @@ export function sortCatalogCards<T extends { number: string; rarity?: string }>(
   })
 }
 
-/**
- * Splits a raw search string into a name portion and an optional collector-number
- * filter. Any token that is purely digits (e.g. "138", "088") is treated as a
- * number filter; everything else is the name query.
- *
- * "Rayquaza 138"  → { nameQuery: "Rayquaza", numberFilter: "138" }
- * "Mickey Mouse"  → { nameQuery: "Mickey Mouse", numberFilter: null }
- */
-export function parseSearchQuery(raw: string): { nameQuery: string; numberFilter: string | null } {
-  const words = raw.trim().split(/\s+/)
-  const nums: string[] = []
-  const names: string[] = []
-  for (const w of words) {
-    if (/^\d+$/.test(w)) nums.push(w)
-    else names.push(w)
-  }
-  return {
-    nameQuery: names.join(' '),
-    numberFilter: nums.length > 0 ? nums[0] : null,
-  }
-}
-
 /** Normalise a collector number for comparison — strips leading zeros so "088" === "88". */
 export function normNum(n: string) { return String(parseInt(n, 10)) }
-
-/**
- * Relevance score for a card name against a search query (higher = better),
- * or -1 if any query word doesn't match the START of a name token (or tag).
- * No mid-word substring matching — "cr" will NOT match "incredible",
- * only names with a token starting with "cr" (e.g. "cratchit").
- *
- * Scoring: exact token match = 30, token prefix = 15, tag match = 20,
- * first-word-starts-name bonus = 10.
- */
-export function scoreMatch(name: string, query: string, tags?: string[]): number {
-  const tokens = name.toLowerCase().split(/[\s\-·,']+/).filter(Boolean)
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  let score = 0
-  for (const w of words) {
-    if (tokens.some((t) => t === w)) score += 30
-    else if (tokens.some((t) => t.startsWith(w))) score += 15
-    else if (tags?.some((tag) => {
-      const t = tag.toLowerCase()
-      return t === w || t.startsWith(w)
-    })) score += 20 // tag hit (e.g. "ahri" finds LeBlanc's "Deceiver" tagged ["Ahri"])
-    else return -1
-  }
-  const first = words[0]
-  if (tokens[0] === first || tokens[0]?.startsWith(first)) score += 10
-  return score
-}

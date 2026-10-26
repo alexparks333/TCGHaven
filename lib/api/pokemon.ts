@@ -1,5 +1,10 @@
-import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog } from './catalog'
+import { rankCards } from './cardSearch'
+import { searchOptionsFor } from './searchTerms'
 import { getPokemonRegistrySets } from './registry'
+import type { Language } from '../types'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../firebase/config'
 
 const BASE_URL = 'https://api.pokemontcg.io/v2'
 
@@ -10,6 +15,7 @@ const HEADERS: Record<string, string> = process.env.POKEMON_TCG_API_KEY
 export interface PokemonCard {
   id: string
   name: string
+  variantPrices?: Record<string, number>  // every edition × finish — scripts/lib/pokemon-variants.mjs
   set: { id: string; name: string }
   number: string
   rarity?: string
@@ -48,26 +54,26 @@ interface CatalogCard {
   marketPriceFoil: number
   lowPriceNM: number
   lowPriceNMFoil: number
+  variantPrices?: Record<string, number>
   hidden?: boolean
 }
 
-export async function searchPokemonCards(query: string): Promise<PokemonCard[]> {
+// `onlyId` skips ranking and returns just that catalog card (the Cardex's "add this card").
+// `language: 'ja'` searches the Japanese catalog (catalog/pokemon-jp) instead of English.
+export async function searchPokemonCards(query: string, onlyId?: string, language?: Language): Promise<PokemonCard[]> {
   if (!query.trim()) return []
-  const catalog = await loadVisibleCatalog<CatalogCard>('pokemon')
+  const japanese = language === 'ja'
+  const catalog = await loadVisibleCatalog<CatalogCard>(japanese ? 'pokemon-jp' : 'pokemon')
   if (catalog.length > 0) {
-    const { nameQuery, numberFilter } = parseSearchQuery(query)
-    if (!nameQuery) return []
-    return catalog
-      .filter((c) => !numberFilter || normNum(c.number) === normNum(numberFilter))
-      .map((c) => ({ c, score: scoreMatch(c.name, nameQuery) }))
-      .filter(({ score }) => score >= 0)
-      .sort((a, b) => b.score - a.score)
-      .map(({ c }) => ({
+    const ranked = onlyId ? catalog.filter((c) => c.id === onlyId) : rankCards(catalog, query, searchOptionsFor('pokemon'))
+    return ranked
+      .map((c) => ({
         id: c.id,
         name: c.name,
         set: { id: c.set, name: c.setName },
         number: c.number,
         rarity: c.rarity,
+        variantPrices: c.variantPrices,
         images: { small: c.imageUrl, large: c.imageUrl },
         // Carry prices from the catalog into the search result
         tcgplayer: {
@@ -78,7 +84,8 @@ export async function searchPokemonCards(query: string): Promise<PokemonCard[]> 
         },
       }))
   }
-  // Fallback: live API
+  // Fallback: live API (English only — there's no Japanese equivalent)
+  if (japanese) return []
   try {
     const res = await fetch(
       `${BASE_URL}/cards?q=name:"${encodeURIComponent(query)}*"&pageSize=20&orderBy=name`,
@@ -98,6 +105,15 @@ export async function getPokemonSets(): Promise<PokemonSet[]> {
   if (_setsCache) return _setsCache
   let sets: PokemonSet[] = []
   let liveFetchOk = false
+  // The set list the Pokémon sync saves (catalog_meta/pokemon.sets — same data as the live API,
+  // see downloadPokemon()) — one Firestore read instead of api.pokemontcg.io, which fails often
+  // enough that a cold set list took ~9s of retries. The live API is only the fallback.
+  try {
+    const stored = ((await getDoc(doc(db, 'catalog_meta', 'pokemon'))).data()?.sets ?? []) as PokemonSet[]
+    if (stored.length > 0) { sets = stored; liveFetchOk = true }
+  } catch {
+    // fall through to the live API
+  }
   // api.pokemontcg.io/v2/sets is genuinely flaky in practice — observed real-world error rates
   // as high as 50-60% of requests (500s/502s) while diagnosing why a newly-released set wasn't
   // showing up. One failed attempt (or three) shouldn't be allowed to define this whole

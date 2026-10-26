@@ -741,7 +741,7 @@ function AddCardToCollectionModal({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search ${GAME_LABELS[game]} cards…`}
+            placeholder={`Search ${GAME_LABELS[game]} cards — name, set or number`}
             className="input-field pl-9 pr-9"
           />
           {searching && (

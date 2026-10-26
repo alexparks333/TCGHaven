@@ -188,6 +188,25 @@ the old static-JSON cache had, just fed from Firestore instead of a file:
    script's own upserts) **must** stamp `updatedAt: serverTimestamp()` — a write that skips it
    is invisible to this delta mechanism forever, only fixable by a full cache invalidation.
 
+**Compressed snapshot (2026-10-26) — `scripts/lib/snapshot-codec.mjs`.** A cold load used to
+download the plain snapshot: 8.7MB/14 docs for Pokémon (12.9MB for Japanese), ~2–3s before the
+first search on every new server instance. Every snapshot writer (`syncToFirestore()`,
+`regenerateSnapshot()`) now also writes `catalog_snapshot/{game}_gz/chunks/{n}` = `{ gz: Bytes,
+asOf, chunk, of }` — gzipped, without `updatedAt` (Pokémon: 0.92MB in 4 docs). `loadCatalog()`
+reads that first (only when all chunks are from one write), then pulls cards with `updatedAt >
+asOf`, so a snapshot that's behind still yields the current catalog; it falls back to the plain
+format, which is still written for older deployments. Concurrent cold loads share one download
+(`_loading`), and a warm-but-stale cache pulls deltas in the background (stale-while-revalidate)
+instead of making a request wait. Add Card calls `GET /api/cards/search?warm=1` as it opens so a
+cold instance loads the catalog + search index while the user types.
+`scripts/backfill-compressed-snapshots.mjs` builds the compressed copies from the plain ones
+(one-off; any sync also writes them). Tests: `npm run test:snapshot`.
+
+**Pokémon set list:** `downloadPokemon()` saves the set list (same data as api.pokemontcg.io's
+`/sets` — built from the same GitHub repo) to `catalog_meta/pokemon.sets`; `getPokemonSets()` reads
+that first and only calls the live API if it's missing. That API failed 2 of 3 calls while this was
+diagnosed, and its retry loop made a cold "Loading sets…" take ~9s.
+
 `regenerateSnapshot(game)` rewrites `catalog_snapshot/{game}/chunks/*` from the current
 `catalog/{game}/cards` collection and calls `invalidateCatalogCache(game)` — called after every
 Admin Catalog write so a fresh app instance (or a stale one past the 2-minute window) sees the
@@ -299,8 +318,10 @@ anyone can browse the table read-only; only the admin sees the write controls.
 - **Whole-catalog Search** (`GET /api/admin/catalog/search?game=&q=`) — the search box at the top
   of `CatalogBrowser` that finds a card across every set for the active game at once (unlike the
   set-scoped table below it), capped at `MAX_RESULTS = 300` with a `truncated` flag the UI can
-  check. Reads the in-memory catalog the same way every other search does (`scoreMatch`/
-  `parseSearchQuery` from `lib/api/catalog.ts`) — no separate index, no writes.
+  check. Uses the same matching as every other search (`searchCatalog()` in
+  `lib/api/cardSearch.ts`, see [§12](#card-search-flow)) minus its "fewer words" fallback, and a
+  collector number in the query narrows to that number instead of just ranking it first — no
+  writes.
 
 ### Key files
 
@@ -325,8 +346,8 @@ anyone can browse the table read-only; only the admin sees the write controls.
   reappear on the next sync). All four only ever touch the registry (Firestore `registry/main`),
   never TypeScript source.
 - `lib/api/catalog.ts` — `loadCatalog`/`loadVisibleCatalog`/`regenerateSnapshot`/
-  `invalidateCatalogCache`, plus `sortCatalogCards`/`scoreMatch`/`parseSearchQuery` shared by all
-  five games' search.
+  `invalidateCatalogCache`, plus `sortCatalogCards`. Search ranking itself lives in
+  `lib/api/cardSearch.ts` ([§12](#card-search-flow)).
 - `lib/firebase/config.ts` — exports `ADMIN_UID` (from `NEXT_PUBLIC_ADMIN_UID`), used by both
   this page's `isAdmin` check and (independently, for real enforcement) `firestore.rules`.
 - `lib/firebase/verifyAdminRequest.ts` / `lib/firebase/authFetch.ts` — the server-side check and
@@ -517,14 +538,76 @@ the registry) — for Pokémon, individual missing cards can still be added via
 used to say: it reads `loadVisibleCatalog<CatalogCard>('pokemon')` (same Firestore-backed,
 in-memory-cached read every other game's search goes through, [§4](#card-catalog-system--deep-dive-firestore-backed))
 and only falls back to a live `api.pokemontcg.io` call if the catalog is completely empty (i.e.
-before any sync has ever run). When a Pokémon card is selected from the dropdown, `AddCardDialog`
-calls `getPokemonCardMarketPrice(card, isFoil)` which reads prices directly from the
-`card.tcgplayer.prices` object `searchPokemonCards()` built from the catalog doc's own
-`marketPrice`/`marketPriceFoil`. This price is stored as `purchasePrice` if Alex leaves it blank.
+before any sync has ever run). A Pokémon card with per-printing prices is **one** dropdown row
+(no separate "✦ Holo" row — only backup-priced cards without `variantPrices` still get one);
+selecting it shows the **Edition** picker (only when TCGplayer prices more than one edition) and the
+**Finish** picker (only the finishes that card actually comes in), each button showing that
+printing's price, and the card saves its `edition`/`finish` (see Editions & Finishes below). An
+**English | Japanese** toggle above the search switches to the Japanese catalog (below).
 
 The `apiId` stored on the Card is the catalog's `id` field (e.g. `"sv7-1"`). Card prices are read
 from the catalog via `app/api/prices/pokemon/route.ts`, same catalog-only shape as every other game
 (see [Price Data](#price-data) and quirk #19).
+
+### Editions & Finishes (2026-10-26) — `scripts/lib/pokemon-variants.mjs`
+
+TCGplayer prices WotC-era cards (and early Japanese sets) per **edition** — subtypes "1st Edition
+Holofoil", "Unlimited Holofoil", "1st Edition", "Unlimited" — and modern cards per **finish**
+("Normal", "Holofoil", "Reverse Holofoil"). The sync used to understand only the three finish names
+and let whichever edition row came first (usually 1st Edition) fill the regular price: Jungle
+Snorlax showed $445.14 (1st Ed) instead of $164.03 (Unlimited), ~840 cards across 11 vintage sets.
+
+- **Catalog:** every Pokémon card (EN and JP) carries `variantPrices`, `${edition}:${finish}` →
+  price (`edition` ∈ unlimited/shadowless/1st, `finish` ∈ normal/holofoil/reverse), e.g.
+  `{ "unlimited:holofoil": 164.03, "1st:holofoil": 445.14 }`. Always present (`{}` when unpriced).
+  The classic `marketPrice`/`marketPriceFoil` are the **default edition** (Unlimited when priced,
+  else the first priced edition) with the old regular/foil semantics, so every card added before
+  editions existed is priced exactly as before — just no longer at the 1st Edition price.
+- **Base Set:** Unlimited is TCGplayer group "Base Set"; 1st Edition and Shadowless are in "Base
+  Set (Shadowless)", whose "Unlimited" rows mean *Shadowless* (`EDITION_GROUPS`).
+- **Inventory card:** `edition`/`finish` (saved when picked from catalog prices) — `catalogPrice()`
+  (`lib/pricing.ts`) prices exactly that printing; a printing TCGplayer has no price for returns 0
+  (the card keeps its own stored price) rather than borrowing another printing's.
+- **Identity:** `cardIdentityKey()` keeps a non-Unlimited edition and a Reverse Holo in their own
+  Inventory rows. Cardex ownership and "Card Unlocked" ignore edition — owning an Unlimited,
+  Shadowless or 1st Edition copy all unlock the same card.
+- **History:** a day's tuple gains a 5th element (the card's `variantPrices`) only for cards whose
+  printings `[m, mf]` can't express (`historyNeedsVariants()`: another edition, or holo + reverse).
+- **eBay:** ⌘/Ctrl-click appends `1st Edition` / `Shadowless -1st` / `-1st -shadowless`
+  (Unlimited vintage), `Reverse Holo`, `Japanese` (`ebaySearchUrl()`).
+- **Tags:** `components/PrintingTags.tsx` (1st Ed / Shadowless / Reverse Holo / Japanese) beside the
+  name in Inventory, Portfolio and card detail.
+- `scripts/fix-vintage-history.mjs` — one-off: removes the inflated pre-fix history entries for the
+  affected vintage cards (dry run by default, `--apply` to write; idempotent).
+- Known upstream oddities, left as TCGplayer reports them: Team Rocket Dark Charizard's 1st Edition
+  "market" is $75 (stale — listings start at $995); Base Set 1st Edition Charizard has no market
+  price, so the existing mid-price fallback shows its one $100,000 listing.
+
+### Japanese Pokémon — its own catalog (`catalog/pokemon-jp`)
+
+Built entirely from TCGplayer's Japanese category (tcgcsv **85**, ~460 sets, ~30k singles) by
+`downloadPokemonJapanese()` + `scripts/lib/pokemon-jp.mjs` — one catalog card per TCGplayer
+product, id `jp-{productId}`, set `jp-{groupId}`, TCGplayer's English card names (so search works
+unchanged), its `_in_1000x1000` photo (none when `imageCount` is 0), prices through the same
+edition/finish logic (many early Japanese sets have 1st Edition). Japanese WotC-era singles have
+**no collector number** on TCGplayer, so a product is a single if it has a number or a rarity, or
+its name doesn't look sealed (`isSingleRow()`). Names drop TCGplayer's " - 001/172" suffixes.
+
+- **Sets:** `catalog_meta/pokemon-jp.sets` (written by the sync) — `{ code, name, releaseDate,
+  cardCount, series }`, `series` = era by release date (`jpSetMeta()`); TCGplayer stamps a batch
+  of back-catalog promo groups with one placeholder date (≥10 sets sharing a date) — those, and
+  promo-named sets, go to "Promos & Special". `GET /api/sets?game=pokemon&lang=ja`.
+- **Inventory:** still `game: 'pokemon'`, plus `language: 'ja'`. `catalogKeyFor(game, language)`
+  (`lib/types.ts`) picks the catalog; the price route, history (`price_history/pokemon-jp`), search
+  (`?lang=ja`), sets and Cardex (`/api/cardex?…&lang=ja`) all take the language.
+- **Cardex:** its own tab, "Pokémon (Japanese)" (`CatalogGame` `'pokemon-jp'` in CardexPage —
+  `baseGameOf()` maps it back to `'pokemon'` for pricing/rarity/eBay), grouped by era. The English
+  Pokémon Cardex only counts English cards and vice versa.
+- **Sync:** `app/api/sync/pokemon-jp/{route,sync}.ts`, an Admin "Pokémon (Japanese)" Sync button,
+  `npm run download-cards` (or `-- --only pokemon-jp`), and the cron — but at most once a day
+  (`minIntervalHours: 20`; TCGplayer's feed updates daily and each run reads the whole catalog).
+  No per-sync image HEAD checks (`checkImages: false`). First sync ≈30k doc writes; a repeat
+  writes only changed prices.
 
 ---
 
@@ -1188,7 +1271,7 @@ User types query
   → AddCardDialog debounces 300ms
   → fetch("/api/cards/search?game=lorcana&q=mickey")
   → app/api/cards/search/route.ts (server-side)
-  → searchCards(game, query) in lib/api/search.ts — caps the final result list at 25
+  → searchCards(game, query) in lib/api/search.ts — caps the final result list at 40
     (searchCardsUncapped() does the real per-game work; each per-game search*Cards()
     already returns matches best-first, so slicing after is a safe cut, not a re-ranking)
   → calls searchLorcanaCards(query) / searchPokemonCards(query) / searchRiftboundCards(query) /
@@ -1197,23 +1280,52 @@ User types query
     per server process (see §4 for the caching/staleness mechanics). Pokémon's own
     searchPokemonCards() only falls back to a live api.pokemontcg.io call if the catalog is
     completely empty (i.e. before the first sync has ever run) — see §7's AddCardDialog note.
-  → scoreMatch() ranks results by word-start prefix matching
-  → returns up to 25 results as JSON
+  → rankCards() (lib/api/cardSearch.ts) ranks every card, eBay-style — see below
+  → returns up to 40 results as JSON
   → AddCardDialog renders dropdown with name, image, set, price
 ```
 
 **Why server-side?** The Pokémon TCG API blocks browser CORS requests. By routing all
 searches through Next.js API routes, we avoid CORS entirely for every game.
 
-**The `scoreMatch` algorithm:** Splits both name and query into word tokens at spaces,
-hyphens, and punctuation. Each query word must match the START of at least one name token
-(not mid-word). Exact token match = 30 pts, prefix match = 15 pts, first-word bonus = 10 pts.
-Returns -1 (filtered out) if any query word has no match at any word start. This prevents
-"cr" from matching "incredible" but allows it to match "cratchit".
+**The ranking engine — `lib/api/cardSearch.ts` (2026-10-26, modeled on eBay's keyword
+search).** One engine for all five games, Add Card, Personal Collections and the Admin
+whole-catalog search. Collectors kept failing to find cards ("sabrinas" found nothing because
+the old `scoreMatch()` split "Sabrina's" at the apostrophe; "Charizard 9" hard-filtered to cards
+numbered 9, hiding the rest), so the old scorer was replaced, not patched:
 
-For Riftbound specifically, the search also checks `card.tags` — this lets a search for
-"ahri" find cards tagged `["Ahri"]` even if the card name is `"Deceiver"` (LeBlanc's
-themed card).
+- **Normalization:** case, accents and punctuation never matter. Apostrophes are *removed*
+  ("Sabrina's" → "sabrinas"), every other symbol becomes a space; ★/δ/◇/♀/♂/&/Æ are spelled out
+  (star/delta/prism/female/male/and/ae). A word may also span tokens ("hooh" = "Ho-Oh",
+  "mrmime" = "Mr. Mime", "pokeball" = "Poké Ball").
+- **Every word must match somewhere** — the name (word starts only, no mid-word matches; "cr"
+  still won't match "incredible"), Riftbound champion `tags`, or the card's "item specifics":
+  set name, set code, rarity, plus per-game extras from `lib/api/searchTerms.ts` (rarity display
+  labels — "secret rare" finds One Piece `SEC`, "signature" finds Riftbound `Star` — Riftbound
+  `cardType`, and "parallel" for One Piece `_pN` ids). A name hit always outweighs the same word
+  hitting a set/rarity.
+- **Collector numbers are soft:** any word containing a digit ("9", "009", "#9", "4/102", "TG05",
+  "OGN-007a", "OP01-024") boosts cards whose number matches (`numberKey()`: digit runs lose
+  leading zeros, anything after "/" is ignored) to the top but never hides the others. It also
+  counts if it's part of a set name or card name ("charizard 151", "porygon2"). A number-only
+  query is a lookup: it lists only the number matches.
+- **Expansion:** plurals ("charizards"); typos, but only for a word that matches nothing as
+  typed, and only the closest corrections (1 edit, 2 for 9+ letters — "charzard" → Charizard,
+  not Charmander).
+- **Best Match order:** exact full name > name prefix > fewer extra name words ("Gengar" before
+  "Gengar & Mimikyu-GX") > set/rarity hits; ties go to the more valuable card.
+- **Fallback:** if nothing matches every word, cards matching at least half the words are shown
+  (eBay's "results matching fewer words"). The Admin search turns this off.
+- **Operators:** `-word` excludes, `"quoted phrase"` must appear in the name. Finish words (holo,
+  foil, reverse, nonfoil) aren't matched; `searchCards()` uses them to put the foil (or regular)
+  row of each card first.
+- **Performance:** each card's search index is built once and cached in a `WeakMap` keyed on the
+  catalog card object, so it lives exactly as long as the catalog cache's copy of that card. That
+  costs ~19MB and ~1.2s on the first MTG search per server process (~3MB / 0.3s for Pokémon); after
+  that a search takes ~25ms for Pokémon and ~90ms for MTG. Every caller searching a game must pass
+  that game's `searchOptionsFor(game)`, since the index (extra terms included) is cached on first
+  use.
+- **Tests:** `npm run test:search` (`lib/api/cardSearch.test.mts`, offline, real card names).
 
 ---
 
@@ -1389,7 +1501,8 @@ returns (see [§7](#pokemon--data-source-schema-add-a-set-guide)) is automatical
 `CardexPage.tsx`'s `buildPokemonGroups()` derives groups from the live API's `series` field
 instead. A custom/manual Pokemon set (Admin Catalog "New Set") still shows up too — it just lands
 in its own trailing "Custom Sets" group rather than a real era, since it has no upstream `series`.
-See quirk #9 for the full reasoning.
+See quirk #9 for the full reasoning. Japanese Pokémon is its own Cardex tab, grouped by era the
+same way (§7 Japanese Pokémon).
 
 **One Piece:** Also no `cardexGroup` needed, for the same "too many sets to hand-curate" reason —
 but unlike Pokemon there's no live external `series` field either, so `buildOnePieceGroups()`
@@ -1787,9 +1900,12 @@ second, redundant verification — see [§18](#cron-driven-price-sync).
   grade?: string          // e.g. "10", "9.5", "Authentic"
   group?: string          // user-defined group label (e.g. "Alex & Brother's Cards") — drives
                           // Portfolio's hidden-groups filter feature
-  priceLocked?: boolean   // when true, "Refresh Prices" never overwrites currentPrice for this card
+  priceLocked?: boolean   // retired — the old "Manual 🔒" price; ignored, cleared when the card is edited
   rarity?: string         // from the catalog at add time; Pokemon catalog cards don't carry one
   nexus?: boolean         // Riftbound only — user-flagged Nexus Night promo-foil variant
+  edition?: 'unlimited' | 'shadowless' | '1st'   // Pokémon printing — §7 Editions & Finishes
+  finish?: 'normal' | 'holofoil' | 'reverse'
+  language?: 'en' | 'ja'  // Pokémon only — 'ja' = from the Japanese catalog (§7)
 }
 ```
 
@@ -1952,6 +2068,11 @@ TCGHaven/
 │       │                             matching (Riftbound only — One Piece needs none, §10)
 │       ├── pokemon-groups.mjs     ← fallbackPokemonSetId() — TCGplayer's older Pokémon group
 │       │                             names → set ids (§13 Pokémon)
+│       ├── pokemon-variants.mjs   ← editions × finishes: subtype classifier, variantPrices,
+│       │                             default printing (§7 Editions & Finishes) — shared with
+│       │                             lib/pricing.ts; tests: `npm run test:variants`
+│       ├── pokemon-jp.mjs         ← Japanese catalog building blocks (§7 Japanese Pokémon)
+│       ├── snapshot-codec.mjs     ← gzipped catalog snapshots (§4) — `npm run test:snapshot`
 │       └── price-fallback.mjs     ← fillPokemonPriceGaps() — gap-only backup prices from
 │                                     pokemontcg.io / tcgdex (§13 Pokémon)
 │
@@ -1988,8 +2109,13 @@ TCGHaven/
 │   │   ├── syncHealth.ts          ← findNewRarities() — diffs a sync's rarity values against
 │   │   │                             CARDEX_RARITY_ORDER, used by every game's sync.ts (§16)
 │   │   ├── catalog.ts             ← loadCatalog()/loadVisibleCatalog()/regenerateSnapshot()/
-│   │   │                             invalidateCatalogCache() + scoreMatch() — Firestore-backed
+│   │   │                             invalidateCatalogCache() — Firestore-backed
 │   │   │                             catalog read/write core shared by all 5 games (§4)
+│   │   ├── cardSearch.ts          ← searchCatalog()/rankCards() — the eBay-style search
+│   │   │                             ranking every card search uses (§12); tests in
+│   │   │                             cardSearch.test.mts (`npm run test:search`)
+│   │   ├── searchTerms.ts         ← searchOptionsFor(game) — per-game extra searchable words
+│   │   │                             (rarity labels, Riftbound cardType, One Piece "parallel")
 │   │   ├── registry.ts            ← loadSetRegistry()/saveSetRegistry() etc. — Firestore
 │   │                             registry/main doc, short in-process staleness cache (§17)
 │   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
@@ -2021,7 +2147,7 @@ TCGHaven/
 │   ├── login/page.tsx
 │   ├── signup/page.tsx            ← Invite-passcode-gated signup (§19)
 │   └── api/
-│       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS), capped at 25
+│       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS), capped at 40
 │       │                             results (§12)
 │       ├── cardex/route.ts        ← Cardex grid data (?game=&set=)
 │       ├── sets/route.ts          ← Set list for AddCardDialog autocomplete (?game=)
@@ -2046,6 +2172,8 @@ TCGHaven/
 │       │   │                         Admin-gated.
 │       │   └── raw-source/route.ts← GET — Raw Source Check diff, Riftbound-only (§5)
 │       ├── sync/
+│       │   ├── pokemon-jp/{route.ts,sync.ts} ← Japanese Pokémon catalog (§7); cron runs it at
+│       │   │                         most once a day
 │       │   ├── pokemon/{route.ts,sync.ts} ← POST — syncs Pokémon via scripts/lib/catalog-sync.mjs.
 │       │   │                         route.ts's POST checks the caller (verifyAdminRequest) then
 │       │   │                         calls sync.ts's runPokemonSync(), which has no auth check of
@@ -2073,9 +2201,8 @@ TCGHaven/
 │           ├── riftbound/route.ts ← Batch Riftbound price lookup — catalog-only
 │           ├── onepiece/route.ts  ← Batch One Piece price lookup — catalog-only, no isFoil
 │           │                         branching (no foil/non-foil duality — §10)
-│           ├── mtg/route.ts       ← Batch MTG price lookup — catalog-only, isFoil-branching
-│           │                         (same shape as lorcana/route.ts — §11)
-│           └── ebay/route.ts      ← eBay price lookup proxy
+│           └── mtg/route.ts       ← Batch MTG price lookup — catalog-only, isFoil-branching
+│                                     (same shape as lorcana/route.ts — §11)
 │
 └── components/
     ├── CardUnlockToast.tsx        ← "Card Unlocked" celebration toast, mounted once in
@@ -2313,11 +2440,16 @@ belongs in Admin Catalog — not Personal Collections, which has no way to do ei
 user. Nothing is ever written onto a user's cards: `components/PriceAutoUpdater.tsx` (mounted in
 `ClientWrapper.tsx`, read-only) fetches live prices for the user's cards from
 `app/api/prices/{game}/route.ts` (in-memory catalog lookups, zero Firestore reads) and lays them
-over each card in memory (`store.applyLivePrices` / `withLivePrice` — manual `priceLocked` cards and
-cards without an `apiId` keep their own stored price). It also loads each card's price at the
+over each card in memory (`store.applyLivePrices` / `withLivePrice` — cards without an `apiId` keep their own
+stored price). It also loads each card's price at the
 start of each Portfolio window (`store.priceBaselines`) and the update status. There is no manual
 refresh button; Portfolio shows "Prices updated {time}" or a red "Price update failed" warning
 (`lib/api/priceStatus.ts`: `catalog_meta.lastBulkSyncAt` + `sync_status`, overdue after 9h).
+
+**No per-user prices (2026-10-26).** Add Card used to offer TCG Market Price / eBay / Manual 🔒 for
+each card; that's gone — every card's price comes from the shared catalog. Old cards with
+`priceLocked` are now priced from the catalog like any other (the flag is ignored and cleared on
+edit); only cards with no catalog match (no `apiId`) keep their own stored price.
 
 **One pricing rule:** `lib/pricing.ts` `catalogPrice()` (foil choice, Riftbound foil-only variants,
 always TCGplayer market price — there's no price-mode toggle; the catalog's `lowPriceNM*` fields are
@@ -2547,3 +2679,12 @@ Parallel/Alt Art → Manga → SP/Gold within it (TCGplayer sometimes creates th
 the Alt Art — OP05-119). Synthesized (TCGplayer-only) codes keep their original row order so their
 ids never shift.
 
+### 29. Catalog map fields: write with `update()`, compare with `stableStringify()`
+`variantPrices` is a map field — the first one in the catalog. `syncToFirestore()` used to write
+changed fields with `set(…, { merge: true })`, which deep-merges maps: a printing TCGplayer
+stopped pricing would linger in the Firestore doc while the snapshot (built from the sync's own
+in-memory copy) dropped it. Existing docs are now written with `update()` (replaces each written
+field whole); only new docs use `set`. And Firestore hands map keys back in its own order, so the
+"did this field change?" check compared `JSON.stringify` output that differed only in key order —
+the second Japanese sync rewrote 1,378 unchanged cards before this was caught. The comparison now
+uses `stableStringify()` (sorted keys). A repeat sync with no price changes writes nothing.

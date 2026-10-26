@@ -53,9 +53,9 @@ export async function getSyncStatus(id: Game | string): Promise<SyncStatus | nul
   return snap.exists() ? (snap.data() as SyncStatus) : null
 }
 
-export async function getAllSyncStatuses(): Promise<Partial<Record<Game, SyncStatus>>> {
+export async function getAllSyncStatuses(): Promise<Partial<Record<string, SyncStatus>>> {
   const snap = await getDocs(collection(db, 'sync_status'))
-  const out: Partial<Record<Game, SyncStatus>> = {}
-  for (const d of snap.docs) out[d.id as Game] = d.data() as SyncStatus
+  const out: Partial<Record<string, SyncStatus>> = {}
+  for (const d of snap.docs) out[d.id] = d.data() as SyncStatus
   return out
 }

@@ -88,8 +88,12 @@ interface GameSyncState {
   result?: GameSyncResult
 }
 
-const SYNC_GAMES: { game: Game; label: string }[] = [
+// 'pokemon-jp' is the Japanese Pokémon catalog (its own sync — app/api/sync/pokemon-jp).
+type SyncJob = Game | 'pokemon-jp'
+
+const SYNC_GAMES: { game: SyncJob; label: string }[] = [
   { game: 'pokemon', label: 'Pokémon' },
+  { game: 'pokemon-jp', label: 'Pokémon (Japanese)' },
   { game: 'lorcana', label: 'Lorcana' },
   { game: 'riftbound', label: 'Riftbound' },
   { game: 'onepiece', label: 'One Piece' },
@@ -111,14 +115,14 @@ function timeAgo(iso: string): string {
 export function SyncPanel() {
   // The staff portal only renders for staff, so this is always true here; kept as a guard.
   const isAdmin = !!useStaff().member
-  const [state, setState] = useState<Record<Game, GameSyncState>>({
-    pokemon: { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' },
+  const [state, setState] = useState<Record<SyncJob, GameSyncState>>({
+    pokemon: { status: 'idle' }, 'pokemon-jp': { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' },
   })
   // Last-known status per game, including from runs this session never triggered — the
   // automatic 4x/day cron, or an admin syncing from a different browser/device. Without this, a
   // failed cron run at 3am stays invisible until someone notices the catalog looks stale days
   // later; sync_status/{game} is what makes that visible here instead.
-  const [lastStatus, setLastStatus] = useState<Partial<Record<Game, SyncStatus>>>({})
+  const [lastStatus, setLastStatus] = useState<Partial<Record<SyncJob, SyncStatus>>>({})
   const [mtgCheck, setMtgCheck] = useState<SyncStatus | null>(null)
 
   useEffect(() => {
@@ -129,7 +133,7 @@ export function SyncPanel() {
 
   if (!isAdmin) return null
 
-  async function runSync(game: Game) {
+  async function runSync(game: SyncJob) {
     setState((s) => ({ ...s, [game]: { status: 'running' } }))
     try {
       const res = await adminFetch(`/api/sync/${game}`, { method: 'POST' })
@@ -223,7 +227,7 @@ export function SyncPanel() {
                   {!!s.result.newSets?.length && (
                     <div>
                       New set{s.result.newSets.length > 1 ? 's' : ''} found: {s.result.newSets.join(', ')}
-                      {game === 'pokemon' || game === 'mtg' ? ' — already visible in the set picker automatically.' : ' — flagged for review below.'}
+                      {game === 'pokemon' || game === 'pokemon-jp' || game === 'mtg' ? ' — already visible in the set picker automatically.' : ' — flagged for review below.'}
                     </div>
                   )}
                   {!!s.result.newRarities?.length && (

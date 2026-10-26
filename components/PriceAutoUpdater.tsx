@@ -25,7 +25,8 @@ const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
 // Per-game batch price endpoints — in-memory catalog lookups server-side, no live external fetch.
 const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> = {
-  pokemon:   { url: '/api/prices/pokemon',   payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil }) },
+  // edition/finish pick the exact printing; language 'ja' prices from the Japanese catalog
+  pokemon:   { url: '/api/prices/pokemon',   payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language }) },
   lorcana:   { url: '/api/prices/lorcana',   payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil }) },
   riftbound: { url: '/api/prices/riftbound', payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil }) },
   // No isFoil — a One Piece "Parallel" print is its own catalog id, not a foil toggle of the
@@ -33,6 +34,9 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
   onepiece:  { url: '/api/prices/onepiece',  payload: (c) => ({ id: c.id, apiId: c.apiId }) },
   mtg:       { url: '/api/prices/mtg',       payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil }) },
 }
+
+// Everything that decides a card's price — a change to any of these reloads prices.
+const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}`
 
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
@@ -45,16 +49,16 @@ export function PriceAutoUpdater() {
   // What the last successful load was based on — reload only when one of these changes.
   const loadedFor = useRef<{ syncAt: number; cardsKey: string } | null>(null)
 
-  // Only cards priced from the catalog take part; manual prices / unmatched cards keep their own.
-  const cardsKey = cards.filter((c) => c.apiId && !c.priceLocked).map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
+  // Only cards priced from the catalog take part; unmatched cards keep their own.
+  const cardsKey = cards.filter((c) => c.apiId).map(priceKey).sort().join('|')
 
   const check = useCallback(async () => {
     if (!user || running.current) return
     running.current = true
     try {
       const { cards, trackedGames } = latest.current
-      const eligible = cards.filter((c) => c.apiId && !c.priceLocked)
-      const key = eligible.map((c) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}`).sort().join('|')
+      const eligible = cards.filter((c) => c.apiId)
+      const key = eligible.map(priceKey).sort().join('|')
       const prev = loadedFor.current
       const statusPromise = loadPriceStatus(trackedGames)
 
@@ -109,7 +113,7 @@ export function PriceAutoUpdater() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               mode: 'baselines',
-              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil })),
+              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language })),
             }),
           })
           if (res.ok) setPriceBaselines(await res.json())

@@ -1,7 +1,9 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
-import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog } from './catalog'
+import { rankCards } from './cardSearch'
+import { searchOptionsFor } from './searchTerms'
 import { getMtgRegistrySets } from './registry'
 
 // Scryfall set_type values that aren't real paper-collectible cards — tokens, art cards, and
@@ -148,15 +150,10 @@ export function invalidateMtgSetsCache() {
   _setsCache = null
 }
 
-export async function searchMtgCards(query: string): Promise<MtgCard[]> {
+// `onlyId` skips ranking and returns just that catalog card (the Cardex's "add this card").
+export async function searchMtgCards(query: string, onlyId?: string): Promise<MtgCard[]> {
   if (!query.trim()) return []
-  const { nameQuery, numberFilter } = parseSearchQuery(query)
-  if (!nameQuery) return []
   const cards = await loadVisibleCatalog<MtgCard>('mtg')
-  return cards
-    .filter((c) => !numberFilter || normNum(c.number) === normNum(numberFilter))
-    .map((c) => ({ c, score: scoreMatch(c.name, nameQuery) }))
-    .filter(({ score }) => score >= 0)
-    .sort((a, b) => b.score - a.score)
-    .map(({ c }) => c)
+  if (onlyId) return cards.filter((c) => c.id === onlyId)
+  return rankCards(cards, query, searchOptionsFor('mtg'))
 }

@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { GAME_COLORS, type Game, type Card } from '@/lib/types'
+import { GAME_COLORS, type Game, type Card, type Language } from '@/lib/types'
 import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
@@ -38,7 +38,15 @@ interface CatalogCard {
   priceSource?: string
 }
 
-type CatalogGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
+type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
+// The Cardex's own tabs: every game, plus Japanese Pokémon — its own catalog with its own sets
+// (catalog/pokemon-jp), shown as its own Cardex. Its cards are still Pokémon (game 'pokemon',
+// language 'ja') everywhere else in the app.
+type CatalogGame = BaseGame | 'pokemon-jp'
+const baseGameOf = (g: CatalogGame): BaseGame => (g === 'pokemon-jp' ? 'pokemon' : g)
+const CARDEX_TAB_LABELS: Record<CatalogGame, string> = {
+  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic',
+}
 
 interface SetMeta {
   name: string           // catalog set name, or '__special__' for inventory-only bucket
@@ -142,11 +150,11 @@ interface MtgSetOption {
 
 const PLACEHOLDER_SET: SetMeta = { name: '', game: 'lorcana' }
 
-const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], onepiece: [], mtg: [] }
+const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], 'pokemon-jp': [], onepiece: [], mtg: [] }
 
 // Deep-link support (e.g. clicking a "Card Unlocked" toast) — ?game=riftbound&set=Secret+Garden
 function isCatalogGame(v: string | null): v is CatalogGame {
-  return v === 'lorcana' || v === 'riftbound' || v === 'pokemon' || v === 'onepiece' || v === 'mtg'
+  return v === 'lorcana' || v === 'riftbound' || v === 'pokemon' || v === 'pokemon-jp' || v === 'onepiece' || v === 'mtg'
 }
 
 function buildGroups(
@@ -197,7 +205,9 @@ function buildGroupsByGame(registry: SetRegistryResponse): Record<'lorcana' | 'r
 // and relying on Map insertion order (first occurrence = each series' newest set, since the
 // input is newest-first) naturally produces newest-era-first groups with zero manual curation —
 // no registry entry is needed per set the way Lorcana/Riftbound need `cardexGroup`.
-function buildPokemonGroups(sets: PokemonSetOption[]): SetGroup[] {
+// Japanese Pokémon (game 'pokemon-jp') uses the same shape: its sets carry an era as `series`
+// (scripts/lib/pokemon-jp.mjs), and its promo/special sets go after the eras.
+function buildPokemonGroups(sets: PokemonSetOption[], game: 'pokemon' | 'pokemon-jp' = 'pokemon'): SetGroup[] {
   const officialSets = sets.filter((s) => !s.isCustom)
   const customSets = sets.filter((s) => s.isCustom)
 
@@ -205,10 +215,14 @@ function buildPokemonGroups(sets: PokemonSetOption[]): SetGroup[] {
   for (const s of officialSets) {
     const label = s.series || 'Other'
     if (!byGroup.has(label)) byGroup.set(label, [])
-    byGroup.get(label)!.push({ name: s.name, game: 'pokemon' })
+    byGroup.get(label)!.push({ name: s.name, game })
   }
 
   const groups: SetGroup[] = Array.from(byGroup.entries()).map(([label, sets]) => ({ label, sets }))
+  if (game === 'pokemon-jp') {
+    const promoIdx = groups.findIndex((g) => g.label === 'Promos & Special')
+    if (promoIdx >= 0) groups.push(groups.splice(promoIdx, 1)[0])
+  }
 
   // Custom sets (Admin Catalog "New Set", source: "manual") get their own trailing group rather
   // than being sorted into a real era — they aren't associated with any upstream series.
@@ -218,7 +232,7 @@ function buildPokemonGroups(sets: PokemonSetOption[]): SetGroup[] {
 
   groups.push({
     label: 'Special',
-    sets: [{ name: '__special__', game: 'pokemon', label: 'Promos & Other', fromInventory: true }],
+    sets: [{ name: '__special__', game, label: game === 'pokemon-jp' ? 'Other Japanese Cards' : 'Promos & Other', fromInventory: true }],
   })
 
   return groups
@@ -548,7 +562,7 @@ function FullSlab({ slab, name, number, setName, children }: {
 // ── Search filtering ─────────────────────────────────────────────────────────
 
 // Plain substring match against name (and collector number, so "#42" or "42" also works) —
-// deliberately simpler than AddCardDialog's scoreMatch()/word-start ranking, since this filters
+// deliberately simpler than AddCardDialog's ranked search (lib/api/cardSearch.ts), since this filters
 // a set that's already small (one set's worth of cards, or one personal collection) rather than
 // searching the whole catalog for a dropdown.
 function matchesSearch(query: string, name: string, number: string): boolean {
@@ -611,6 +625,7 @@ export default function CardexPage() {
   const [groupsByGame, setGroupsByGame] = useState(EMPTY_GROUPS_BY_GAME)
   const [registryLoading, setRegistryLoading] = useState(true)
   const [pokemonSetsLoading, setPokemonSetsLoading] = useState(true)
+  const [jpSetsLoading, setJpSetsLoading] = useState(true)
   const [onepieceSetsLoading, setOnepieceSetsLoading] = useState(true)
   const [mtgSetsLoading, setMtgSetsLoading] = useState(true)
 
@@ -637,7 +652,11 @@ export default function CardexPage() {
   // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
   // rendered while that tab is active.
   const catalogGame: CatalogGame = activeGame === 'personal' ? 'lorcana' : activeGame
-  const gameColor = activeGame === 'personal' ? '#7a5230' : GAME_COLORS[catalogGame]
+  // The real game behind the tab (Japanese Pokémon → 'pokemon') — what pricing, rarity labels,
+  // eBay search and ownership matching go by.
+  const baseGame = baseGameOf(catalogGame)
+  const japanese = catalogGame === 'pokemon-jp'
+  const gameColor = activeGame === 'personal' ? '#7a5230' : GAME_COLORS[baseGame]
 
   // Load Lorcana/Riftbound set groups from the registry once on mount.
   useEffect(() => {
@@ -680,6 +699,27 @@ export default function CardexPage() {
       })
       .catch(() => {})
       .finally(() => { if (!stale) setPokemonSetsLoading(false) })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Japanese Pokémon's set list (catalog_meta/pokemon-jp, written by its sync) — grouped by era.
+  useEffect(() => {
+    let stale = false
+    fetch('/api/sets?game=pokemon&lang=ja')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((sets: PokemonSetOption[]) => {
+        if (stale) return
+        const built = buildPokemonGroups(sets, 'pokemon-jp')
+        setGroupsByGame((g) => ({ ...g, 'pokemon-jp': built }))
+        if (!initialSetPicked.current && activeGame === 'pokemon-jp') {
+          setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          if (built[0]) setActiveCategoryByGame((c) => ({ ...c, 'pokemon-jp': built[0].label }))
+          initialSetPicked.current = true
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!stale) setJpSetsLoading(false) })
     return () => { stale = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -789,7 +829,11 @@ export default function CardexPage() {
   }, [groupsByGame, catalogGame])
 
   // Cards for the active game from inventory
-  const gameCards = useMemo(() => cards.filter((c) => c.game === catalogGame), [cards, catalogGame])
+  // English and Japanese Pokémon are separate Cardexes — each only counts its own language's cards.
+  const gameCards = useMemo(
+    () => cards.filter((c) => c.game === baseGame && (baseGame !== 'pokemon' || (c.language === 'ja') === japanese)),
+    [cards, baseGame, japanese],
+  )
 
   // Special bucket: inventory cards whose set is NOT in the known catalog sets
   const specialCards = useMemo(
@@ -816,7 +860,7 @@ export default function CardexPage() {
     let stale = false // rapid set switching: ignore responses for a set we've left
     setLoading(true)
     setCatalogCards([])
-    fetch(`/api/cardex?game=${activeGame}&set=${encodeURIComponent(activeSet.name)}`)
+    fetch(`/api/cardex?game=${baseGameOf(activeGame)}&set=${encodeURIComponent(activeSet.name)}${activeGame === 'pokemon-jp' ? '&lang=ja' : ''}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((cards: CatalogCard[]) => { if (!stale) setCatalogCards(cards) })
       .catch(() => {})
@@ -834,7 +878,7 @@ export default function CardexPage() {
   // groups to pick from, and claims initialSetPicked first so none of the mount-time fetch
   // effects above (which captured the *original* activeGame) can overwrite the choice afterward.
   useEffect(() => {
-    if (activeGame === 'personal' || trackedGames.includes(activeGame)) return
+    if (activeGame === 'personal' || trackedGames.includes(baseGameOf(activeGame))) return
     const target = trackedGames[0]
     const targetLoading = target === 'pokemon' ? pokemonSetsLoading : target === 'onepiece' ? onepieceSetsLoading : target === 'mtg' ? mtgSetsLoading : registryLoading
     if (targetLoading) return
@@ -875,10 +919,10 @@ export default function CardexPage() {
   // Inventory and Portfolio use — see lib/pricing.ts.
   const enriched = useMemo(
     () => catalogCards.map((cc) => {
-      const owned = getOwnedInfo(cc, gameCards, catalogGame)
-      return { ...cc, ...owned, marketPrice: catalogPrice(catalogGame, cc, { isFoil: owned.ownedFoil }) }
+      const owned = getOwnedInfo(cc, gameCards, baseGame)
+      return { ...cc, ...owned, marketPrice: catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
     }),
-    [catalogCards, gameCards, catalogGame],
+    [catalogCards, gameCards, baseGame],
   )
 
   // Progress is always against the full set, not the filtered search view.
@@ -895,21 +939,21 @@ export default function CardexPage() {
   // future set's new tier before this app has been updated for it) shows up as a toggle instead
   // of silently bypassing the filter.
   const rarityFilters = useMemo(() => {
-    if (!RARITY_TOGGLE_GAMES.has(catalogGame)) return []
+    if (!RARITY_TOGGLE_GAMES.has(baseGame)) return []
     const present = new Set(enriched.map((c) => c.rarity).filter((r): r is string => !!r))
     return Array.from(present).sort((a, b) => {
       const pa = CARDEX_RARITY_ORDER[a] ?? 9999
       const pb = CARDEX_RARITY_ORDER[b] ?? 9999
       return pa !== pb ? pa - pb : a.localeCompare(b)
     })
-  }, [catalogGame, enriched])
+  }, [baseGame, enriched])
 
   const filteredEnriched = useMemo(() => {
     let list = enriched
     if (searchQuery.trim()) list = list.filter((c) => matchesSearch(searchQuery, c.name, c.number))
-    if (RARITY_TOGGLE_GAMES.has(catalogGame) && hiddenRarities.size > 0) list = list.filter((c) => !hiddenRarities.has(c.rarity))
+    if (RARITY_TOGGLE_GAMES.has(baseGame) && hiddenRarities.size > 0) list = list.filter((c) => !hiddenRarities.has(c.rarity))
     return list
-  }, [enriched, searchQuery, catalogGame, hiddenRarities])
+  }, [enriched, searchQuery, baseGame, hiddenRarities])
 
   const isSpecial = activeSet.fromInventory
   const setKey = `${activeGame}:${activeSet.name}`
@@ -950,7 +994,7 @@ export default function CardexPage() {
   const categories = groupsByGame[catalogGame]
   const activeCategoryLabel = activeCategoryByGame[catalogGame] ?? categories[0]?.label
   const activeCategoryGroup = categories.find((g) => g.label === activeCategoryLabel) ?? categories[0]
-  const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading
+  const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'pokemon-jp' ? jpSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading
 
   return (
     <AuthGuard>
@@ -965,7 +1009,7 @@ export default function CardexPage() {
         {/* Game tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {/* Only the games this user tracks (added from Inventory's "+" game picker) */}
-          {[...(['pokemon', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(g)), 'personal' as const].map((game) => (
+          {[...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(baseGameOf(g))), 'personal' as const].map((game) => (
             <button
               key={game}
               onClick={() => switchGame(game)}
@@ -976,11 +1020,11 @@ export default function CardexPage() {
                   : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800',
               )}
               style={activeGame === game
-                ? { backgroundColor: (game === 'personal' ? '#7a5230' : GAME_COLORS[game]) + '33', color: game === 'personal' ? '#7a5230' : GAME_COLORS[game], border: `1px solid ${(game === 'personal' ? '#7a5230' : GAME_COLORS[game])}55` }
+                ? { backgroundColor: (game === 'personal' ? '#7a5230' : GAME_COLORS[baseGameOf(game)]) + '33', color: game === 'personal' ? '#7a5230' : GAME_COLORS[baseGameOf(game)], border: `1px solid ${(game === 'personal' ? '#7a5230' : GAME_COLORS[baseGameOf(game)])}55` }
                 : {}}
             >
               {game === 'personal' && <FolderHeart size={14} />}
-              {game === 'pokemon' ? 'Pokémon' : game === 'onepiece' ? 'One Piece' : game === 'lorcana' ? 'Lorcana' : game === 'riftbound' ? 'Riftbound' : game === 'mtg' ? 'Magic' : 'Personalized Collections'}
+              {game === 'personal' ? 'Personalized Collections' : CARDEX_TAB_LABELS[game]}
             </button>
           ))}
         </div>
@@ -1055,14 +1099,14 @@ export default function CardexPage() {
 
             {/* Rarity filter — currently wired up for Riftbound and Pokemon, see
                 RARITY_TOGGLE_GAMES above */}
-            {RARITY_TOGGLE_GAMES.has(catalogGame) && activeSet.name && rarityFilters.length > 0 && (
+            {RARITY_TOGGLE_GAMES.has(baseGame) && activeSet.name && rarityFilters.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap mb-4">
                 {rarityFilters.map((r) => {
                   const active = !hiddenRarities.has(r)
                   // One dark brown for every rarity pill (not RARITY_COLORS) — per-rarity colors
                   // read as too loud on the parchment theme.
                   const color = '#4a3520'
-                  const label = RARITY_LABELS_BY_GAME[catalogGame]?.[r] ?? r.replace('_', ' ')
+                  const label = RARITY_LABELS_BY_GAME[baseGame]?.[r] ?? r.replace('_', ' ')
                   return (
                     <button
                       key={r}
@@ -1119,7 +1163,8 @@ export default function CardexPage() {
                     onArtDone={markArtDone}
                     card={card}
                     gameColor={gameColor}
-                    game={catalogGame}
+                    game={baseGame}
+                    language={japanese ? 'ja' : undefined}
                     isHovered={hoveredId === card.id}
                     onHover={() => setHoveredId(card.id)}
                     onLeave={() => setHoveredId(null)}
@@ -1135,9 +1180,9 @@ export default function CardexPage() {
               <SpecialBucket
                 cards={specialCards}
                 gameColor={gameColor}
-                game={catalogGame}
+                game={baseGame}
                 searchQuery={searchQuery}
-                hiddenRarities={RARITY_TOGGLE_GAMES.has(catalogGame) ? hiddenRarities : EMPTY_SET}
+                hiddenRarities={RARITY_TOGGLE_GAMES.has(baseGame) ? hiddenRarities : EMPTY_SET}
                 onZoom={openZoom}
               />
             )}
@@ -1253,7 +1298,8 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
 interface CardTileProps {
   card: CatalogCard & { owned: boolean; quantity: number; slab?: SlabInfo }
   gameColor: string
-  game: CatalogGame
+  game: BaseGame
+  language?: Language   // 'ja' on the Japanese Pokémon Cardex
   isHovered: boolean
   onHover: () => void
   onLeave: () => void
@@ -1266,7 +1312,7 @@ interface CardTileProps {
 // How long a tap waits for a second one before it counts as a single tap (opening the zoom view)
 const DOUBLE_TAP_MS = 260
 
-function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone }: CardTileProps) {
+function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#7a6a55'
   // RARITY_LABELS_BY_GAME is keyed per-game (lib/utils.ts) — the same raw string can mean
   // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
@@ -1274,7 +1320,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
   const rarityLabel = RARITY_LABELS_BY_GAME[game]?.[card.rarity] ?? card.rarity
   // An owned graded copy searches eBay for that slab ("… PSA 8"), not the raw card
   const slab = card.owned ? card.slab : undefined
-  const ebayCard = { name: card.name, number: card.number, set: card.setName, game, gradingCompany: slab?.company, grade: slab?.grade }
+  const ebayCard = { name: card.name, number: card.number, set: card.setName, game, gradingCompany: slab?.company, grade: slab?.grade, language }
   const lastPointerType = useRef('')
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
@@ -1285,7 +1331,7 @@ function CardTile({ card, gameColor, game, isHovered, onHover, onLeave, onZoom, 
     onAdd({
       id: card.id, name: card.name, set: card.setCode, setName: card.setName, number: card.number,
       imageUrl: card.imageUrl, marketPrice: card.marketPrice, marketPriceFoil: card.marketPriceFoil ?? 0,
-      isFoil: false, game, rarity: card.rarity || undefined,
+      isFoil: false, game, rarity: card.rarity || undefined, ...(language && { language }),
     })
   }
 

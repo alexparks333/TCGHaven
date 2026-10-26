@@ -29,6 +29,9 @@ import { normSetName } from './text-norm.mjs'
 import { PRICE_HISTORY_COLLECTION, buildDailyEntries } from './price-history.mjs'
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { fallbackPokemonSetId } from './pokemon-groups.mjs'
+import { EDITION_GROUPS, newPriceEntry, addPriceRow, legacyFields } from './pokemon-variants.mjs'
+import { writeCompressedSnapshot } from './snapshot-codec.mjs'
+import { JP_CATEGORY, JP_CATALOG, isSingleRow, jpCard, jpSetMeta, placeholderDates } from './pokemon-jp.mjs'
 
 const firebaseApp = getApps().length === 0
   ? initializeApp({
@@ -146,7 +149,18 @@ export async function findBrokenImageUrls(candidates, { concurrency = 20, timeou
 // backup-priced cards). A fresh card without one is compared as having the default, so a field
 // set by an earlier sync gets reset when it no longer applies — while cards that never had it
 // (undefined in Firestore) aren't rewritten just to add the default.
-async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults = {} } = {}) {
+// JSON with object keys sorted — Firestore hands map fields back in its own key order, so a plain
+// JSON.stringify comparison of a map (variantPrices) would see a "change" on every sync and
+// rewrite thousands of unchanged cards each run.
+export function stableStringify(v) {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
+  if (v && typeof v === 'object' && !(typeof v.toMillis === 'function')) {
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`).join(',')}}`
+  }
+  return JSON.stringify(v)
+}
+
+async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults = {}, checkImages = true } = {}) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
   const meta = metaSnap.exists() ? metaSnap.data() : {}
@@ -173,7 +187,7 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
 
     if (!existing) {
       finalMap.set(card.id, { ...card, hidden: false })
-      writes.push({ id: card.id, data: { ...card, hidden: false, updatedAt: serverTimestamp() } })
+      writes.push({ id: card.id, data: { ...card, hidden: false, updatedAt: serverTimestamp() }, create: true })
       newCardIds.push(card.id)
       continue
     }
@@ -184,7 +198,7 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
 
     const changed = {}
     for (const key of Object.keys(card)) {
-      if (JSON.stringify(existing[key]) !== JSON.stringify(card[key])) changed[key] = card[key]
+      if (stableStringify(existing[key]) !== stableStringify(card[key])) changed[key] = card[key]
     }
     for (const [key, def] of Object.entries(fieldDefaults)) {
       if (key in card || existing[key] === undefined || existing[key] === def) continue
@@ -216,7 +230,14 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
   if (writes.length > 0) {
     for (const batchOps of chunk(writes, 450)) { // headroom under Firestore's 500-op batch cap
       const batch = writeBatch(db)
-      for (const { id, data } of batchOps) batch.set(doc(db, 'catalog', game, 'cards', id), data, { merge: true })
+      // Existing docs get update(), not set({ merge: true }): merge would deep-merge map fields
+      // (variantPrices), so a printing TCGplayer stopped pricing would linger in Firestore while
+      // the snapshot (built from finalMap) dropped it. update() replaces each written field whole.
+      for (const { id, data, create } of batchOps) {
+        const ref = doc(db, 'catalog', game, 'cards', id)
+        if (create) batch.set(ref, data, { merge: true })
+        else batch.update(ref, data)
+      }
       await batch.commit()
     }
     console.log(`   Firestore sync (${game}): ${writes.length} card(s) created/updated`)
@@ -235,7 +256,7 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
   let brokenImageIds = previouslyBrokenImageIds.filter((id) => finalMap.has(id)) // default: unchanged
   let newlyBrokenImages = []
   let newlyFixedImages = []
-  if (checkCandidates.length > 0) {
+  if (checkImages && checkCandidates.length > 0) {
     const { broken, suspicious } = await findBrokenImageUrls(checkCandidates)
     if (suspicious) {
       // Don't trust this run's result — an implausibly high failure rate means something
@@ -265,6 +286,9 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
   const newSetNames = [...new Set(finalCards.map((c) => c.setName).filter(Boolean))].filter((n) => !existingSetNames.has(n))
 
   await writeSnapshot(game, finalCards)
+  // The compressed copy the app's cold loads read (snapshot-codec.mjs). As of now: every write
+  // above is committed, and anything changed after this the app pulls as a delta.
+  await writeCompressedSnapshot(db, game, finalCards, new Date())
   await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp(), brokenImageIds }, { merge: true })
   // Today's prices into the shared price history (see price-history.mjs). Non-fatal: a failure
   // here (e.g. firestore.rules not yet deployed for price_history) must never fail the sync
@@ -419,6 +443,9 @@ export async function downloadPokemon() {
             marketPriceFoil: 0,
             lowPriceNM: 0,
             lowPriceNMFoil: 0,
+            // Always present (even empty) so a printing TCGplayer stops pricing is cleared on
+            // the next sync instead of lingering.
+            variantPrices: {},
           })
         }
       } catch (err) {
@@ -455,7 +482,18 @@ export async function downloadPokemon() {
 
     // Map tcgcsv groupId → GitHub setId
     const groupToSetId = new Map()
+    // Groups whose edition subtypes need re-reading (Base Set (Shadowless) — see
+    // pokemon-variants.mjs's EDITION_GROUPS): groupId → { unlimitedIs }.
+    const groupEditionOpts = new Map()
     for (const g of groups) {
+      const special = EDITION_GROUPS[g.name]
+      if (special) {
+        if (setIdSet.has(special.setId)) {
+          groupToSetId.set(g.groupId, special.setId)
+          groupEditionOpts.set(g.groupId, { unlimitedIs: special.unlimitedIs })
+        }
+        continue
+      }
       // Strategy 1: strip set-code prefix like "SWSH12: " / "SV07: " / "SV: "
       const stripped = g.name.replace(/^[A-Z0-9]+:\s*/i, '').trim()
       // Also try stripping known subset suffixes
@@ -490,7 +528,8 @@ export async function downloadPokemon() {
     console.log(`   Matched ${groupToSetId.size}/${groups.length} TCGPlayer groups to GitHub sets`)
 
     // Download price CSVs in parallel batches of 20
-    // priceMap key: `${setId}:${normalizedNumber}` → {normal, holofoil, reverseHolo}
+    // priceMap key: `${setId}:${normalizedNumber}` → a pokemon-variants.mjs price entry (every
+    // edition × finish TCGplayer prices for that card)
     const priceMap = new Map()
     const groupEntries = [...groupToSetId.entries()]
     const BATCH = 20
@@ -501,27 +540,14 @@ export async function downloadPokemon() {
           try {
             const csv = await fetchText(`https://tcgcsv.com/tcgplayer/3/${groupId}/ProductsAndPrices.csv`, TCGP_HEADERS)
             const rows = parseCsv(csv)
+            const editionOpts = groupEditionOpts.get(groupId) ?? {}
             for (const row of rows) {
               const extNum = row.extNumber ?? ''
               if (!extNum || !/^[A-Z0-9]*\d/.test(extNum)) continue
               const num = normCardNum(extNum)
               const key = `${setId}:${num}`
-              if (!priceMap.has(key)) priceMap.set(key, { normal: 0, holofoil: 0, reverseHolo: 0, lowNormal: 0, lowHolofoil: 0, lowReverseHolo: 0, plain: new Set() })
-              const entry = priceMap.get(key)
-              const price    = parseFloat(row.marketPrice) || parseFloat(row.midPrice) || 0
-              const lowPrice = parseFloat(row.lowPrice) || 0
-              const sub = row.subTypeName ?? ''
-              // TCGplayer files variants under the card's own number — "Charizard (Black Dot
-              // Error)" shares 004/102 with Charizard, as do stamped/staff/prerelease copies. The
-              // plain-named product is the card itself: once it has set a price, a variant row
-              // never overwrites it (whichever row came last used to win).
-              const isVariant = /\(/.test(row.name ?? '')
-              if (isVariant && entry.plain.has(sub)) continue
-              if (!isVariant && price > 0) entry.plain.add(sub)
-              if (sub === 'Normal') { if (price > 0) entry.normal = price; if (lowPrice > 0) entry.lowNormal = lowPrice }
-              else if (sub === 'Holofoil') { if (price > 0) entry.holofoil = price; if (lowPrice > 0) entry.lowHolofoil = lowPrice }
-              else if (sub === 'Reverse Holofoil') { if (price > 0) entry.reverseHolo = price; if (lowPrice > 0) entry.lowReverseHolo = lowPrice }
-              else if (!entry.normal && !entry.holofoil && price > 0) { entry.normal = price; if (lowPrice > 0) entry.lowNormal = lowPrice }
+              if (!priceMap.has(key)) priceMap.set(key, newPriceEntry())
+              addPriceRow(priceMap.get(key), row, editionOpts)
             }
           } catch {
             // silently skip groups that fail — card still appears with $0 price
@@ -538,10 +564,9 @@ export async function downloadPokemon() {
       const key = `${card.set}:${num}`
       const p = priceMap.get(key)
       if (p) {
-        card.marketPrice     = p.normal       || p.holofoil    || 0
-        card.marketPriceFoil = p.holofoil     || p.reverseHolo || 0
-        card.lowPriceNM      = p.lowNormal    || p.lowHolofoil || 0
-        card.lowPriceNMFoil  = p.lowHolofoil  || p.lowReverseHolo || 0
+        // Classic fields = the default edition (Unlimited when priced); variantPrices = every
+        // printing, for cards whose owner picked an edition/finish (lib/pricing.ts).
+        Object.assign(card, legacyFields(p))
         if (card.marketPrice > 0 || card.marketPriceFoil > 0) priced++
       }
     }
@@ -564,7 +589,80 @@ export async function downloadPokemon() {
   }
 
   all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
-  return syncToFirestore('pokemon', all, { fieldDefaults: { priceSource: '' } })
+  const result = await syncToFirestore('pokemon', all, { fieldDefaults: { priceSource: '' } })
+  // The set list (same data api.pokemontcg.io/v2/sets serves — it's built from this repo), saved
+  // so the app reads one Firestore doc instead of that API, which fails often enough (500/502)
+  // that a cold "Loading sets…" took ~9s of retries. Oldest first, like the API's orderBy.
+  const setList = sets
+    .map((s) => ({
+      id: s.id, name: s.name, series: s.series ?? '', releaseDate: s.releaseDate ?? '', total: s.total ?? 0,
+      images: { symbol: s.images?.symbol ?? '', logo: s.images?.logo ?? '' },
+    }))
+    .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+  await setDoc(doc(db, 'catalog_meta', 'pokemon'), { sets: setList }, { merge: true })
+  return result
+}
+
+// ── Pokémon (Japanese) ────────────────────────────────────────────────────────
+// Its own catalog (catalog/pokemon-jp), built entirely from TCGplayer's Japanese category — see
+// pokemon-jp.mjs. ~460 small CSVs, one per set. The set list (release dates, eras for the Cardex)
+// is written to catalog_meta/pokemon-jp.sets alongside the cards.
+export async function downloadPokemonJapanese() {
+  console.log('\n🎴 Pokemon (Japanese)...')
+  const headers = {
+    'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
+    'Referer': 'https://tcgcsv.com/',
+    'Accept': 'application/json,text/csv,*/*',
+  }
+  const groups = (await fetchJSON(`https://tcgcsv.com/tcgplayer/${JP_CATEGORY}/groups`, headers)).results ?? []
+  if (!groups.length) throw new Error('TCGplayer returned no Japanese Pokémon sets')
+  const placeholders = placeholderDates(groups)
+
+  const all = []
+  const sets = []
+  const failedGroups = []
+  for (let i = 0; i < groups.length; i += 20) {
+    await Promise.all(groups.slice(i, i + 20).map(async (g) => {
+      let csv = null
+      for (let attempt = 0; attempt < 3 && csv === null; attempt++) {
+        try {
+          csv = await fetchText(`https://tcgcsv.com/tcgplayer/${JP_CATEGORY}/${g.groupId}/ProductsAndPrices.csv`, headers)
+        } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+        }
+      }
+      if (csv === null) { failedGroups.push(g); return }
+      const byProduct = new Map()
+      for (const row of parseCsv(csv)) {
+        if (!row.productId || !isSingleRow(row)) continue
+        if (!byProduct.has(row.productId)) byProduct.set(row.productId, [])
+        byProduct.get(row.productId).push(row)
+      }
+      const cards = [...byProduct.values()].map((rows) => jpCard(g, rows))
+      all.push(...cards)
+      if (cards.length) sets.push(jpSetMeta(g, cards.length, placeholders))
+    }))
+    process.stdout.write(`   Japanese sets: ${Math.min(i + 20, groups.length)}/${groups.length}...\r`)
+  }
+  console.log(`   ${all.length} Japanese cards in ${sets.length} sets${failedGroups.length ? ` (${failedGroups.length} sets failed to download)` : ''}`)
+  // A handful of failed downloads is fine (syncToFirestore never deletes, and those sets keep their
+  // existing cards and set-list entry); a large share means TCGplayer/tcgcsv is having a bad day.
+  if (failedGroups.length > groups.length * 0.1) {
+    throw new Error(`${failedGroups.length}/${groups.length} Japanese sets failed to download — not syncing a partial catalog`)
+  }
+
+  all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
+  // No per-sync image HEAD checks: a first sync would HEAD ~30k images. TCGplayer's own
+  // imageCount column already says which products have no photo (those get no imageUrl).
+  const result = await syncToFirestore(JP_CATALOG, all, { checkImages: false })
+
+  const metaRef = doc(db, 'catalog_meta', JP_CATALOG)
+  const previous = (await getDoc(metaRef)).data()?.sets ?? []
+  const fresh = new Set(sets.map((s) => s.code))
+  const kept = previous.filter((s) => !fresh.has(s.code) && failedGroups.some((g) => `jp-${g.groupId}` === s.code))
+  const allSets = [...sets, ...kept].sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.name.localeCompare(b.name))
+  await setDoc(metaRef, { sets: allSets }, { merge: true })
+  return { ...result, sets: allSets }
 }
 
 // ── Lorcana ───────────────────────────────────────────────────────────────────

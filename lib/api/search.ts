@@ -1,10 +1,16 @@
-import type { Game } from '../types'
+import type { CatalogKey, Game, Language } from '../types'
+import { catalogKeyFor } from '../types'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../firebase/config'
 import { searchPokemonCards, getPokemonSets, getPokemonCardMarketPrice, isPokemonSetsCacheReliable } from './pokemon'
 import { searchLorcanaCards, getLorcanaSets } from './lorcana'
 import { searchRiftboundCards, getRiftboundSets } from './riftbound'
 import { searchOnePieceCards, getOnePieceSets } from './onepiece'
 import { searchMtgCards, getMtgSets, isMtgSetsCacheReliable } from './mtg'
 import { riftboundDisplayNumber, riftboundVariantFlags } from '../utils'
+import { parseQuery, buildSearchIndex, type SearchableCard } from './cardSearch'
+import { loadVisibleCatalog } from './catalog'
+import { searchOptionsFor } from './searchTerms'
 
 export interface CardSearchResult {
   id: string
@@ -20,6 +26,9 @@ export interface CardSearchResult {
   isFoil: boolean
   game: Game
   rarity?: string
+  // Pokémon: every printing's price (edition × finish) — Add Card's Edition/Finish pickers
+  variantPrices?: Record<string, number>
+  language?: Language   // 'ja' for a Japanese Pokémon card
 }
 
 export interface SetOption {
@@ -37,32 +46,58 @@ export interface SetOption {
 
 // AddCardDialog's dropdown only ever shows a handful of rows at a time (max-h-80,
 // overflow-y-auto) — a short query against a big catalog (MTG's ~100k printings, Pokemon's
-// ~20k+ cards) could otherwise score-match thousands of cards, all fully JSON-serialized and
-// shipped to the browser for a list nobody scrolls that far into. Each per-game search*Cards()
-// already returns its matches best-first (sorted by scoreMatch()'s score), so slicing here after
-// building the full result list keeps exactly the best matches.
-const MAX_SEARCH_RESULTS = 25
+// ~20k+ cards) could otherwise match thousands of cards, all fully JSON-serialized and shipped
+// to the browser for a list nobody scrolls that far into. Each per-game search*Cards() already
+// returns its matches best-first (cardSearch.ts's ranking), so slicing here after building the
+// full result list keeps exactly the best matches.
+const MAX_SEARCH_RESULTS = 40
 
-export async function searchCards(game: Game, query: string): Promise<CardSearchResult[]> {
-  const results = await searchCardsUncapped(game, query)
+export async function searchCards(game: Game, query: string, language?: Language): Promise<CardSearchResult[]> {
+  const results = preferFinish(await searchCardsUncapped(game, query, undefined, language), parseQuery(query).finish)
   return results.slice(0, MAX_SEARCH_RESULTS)
+}
+
+// "charizard holo" / "elsa foil": the finish word isn't part of any card name, so the ranking
+// ignores it — here it just puts each card's foil row ahead of its regular row (rows for one
+// card are always adjacent), and "nonfoil" does the opposite.
+function preferFinish(results: CardSearchResult[], finish: 'foil' | 'normal' | null): CardSearchResult[] {
+  if (!finish) return results
+  const want = finish === 'foil'
+  const out = [...results]
+  for (let i = 0; i + 1 < out.length; i++) {
+    if (out[i].id === out[i + 1].id && out[i].isFoil !== want && out[i + 1].isFoil === want) {
+      const t = out[i]; out[i] = out[i + 1]; out[i + 1] = t
+      i++
+    }
+  }
+  return out
 }
 
 // One exact catalog card, built the same way a search dropdown row is (variant suffixes,
 // foil-only handling, prices) — used when the Cardex opens Add Card for a card it already knows,
-// so the added card is identical to one picked from the dropdown. Searches the card's own name
-// uncapped (a name always matches itself), then keeps just that id's row(s) — a foil row too when
-// the card is priced both ways.
-export async function findCardById(game: Game, id: string, name: string): Promise<CardSearchResult[]> {
-  const results = await searchCardsUncapped(game, name)
+// so the added card is identical to one picked from the dropdown. Looks the card up by id (no
+// ranking involved) and returns its row(s) — a foil row too when the card is priced both ways.
+export async function findCardById(game: Game, id: string, name: string, language?: Language): Promise<CardSearchResult[]> {
+  const results = await searchCardsUncapped(game, name || id, id, language)
   return results.filter((r) => r.id === id)
 }
 
-async function searchCardsUncapped(game: Game, query: string): Promise<CardSearchResult[]> {
-  if (!query || query.length < 2) return []
+// Loads a game's catalog and builds its search index ahead of the first real search — Add Card
+// calls this (GET /api/cards/search?warm=1) as it opens, so a cold server instance does that work
+// while the user is still typing. Any query builds the whole index; the results are discarded.
+export async function warmCardSearch(game: Game, language?: Language): Promise<void> {
+  // Load the catalog and build its search index. Not a real search: a word that matches nothing
+  // (it used to search "warm") sends the engine through its typo pass over every name (~1s).
+  const key = catalogKeyFor(game, language)
+  buildSearchIndex(await loadVisibleCatalog<SearchableCard & { hidden?: boolean }>(key), searchOptionsFor(game))
+}
+
+async function searchCardsUncapped(game: Game, query: string, onlyId?: string, language?: Language): Promise<CardSearchResult[]> {
+  if (!query || (query.length < 2 && !onlyId)) return []
 
   if (game === 'pokemon') {
-    const cards = await searchPokemonCards(query)
+    const japanese = language === 'ja'
+    const cards = await searchPokemonCards(query, onlyId, language)
     const results: CardSearchResult[] = []
     for (const c of cards) {
       const normalPrice = getPokemonCardMarketPrice(c, false)
@@ -80,6 +115,14 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
         game: 'pokemon' as Game,
         lowPriceNM: lowNM,
         lowPriceNMFoil: lowNMFoil,
+        ...(japanese && { language: 'ja' as Language }),
+      }
+      // A card with per-printing prices is ONE row — Add Card's Edition/Finish pickers choose the
+      // printing (and its price). Only cards without them (backup-priced) keep a separate
+      // "✦ Holo" row the old way.
+      if (c.variantPrices && Object.keys(c.variantPrices).length) {
+        results.push({ ...base, variantPrices: c.variantPrices, marketPrice: normalPrice, marketPriceFoil: foilPrice, isFoil: false })
+        continue
       }
       results.push({ ...base, marketPrice: normalPrice, marketPriceFoil: foilPrice, isFoil: false })
       if (foilPrice > 0 && foilPrice !== normalPrice) {
@@ -90,7 +133,7 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
   }
 
   if (game === 'lorcana') {
-    const cards = await searchLorcanaCards(query)
+    const cards = await searchLorcanaCards(query, onlyId)
     // These rarities are always foil-only — no non-foil version exists
     const FOIL_ONLY_RARITIES = new Set(['Epic', 'Enchanted', 'Mythic', 'Special'])
     const results: CardSearchResult[] = []
@@ -129,7 +172,7 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
   }
 
   if (game === 'riftbound') {
-    const cards = await searchRiftboundCards(query)
+    const cards = await searchRiftboundCards(query, onlyId)
     const results: CardSearchResult[] = []
     for (const c of cards) {
       const isLegend = c.cardType === 'Legend'
@@ -184,7 +227,7 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
   }
 
   if (game === 'onepiece') {
-    const cards = await searchOnePieceCards(query)
+    const cards = await searchOnePieceCards(query, onlyId)
     // Every print variant (regular, Parallel, a rarer 2nd/3rd Parallel art) is already its own
     // catalog id (apitcg's own "OP01-024" / "OP01-024_p1" / "OP01-024_p2" scheme — see
     // catalog-sync.mjs's downloadOnePiece()), so unlike the other three games there's no
@@ -196,7 +239,8 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
       const suffix = !parallelMatch ? '' : parallelMatch[1] === '1' ? ' (Parallel)' : ` (Parallel ${parallelMatch[1]})`
       return {
         id: c.id,
-        name: `${c.name}${suffix}`,
+        // a few apitcg names carry stray newlines/indentation from its scrape
+        name: `${c.name.replace(/\s+/g, ' ').trim()}${suffix}`,
         set: c.set,
         setName: c.setName,
         number: c.number,
@@ -211,7 +255,7 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
   }
 
   if (game === 'mtg') {
-    const cards = await searchMtgCards(query)
+    const cards = await searchMtgCards(query, onlyId)
     const results: CardSearchResult[] = []
     for (const c of cards) {
       const regularPrice = c.marketPrice ?? 0
@@ -248,9 +292,12 @@ async function searchCardsUncapped(game: Game, query: string): Promise<CardSearc
 
 // ── Sets ────────────────────────────────────────────────────────────────────
 
-const setsCache: Partial<Record<Game, SetOption[]>> = {}
+const setsCache: Partial<Record<CatalogKey, SetOption[]>> = {}
+const JP_SETS_TTL_MS = 10 * 60 * 1000
+let jpSetsFetchedAt = 0
 
-export async function getSetsForGame(game: Game): Promise<SetOption[]> {
+export async function getSetsForGame(game: Game, language?: Language): Promise<SetOption[]> {
+  if (game === 'pokemon' && language === 'ja') return getJapanesePokemonSets()
   if (setsCache[game]) return setsCache[game]!
 
   let sets: SetOption[] = []
@@ -330,9 +377,24 @@ export async function getSetsForGame(game: Game): Promise<SetOption[]> {
   return sets
 }
 
+// Japanese Pokémon's set list, written by its sync (catalog_meta/pokemon-jp.sets — see
+// scripts/lib/pokemon-jp.mjs), newest first. `series` is the era, for the Japanese Cardex.
+async function getJapanesePokemonSets(): Promise<SetOption[]> {
+  const cached = setsCache['pokemon-jp']
+  if (cached && Date.now() - jpSetsFetchedAt < JP_SETS_TTL_MS) return cached
+  try {
+    const raw = ((await getDoc(doc(db, 'catalog_meta', 'pokemon-jp'))).data()?.sets ?? []) as SetOption[]
+    const sets = raw.map((s) => ({ code: s.code, name: s.name, releaseDate: s.releaseDate, cardCount: s.cardCount, series: s.series }))
+    if (sets.length) { setsCache['pokemon-jp'] = sets; jpSetsFetchedAt = Date.now() }
+    return sets
+  } catch {
+    return cached ?? []
+  }
+}
+
 /** Drops the cached set list for a game (or all games) — called after registering a new set
  * in the registry so it shows up without waiting for server restart. */
-export function invalidateSetsCache(game?: Game) {
+export function invalidateSetsCache(game?: CatalogKey) {
   if (game) delete setsCache[game]
-  else for (const g of Object.keys(setsCache) as Game[]) delete setsCache[g]
+  else for (const g of Object.keys(setsCache) as CatalogKey[]) delete setsCache[g]
 }

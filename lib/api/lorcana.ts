@@ -1,4 +1,6 @@
-import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog } from './catalog'
+import { rankCards } from './cardSearch'
+import { searchOptionsFor } from './searchTerms'
 import { getLorcanaRegistrySets } from './registry'
 
 const BASE = 'https://api.lorcast.com/v0'
@@ -38,30 +40,14 @@ interface LorcanaCatalogCard {
   hidden?: boolean
 }
 
-// Lorcana tiebreaker: small bonus when the first query word matches the start
-// of the card's version subtitle ("Mickey Mouse - Bob Cratchit" → "bob").
-function scoreLorcanaMatch(name: string, query: string): number {
-  const score = scoreMatch(name, query)
-  if (score < 0) return score
-  const n = name.toLowerCase()
-  const first = query.toLowerCase().split(/\s+/).filter(Boolean)[0]
-  const versionStart = n.includes(' - ') ? n.split(' - ').slice(1).join(' - ').split(/[\s\-·,']+/)[0] : null
-  if (first && versionStart && (versionStart === first || versionStart.startsWith(first))) return score + 8
-  return score
-}
-
-export async function searchLorcanaCards(query: string): Promise<LorcanaCard[]> {
+// `onlyId` skips ranking and returns just that catalog card (the Cardex's "add this card").
+export async function searchLorcanaCards(query: string, onlyId?: string): Promise<LorcanaCard[]> {
   if (!query.trim()) return []
   const catalog = await loadVisibleCatalog<LorcanaCatalogCard>('lorcana')
   if (catalog.length > 0) {
-    const { nameQuery, numberFilter } = parseSearchQuery(query)
-    if (!nameQuery) return []
-    return catalog
-      .filter((c) => !numberFilter || normNum(c.number) === normNum(numberFilter))
-      .map((c) => ({ c, score: scoreLorcanaMatch(c.name, nameQuery) }))
-      .filter(({ score }) => score >= 0)
-      .sort((a, b) => b.score - a.score)
-      .map(({ c }) => {
+    const ranked = onlyId ? catalog.filter((c) => c.id === onlyId) : rankCards(catalog, query, searchOptionsFor('lorcana'))
+    return ranked
+      .map((c) => {
         const [name, ...versionParts] = c.name.split(' - ')
         return {
           id: c.id,

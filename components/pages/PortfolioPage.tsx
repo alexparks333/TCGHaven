@@ -1,5 +1,6 @@
 'use client'
 
+import { PrintingTags } from '@/components/PrintingTags'
 import { useState, useMemo } from 'react'
 import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -519,11 +520,6 @@ export default function PortfolioPage() {
                         ×{card.quantity}
                       </span>
                     )}
-                    {card.priceLocked && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-400 border border-slate-600/50" title="Manual price — not changed by the automatic price updates">
-                        🔒
-                      </span>
-                    )}
                     {card.group && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 border border-violet-500/20">
                         {card.group}
@@ -539,6 +535,7 @@ export default function PortfolioPage() {
                         Nexus
                       </span>
                     )}
+                    <PrintingTags card={card} />
                   </div>
                   <div className="text-xs text-slate-500">
                     {card.set} {card.isFoil && '✨'}

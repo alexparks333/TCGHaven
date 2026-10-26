@@ -2,7 +2,7 @@ import { collection, documentId, getDocs, query, where } from 'firebase/firestor
 import { db } from '@/lib/firebase/config'
 import { loadCatalog } from '@/lib/api/catalog'
 import { catalogPrice } from '@/lib/pricing'
-import type { Game } from '@/lib/types'
+import { catalogKeyFor, type CatalogKey, type Edition, type Finish, type Game, type Language } from '@/lib/types'
 import { PRICE_HISTORY_COLLECTION, setKeyOf, monthDocId, tupleToFields } from '@/scripts/lib/price-history.mjs'
 
 // Server-side reader for the shared price history (format: scripts/lib/price-history.mjs).
@@ -15,6 +15,9 @@ export interface HistoryItem {
   game: Game
   apiId: string     // catalog card id
   isFoil?: boolean
+  edition?: Edition     // Pokémon printing — see lib/pricing.ts
+  finish?: Finish
+  language?: Language   // 'ja' → the Japanese catalog's history (price_history/pokemon-jp)
 }
 
 export interface PricePoint { date: string; price: number }
@@ -32,7 +35,7 @@ const setCache = new Map<string, { fromMonth: string; months: Map<string, MonthD
 // `{setKey}__{YYYY-MM}`, so a document-id range selects exactly that set's months), instead of a
 // get() per set per month — which, with history only starting recently, was ~200 lookups of
 // mostly-missing docs per request and the main reason Portfolio took so long to load.
-async function loadSetMonths(game: Game, setKey: string, fromMonth: string): Promise<Map<string, MonthDoc>> {
+async function loadSetMonths(game: CatalogKey, setKey: string, fromMonth: string): Promise<Map<string, MonthDoc>> {
   const cacheKey = `${game}/${setKey}`
   const hit = setCache.get(cacheKey)
   if (hit && hit.fromMonth <= fromMonth && Date.now() - hit.fetchedAt < SET_TTL_MS) return hit.months
@@ -65,14 +68,16 @@ export async function loadPriceSeries(
   const fromMonth = from.toISOString().slice(0, 7)
   const fromMs = from.getTime()
 
-  const byGame = new Map<Game, HistoryItem[]>()
+  // Grouped by catalog (Japanese Pokémon has its own catalog and history), priced by game.
+  const byCatalog = new Map<CatalogKey, { game: Game; items: HistoryItem[] }>()
   for (const it of items) {
-    if (!byGame.has(it.game)) byGame.set(it.game, [])
-    byGame.get(it.game)!.push(it)
+    const key = catalogKeyFor(it.game, it.language)
+    if (!byCatalog.has(key)) byCatalog.set(key, { game: it.game, items: [] })
+    byCatalog.get(key)!.items.push(it)
   }
 
-  for (const [game, gameItems] of Array.from(byGame.entries())) {
-    const catalog = await loadCatalog<{ id: string; rarity?: string; publicCode?: string; set?: string; setCode?: string; setName?: string }>(game)
+  for (const [catalogKey, { game, items: gameItems }] of Array.from(byCatalog.entries())) {
+    const catalog = await loadCatalog<{ id: string; rarity?: string; publicCode?: string; set?: string; setCode?: string; setName?: string }>(catalogKey)
     const byId = new Map(catalog.map((c) => [c.id, c]))
 
     // Group by set so each month doc is loaded once per set.
@@ -86,14 +91,14 @@ export async function loadPriceSeries(
     }
 
     await Promise.all(Array.from(bySet.entries()).map(async ([setKey, rows]) => {
-      const monthDocs = await loadSetMonths(game, setKey, fromMonth)
+      const monthDocs = await loadSetMonths(catalogKey, setKey, fromMonth)
       for (const monthDoc of Array.from(monthDocs.values())) {
         for (const entry of Array.from(monthDoc.values())) {
           if (new Date(entry.t).getTime() < fromMs) continue
           for (const { item, rarity, publicCode } of rows) {
             const tuple = entry.p[item.apiId]
             if (!tuple) continue
-            const price = catalogPrice(game, { ...tupleToFields(tuple), rarity, publicCode }, { isFoil: item.isFoil })
+            const price = catalogPrice(game, { ...tupleToFields(tuple), rarity, publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish })
             if (price <= 0) continue
             if (!result.has(item.key)) result.set(item.key, [])
             result.get(item.key)!.push({ date: entry.t, price })

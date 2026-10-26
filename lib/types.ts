@@ -23,10 +23,29 @@ export interface Card {
   gradingCompany?: string // e.g. "PSA", "CGC", "BGS", "SGC"
   grade?: string          // e.g. "10", "9.5", "Authentic"
   group?: string          // user-defined group label, e.g. "Alex & Brother's Cards"
-  priceLocked?: boolean   // when true, the automatic price updates never overwrite currentPrice
+  priceLocked?: boolean   // retired (2026-10-26): every card is priced from the shared catalog;
+                          // old cards may still carry it, nothing reads it
   rarity?: string         // from the catalog at add time; Pokemon catalog cards don't carry one
   nexus?: boolean         // Riftbound only — user-flagged Nexus Night promo-foil variant
+  // Pokémon printing (scripts/lib/pokemon-variants.mjs). Absent on cards added before editions
+  // existed — those are priced by the catalog's default printing, exactly as before.
+  edition?: Edition       // 'unlimited' | 'shadowless' | '1st'
+  finish?: Finish         // 'normal' | 'holofoil' | 'reverse'
+  language?: Language     // Pokémon only — absent = English; 'ja' = from the Japanese catalog
 }
+
+// Which catalog a card lives in. Japanese Pokémon is its own catalog (catalog/pokemon-jp, built
+// from TCGplayer's Japanese category — different sets, numbers, names and prices from English),
+// but its cards are still `game: 'pokemon'` in a user's inventory, with `language: 'ja'`.
+export type CatalogKey = Game | 'pokemon-jp'
+
+export function catalogKeyFor(game: Game, language?: Language | string): CatalogKey {
+  return game === 'pokemon' && language === 'ja' ? 'pokemon-jp' : game
+}
+
+export type Edition = 'unlimited' | 'shadowless' | '1st'
+export type Finish = 'normal' | 'holofoil' | 'reverse'
+export type Language = 'en' | 'ja'
 
 export interface SoldCard extends Card {
   soldDate: string    // YYYY-MM-DD

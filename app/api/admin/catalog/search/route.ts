@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
-import { loadCatalog, scoreMatch, parseSearchQuery, normNum } from '@/lib/api/catalog'
+import { loadCatalog } from '@/lib/api/catalog'
+import { searchCatalog, parseQuery } from '@/lib/api/cardSearch'
+import { searchOptionsFor } from '@/lib/api/searchTerms'
 import { getSetsForGame } from '@/lib/api/search'
 import type { Game } from '@/lib/types'
 
@@ -40,8 +42,6 @@ export async function GET(request: Request) {
   }
   if (q.trim().length < 2) return NextResponse.json([])
 
-  const { nameQuery, numberFilter } = parseSearchQuery(q)
-  if (!nameQuery) return NextResponse.json([])
 
   const [catalog, sets] = await Promise.all([
     loadCatalog<CatalogCard>(game),
@@ -59,11 +59,13 @@ export async function GET(request: Request) {
     return releaseDateBySetKey.get(key) || ''
   }
 
-  const matches = catalog
-    .filter((c) => !numberFilter || normNum(c.number) === normNum(numberFilter))
-    .map((c) => ({ c, score: scoreMatch(c.name, nameQuery, c.tags) }))
-    .filter(({ score }) => score >= 0)
-    .map(({ c }) => ({
+  // Same matching as the collector app's search (cardSearch.ts), minus its "fewer words" fallback —
+  // this is a precise admin lookup. A collector number in the query narrows to that number here
+  // rather than just ranking it first, since results are re-sorted chronologically below.
+  let hits = searchCatalog(catalog, q, { ...searchOptionsFor(game), relax: false })
+  if (parseQuery(q).numbers.length && hits.some((h) => h.numberMatch)) hits = hits.filter((h) => h.numberMatch)
+  const matches = hits
+    .map(({ card: c }) => ({
       id: c.id,
       name: c.name,
       number: c.number,

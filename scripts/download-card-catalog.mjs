@@ -54,17 +54,27 @@ loadEnvLocal()
 // Imported dynamically, AFTER env vars are loaded above — scripts/lib/catalog-sync.mjs reads
 // process.env.NEXT_PUBLIC_FIREBASE_* at module-load time (initializeApp() runs at import time),
 // so a static top-level `import` here would run before loadEnvLocal() ever executed.
-const { ensureSignedIn, downloadPokemon, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG } =
+const { ensureSignedIn, downloadPokemon, downloadPokemonJapanese, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG } =
   await import('./lib/catalog-sync.mjs')
 
 const includeMtg = process.argv.includes('--include-mtg')
+// `--only pokemon,pokemon-jp` syncs just those catalogs.
+const onlyArg = process.argv.find((a, i) => process.argv[i - 1] === '--only' || a.startsWith('--only='))
+const only = onlyArg ? new Set(onlyArg.replace(/^--only=/, '').split(',').map((s) => s.trim())) : null
+const JOBS = {
+  pokemon: downloadPokemon,
+  'pokemon-jp': downloadPokemonJapanese,
+  lorcana: downloadLorcana,
+  riftbound: downloadRiftbound,
+  onepiece: downloadOnePiece,
+  mtg: downloadMTG,
+}
+const selected = Object.keys(JOBS).filter((g) => (only ? only.has(g) : g !== 'mtg' || includeMtg))
 
-console.log('📦 Downloading card catalogs...')
-if (!includeMtg) console.log('   (skipping MTG — pass --include-mtg to include it; see "MTG Integration.md")')
+console.log(`📦 Downloading card catalogs: ${selected.join(', ')}`)
+if (!only && !includeMtg) console.log('   (skipping MTG — pass --include-mtg to include it; see "MTG Integration.md")')
 await ensureSignedIn()
-const [pokemon, lorcana, riftbound, onepiece, mtg] = await Promise.all([
-  downloadPokemon(), downloadLorcana(), downloadRiftbound(), downloadOnePiece(),
-  includeMtg ? downloadMTG() : Promise.resolve({ setNames: [] }),
-])
+const results = await Promise.all(selected.map((g) => JOBS[g]()))
 
-console.log(`\n✅ Done. ${pokemon.setNames.length} Pokemon sets, ${lorcana.setNames.length} Lorcana sets, ${riftbound.setNames.length} Riftbound sets, ${onepiece.setNames.length} One Piece sets${includeMtg ? `, ${mtg.setNames.length} MTG sets` : ' (MTG skipped)'}.`)
+console.log(`\n✅ Done. ${selected.map((g, i) => `${results[i].setNames.length} ${g} sets`).join(', ')}.`)
+process.exit(0)

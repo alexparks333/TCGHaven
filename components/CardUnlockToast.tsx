@@ -39,7 +39,9 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
     // set picker matches sets by. A set the catalog doesn't recognize (not yet synced, or a
     // manually-typed custom card) falls back to that game's inventory-only Special bucket —
     // handled on the receiving end, in CardexPage's deep-link effect.
-    router.push(`/cardex?game=${card.game}&set=${encodeURIComponent(card.set)}`)
+    // Japanese Pokémon has its own Cardex tab
+    const tab = card.game === 'pokemon' && card.language === 'ja' ? 'pokemon-jp' : card.game
+    router.push(`/cardex?game=${tab}&set=${encodeURIComponent(card.set)}`)
     startExit()
   }
 

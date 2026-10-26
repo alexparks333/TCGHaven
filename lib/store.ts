@@ -73,10 +73,10 @@ export interface PriceBaseline {
   first: number | null   // earliest recorded price
 }
 
-// A catalog-priced card shows the live catalog price; a manually priced card (priceLocked) or one
-// with no catalog match (no apiId) keeps its own stored price.
+// A catalog-priced card shows the live catalog price; one with no catalog match (no apiId) keeps
+// its own stored price. (The old per-card "Manual 🔒" price is retired and ignored.)
 export function withLivePrice(card: Card, prices: Record<string, number>): Card {
-  if (!card.apiId || card.priceLocked) return card
+  if (!card.apiId) return card
   const live = prices[card.id]
   return live != null && live !== card.currentPrice ? { ...card, currentPrice: live } : card
 }

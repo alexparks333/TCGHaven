@@ -77,10 +77,10 @@ export default function PortfolioAnalyticsPage() {
 
   // Daily portfolio value comes from the shared, catalog-level price history, summed on the
   // server (app/api/price-history, mode "portfolio") — only one number per day is downloaded.
-  // Cards without a catalog price (manual / unmatched) count at their own price every day.
-  const catalogCards = useMemo(() => filteredCards.filter((c) => c.apiId && !c.priceLocked), [filteredCards])
+  // Cards without a catalog match count at their own price every day.
+  const catalogCards = useMemo(() => filteredCards.filter((c) => c.apiId), [filteredCards])
   const fixedValue = useMemo(
-    () => filteredCards.filter((c) => !c.apiId || c.priceLocked).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
+    () => filteredCards.filter((c) => !c.apiId).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
     [filteredCards],
   )
   const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}`).join('|')
@@ -98,7 +98,7 @@ export default function PortfolioAnalyticsPage() {
         mode: 'portfolio',
         days: 730,
         items: catalogCards.map((c) => ({
-          key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil,
+          key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language,
           qty: c.quantity, fallback: c.currentPrice ?? c.purchasePrice,
         })),
       }),

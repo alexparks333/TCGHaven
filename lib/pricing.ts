@@ -1,5 +1,6 @@
-import type { Game } from './types'
+import type { Game, Edition, Finish } from './types'
 import { riftboundVariantFlags } from './utils'
+import { variantPrice } from '@/scripts/lib/pokemon-variants.mjs'
 
 // THE one rule for "what is this card worth" — used by every place a price is shown, so the
 // Cardex, Personalized Collections, Inventory and Portfolio can never disagree:
@@ -18,13 +19,31 @@ export interface CatalogPriceFields {
   lowPriceNMFoil?: number
   rarity?: string
   publicCode?: string
+  variantPrices?: Record<string, number>  // Pokémon: every edition × finish — scripts/lib/pokemon-variants.mjs
+}
+
+export interface PrintingChoice {
+  isFoil?: boolean
+  edition?: Edition   // Pokémon only — Unlimited / Shadowless / 1st Edition
+  finish?: Finish     // Pokémon only — Normal / Holo / Reverse Holo
 }
 
 export function catalogPrice(
   game: Game,
   card: CatalogPriceFields,
-  { isFoil = false }: { isFoil?: boolean } = {},
+  { isFoil = false, edition, finish }: PrintingChoice = {},
 ): number {
+  // A Pokémon card added with an explicit edition/finish is priced as exactly that printing.
+  if (game === 'pokemon' && (edition || finish)) {
+    const vp = card.variantPrices
+    if (vp && Object.keys(vp).length) return variantPrice(vp, { edition, finish, isFoil })
+    // No per-printing prices (a backup-priced card, or a history day from before editions were
+    // tracked): another edition's price is unknown — never fall back to a different printing's —
+    // and Unlimited is the classic pair below.
+    if (edition && edition !== 'unlimited') return 0
+    if (finish) isFoil = finish !== 'normal'
+  }
+
   // One Piece has no foil duality (a Parallel print is its own catalog card) and no
   // lowest-listing field — just the one market price.
   if (game === 'onepiece') return card.marketPrice ?? 0

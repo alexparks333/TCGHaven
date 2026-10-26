@@ -1,4 +1,6 @@
-import { loadVisibleCatalog, scoreMatch, parseSearchQuery, normNum } from './catalog'
+import { loadVisibleCatalog } from './catalog'
+import { rankCards } from './cardSearch'
+import { searchOptionsFor } from './searchTerms'
 import { getRiftboundRegistrySets } from './registry'
 
 export interface RiftboundCard {
@@ -49,15 +51,10 @@ export async function getRiftboundSets(): Promise<RiftboundSet[]> {
   }))
 }
 
-export async function searchRiftboundCards(query: string): Promise<RiftboundCard[]> {
+// `onlyId` skips ranking and returns just that catalog card (the Cardex's "add this card").
+export async function searchRiftboundCards(query: string, onlyId?: string): Promise<RiftboundCard[]> {
   if (!query.trim()) return []
-  const { nameQuery, numberFilter } = parseSearchQuery(query)
-  if (!nameQuery) return []
   const cards = await loadVisibleCatalog<RiftboundCard>('riftbound')
-  return cards
-    .filter((c) => !numberFilter || normNum(c.number) === normNum(numberFilter))
-    .map((c) => ({ c, score: scoreMatch(c.name, nameQuery, c.tags) }))
-    .filter(({ score }) => score >= 0)
-    .sort((a, b) => b.score - a.score)
-    .map(({ c }) => c)
+  if (onlyId) return cards.filter((c) => c.id === onlyId)
+  return rankCards(cards, query, searchOptionsFor('riftbound'))
 }

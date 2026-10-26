@@ -1,5 +1,6 @@
 'use client'
 
+import { PrintingTags } from '@/components/PrintingTags'
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
@@ -22,21 +23,21 @@ export default function CardDetailPage() {
   const card = cards.find((c) => c.id === cardId)
 
   // This card's daily prices from the shared, catalog-level history (app/api/price-history) —
-  // the same history every owner of this card sees. Manually priced / unmatched cards have none.
+  // the same history every owner of this card sees. Unmatched cards have none.
   const [history, setHistory] = useState<{ date: string; price: number }[]>([])
   useEffect(() => {
-    if (!card?.apiId || card.priceLocked) { setHistory([]); return }
+    if (!card?.apiId) { setHistory([]); return }
     let stale = false
     authFetch('/api/price-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil }] }),
+      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil, edition: card.edition, finish: card.finish, language: card.language }] }),
     })
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
       .catch(() => {})
     return () => { stale = true }
-  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.priceLocked])
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil])
 
   const chartData = useMemo(() => {
     if (!card) return []
@@ -107,6 +108,7 @@ export default function CardDetailPage() {
                   Nexus
                 </span>
               )}
+              <PrintingTags card={card} className="w-fit" />
               <div className="text-sm text-slate-400">{card.set}</div>
               <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
               <div className="text-xs text-slate-500">{conditionLabel(card)}</div>

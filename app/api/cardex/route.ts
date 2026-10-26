@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sortCatalogCards, loadVisibleCatalog } from '@/lib/api/catalog'
 import { riftboundDisplayNumber } from '@/lib/utils'
-import type { Game } from '@/lib/types'
+import { catalogKeyFor, type Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +35,8 @@ export async function GET(request: Request) {
   // loadVisibleCatalog already excludes hidden cards (via the in-memory cache described in
   // lib/api/catalog.ts) — a hide/unhide shows up here as soon as this instance's cache next
   // syncs, no rebuild needed.
-  const visible = await loadVisibleCatalog<CatalogCard>(game as Game)
+  // lang=ja → the Japanese Pokémon catalog (its own Cardex)
+  const visible = await loadVisibleCatalog<CatalogCard>(catalogKeyFor(game as Game, searchParams.get('lang') ?? undefined))
 
   // sortCatalogCards runs first, on the untouched bare `number` — sort order must stay numeric
   // (Alt Art/Overnumbered/Signature variants share their base card's bare number; see

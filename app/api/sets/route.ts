@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSetsForGame } from '@/lib/api/search'
-import type { Game } from '@/lib/types'
+import type { Game, Language } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic'
 // and the module-level cache belongs on the server.
 export async function GET(req: NextRequest) {
   const game = (req.nextUrl.searchParams.get('game') ?? 'pokemon') as Game
-  const sets = await getSetsForGame(game)
+  const language = req.nextUrl.searchParams.get('lang') === 'ja' ? 'ja' as Language : undefined
+  const sets = await getSetsForGame(game, language)
   // no-store: this route already owns its own freshness (getSetsForGame's in-memory cache,
   // invalidated correctly on writes) — the browser's own HTTP cache has no business adding a
   // second, un-invalidatable layer on top of that. Without this, an open tab can keep serving a

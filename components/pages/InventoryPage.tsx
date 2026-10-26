@@ -1,5 +1,6 @@
 'use client'
 
+import { PrintingTags } from '@/components/PrintingTags'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -656,12 +657,12 @@ export default function InventoryPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-semibold text-ink text-[15px] md:text-sm">{rep.name}</span>
-                          {rep.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                           {rep.nexus && (
                             <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                               Nexus
                             </span>
                           )}
+                          <PrintingTags card={rep} />
                         </div>
                         {/* Phone: "Set ✨ · $X ea", matching Portfolio's rows; desktop keeps number + foil (set/qty have columns) */}
                         <div className="md:hidden text-xs text-slate-500">
@@ -837,7 +838,6 @@ export default function InventoryPage() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-semibold text-ink text-[15px] md:text-sm">{card.name}</span>
-                        {card.priceLocked && <span title="Manual price — locked" className="text-[11px]">🔒</span>}
                         {card.gradingCompany && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                             {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
@@ -848,6 +848,7 @@ export default function InventoryPage() {
                             Nexus
                           </span>
                         )}
+                        <PrintingTags card={card} />
                       </div>
                       <div className="md:hidden text-xs text-slate-500">
                         {card.set} {card.isFoil && '✨'}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}

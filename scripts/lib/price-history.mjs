@@ -3,14 +3,18 @@
 //
 // Storage: price_history/{game}/months/{setKey}__{YYYY-MM}
 //   { game, setKey, month: 'YYYY-MM', days: { 'DD': '<json string>' } }
-// where each day's string is JSON { t: ISO time of the sync, p: { [catalogId]: [m, mf, l, lf] } }
-// — marketPrice, marketPriceFoil, lowPriceNM, lowPriceNMFoil. Grouping by set + month keeps every
+// where each day's string is JSON { t: ISO time of the sync, p: { [catalogId]: [m, mf, l, lf, v?] } }
+// — marketPrice, marketPriceFoil, lowPriceNM, lowPriceNMFoil, and for the few Pokémon cards whose
+// printings those four can't express (other editions, or a holo + reverse holo pair) their full
+// `variantPrices` (pokemon-variants.mjs) as a 5th element. Grouping by set + month keeps every
 // doc comfortably under Firestore's 1MiB limit (a ~350-card set × 31 days ≈ 0.5MB) while a
 // whole month of a set is one read. Each sync overwrites its own day, so a day holds that day's
 // latest prices.
 //
 // Plain .mjs (not TS) so both the Node sync script (scripts/lib/catalog-sync.mjs) and the Next.js
 // server (lib/api/priceHistory.ts) share this exact format.
+
+import { historyNeedsVariants } from './pokemon-variants.mjs'
 
 export const PRICE_HISTORY_COLLECTION = 'price_history'
 
@@ -28,14 +32,18 @@ export function monthDocId(setKey, month) {
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
-// [m, mf, l, lf] for a catalog card, or null if it has no price at all (nothing worth storing).
+// [m, mf, l, lf(, v)] for a catalog card, or null if it has no price at all (nothing worth storing).
 export function priceTuple(card) {
   const t = [round2(card.marketPrice), round2(card.marketPriceFoil), round2(card.lowPriceNM), round2(card.lowPriceNMFoil)]
-  return t.some((v) => v > 0) ? t : null
+  if (!t.some((v) => v > 0)) return null
+  if (historyNeedsVariants(card.variantPrices)) t.push(card.variantPrices)
+  return t
 }
 
 export function tupleToFields(t) {
-  return { marketPrice: t[0] || 0, marketPriceFoil: t[1] || 0, lowPriceNM: t[2] || 0, lowPriceNMFoil: t[3] || 0 }
+  const fields = { marketPrice: t[0] || 0, marketPriceFoil: t[1] || 0, lowPriceNM: t[2] || 0, lowPriceNMFoil: t[3] || 0 }
+  if (t[4] && typeof t[4] === 'object') fields.variantPrices = t[4]
+  return fields
 }
 
 // Groups a game's catalog cards into this sync's month-doc writes:

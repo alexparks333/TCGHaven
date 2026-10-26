@@ -3,6 +3,7 @@ import { runPokemonSync as syncPokemon } from '../../sync/pokemon/sync'
 import { runLorcanaSync as syncLorcana } from '../../sync/lorcana/sync'
 import { runRiftboundSync as syncRiftbound } from '../../sync/riftbound/sync'
 import { runOnePieceSync as syncOnePiece } from '../../sync/onepiece/sync'
+import { runPokemonJapaneseSync } from '../../sync/pokemon-jp/sync'
 import { checkForNewMtgSets } from '@/lib/api/mtg'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 
@@ -64,11 +65,13 @@ async function runSync() {
   // CLAUDE.md's file map always claimed this called "all four" sync routes, but the code only
   // ever called three. Fixed here; MTG's full sync stays out on purpose (see comment above) —
   // only its lightweight new-set check runs here.
-  const [pokemon, lorcana, riftbound, onepiece, mtgCheck] = await Promise.allSettled([
+  const [pokemon, lorcana, riftbound, onepiece, pokemonJp, mtgCheck] = await Promise.allSettled([
     syncPokemon(),
     syncLorcana(),
     syncRiftbound(),
     syncOnePiece(),
+    // Once a day is enough (TCGplayer's feed updates daily) — see its sync.ts.
+    runPokemonJapaneseSync({ minIntervalHours: 20 }),
     runMtgCheck(),
   ])
 
@@ -86,6 +89,7 @@ async function runSync() {
     summarize('lorcana', lorcana),
     summarize('riftbound', riftbound),
     summarize('onepiece', onepiece),
+    summarize('pokemon-jp', pokemonJp),
     mtgCheck.status === 'fulfilled' ? mtgCheck.value : { game: 'mtg-new-set-check', ok: false, error: String(mtgCheck.reason) },
   ])
 }

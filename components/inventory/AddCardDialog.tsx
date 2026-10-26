@@ -1,17 +1,18 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Search, Loader2, ChevronDown, AlertCircle, TrendingUp } from 'lucide-react'
+import { X, Search, Loader2, ChevronDown, AlertCircle } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
-import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition } from '@/lib/types'
+import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
+import {
+  EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
+} from '@/scripts/lib/pokemon-variants.mjs'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { authFetch } from '@/lib/firebase/authFetch'
 
-type MarketSource = 'catalog' | 'ebay' | 'manual'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
@@ -58,6 +59,9 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced
 }
 
+// Shorter names for the game tabs, so the row fits without scrolling at today's game count.
+const GAME_TAB_LABELS: Partial<Record<Game, string>> = { mtg: 'Magic' }
+
 export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveError }: Props) {
   const { addCard, updateCard, deleteCard, cards: allCards, pushCardUnlock, trackedGames } = useStore()
   const { user } = useAuth()
@@ -72,19 +76,13 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   // Catalog market prices for the selected card
   const existingMarket = editCard?.currentPrice ?? 0
   const [marketPrices, setMarketPrices] = useState({ regular: existingMarket, foil: existingMarket })
+  // Pokémon: the selected catalog card's price for every printing (edition × finish) — drives the
+  // Edition / Finish pickers and the shown market price. null = no per-printing prices (other
+  // games, manual entry, a backup-priced card): the classic Foil checkbox applies instead.
+  const [variantPrices, setVariantPrices] = useState<Record<string, number> | null>(null)
+  const japanese = form.game === 'pokemon' && form.language === 'ja'
+  const langParam = japanese ? '&lang=ja' : ''
 
-  // Market price source — default to Manual (pre-filled) when editing a locked card
-  const [marketSource, setMarketSource] = useState<MarketSource>(editCard?.priceLocked ? 'manual' : 'catalog')
-  const [manualMarketPrice, setManualMarketPrice] = useState(
-    editCard?.priceLocked && existingMarket > 0 ? String(existingMarket) : ''
-  )
-  const [ebayData, setEbayData] = useState<{
-    avgPrice: number | null
-    count: number
-    source: 'sold_5_days' | 'active_listings'
-    error?: string
-  } | null>(null)
-  const [ebayLoading, setEbayLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [dialogError, setDialogError] = useState<string | null>(null)
 
@@ -102,6 +100,12 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   const [setsLoading, setSetsLoading] = useState(false)
 
   const cardResultsRef = useRef<HTMLDivElement>(null)
+  // Keep the selected game's tab in view when the game row scrolls (e.g. editing a card from a
+  // game further along the row).
+  const activeGameRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    activeGameRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [form.game])
   const setDropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const cardJustSelectedRef = useRef(false)
@@ -123,13 +127,35 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   useEffect(() => {
     if (!prefill) return
     let stale = false
-    fetch(`/api/cards/search?game=${prefill.game}&id=${encodeURIComponent(prefill.id)}&q=${encodeURIComponent(prefill.name)}`)
+    fetch(`/api/cards/search?game=${prefill.game}&id=${encodeURIComponent(prefill.id)}&q=${encodeURIComponent(prefill.name)}${prefill.language === 'ja' ? '&lang=ja' : ''}`)
       .then((r) => (r.ok ? r.json() : []))
       .catch(() => [])
       .then((rows: CardSearchResult[]) => {
         if (stale) return
         selectCard(rows.find((r) => !r.isFoil) ?? rows[0] ?? prefill)
         setPrefillLoading(false)
+      })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Editing a Pokémon card picked from the catalog: load its printing prices so the Edition /
+  // Finish pickers work (the form itself keeps the card's saved values).
+  useEffect(() => {
+    if (!editCard || editCard.game !== 'pokemon' || !editCard.apiId) return
+    let stale = false
+    fetch(`/api/cards/search?game=pokemon&id=${encodeURIComponent(editCard.apiId)}&q=${encodeURIComponent(editCard.name)}${editCard.language === 'ja' ? '&lang=ja' : ''}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => [])
+      .then((rows: CardSearchResult[]) => {
+        const vp = rows[0]?.variantPrices
+        if (stale || !vp || !Object.keys(vp).length) return
+        setVariantPrices(vp)
+        // A card saved before editions existed: show the printing it's actually priced as.
+        setForm((f) => {
+          const edition = (f.edition ?? defaultEdition(vp)) as Edition
+          return { ...f, edition, finish: (f.finish ?? defaultFinish(vp, edition, f.isFoil)) as Finish }
+        })
       })
     return () => { stale = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,13 +170,20 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
     let stale = false
     setSetsLoading(true)
     setAllSets([])
-    fetch(`/api/sets?game=${form.game}`)
+    fetch(`/api/sets?game=${form.game}${langParam}`)
       .then((r) => (r.ok ? r.json() : []))
       .then((sets: SetOption[]) => { if (!stale) setAllSets(sets) })
       .catch(() => {})
       .finally(() => { if (!stale) setSetsLoading(false) })
     return () => { stale = true }
-  }, [form.game])
+  }, [form.game, langParam])
+
+  // Warm the server's catalog + search index for this game/language as soon as the dialog opens
+  // (or the game/language changes) — on a cold server instance that's the slow part of the first
+  // search, and this way it happens while the user is still typing.
+  useEffect(() => {
+    fetch(`/api/cards/search?game=${form.game}&warm=1${langParam}`).catch(() => {})
+  }, [form.game, langParam])
 
   // Live card search — goes through Next.js API route so external fetches are server-side
   useEffect(() => {
@@ -160,7 +193,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
     }
     let stale = false // ignore out-of-order responses from older queries
     setCardSearching(true)
-    fetch(`/api/cards/search?game=${form.game}&q=${encodeURIComponent(debouncedCardQuery)}`)
+    fetch(`/api/cards/search?game=${form.game}&q=${encodeURIComponent(debouncedCardQuery)}${langParam}`)
       .then((r) => r.json())
       .then((results: CardSearchResult[]) => {
         if (stale) return
@@ -174,7 +207,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       .catch(() => {})
       .finally(() => { if (!stale) setCardSearching(false) })
     return () => { stale = true }
-  }, [debouncedCardQuery, form.game])
+  }, [debouncedCardQuery, form.game, langParam])
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -197,8 +230,11 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
     const regular = rawRegular > 0 ? rawRegular : 0
     const foil = rawFoil > 0 ? rawFoil : regular
     setMarketPrices({ regular, foil })
-    setMarketSource('catalog')
-    setEbayData(null)
+    const vp = result.variantPrices && Object.keys(result.variantPrices).length ? result.variantPrices : null
+    setVariantPrices(vp)
+    // Start on the printing most copies are (Unlimited; Normal unless the card only comes foil).
+    const edition = vp ? (defaultEdition(vp) as Edition) : undefined
+    const finish = vp && edition ? (defaultFinish(vp, edition, result.isFoil) as Finish) : undefined
     setForm((f) => ({
       ...f,
       name: result.name,
@@ -207,28 +243,33 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       number: result.number,
       imageUrl: result.imageUrl,
       apiId: result.id,
-      isFoil: result.isFoil,
+      isFoil: finish ? finish !== 'normal' : result.isFoil,
       rarity: result.rarity,
+      edition,
+      finish,
     }))
     setCardQuery(result.name)
     setSetQuery(result.setName)
     setShowCardResults(false)
   }
 
-  async function switchMarketSource(source: MarketSource) {
-    setMarketSource(source)
-    if (source === 'ebay' && form.name && !ebayData) {
-      setEbayLoading(true)
-      try {
-        const res = await authFetch(`/api/prices/ebay?q=${encodeURIComponent(form.name)}&game=${form.game}`)
-        const data = await res.json()
-        setEbayData(res.ok ? data : { avgPrice: null, count: 0, source: 'sold_5_days', error: data.error })
-      } catch {
-        setEbayData({ avgPrice: null, count: 0, source: 'sold_5_days', error: 'Network error' })
-      } finally {
-        setEbayLoading(false)
-      }
-    }
+  // The catalog's price for what's selected: the exact printing when per-printing prices exist,
+  // else the classic regular / foil pair. Same rule as lib/pricing.ts.
+  function catalogMarketPrice(): number {
+    if (variantPrices) return variantPrice(variantPrices, { edition: form.edition, finish: form.finish, isFoil: form.isFoil })
+    return form.isFoil ? (marketPrices.foil > 0 ? marketPrices.foil : marketPrices.regular) : marketPrices.regular
+  }
+
+  function pickEdition(edition: Edition) {
+    if (!variantPrices) return
+    setForm((f) => {
+      const finish = (f.finish && finishesOf(variantPrices, edition).includes(f.finish) ? f.finish : defaultFinish(variantPrices, edition, f.isFoil)) as Finish
+      return { ...f, edition, finish, isFoil: finish !== 'normal' }
+    })
+  }
+
+  function pickFinish(finish: Finish) {
+    setForm((f) => ({ ...f, finish, isFoil: finish !== 'normal' }))
   }
 
   function selectSet(set: SetOption) {
@@ -247,14 +288,10 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
     setDialogError(null)
     setIsSaving(true)
 
-    // Resolve the market price from whichever source is active
-    const catalogPrice = form.isFoil
-      ? (marketPrices.foil > 0 ? marketPrices.foil : marketPrices.regular)
-      : marketPrices.regular
-    const resolvedMarketPrice =
-      marketSource === 'manual' ? (parseFloat(manualMarketPrice) || 0) :
-      marketSource === 'ebay' ? (ebayData?.avgPrice ?? catalogPrice) :
-      catalogPrice > 0 ? catalogPrice : (editCard?.currentPrice ?? 0)
+    // Prices come from the shared catalog only. A card with no catalog price (a custom card, or one
+    // TCGplayer doesn't price) keeps the price it already had.
+    const catalogPrice = catalogMarketPrice()
+    const resolvedMarketPrice = catalogPrice > 0 ? catalogPrice : (editCard?.currentPrice ?? 0)
 
     const now = new Date().toISOString()
     const cardData: Omit<Card, 'id'> = {
@@ -276,7 +313,12 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       ...(form.group && { group: form.group }),
       ...(form.rarity && { rarity: form.rarity }),
       ...(form.game === 'riftbound' && { nexus: !!form.nexus }),
-      priceLocked: marketSource === 'manual' && resolvedMarketPrice > 0,
+      // Pokémon printing — only when it was picked from catalog prices (lib/pricing.ts)
+      ...(form.game === 'pokemon' && variantPrices && form.edition && { edition: form.edition }),
+      ...(form.game === 'pokemon' && variantPrices && form.finish && { finish: form.finish }),
+      ...(japanese && { language: 'ja' as Language }),
+      // Editing a card from before the manual-price lock was retired clears it.
+      ...(editCard?.priceLocked && { priceLocked: false }),
       ...(resolvedMarketPrice > 0 && {
         currentPrice: resolvedMarketPrice,
         priceUpdatedAt: editCard?.priceUpdatedAt ?? now,
@@ -333,12 +375,10 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   }
 
   // When game tab changes, reset form but keep condition/date/quantity
-  function changeGame(game: Game) {
-    setForm((f) => ({ ...emptyForm(game), condition: f.condition, quantity: f.quantity, purchaseDate: f.purchaseDate, group: f.group }))
+  function changeGame(game: Game, language?: Language) {
+    setForm((f) => ({ ...emptyForm(game), condition: f.condition, quantity: f.quantity, purchaseDate: f.purchaseDate, group: f.group, ...(language === 'ja' && { language }) }))
+    setVariantPrices(null)
     setMarketPrices({ regular: 0, foil: 0 })
-    setMarketSource('catalog')
-    setEbayData(null)
-    setManualMarketPrice('')
     setCardQuery('')
     setSetQuery('')
     setCardResults([])
@@ -347,7 +387,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
-      <div className="add-card-panel relative w-full max-w-lg card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div className="add-card-panel relative w-full max-w-[592px] card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -359,23 +399,25 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-          {/* Game tabs — hidden when there's only one game to pick from */}
+          {/* Game tabs — hidden when there's only one game to pick from. One row that scrolls
+              sideways once there are more games than fit, rather than wrapping or squeezing. */}
           {gameChoices.length > 1 && <div>
             <label className="field-label">Game</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1">
               {gameChoices.map((g) => (
                 <button
                   key={g}
+                  ref={form.game === g ? activeGameRef : undefined}
                   type="button"
                   onClick={() => changeGame(g)}
                   className={cn(
-                    'flex-1 py-2 rounded-xl text-sm font-medium transition-all border',
+                    'flex-auto shrink-0 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all border',
                     form.game === g
                       ? 'bg-violet-600 border-violet-500 text-white'
                       : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
                   )}
                 >
-                  {GAME_LABELS[g]}
+                  {GAME_TAB_LABELS[g] ?? GAME_LABELS[g]}
                 </button>
               ))}
             </div>
@@ -383,12 +425,33 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
           {/* Card search */}
           <div ref={cardResultsRef} className="relative">
-            <label className="field-label">
-              Search {GAME_LABELS[form.game]} Cards
-              {form.game === 'riftbound' && (
-                <span className="text-slate-600 font-normal normal-case ml-1">(loads on first search)</span>
+            <div className="flex items-end justify-between gap-2">
+              <label className="field-label">
+                Search {japanese ? 'Japanese ' : ''}{GAME_LABELS[form.game]} Cards
+                {form.game === 'riftbound' && (
+                  <span className="text-slate-600 font-normal normal-case ml-1">(loads on first search)</span>
+                )}
+              </label>
+              {/* English and Japanese Pokémon are separate catalogs — different sets, numbers and
+                  prices — so the search targets one at a time. */}
+              {form.game === 'pokemon' && !editCard && (
+                <div className="flex mb-1.5 rounded-lg border border-slate-800 overflow-hidden text-[11px] font-medium flex-shrink-0">
+                  {([['en', 'English'], ['ja', 'Japanese']] as const).map(([lang, label]) => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => { if ((lang === 'ja') !== japanese) changeGame('pokemon', lang) }}
+                      className={cn(
+                        'px-2.5 py-1 transition-colors',
+                        (lang === 'ja') === japanese ? 'bg-violet-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-ink',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               )}
-            </label>
+            </div>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
               <input
@@ -403,7 +466,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                     selectCard(cardResults[0])
                   }
                 }}
-                placeholder={`Type a card name…`}
+                placeholder={japanese ? 'Name, set or number — e.g. Umbreon ex 217' : 'Name, set or number — e.g. Charizard 4'}
                 className="input-field pl-9 pr-9"
               />
               {(cardSearching || prefillLoading) && (
@@ -556,84 +619,17 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             </div>
           </div>
 
-          {/* Market Price source */}
+          {/* Market price — always the shared catalog's (TCGplayer market), never chosen per user */}
           <div>
             <label className="field-label">Market Price</label>
-            <div className="flex gap-1.5 mb-2">
-              {([
-                ['catalog', 'TCG Market Price'],
-                ['ebay', 'eBay'],
-                ['manual', 'Manual 🔒'],
-              ] as [MarketSource, string][]).map(([src, label]) => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => switchMarketSource(src)}
-                  className={cn(
-                    'flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all border',
-                    marketSource === src
-                      ? 'bg-violet-600 border-violet-500 text-white'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
-                  )}
-                >
-                  {src === 'ebay' && ebayLoading ? (
-                    <span className="flex items-center justify-center gap-1">
-                      <Loader2 size={11} className="animate-spin" /> Loading…
-                    </span>
-                  ) : label}
-                </button>
-              ))}
+            <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm">
+              {(() => {
+                const mp = catalogMarketPrice()
+                return mp > 0
+                  ? <span className="text-emerald-600 font-medium">${mp.toFixed(2)}</span>
+                  : <span className="text-slate-500">No market price yet</span>
+              })()}
             </div>
-
-            {/* Source-specific display */}
-            {marketSource === 'catalog' && (
-              <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm">
-                {(() => {
-                  const mp = form.isFoil && marketPrices.foil > 0 ? marketPrices.foil : marketPrices.regular
-                  return mp > 0
-                    ? <span className="text-emerald-600 font-medium">${mp.toFixed(2)}</span>
-                    : <span className="text-slate-500">No catalog price available</span>
-                })()}
-              </div>
-            )}
-
-            {marketSource === 'ebay' && !ebayLoading && ebayData && (
-              <div className={cn(
-                'px-3 py-2 rounded-lg flex items-start gap-2 text-xs border',
-                ebayData.error
-                  ? 'bg-red-100/50 text-red-600 border-red-200'
-                  : 'bg-emerald-100/50 text-emerald-600 border-emerald-200'
-              )}>
-                {ebayData.error
-                  ? <><AlertCircle size={13} className="mt-0.5 flex-shrink-0" /><span>{ebayData.error}</span></>
-                  : <><TrendingUp size={13} className="mt-0.5 flex-shrink-0" /><span>
-                      {ebayData.avgPrice !== null
-                        ? `$${ebayData.avgPrice.toFixed(2)} avg · ${ebayData.count} ${ebayData.source === 'sold_5_days' ? 'sold in last 5 days' : 'active listings'}`
-                        : 'No recent eBay data found'}
-                    </span></>
-                }
-              </div>
-            )}
-
-            {marketSource === 'ebay' && !ebayLoading && !ebayData && (
-              <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-500">
-                Click eBay above to fetch recent sold prices
-              </div>
-            )}
-
-            {marketSource === 'manual' && (
-              <input
-                type="text"
-                inputMode="decimal"
-                value={manualMarketPrice}
-                onChange={(e) => {
-                  const v = e.target.value
-                  if (v === '' || /^\d*\.?\d*$/.test(v)) setManualMarketPrice(v)
-                }}
-                placeholder="e.g. 6.87"
-                className="input-field"
-              />
-            )}
           </div>
 
           {/* How Much Paid + Date */}
@@ -663,7 +659,55 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           {/* Foil toggle — not shown for One Piece: a "Parallel" print is its own catalog entry
               (selected from the search dropdown, e.g. "Shanks (Parallel)"), not a foil toggle of
               the same card the way Pokemon holo/Lorcana foil/Riftbound foil are. */}
-          {form.game !== 'onepiece' && (
+          {/* Pokémon cards picked from the catalog choose an exact printing instead: Edition (only
+              for cards TCGplayer prices in more than one — WotC-era sets, early Japanese sets) and
+              Finish (Normal / Holo / Reverse Holo — only the ones that card actually comes in). */}
+          {form.game === 'pokemon' && variantPrices && (() => {
+            const vp = variantPrices
+            const edition = (form.edition ?? defaultEdition(vp)) as Edition
+            const editions = editionsOf(vp) as Edition[]
+            const finishes = finishesOf(vp, edition) as Finish[]
+            const priceTag = (p: number) => p > 0 ? <span className="block text-[10px] opacity-80">${p.toFixed(2)}</span> : <span className="block text-[10px] opacity-60">no price</span>
+            const chip = (active: boolean) => cn(
+              'flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all border leading-tight',
+              active ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
+            )
+            return (
+              <div className="space-y-3">
+                {editions.length > 1 && (
+                  <div>
+                    <label className="field-label">Edition</label>
+                    <div className="flex gap-1.5">
+                      {editions.map((e) => {
+                        const f = form.finish && finishesOf(vp, e).includes(form.finish) ? form.finish : undefined
+                        return (
+                          <button key={e} type="button" onClick={() => pickEdition(e)} className={chip(e === edition)}>
+                            {EDITION_LABELS[e]}
+                            {priceTag(variantPrice(vp, { edition: e, finish: f }))}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                {finishes.length > 1 && (
+                  <div>
+                    <label className="field-label">Finish</label>
+                    <div className="flex gap-1.5">
+                      {finishes.map((f) => (
+                        <button key={f} type="button" onClick={() => pickFinish(f)} className={chip(f === form.finish)}>
+                          {FINISH_LABELS[f]}
+                          {priceTag(variantPrice(vp, { edition, finish: f }))}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {form.game !== 'onepiece' && !(form.game === 'pokemon' && variantPrices) && (
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -784,6 +828,19 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>
                 {form.game === 'riftbound' && form.nexus && (
                   <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-600 border border-blue-300 rounded px-1 py-0.5">Nexus</span>
+                )}
+                {form.game === 'pokemon' && (japanese || (variantPrices && (form.edition !== 'unlimited' || form.finish === 'reverse'))) && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {variantPrices && form.edition && form.edition !== 'unlimited' && (
+                      <span className="text-[10px] font-bold uppercase text-amber-700 border border-amber-400 rounded px-1 py-0.5">{EDITION_LABELS[form.edition]}</span>
+                    )}
+                    {variantPrices && form.finish === 'reverse' && (
+                      <span className="text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">Reverse Holo</span>
+                    )}
+                    {japanese && (
+                      <span className="text-[10px] font-bold uppercase text-red-600 border border-red-300 rounded px-1 py-0.5">Japanese</span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

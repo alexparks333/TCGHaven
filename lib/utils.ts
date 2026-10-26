@@ -41,8 +41,13 @@ export function cardIdentityKey(card: Card): string {
   // into the same Inventory row — without this, grading info silently got dropped and both
   // landed in one group with a shared "Total Paid"/"Market" sum and only one grade badge shown.
   const gradePart = card.gradingCompany ? `::${card.gradingCompany}::${card.grade ?? ''}` : ''
-  if (card.apiId) return `${card.game}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${gradePart}${nexusPart}`
-  return `${card.game}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${gradePart}${nexusPart}`
+  // Same for a Pokémon card's printing: a 1st Edition and an Unlimited copy (or a Holo and a
+  // Reverse Holo) are priced differently and never share a row. Cards from before editions
+  // existed have neither field and keep their old key.
+  const printingPart = card.edition || card.finish ? `::${card.edition ?? ''}::${card.finish ?? ''}` : ''
+  const langPart = card.language === 'ja' ? '::ja' : ''
+  if (card.apiId) return `${card.game}${langPart}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${printingPart}${gradePart}${nexusPart}`
+  return `${card.game}${langPart}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${printingPart}${gradePart}${nexusPart}`
 }
 
 // Whether `newCard` is the first copy of this exact print the user has ever added — same
@@ -52,8 +57,11 @@ export function cardIdentityKey(card: Card): string {
 // "Card Unlocked" celebration in AddCardDialog — deliberately checked against inventory alone,
 // not the catalog, so it also fires for a manually-typed card in an unregistered/Special set.
 export function isFirstCopyOfCard(newCard: Card, existingCards: Card[]): boolean {
+  // Edition/finish deliberately play no part: owning an Unlimited, Shadowless or 1st Edition copy
+  // all unlock the same card. Language does — a Japanese card is its own card.
   return !existingCards.some((c) => {
     if (c.game !== newCard.game) return false
+    if ((c.language === 'ja') !== (newCard.language === 'ja')) return false
     if (newCard.apiId) return c.apiId === newCard.apiId
     if (newCard.game === 'riftbound') return c.setCode === newCard.setCode && c.number === newCard.number
     return c.set === newCard.set && c.number === newCard.number
@@ -203,19 +211,34 @@ export const RARITY_LABELS_BY_GAME: Partial<Record<Card['game'], Record<string, 
 }
 
 // Build an eBay sold-listings search URL for a card.
-// Format: "{name} {number} {gradingCompany} {grade}" (graded)
-//      or "{name} {number} {setName}"               (raw)
-export function openEbaySearch(card: { name: string; number: string; set: string; game: string; gradingCompany?: string; grade?: string; isFoil?: boolean }) {
-  const parts: string[] = [card.name]
+// Format: "{name} {number} {gradingCompany} {grade} {tags}" (graded)
+//      or "{name} {number} {setName} {finish} {tags}"    (raw)
+// Tags go last: a Pokémon printing ("1st Edition", "Shadowless") and "Japanese". An Unlimited
+// vintage copy excludes the pricier printings instead (-1st -shadowless), so their sales don't
+// crowd out what an Unlimited copy actually sells for.
+export function openEbaySearch(card: {
+  name: string; number: string; set: string; game: string; gradingCompany?: string; grade?: string; isFoil?: boolean
+  edition?: string; finish?: string; language?: string
+}) {
+  window.open(ebaySearchUrl(card), '_blank', 'noopener,noreferrer')
+}
+
+export function ebaySearchUrl(card: Parameters<typeof openEbaySearch>[0]): string {
+  // a saved "✦ Holo" name suffix would just duplicate the finish word added below
+  const parts: string[] = [card.name.replace(/\s+✦ (Holo|Foil)$/, '')]
   if (card.number && card.number !== 'N/A') parts.push(card.number)
   if (card.gradingCompany) {
     parts.push(card.gradingCompany)
     if (card.grade) parts.push(card.grade)
   } else {
     if (card.set && card.set !== 'N/A') parts.push(card.set)
-    if (card.isFoil) parts.push('Holo')
+    if (card.finish === 'reverse') parts.push('Reverse Holo')
+    else if (card.finish === 'holofoil' || (!card.finish && card.isFoil)) parts.push('Holo')
   }
+  if (card.edition === '1st') parts.push('1st Edition')
+  else if (card.edition === 'shadowless') parts.push('Shadowless', '-1st')
+  else if (card.edition === 'unlimited') parts.push('-1st', '-shadowless')
+  if (card.language === 'ja') parts.push('Japanese')
   const query = parts.join(' ')
-  const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1`
-  window.open(url, '_blank', 'noopener,noreferrer')
+  return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1`
 }
