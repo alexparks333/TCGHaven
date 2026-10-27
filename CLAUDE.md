@@ -1599,9 +1599,12 @@ The first community feature (Creators/Communities come next). `lib/firebase/frie
   'pending'|'accepted' }` — only the addressee can accept, either side can delete = decline /
   cancel / unfriend), `invite_codes/{code}` → `{ uid }` (get-only, never listable; the owner's
   current code lives in `users/{uid}/private/invite`).
-- **Invite link** `/invite/{code}` (`InvitePage.tsx`): opening it and tapping "Add" creates the
-  friendship already `accepted` — the rules allow that only with the inviter's real code.
-  "Get a new link" rotates it. Signed-out visitors go through `/login?next=…` and come back
+- **Haven link** — "Your Haven link" in the Friends popup/page (and the QR code) is just your
+  profile address, `/u/{username}`: it opens your Haven, where they tap "Add" and you get a
+  request to accept. There is no way to become someone's friend without their say-so — the rules
+  only allow creating a friendship as `pending` (2026-10-27; invite links used to create it
+  already accepted). Old `/invite/{code}` links (`InvitePage.tsx`) now just redirect to that
+  person's Haven. Signed-out visitors go through `/login?next=…` and come back
   (`AuthGuard` + `lib/authRedirect.ts`); new accounts still need the signup passcode.
 - **UI:** the Friends page `/friends` (`components/pages/FriendsPage.tsx` — profile header with
   editable @username and counts, requests waiting on you, friend cards, sent requests, and the

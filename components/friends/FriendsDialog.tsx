@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  X, Search, UserPlus, Check, Copy, Share2, Link2, Pencil, Loader2, Clock, UserMinus, RefreshCw, Users, Inbox, Sparkles, Maximize2, MoreHorizontal, Home, QrCode,
+  X, Search, UserPlus, Check, Copy, Share2, Link2, Pencil, Loader2, Clock, UserMinus, Users, Inbox, Sparkles, Maximize2, MoreHorizontal, Home, QrCode,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -11,7 +11,7 @@ import { useFriends, type FriendsTab, type FriendEntry } from './FriendsProvider
 import { Avatar } from './Avatar'
 import { InviteQrCode, ScanFriendCode } from './FriendQr'
 import {
-  searchProfiles, profilePath, sendFriendRequest, acceptFriendRequest, removeFriendship, getInviteCode, changeUsername,
+  searchProfiles, profilePath, sendFriendRequest, acceptFriendRequest, removeFriendship, changeUsername,
   type Profile,
 } from '@/lib/firebase/friends'
 
@@ -399,11 +399,9 @@ function RequestsTabView() {
                 <button
                   onClick={() => run(e.uid + ':x', () => removeFriendship(me, e.uid))}
                   disabled={busy === e.uid + ':x'}
-                  aria-label="Decline"
-                  title="Decline"
-                  className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800 transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors disabled:opacity-60"
                 >
-                  {busy === e.uid + ':x' ? <Loader2 size={13} className="animate-spin" /> : <X size={15} />}
+                  {busy === e.uid + ':x' ? <Loader2 size={13} className="animate-spin" /> : 'Deny'}
                 </button>
               </PersonRow>
             ))}
@@ -531,20 +529,15 @@ function AddTabView() {
   )
 }
 
+// Your Haven link (/u/{username}) — it opens your profile, where they tap "Add" and you get a
+// request to accept. (Invite links used to make you friends instantly; old ones now open your
+// Haven too — see InvitePage.tsx.)
 function InviteLinkCard() {
-  const { user } = useAuth()
-  const [code, setCode] = useState<string | null>(null)
+  const { me } = useFriends()
   const [copied, setCopied] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [failed, setFailed] = useState(false)
   const [showQr, setShowQr] = useState(false)
 
-  useEffect(() => {
-    if (!user) return
-    getInviteCode(user.uid).then(setCode).catch((e) => { console.error(e); setFailed(true) })
-  }, [user])
-
-  const link = code ? `${window.location.origin}/invite/${code}` : ''
+  const link = me ? `${window.location.origin}${profilePath(me.uid, me.username)}` : ''
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
   async function copy() {
@@ -562,25 +555,19 @@ function InviteLinkCard() {
     } catch { /* cancelled */ }
   }
 
-  async function reset() {
-    if (!user) return
-    setResetting(true)
-    try { setCode(await getInviteCode(user.uid, true)) } catch (e) { console.error(e) } finally { setResetting(false) }
-  }
-
   return (
     <section className="relative overflow-hidden rounded-2xl border border-violet-600/30 bg-gradient-to-br from-violet-600/15 via-slate-950 to-amber-500/10 p-4">
       <Sparkles size={64} className="absolute -right-3 -top-3 text-violet-600/10" />
       <div className="flex items-center gap-2 text-sm font-bold text-ink">
         <Link2 size={16} className="text-violet-600" />
-        Your invite link
+        Your Haven link
       </div>
       <p className="text-xs text-slate-500 mt-1 mb-3 pr-6">
-        Send this to a friend. When they open it, you&rsquo;re friends instantly — no request needed.
+        Send this to a friend. It opens your Haven, where they can add you — you&rsquo;ll get a request to accept.
       </p>
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 truncate font-mono select-all">
-          {failed ? 'Couldn’t load your link' : link || 'Creating your link…'}
+          {link || 'Loading your link…'}
         </div>
         <button
           onClick={copy}
@@ -614,13 +601,9 @@ function InviteLinkCard() {
       {showQr && link && (
         <div className="mt-3 flex flex-col items-center gap-2">
           <InviteQrCode link={link} />
-          <span className="text-[11px] text-slate-500">Have your friend scan this — you&rsquo;ll be friends instantly.</span>
+          <span className="text-[11px] text-slate-500">Have your friend scan this to open your Haven and add you.</span>
         </div>
       )}
-      <button onClick={reset} disabled={!code || resetting} className="mt-2.5 flex items-center gap-1 text-[11px] text-slate-500 hover:text-ink transition-colors disabled:opacity-50">
-        <RefreshCw size={11} className={cn(resetting && 'animate-spin')} />
-        Get a new link (the old one stops working)
-      </button>
     </section>
   )
 }

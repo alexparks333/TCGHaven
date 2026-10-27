@@ -141,8 +141,8 @@ service cloud.firestore {
       allow write: if signedIn() && request.auth.uid == uid;
     }
 
-    // Personal invite links. Knowing a code is the permission: it can be looked up one at a
-    // time, never listed.
+    // Old personal invite links — /invite/{code} now just opens that person's Haven. Looked up one
+    // at a time, never listed; no longer created.
     match /invite_codes/{code} {
       allow get: if signedIn();
       allow list: if false;
@@ -152,9 +152,9 @@ service cloud.firestore {
     }
 
     // One doc per pair of collectors, id = their two uids sorted and joined by "_". Only the
-    // two of them can see it. A request starts 'pending' and only the person it was sent to can
-    // accept it; an invite link creates it already 'accepted', but only with that person's
-    // real invite code. Either of them can delete it (decline, cancel, unfriend).
+    // two of them can see it. A request always starts 'pending' and only the person it was sent to
+    // can accept it — there's no way to become someone's friend without their say-so. Either of
+    // them can delete it (decline, cancel, unfriend).
     match /friendships/{id} {
       allow read: if signedIn()
         && (resource.data.requester == request.auth.uid || resource.data.addressee == request.auth.uid);
@@ -168,12 +168,7 @@ service cloud.firestore {
         && request.resource.data.users.hasAll([request.auth.uid, request.resource.data.addressee])
         && request.resource.data.keys().hasOnly(['users', 'requester', 'addressee', 'status', 'createdAt', 'respondedAt', 'inviteCode'])
         && exists(/databases/$(database)/documents/profiles/$(request.resource.data.addressee))
-        && (
-          request.resource.data.status == 'pending'
-          || (request.resource.data.status == 'accepted'
-              && request.resource.data.inviteCode is string
-              && get(/databases/$(database)/documents/invite_codes/$(request.resource.data.inviteCode)).data.uid == request.resource.data.addressee)
-        );
+        && request.resource.data.status == 'pending';
       allow update: if signedIn()
         && resource.data.addressee == request.auth.uid
         && resource.data.status == 'pending'

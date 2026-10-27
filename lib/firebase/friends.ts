@@ -14,8 +14,8 @@ import type { Card, Game } from '../types'
 //   friendships/{a_b}       — one doc per pair (uids sorted, joined by "_"):
 //                              { users, requester, addressee, status: 'pending' | 'accepted' }.
 //                              Either person can delete it (decline / cancel / unfriend).
-//   invite_codes/{code}     — { uid }: a personal invite link. Opening it lets someone create an
-//                              already-accepted friendship with that person, no request step.
+//   invite_codes/{code}     — { uid }: old personal invite links. They no longer create friendships —
+//                              /invite/{code} just opens that person's Haven (InvitePage.tsx).
 //   shared_cardex/{uid}     — a copy of which cards the user owns (no prices, no purchase info),
 //                              written only while they share their Cardex; readable by their
 //                              friends while profiles/{uid}.privacy.cardex is on.
@@ -279,26 +279,6 @@ export async function removeFriendship(me: string, them: string): Promise<void> 
 
 // ── Invite links ────────────────────────────────────────────────────────────────────────────
 
-function newCode(): string {
-  const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  const bytes = crypto.getRandomValues(new Uint8Array(10))
-  return Array.from(bytes, (b) => chars[b % chars.length]).join('')
-}
-
-/** The user's invite code, created the first time it's asked for. `reset` swaps in a new one. */
-export async function getInviteCode(uid: string, reset = false): Promise<string> {
-  const ref = doc(db, 'users', uid, 'private', 'invite')
-  const current = (await getDoc(ref)).data()?.code as string | undefined
-  if (current && !reset) return current
-  const code = newCode()
-  const batch = writeBatch(db)
-  batch.set(doc(db, 'invite_codes', code), { uid, createdAt: serverTimestamp() })
-  if (current) batch.delete(doc(db, 'invite_codes', current))
-  batch.set(ref, { code })
-  await batch.commit()
-  return code
-}
-
 /** Who an invite code belongs to, or null if it's unknown (reset or mistyped). */
 export async function resolveInviteCode(code: string): Promise<string | null> {
   try {
@@ -307,18 +287,4 @@ export async function resolveInviteCode(code: string): Promise<string | null> {
   } catch {
     return null
   }
-}
-
-/**
- * Accepts someone's invite link: becomes friends straight away. If either of them already sent
- * a request, that's settled the same way.
- */
-export async function acceptInvite(me: string, them: string, code: string, existing: Friendship | undefined): Promise<void> {
-  if (existing?.status === 'accepted') return
-  if (existing && existing.addressee === me) return acceptFriendRequest(me, them)
-  if (existing) await removeFriendship(me, them)
-  await setDoc(doc(db, 'friendships', pairId(me, them)), {
-    users: [me, them].sort(), requester: me, addressee: them, status: 'accepted',
-    inviteCode: code, createdAt: serverTimestamp(), respondedAt: serverTimestamp(),
-  })
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, Lock, Award, TrendingUp, Pencil, Check, Loader2, UserPlus, Clock, Eye, EyeOff, ChevronRight, Users,
-  Layers, LayoutGrid, Sparkles, Settings,
+  Layers, LayoutGrid, Sparkles, Settings, X,
 } from 'lucide-react'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
@@ -107,7 +107,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   const [editing, setEditing] = useState(false)
   const [bio, setBio] = useState(profile.bio)
   const [saving, setSaving] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'accept' | 'deny' | 'cancel' | 'add' | null>(null)
   const [error, setError] = useState('')
   // Settings opens from the ⚙️ here; the old /settings address redirects to /profile?settings=1.
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -131,9 +131,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     } finally { setSaving(false) }
   }
 
-  async function act(fn: () => Promise<void>) {
-    setBusy(true); setError('')
-    try { await fn() } catch (e) { console.error(e); setError('Something went wrong — please try again.') } finally { setBusy(false) }
+  async function act(key: NonNullable<typeof busy>, fn: () => Promise<void>) {
+    setBusy(key); setError('')
+    try { await fn() } catch (e) { console.error(e); setError('Something went wrong — please try again.') } finally { setBusy(null) }
   }
 
   const me = user?.uid ?? ''
@@ -148,11 +148,21 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         </span>
       )
     } else if (friendship && friendship.addressee === me) {
-      action = <button onClick={() => act(() => acceptFriendRequest(me, profile.uid))} className="btn-primary">{busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Accept request</button>
+      // They sent you a request: accept or deny it right here
+      action = (
+        <div className="flex items-center gap-2">
+          <button onClick={() => act('accept', () => acceptFriendRequest(me, profile.uid))} disabled={!!busy} className="btn-primary disabled:opacity-60">
+            {busy === 'accept' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Accept request
+          </button>
+          <button onClick={() => act('deny', () => removeFriendship(me, profile.uid))} disabled={!!busy} className="btn-secondary disabled:opacity-60">
+            {busy === 'deny' ? <Loader2 size={15} className="animate-spin" /> : <X size={15} />}Deny
+          </button>
+        </div>
+      )
     } else if (friendship) {
-      action = <button onClick={() => act(() => removeFriendship(me, profile.uid))} className="btn-secondary" title="Cancel request">{busy ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}Requested</button>
+      action = <button onClick={() => act('cancel', () => removeFriendship(me, profile.uid))} disabled={!!busy} className="btn-secondary" title="Cancel request">{busy ? <Loader2 size={15} className="animate-spin" /> : <Clock size={15} />}Requested</button>
     } else {
-      action = <button onClick={() => act(() => sendFriendRequest(me, profile.uid))} className="btn-primary">{busy ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}Add {first}</button>
+      action = <button onClick={() => act('add', () => sendFriendRequest(me, profile.uid))} disabled={!!busy} className="btn-primary">{busy ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}Add {first}</button>
     }
   }
 

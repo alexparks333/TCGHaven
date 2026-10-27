@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
-  X, Search, UserPlus, Check, Copy, Share2, Link2, Pencil, Loader2, Clock, UserMinus, RefreshCw, Users,
+  X, Search, UserPlus, Check, Copy, Share2, Link2, Pencil, Loader2, Clock, UserMinus, Users,
   Sparkles, MoreHorizontal, Inbox, Send, Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -12,8 +12,9 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends, type FriendEntry } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
+import { SentRequestsDialog } from '@/components/friends/SentRequestsDialog'
 import {
-  searchProfiles, profilePath, sendFriendRequest, acceptFriendRequest, removeFriendship, getInviteCode, changeUsername,
+  searchProfiles, profilePath, sendFriendRequest, acceptFriendRequest, removeFriendship, changeUsername,
   type Profile,
 } from '@/lib/firebase/friends'
 
@@ -70,7 +71,8 @@ function FriendsModule() {
 
 function ProfileHero() {
   const { user } = useAuth()
-  const { me, setMe, friends, incoming, outgoing } = useFriends()
+  const { me, setMe, friends, incoming, outgoing, openFriends } = useFriends()
+  const [sentOpen, setSentOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -92,10 +94,12 @@ function ProfileHero() {
   }
 
   const name = me?.displayName ?? user.displayName ?? 'You'
+  // Each tile opens something: Friends / Requests → the Friends popup on that tab; Sent → your
+  // active sent requests (with how long ago, and Cancel).
   const stats = [
-    { label: 'Friends', value: friends.length },
-    { label: 'Requests', value: incoming.length, hot: incoming.length > 0 },
-    { label: 'Sent', value: outgoing.length },
+    { label: 'Friends', value: friends.length, onClick: () => openFriends('friends') },
+    { label: 'Requests', value: incoming.length, hot: incoming.length > 0, onClick: () => openFriends('requests') },
+    { label: 'Sent', value: outgoing.length, onClick: () => setSentOpen(true) },
   ]
 
   return (
@@ -150,16 +154,21 @@ function ProfileHero() {
             <span className="text-[11px] font-semibold mt-1">My profile</span>
           </Link>
           {stats.map((s) => (
-            <div key={s.label} className={cn(
-              'flex-1 sm:flex-none sm:w-24 rounded-xl border px-3 py-2.5 text-center bg-slate-950/70',
-              s.hot ? 'border-violet-600/50' : 'border-slate-800',
-            )}>
+            <button
+              key={s.label}
+              onClick={s.onClick}
+              className={cn(
+                'flex-1 sm:flex-none sm:w-24 rounded-xl border px-3 py-2.5 text-center bg-slate-950/70 transition-all hover:-translate-y-0.5 hover:shadow-md',
+                s.hot ? 'border-violet-600/50 hover:border-violet-600' : 'border-slate-800 hover:border-slate-700',
+              )}
+            >
               <div className={cn('text-xl font-bold leading-none', s.hot ? 'text-violet-700' : 'text-ink')}>{s.value}</div>
               <div className="text-[11px] font-semibold text-slate-500 mt-1">{s.label}</div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
+      {sentOpen && <SentRequestsDialog onClose={() => setSentOpen(false)} />}
     </section>
   )
 }
@@ -235,7 +244,7 @@ function RequestsSection({ sectionRef }: { sectionRef: React.RefObject<HTMLEleme
               disabled={busy === e.uid + ':x'}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-ink hover:bg-slate-800 transition-colors"
             >
-              {busy === e.uid + ':x' ? <Loader2 size={13} className="animate-spin" /> : 'Decline'}
+              {busy === e.uid + ':x' ? <Loader2 size={13} className="animate-spin" /> : 'Deny'}
             </button>
           </PersonRow>
         ))}
@@ -399,19 +408,14 @@ function SentSection() {
 
 // ── Invite link ─────────────────────────────────────────────────────────────────────────────
 
+// Your Haven link (/u/{username}) — it opens your profile, where they tap "Add" and you get a
+// request to accept. (Invite links used to make you friends instantly; old ones now open your
+// Haven too — see InvitePage.tsx.)
 function InviteLinkCard() {
-  const { user } = useAuth()
-  const [code, setCode] = useState<string | null>(null)
+  const { me } = useFriends()
   const [copied, setCopied] = useState(false)
-  const [resetting, setResetting] = useState(false)
-  const [failed, setFailed] = useState(false)
 
-  useEffect(() => {
-    if (!user) return
-    getInviteCode(user.uid).then(setCode).catch((e) => { console.error(e); setFailed(true) })
-  }, [user])
-
-  const link = code ? `${window.location.origin}/invite/${code}` : ''
+  const link = me ? `${window.location.origin}${profilePath(me.uid, me.username)}` : ''
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
 
   async function copy() {
@@ -429,12 +433,6 @@ function InviteLinkCard() {
     } catch { /* cancelled */ }
   }
 
-  async function reset() {
-    if (!user) return
-    setResetting(true)
-    try { setCode(await getInviteCode(user.uid, true)) } catch (e) { console.error(e) } finally { setResetting(false) }
-  }
-
   return (
     <section className="relative overflow-hidden rounded-2xl border border-violet-600/30 bg-gradient-to-br from-violet-600/15 via-slate-900 to-amber-500/10 p-5 shadow-sm">
       <Sparkles size={72} className="absolute -right-3 -top-3 text-violet-600/10" />
@@ -443,10 +441,10 @@ function InviteLinkCard() {
         Invite friends
       </div>
       <p className="text-xs text-slate-500 mt-1 mb-3 pr-6">
-        Send your link to a friend. When they open it, you&rsquo;re friends instantly — no request needed.
+        Send your link to a friend. It opens your Haven, where they can add you — you&rsquo;ll get a request to accept.
       </p>
       <div className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 truncate font-mono select-all">
-        {failed ? 'Couldn’t load your link' : link || 'Creating your link…'}
+        {link || 'Loading your link…'}
       </div>
       <div className="flex gap-2 mt-2">
         <button
@@ -465,10 +463,6 @@ function InviteLinkCard() {
           </button>
         )}
       </div>
-      <button onClick={reset} disabled={!code || resetting} className="mt-3 flex items-center gap-1 text-[11px] text-slate-500 hover:text-ink transition-colors disabled:opacity-50">
-        <RefreshCw size={11} className={cn(resetting && 'animate-spin')} />
-        Get a new link (the old one stops working)
-      </button>
     </section>
   )
 }

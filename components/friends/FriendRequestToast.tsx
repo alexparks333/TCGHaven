@@ -9,7 +9,7 @@ import { Avatar } from './Avatar'
 import { acceptFriendRequest, removeFriendship, profilePath } from '@/lib/firebase/friends'
 
 // Pops out in the top right when someone sends you a friend request (or accepts yours): Accept /
-// Decline right there, or tap through to their profile. Each request pops once — which ones have
+// Deny right there, or tap through to their profile. Each request pops once — which ones have
 // been shown is remembered per account on this device, so a request that arrived while you were
 // away pops the next time you open the app, and never again after that.
 
@@ -160,7 +160,7 @@ function ToastCard({ toast, onDone }: { toast: Toast; onDone: () => void }) {
                 disabled={!!busy}
                 className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold disabled:opacity-60"
               >
-                {busy === 'decline' ? <Loader2 size={13} className="animate-spin mx-auto" /> : 'Decline'}
+                {busy === 'decline' ? <Loader2 size={13} className="animate-spin mx-auto" /> : 'Deny'}
               </button>
             </div>
           )}
