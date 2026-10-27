@@ -12,7 +12,7 @@ import { loadCatalog } from '@/lib/api/catalog'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// Dev tools (components/dev/DevPanel.tsx, Owner only): a test collector, "Tess Tester", who can
+// Dev tools (components/dev/DevPanel.tsx, Owner only, local dev server only — 404 in production): a test collector, "Tess Tester", who can
 // send the Owner a friend request, accept one, unfriend them, and share a Cardex with real cards —
 // so the friends flow can be tried end to end from one account. The server signs in AS Tess (her
 // own Firebase app instance, separate from the process's admin session), so every write goes
@@ -128,6 +128,8 @@ async function shareCards(uid: string) {
 type Action = 'status' | 'request' | 'accept' | 'unfriend' | 'toggle-cardex'
 
 export async function POST(request: Request) {
+  // Dev tools exist only on a local dev server (`npm run dev`) — never on the live site.
+  if (process.env.NODE_ENV !== 'development') return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const owner = await verifyOwnerRequest(request)
   if (owner instanceof NextResponse) return owner
   const { action } = (await request.json().catch(() => ({}))) as { action?: Action }

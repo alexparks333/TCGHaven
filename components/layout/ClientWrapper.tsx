@@ -41,7 +41,8 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         <PriceAutoUpdater />
         <FriendsDialog />
         <FriendRequestToast />
-        <DevPanel />
+        {/* Local dev server only — compiled out of production builds (NODE_ENV is fixed at build time) */}
+        {process.env.NODE_ENV === 'development' && <DevPanel />}
       </FriendsProvider>
     </AuthProvider>
   )

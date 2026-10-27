@@ -8,7 +8,9 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { ADMIN_UID } from '@/lib/firebase/config'
 import { authFetch } from '@/lib/firebase/authFetch'
 
-// Dev tools, bottom left, for the Owner only (ADMIN_UID — everyone else never sees it). Drives a
+// Dev tools, bottom left, for the Owner only (ADMIN_UID — everyone else never sees it), and only
+// on a local dev server: ClientWrapper renders it only when NODE_ENV is 'development', so it isn't
+// in production builds at all. Drives a
 // test collector, Tess Tester (app/api/dev/test-friend/route.ts), so the friends flow can be
 // tried from one account: she can send you a request (→ the top-right popup), accept yours,
 // unfriend you, and turn her Cardex sharing on/off. Minimized/open is remembered on this device.
@@ -83,7 +85,7 @@ function Panel({ uid }: { uid: string }) {
     return (
       <button
         onClick={() => toggle(true)}
-        className={cn('fixed z-[70] md:!bottom-4 flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full bg-slate-50 text-slate-950 text-xs font-bold shadow-lg hover:scale-105 transition-transform', position)}
+        className={cn('fixed z-[55] md:!bottom-4 flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full bg-slate-50 text-slate-950 text-xs font-bold shadow-lg hover:scale-105 transition-transform', position)}
         style={bottom}
       >
         <Wrench size={13} />Dev
@@ -95,7 +97,7 @@ function Panel({ uid }: { uid: string }) {
 
   return (
     <div
-      className={cn('fixed z-[70] md:!bottom-4 w-[min(300px,calc(100vw-24px))] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden', position)}
+      className={cn('fixed z-[55] md:!bottom-4 w-[min(300px,calc(100vw-24px))] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden', position)}
       style={bottom}
     >
       <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-950">

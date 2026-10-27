@@ -1620,8 +1620,10 @@ The first community feature (Creators/Communities come next). `lib/firebase/frie
   once: shown ids are remembered per account in localStorage (`tcghaven-seen-requests:{uid}`), so a
   request that arrived while you were away pops on your next visit. Also pops "X accepted your
   friend request" when one you sent is accepted while the app is open.
-- **Dev panel** (`components/dev/DevPanel.tsx`): a minimizable "Dev" pill bottom left (next to the
-  sidebar on desktop, above the bottom bar on phones), shown only to the Owner (`ADMIN_UID`). Drives
+- **Dev panel** (`components/dev/DevPanel.tsx`): a minimizable "Dev" pill bottom left (under pop-up windows) (next to the
+  sidebar on desktop, above the bottom bar on phones), shown only to the Owner (`ADMIN_UID`) and **only on a local dev server** — `ClientWrapper`
+  renders it only when `NODE_ENV === 'development'` (so it's compiled out of production builds) and
+  the route returns 404 outside development. Drives
   a test collector, **Tess Tester** (`tess.tester@tcghaven.test`, @tesstester), through
   `POST /api/dev/test-friend` (`verifyOwnerRequest()` — Owner only): send you a request, accept the
   one you sent her, unfriend/cancel, toggle her Cardex sharing, open her profile, and replay request
