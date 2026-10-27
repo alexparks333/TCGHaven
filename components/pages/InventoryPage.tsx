@@ -14,6 +14,8 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { removeCard, removeCards, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
 import { saveTrackedGames } from '@/lib/firebase/preferences'
 import { cn } from '@/lib/utils'
+
+const RENDER_STEP = 50
 import { useScrollLock } from '@/lib/useScrollLock'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -288,6 +290,21 @@ export default function InventoryPage() {
       }
     })
   }, [filtered, dateFilter])
+
+  // Rows are drawn a screenful at a time — drawing every row (900+) on open froze the page for
+  // ~0.4s on each visit. More are added as the end of the list scrolls into view.
+  const [renderLimit, setRenderLimit] = useState(RENDER_STEP)
+  const moreRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { setRenderLimit(RENDER_STEP) }, [activeGame, search, dateFilter, selectedRarities])
+  useEffect(() => {
+    const el = moreRef.current
+    if (!el) return
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) setRenderLimit((n) => n + RENDER_STEP * 2)
+    }, { rootMargin: '1200px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [renderLimit, grouped, filtered])
 
   // Session summary: ALL games on the selected date
   const sessionCards = useMemo(
@@ -625,7 +642,7 @@ export default function InventoryPage() {
               <span>Card</span><span>Set</span><span>Condition</span><span>Qty</span><span>Total Paid</span><span>Market</span><span></span>
             </div>
 
-            {grouped.map((group) => {
+            {grouped.slice(0, renderLimit).map((group) => {
               const { key, lots, totalQty, totalPaid: gPaid, rep, currentPrice } = group
               const hasMarket = currentPrice > 0
               const marketTotal = hasMarket ? currentPrice * totalQty : null
@@ -804,6 +821,7 @@ export default function InventoryPage() {
                 </div>
               )
             })}
+            {grouped.length > renderLimit && <div ref={moreRef} className="h-12" aria-hidden />}
           </div>
         ) : (
           /* ── Individual-lot view (date filter active) ── */
@@ -812,7 +830,7 @@ export default function InventoryPage() {
               <span>Card</span><span>Set</span><span>Condition</span><span>Qty</span><span>Paid</span><span>Market</span><span></span>
             </div>
 
-            {filtered.map((card) => {
+            {filtered.slice(0, renderLimit).map((card) => {
               const hasMarket = (card.currentPrice ?? 0) > 0
               const marketTotal = hasMarket ? card.currentPrice! * card.quantity : null
               const pnl = hasMarket ? marketTotal! - card.purchasePrice * card.quantity : null
@@ -897,6 +915,7 @@ export default function InventoryPage() {
                 </div>
               )
             })}
+            {filtered.length > renderLimit && <div ref={moreRef} className="h-12" aria-hidden />}
           </div>
         )}
 

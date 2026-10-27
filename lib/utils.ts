@@ -24,6 +24,19 @@ const ZOOM_GLOW_COLORS: Partial<Record<Game, Record<string, string>>> = {
   },
 }
 
+/**
+ * The full-size version of a card image saved as a thumbnail. Older inventory cards stored
+ * pokemontcg.io's small image ("…/swsh4/12.png", 245px wide) and lorcast's "digital/small" one,
+ * which looked blurry at card size; both hosts serve a large copy at a predictable address
+ * ("…/12_hires.png" ~734px, "digital/large" ~674px). Anything else is returned unchanged.
+ */
+export function sharpImageUrl(url: string | undefined): string | undefined {
+  if (!url) return url
+  if (url.includes('images.pokemontcg.io/')) return url.replace(/\/([^/_]+)\.png$/, '/$1_hires.png')
+  if (url.includes('lorcast.io/') && url.includes('/digital/small/')) return url.replace('/digital/small/', '/digital/large/')
+  return url
+}
+
 export function zoomGlowColor(game: Game, rarity: string, fallback: string): string {
   return ZOOM_GLOW_COLORS[game]?.[rarity] ?? fallback
 }

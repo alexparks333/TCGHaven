@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { Card, Game, SoldCard } from './types'
 import type { PriceStatus } from './api/priceStatus'
+import { sharpImageUrl } from './utils'
 
 interface TCGStore {
   cards: Card[]
@@ -76,6 +77,10 @@ export interface PriceBaseline {
 // A catalog-priced card shows the live catalog price; one with no catalog match (no apiId) keeps
 // its own stored price. (The old per-card "Manual 🔒" price is retired and ignored.)
 export function withLivePrice(card: Card, prices: Record<string, number>): Card {
+  // Every card passes through here on its way into the store, so it's also where a saved
+  // thumbnail-size image is swapped for the full-size one (lib/utils.ts sharpImageUrl).
+  const sharp = sharpImageUrl(card.imageUrl)
+  if (sharp !== card.imageUrl) card = { ...card, imageUrl: sharp }
   if (!card.apiId) return card
   const live = prices[card.id]
   return live != null && live !== card.currentPrice ? { ...card, currentPrice: live } : card
@@ -109,7 +114,7 @@ export const useStore = create<TCGStore>()(
   cardUnlocks: [] as { id: string; card: Card }[],
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
-  loadUserSoldCards: (soldCards) => set({ soldCards }),
+  loadUserSoldCards: (soldCards) => set({ soldCards: soldCards.map((c) => ({ ...c, imageUrl: sharpImageUrl(c.imageUrl) })) }),
   clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
@@ -124,7 +129,7 @@ export const useStore = create<TCGStore>()(
     set((state) => ({ cards: state.cards.filter((c) => c.id !== id) })),
 
   addSoldCard: (card) =>
-    set((state) => ({ soldCards: [card, ...state.soldCards] })),
+    set((state) => ({ soldCards: [{ ...card, imageUrl: sharpImageUrl(card.imageUrl) }, ...state.soldCards] })),
 
   removeSoldCard: (id) =>
     set((state) => ({ soldCards: state.soldCards.filter((c) => c.id !== id) })),

@@ -1,34 +1,36 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { Package, TrendingUp, LogOut, BookOpen, SlidersHorizontal, Banknote, Settings } from 'lucide-react'
+import { usePathname } from 'next/navigation'
+import { Package, TrendingUp, BookOpen, SlidersHorizontal, Banknote, Users, ChevronRight, CircleUserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
+import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
+import { useFriends } from '@/components/friends/FriendsProvider'
+import { Avatar } from '@/components/friends/Avatar'
 
 const BASE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/sold', label: 'Sold', icon: Banknote },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
-  { href: '/settings', label: 'Settings', icon: Settings },
 ]
-// Phone bottom bar, in display order. Sign out lives on the Settings page on phones;
-// Filters is a button in the phone top bar (MobileHeader).
+// Phone bottom bar, in display order. Profile holds Settings (the ⚙️ on its banner — account,
+// username, Sign out); Filters is a button in the phone top bar (MobileHeader).
 const MOBILE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
   { href: '/sold', label: 'Sold', icon: Banknote },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/profile', label: 'Profile', icon: CircleUserRound },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const { calcFloor, showFilters, setShowFilters } = useStore()
+  const { me } = useFriends()
 
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   if (isAuthPage) return null
@@ -36,14 +38,7 @@ export function Sidebar() {
   // Admin isn't in the collector app anymore — it's the separate staff portal at /admin.
   const nav = BASE_NAV
 
-  async function handleSignOut() {
-    await signOut()
-    router.replace('/login')
-  }
 
-  const initials = user?.displayName
-    ? user.displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-    : user?.email?.[0]?.toUpperCase() ?? '?'
 
   return (
     <>
@@ -88,37 +83,33 @@ export function Sidebar() {
 
         {/* User section */}
         <div className="mt-auto">
+          {user && <FriendsSidebarSection />}
           {user && (
-            <div className="px-3 py-3 rounded-xl bg-slate-900/50 border border-slate-800">
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-full bg-violet-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
-                  ) : initials}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-ink truncate">
-                    {user.displayName ?? 'Collector'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 truncate">{user.email}</div>
-                </div>
-              </div>
-              <button
-                onClick={handleSignOut}
-                className="w-full flex items-center gap-2 text-xs text-slate-500 hover:text-red-600 transition-colors px-1 py-1 rounded-lg hover:bg-red-100/20"
+            <>
+              {/* Your profile — what your friends see (components/pages/ProfilePage.tsx). Sign out
+                  is in Settings, behind the ⚙️ on the profile banner. */}
+              <Link
+                href="/profile"
+                className={cn(
+                  'group flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-colors',
+                  pathname === '/profile' ? 'bg-slate-800 border-slate-700' : 'bg-slate-900/50 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50',
+                )}
               >
-                <LogOut size={12} />
-                Sign out
-              </button>
-            </div>
+                <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? user.email ?? ''} photoURL={user.photoURL ?? ''} size={34} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</div>
+                  <div className="text-[10px] text-slate-500 truncate">{me ? `@${me.username}` : 'Your profile'}</div>
+                </div>
+                <ChevronRight size={14} className="text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
+              </Link>
+            </>
           )}
         </div>
       </aside>
 
-      {/* Mobile Bottom Nav — the five everyday pages. Admin and Sign out live on the Settings
-          page on phones (see AccountActions in SettingsPage.tsx) and Filters in the top bar,
-          rather than each taking a bottom-bar slot; nine-plus equal slots left every label
-          colliding. */}
+      {/* Mobile Bottom Nav — the five everyday pages. Settings and Sign out live behind the ⚙️ on
+          the Profile banner (ProfilePage.tsx) and Filters in the top bar, rather than each taking a
+          bottom-bar slot; nine-plus equal slots left every label colliding. */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950 border-t border-slate-700 shadow-[0_-4px_16px_rgba(60,40,20,0.08)] flex"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -160,6 +151,7 @@ export function Sidebar() {
 export function MobileHeader() {
   const pathname = usePathname()
   const { calcFloor, showFilters, setShowFilters } = useStore()
+  const { incoming } = useFriends()
   if (pathname === '/login' || pathname === '/signup') return null
   return (
     <header
@@ -172,12 +164,23 @@ export function MobileHeader() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-text.png" alt="TCGHaven" className="h-6 w-auto object-contain" />
       </Link>
+      {/* Friends — on phones the sidebar's Friends card lives behind this button */}
+      <Link
+        href={incoming.length ? '/friends?tab=requests' : '/friends'}
+        className={cn('ml-auto relative w-9 h-9 flex items-center justify-center rounded-xl border text-slate-300', pathname === '/friends' ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800')}
+        aria-label={incoming.length ? `Friends — ${incoming.length} new request${incoming.length === 1 ? '' : 's'}` : 'Friends'}
+      >
+        <Users size={17} />
+        {incoming.length > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">{incoming.length}</span>
+        )}
+      </Link>
       {/* Portfolio Filters dropdown toggle — opens the same FilterPanel the desktop sidebar's
           Filters button does, right under this bar */}
       <button
         onClick={() => setShowFilters(!showFilters)}
         className={cn(
-          'ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[13px] font-semibold transition-colors',
+          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[13px] font-semibold transition-colors',
           showFilters ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800 text-slate-300',
         )}
         aria-expanded={showFilters}

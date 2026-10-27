@@ -111,7 +111,7 @@ async function searchCardsUncapped(game: Game, query: string, onlyId?: string, l
         setName: c.set.name,
         number: c.number,
         rarity: c.rarity || undefined,
-        imageUrl: c.images.small,
+        imageUrl: c.images.large ?? c.images.small,
         game: 'pokemon' as Game,
         lowPriceNM: lowNM,
         lowPriceNMFoil: lowNMFoil,

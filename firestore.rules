@@ -92,6 +92,97 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Friends (lib/firebase/friends.ts) ──────────────────────────────────────────────────
+    // A collector's public card: name, @username, photo (never their email). Any signed-in
+    // user can find people by name/username; only you can write yours, and the username on it
+    // must be one you've claimed in /usernames.
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'createdAt', 'updatedAt'])
+        && (!('previousUsernames' in request.resource.data) || (request.resource.data.previousUsernames is list && request.resource.data.previousUsernames.size() <= 3))
+        && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
+        && (!('privacy' in request.resource.data) || request.resource.data.privacy.keys().hasOnly(['cardex', 'badges']))
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
+      allow delete: if false;
+    }
+
+    // Username claims — the doc id is the username, so two people can't hold the same one. A
+    // rename keeps your last 3 old names (still yours, old links still find you); the app deletes
+    // older ones, which frees them for anyone.
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid'])
+        && name.matches('^[a-z0-9_.]{3,20}$');
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // Accepted friends only — the pair's doc id is the two uids sorted, so check both orders.
+    function isFriendOf(other) {
+      return signedIn() && (
+        (exists(/databases/$(database)/documents/friendships/$(request.auth.uid + '_' + other)) &&
+         get(/databases/$(database)/documents/friendships/$(request.auth.uid + '_' + other)).data.status == 'accepted') ||
+        (exists(/databases/$(database)/documents/friendships/$(other + '_' + request.auth.uid)) &&
+         get(/databases/$(database)/documents/friendships/$(other + '_' + request.auth.uid)).data.status == 'accepted')
+      );
+    }
+
+    // A copy of which cards someone owns (no prices or purchase info), kept only while they share
+    // their Cardex. Their friends can read it while the profile's privacy.cardex is on. The
+    // Portfolio has no shared copy at all — it's never visible to anyone else.
+    match /shared_cardex/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        (isFriendOf(uid) && get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('cardex', false) == true)
+      );
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Personal invite links. Knowing a code is the permission: it can be looked up one at a
+    // time, never listed.
+    match /invite_codes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // One doc per pair of collectors, id = their two uids sorted and joined by "_". Only the
+    // two of them can see it. A request starts 'pending' and only the person it was sent to can
+    // accept it; an invite link creates it already 'accepted', but only with that person's
+    // real invite code. Either of them can delete it (decline, cancel, unfriend).
+    match /friendships/{id} {
+      allow read: if signedIn()
+        && (resource.data.requester == request.auth.uid || resource.data.addressee == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.requester == request.auth.uid
+        && request.resource.data.addressee is string
+        && request.resource.data.addressee != request.auth.uid
+        && (id == request.auth.uid + '_' + request.resource.data.addressee
+            || id == request.resource.data.addressee + '_' + request.auth.uid)
+        && request.resource.data.users.size() == 2
+        && request.resource.data.users.hasAll([request.auth.uid, request.resource.data.addressee])
+        && request.resource.data.keys().hasOnly(['users', 'requester', 'addressee', 'status', 'createdAt', 'respondedAt', 'inviteCode'])
+        && exists(/databases/$(database)/documents/profiles/$(request.resource.data.addressee))
+        && (
+          request.resource.data.status == 'pending'
+          || (request.resource.data.status == 'accepted'
+              && request.resource.data.inviteCode is string
+              && get(/databases/$(database)/documents/invite_codes/$(request.resource.data.inviteCode)).data.uid == request.resource.data.addressee)
+        );
+      allow update: if signedIn()
+        && resource.data.addressee == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt']);
+      allow delete: if signedIn()
+        && (resource.data.requester == request.auth.uid || resource.data.addressee == request.auth.uid);
+    }
+
     // Per-user inventory data — unchanged from before this migration. A user may only
     // read/write their own subtree.
     match /users/{uid}/{document=**} {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
-import { useStore } from '@/lib/store'
+import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, type Game, type Card, type Language } from '@/lib/types'
 import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/utils'
@@ -332,7 +332,7 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
 
 // ── Rarity colors ─────────────────────────────────────────────────────────────
 
-const RARITY_COLORS: Record<string, string> = {
+export const RARITY_COLORS: Record<string, string> = {
   Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
   Super_rare: '#7a4a5a', Legendary: '#b0602a', Enchanted: '#9a5a5a', Iconic: '#a8861e',
   Epic: '#5f7360', 'Alt Art': '#a8701e', Overnumbered: '#a8701e', Showcase: '#a8701e', Star: '#a8701e', Promo: '#7a8030', 'Event Promo': '#b5532f', Metal: '#6f6a5e',
@@ -429,7 +429,7 @@ export type SlabInfo = { company: string; grade: string }
 
 // The best graded copy among the owned ones (highest numeric grade), so the tile shows the slab
 // you'd actually show off. Undefined when no owned copy is graded.
-function bestSlab(cards: Card[]): SlabInfo | undefined {
+export function bestSlab(cards: Card[]): SlabInfo | undefined {
   let best: SlabInfo | undefined
   let bestN = -1
   for (const c of cards) {
@@ -474,7 +474,7 @@ function gradeWord(company: string, grade: string): string {
 // Grid-tile slab treatment: drawn over the normal full-size card art. A thin clear-acrylic rim and
 // sheen, plus a see-through grade banner across the top that fills in when the tile is hovered
 // (the tile's root carries `group`).
-function SlabTileOverlay({ slab }: { slab: SlabInfo }) {
+export function SlabTileOverlay({ slab }: { slab: SlabInfo }) {
   const label = slabStyle(slab.company)
   return (
     <>
@@ -573,15 +573,29 @@ function matchesSearch(query: string, name: string, number: string): boolean {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function CardexPage() {
-  const { cards, trackedGames } = useStore()
+// A friend's full Cardex inside their profile (ProfilePage.tsx): their shared cards (no prices or
+// purchase info) drive ownership, read-only — no header, no Personalized Collections, no adding,
+// no prices, and it leaves the page's URL alone.
+export interface CardexViewer {
+  cards: Card[]
+}
+
+export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
+  const store = useStore()
+  const cards = viewer?.cards ?? store.cards
+  const viewerGames = useMemo(() => {
+    if (!viewer) return null
+    const games = Array.from(new Set(viewer.cards.map((c) => c.game)))
+    return games.length ? games : DEFAULT_TRACKED_GAMES
+  }, [viewer])
+  const trackedGames = viewerGames ?? store.trackedGames
 
   // Deep-link support — e.g. clicking a "Card Unlocked" toast navigates to
   // /cardex?game=riftbound&set=Secret+Garden. Read once; a mid-session change to the URL isn't
   // expected to re-drive the page (the user is already browsing at that point).
   const searchParams = useSearchParams()
-  const urlGame = searchParams.get('game')
-  const urlSet = searchParams.get('set')
+  const urlGame = viewer ? null : searchParams.get('game')
+  const urlSet = viewer ? null : searchParams.get('set')
 
   // Starts on the deep-linked game if there is one, else the first game this user tracks
   // (trackedGames is already hydrated from localStorage by the time this first renders).
@@ -808,6 +822,7 @@ export default function CardexPage() {
   // set through the deep-link path above instead of resetting to the game's first set. Waits for
   // a deep link to be resolved first, so it never overwrites one with the placeholder set.
   useEffect(() => {
+    if (viewer) return
     if (activeGame !== 'personal' && !activeSet.name) return
     if (!urlSetApplied.current) return
     const params = new URLSearchParams(window.location.search)
@@ -818,7 +833,7 @@ export default function CardexPage() {
     if (next !== window.location.pathname + window.location.search) {
       window.history.replaceState(window.history.state, '', next)
     }
-  }, [activeGame, activeSet])
+  }, [activeGame, activeSet, viewer])
 
   const knownSets = useMemo(() => {
     const s = new Set<string>()
@@ -920,9 +935,9 @@ export default function CardexPage() {
   const enriched = useMemo(
     () => catalogCards.map((cc) => {
       const owned = getOwnedInfo(cc, gameCards, baseGame)
-      return { ...cc, ...owned, marketPrice: catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
+      return { ...cc, ...owned, marketPrice: viewer ? 0 : catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
     }),
-    [catalogCards, gameCards, baseGame],
+    [catalogCards, gameCards, baseGame, viewer],
   )
 
   // Progress is always against the full set, not the filtered search view.
@@ -999,17 +1014,19 @@ export default function CardexPage() {
   return (
     <AuthGuard>
       <div>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-ink">Cardex</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
-            Your personal collection tracker — grey means missing, full color means you own it.
-          </p>
-        </div>
+        {!viewer && (
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-ink">Cardex</h1>
+            <p className="text-slate-400 text-sm mt-0.5">
+              Your personal collection tracker — grey means missing, full color means you own it.
+            </p>
+          </div>
+        )}
 
         {/* Game tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {/* Only the games this user tracks (added from Inventory's "+" game picker) */}
-          {[...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(baseGameOf(g))), 'personal' as const].map((game) => (
+          {[...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(baseGameOf(g))), ...(viewer ? [] : ['personal' as const])].map((game) => (
             <button
               key={game}
               onClick={() => switchGame(game)}
@@ -1032,7 +1049,7 @@ export default function CardexPage() {
         {activeGame === 'personal' ? (
           <PersonalCollectionsView onZoom={openZoom} />
         ) : setsLoading ? (
-          <LogoLoader label="Loading your Cardex…" />
+          <LogoLoader label={viewer ? 'Loading Cardex…' : 'Loading your Cardex…'} />
         ) : (
           <>
             {/* Two-tier set picker: pick a category (era/product group) from a dropdown, then a
@@ -1169,7 +1186,7 @@ export default function CardexPage() {
                     onHover={() => setHoveredId(card.id)}
                     onLeave={() => setHoveredId(null)}
                     onZoom={openZoom}
-                    onAdd={setAddPrefill}
+                    onAdd={viewer ? undefined : setAddPrefill}
                   />
                 ))}
               </div>
@@ -1203,8 +1220,8 @@ export default function CardexPage() {
           </>
         )}
       </div>
-      <CardZoomOverlay data={zoomCard} onClose={() => setZoomCard(null)} />
-      {addPrefill && (
+      <CardZoomOverlay data={zoomCard} onClose={() => setZoomCard(null)} viewOnly={!!viewer} />
+      {addPrefill && !viewer && (
         <AddCardDialog
           key={`${addPrefill.game}:${addPrefill.id}`}
           defaultGame={addPrefill.game}
@@ -1304,7 +1321,7 @@ interface CardTileProps {
   onHover: () => void
   onLeave: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
-  onAdd: (card: CardSearchResult) => void
+  onAdd?: (card: CardSearchResult) => void // absent = read-only (a friend's Cardex)
   eagerArt?: boolean
   onArtDone?: (id: string) => void
 }
@@ -1328,6 +1345,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
   // Shift+Click / double-tap: open Add Card on this exact card. AddCardDialog re-fetches it as a
   // search row; this copy is only its fallback.
   function addToInventory() {
+    if (!onAdd) return
     onAdd({
       id: card.id, name: card.name, set: card.setCode, setName: card.setName, number: card.number,
       imageUrl: card.imageUrl, marketPrice: card.marketPrice, marketPriceFoil: card.marketPriceFoil ?? 0,
@@ -1366,6 +1384,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
       onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
       onPointerDown={(e) => { lastPointerType.current = e.pointerType }}
       onClick={(e) => {
+        if (!onAdd) { zoom(e.currentTarget); return }
         if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
         if (e.shiftKey) { addToInventory(); return }
         if (lastPointerType.current !== 'touch') { zoom(e.currentTarget); return }
@@ -1379,7 +1398,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
         const el = e.currentTarget
         tapTimer.current = setTimeout(() => { tapTimer.current = null; zoom(el) }, DOUBLE_TAP_MS)
       }}
-      title="Click to view — Shift+Click to add to inventory — ⌘/Ctrl+Click to search eBay sold listings"
+      title={onAdd ? 'Click to view — Shift+Click to add to inventory — ⌘/Ctrl+Click to search eBay sold listings' : 'Click to view'}
     >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
@@ -1751,7 +1770,9 @@ function useCardInspect() {
 // direct ref mutation (not React state) specifically to avoid an extra render and guarantee zero
 // flash at the wrong position — see globals.css's own comment on the card-zoom-* rules for the
 // timing this is tuned to match.
-function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose: () => void }) {
+// Also used by a profile's Cardex showcase (ProfilePage.tsx).
+// `viewOnly` (a profile's showcase): just the card and its details — no owned count or eBay link.
+export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: ZoomCardData | null; onClose: () => void; viewOnly?: boolean }) {
   const [visible, setVisible] = useState(false)
   const [closing, setClosing] = useState(false)
   const moverRef = useRef<HTMLDivElement>(null)
@@ -1971,15 +1992,19 @@ function CardZoomOverlay({ data, onClose }: { data: ZoomCardData | null; onClose
                 )}
               </div>
             )}
-            <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
-              {d.owned ? `✓ ${d.quantity > 1 ? `×${d.quantity} owned` : 'owned'}` : 'not collected'}
-            </div>
-            <button
-              onClick={() => openEbaySearch(d.ebayCard)}
-              className="mt-1 text-[11px] text-slate-500 hover:text-ink underline underline-offset-2"
-            >
-              Search eBay sold listings
-            </button>
+            {!viewOnly && (
+              <>
+                <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
+                  {d.owned ? `✓ ${d.quantity > 1 ? `×${d.quantity} owned` : 'owned'}` : 'not collected'}
+                </div>
+                <button
+                  onClick={() => openEbaySearch(d.ebayCard)}
+                  className="mt-1 text-[11px] text-slate-500 hover:text-ink underline underline-offset-2"
+                >
+                  Search eBay sold listings
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

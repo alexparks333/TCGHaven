@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { usePathname } from 'next/navigation'
 import { X, SlidersHorizontal } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { formatCurrency, cn } from '@/lib/utils'
@@ -20,6 +21,11 @@ export function FilterPanel() {
     cards,
     hiddenGroups, toggleHiddenGroup,
   } = useStore()
+
+  // The closed-panel summary bar only belongs on the Portfolio (and its sub-pages), where these
+  // filters change what the page shows — everywhere else it's just clutter.
+  const pathname = usePathname() ?? ''
+  const onPortfolio = pathname === '/' || pathname.startsWith('/portfolio')
 
   const allGroups = useMemo(
     () => Array.from(new Set(cards.map((c) => c.group).filter(Boolean) as string[])).sort(),
@@ -193,7 +199,7 @@ export function FilterPanel() {
       </div>
 
       {/* Active-filter banner when panel is closed */}
-      {!showFilters && hasActiveFilters && (
+      {!showFilters && hasActiveFilters && onPortfolio && (
         <div className="bg-amber-100/40 border-b border-amber-200/40 px-4 sm:px-6 lg:px-8 py-1.5">
           {/* One line at every width — on a phone the extra items scroll sideways instead of
               wrapping into a tall block above every page */}

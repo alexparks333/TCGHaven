@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Mail, Lock, User, KeyRound, AlertCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
+import { afterSignIn, nextQuery } from '@/lib/authRedirect'
 import { friendlyAuthError } from '@/lib/auth-errors'
 
 export default function SignupPage() {
@@ -41,7 +42,7 @@ export default function SignupPage() {
     setLoading(true)
     try {
       await signUp(email, password, name)
-      router.replace('/')
+      router.replace(afterSignIn())
     } catch (err: unknown) {
       setError(friendlyAuthError(err))
     } finally {
@@ -54,7 +55,7 @@ export default function SignupPage() {
     setGoogleLoading(true)
     try {
       await signInWithGoogle()
-      router.replace('/')
+      router.replace(afterSignIn())
     } catch (err: unknown) {
       setError(friendlyAuthError(err))
     } finally {
@@ -192,7 +193,7 @@ export default function SignupPage() {
 
         <p className="text-center text-slate-500 text-xs mt-6">
           Already have an account?{' '}
-          <Link href="/login" className="text-violet-600 hover:text-violet-700 transition-colors font-medium">
+          <Link href={`/login${nextQuery()}`} className="text-violet-600 hover:text-violet-700 transition-colors font-medium">
             Sign in
           </Link>
         </p>

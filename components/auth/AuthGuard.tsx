@@ -1,17 +1,19 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from './AuthProvider'
 import { LogoLoader } from '@/components/LogoLoader'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading, dataLoading, dataProgress } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
-    if (!loading && !user) router.replace('/login')
-  }, [user, loading, router])
+    // Come back here after signing in (e.g. a friend's invite link) — the home page needs no hint.
+    if (!loading && !user) router.replace(pathname && pathname !== '/' ? `/login?next=${encodeURIComponent(pathname)}` : '/login')
+  }, [user, loading, router, pathname])
 
   // Held until the user's cards/sold cards/games have actually arrived from Firestore, not just
   // until sign-in resolves — otherwise every page briefly renders an empty store (Portfolio at

@@ -95,3 +95,11 @@ export async function verifyAdminRequest(request: Request): Promise<NextResponse
 export async function verifyUserRequest(request: Request): Promise<NextResponse | null> {
   return (await callerUid(request)) ? null : NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }
+
+// The Owner only (ADMIN_UID) — the collector app's dev tools (app/api/dev/*). Returns the
+// Owner's uid, or an error response to send back.
+export async function verifyOwnerRequest(request: Request): Promise<{ uid: string } | NextResponse> {
+  const uid = await callerUid(request)
+  if (!uid || uid !== ADMIN_UID) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return { uid }
+}

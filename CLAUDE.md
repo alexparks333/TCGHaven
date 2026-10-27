@@ -380,8 +380,10 @@ the collector shell/session for `/admin/*`, and `app/admin/layout.tsx` renders `
   caller's own ID token (rules allow reading your own staff doc) — Owner uid always passes.
 - Admin Catalog edits no longer cascade name/number/image into the editor's own inventory (the
   portal has no inventory), so the Inventory "catalog correction" banner is gone too. The collector
-  app has no admin or sync UI at all anymore — Settings is just the account + the user's own
-  Riftbound inventory repair.
+  app has no admin or sync UI at all anymore. There's no Settings page either (2026-10-27): Settings
+  is a panel behind the ⚙️ on your profile banner (`components/friends/SettingsDialog.tsx` — name,
+  email, @username, Sign out); `/settings` redirects to `/profile?settings=1`, which opens it. The
+  old Riftbound "scan & fix numbers/foil/rarity" repair tool was removed with it.
 
 ### Auth model — `isAdmin` is UX, but every write route now checks the caller too
 
@@ -1581,6 +1583,87 @@ pass rather than trusting this doc's own older per-game rarity lists, which caug
 
 ---
 
+## Friends (2026-10-26)
+
+The first community feature (Creators/Communities come next). `lib/firebase/friends.ts` +
+`components/friends/`:
+
+- **Collections** (rules in `firestore.rules`): `profiles/{uid}` (name, `@username`, photo —
+  never email; readable by any signed-in user, created/kept in step on sign-in by
+  `ensureProfile()`), `usernames/{name}` (claim doc — its id makes usernames unique; rules allow create, never
+  update, so no one can take a held name. Renaming keeps your last 3 old names (`KEEP_OLD_USERNAMES`,
+  `profile.previousUsernames`, newest first): `/u/{old}` still resolves to you and the address bar is
+  swapped to your current name, and you can switch back. On each rename `changeUsername()` deletes
+  every claim you hold beyond those (including leftovers), which frees it for anyone),
+  `friendships/{uidA_uidB}` (sorted pair id; `{ users, requester, addressee, status:
+  'pending'|'accepted' }` — only the addressee can accept, either side can delete = decline /
+  cancel / unfriend), `invite_codes/{code}` → `{ uid }` (get-only, never listable; the owner's
+  current code lives in `users/{uid}/private/invite`).
+- **Invite link** `/invite/{code}` (`InvitePage.tsx`): opening it and tapping "Add" creates the
+  friendship already `accepted` — the rules allow that only with the inviter's real code.
+  "Get a new link" rotates it. Signed-out visitors go through `/login?next=…` and come back
+  (`AuthGuard` + `lib/authRedirect.ts`); new accounts still need the signup passcode.
+- **UI:** the Friends page `/friends` (`components/pages/FriendsPage.tsx` — profile header with
+  editable @username and counts, requests waiting on you, friend cards, sent requests, and the
+  invite link + "Find people" search (name or @username, prefix match) on the right). Deep links:
+  `?focus={uid}`, `?add=1`, `?tab=requests`. `FriendsProvider` (mounted in `ClientWrapper.tsx`)
+  keeps live listeners on the two friendship queries and the open state of the quick Friends
+  popup (`FriendsDialog.tsx`: Friends / Requests / Add Friends tabs). Sidebar card above the account
+  box (`FriendsSidebar.tsx`): its inner controls (invite, ➕, requests, a friend) open the popup; the
+  card itself goes to `/friends`. The phone top bar's Friends button goes to the page.
+
+### Friend request popup & dev tools
+
+- **Popup** (`components/friends/FriendRequestToast.tsx`, mounted in `ClientWrapper.tsx`): top right
+  (full width under the status bar on phones) whenever a request arrives — Accept / Decline in
+  place, tap the person for their profile; auto-hides after 9s (paused on hover). Each request pops
+  once: shown ids are remembered per account in localStorage (`tcghaven-seen-requests:{uid}`), so a
+  request that arrived while you were away pops on your next visit. Also pops "X accepted your
+  friend request" when one you sent is accepted while the app is open.
+- **Dev panel** (`components/dev/DevPanel.tsx`): a minimizable "Dev" pill bottom left (next to the
+  sidebar on desktop, above the bottom bar on phones), shown only to the Owner (`ADMIN_UID`). Drives
+  a test collector, **Tess Tester** (`tess.tester@tcghaven.test`, @tesstester), through
+  `POST /api/dev/test-friend` (`verifyOwnerRequest()` — Owner only): send you a request, accept the
+  one you sent her, unfriend/cancel, toggle her Cardex sharing, open her profile, and replay request
+  popups. The route signs in **as Tess** in its own Firebase app instance, so her writes go through
+  the normal `firestore.rules`; her password is derived from `CRON_SECRET` (HMAC), never stored. Her
+  first request creates the account, a profile and a shared Cardex: ~half of Riftbound Origins and
+  Pokémon Base Set plus a few chase cards (seeded, so it's the same every time; top 3 PSA 10).
+
+### Profiles & what friends can see
+
+`/profile` (`components/pages/ProfilePage.tsx`) is your profile — exactly what friends see — opened
+from the sidebar's profile button (its own box; Sign out sits separately below it). You curate it:
+a bio (≤160 chars) and `privacy` on `profiles/{uid}` — `cardex` (friends can browse your Cardex) and
+`badges` (badges are coming soon); both off by default. **The Portfolio is never shared** — there is
+no shared copy of values, prices or purchase info anywhere. `/u/{username}` (`profilePath()`; the
+profile's "Share profile" button copies it) — or `/profile/{uid}` as a fallback — shows someone else's
+profile with only what they share (non-friends see name/bio and an Add button).
+
+Layout: header card (banner, avatar, name, bio — and on your own profile the compact "Friends can
+see" switches on its right), then the **showcase**, framed in the parchment palette
+(`.showcase-frame` / `.showcase-inner` in `globals.css`) with Cardex | Badges tabs. The profile is
+**standalone** — it's for other people, so nothing on it links into app pages a visitor can't open.
+The Cardex tab is a self-contained mini Cardex: card / set / game counts, game chips, a set picker,
+cards best-first (yours by today's price; a friend's shared copy is stored most-valuable-first,
+without prices) paged in place with "Show more", and a click opens the Cardex's own spin-around
+`CardZoomOverlay` (exported from `CardexPage.tsx`) — with no price, since profiles never show any.
+Badges is a "coming soon" preview.
+A **Top cards | Full Cardex** switch sits at the top of the Cardex tab: Full Cardex renders the
+real `CardexPage` inside the profile with a `viewer` prop — the profile owner's cards drive
+ownership (owned in color, missing grey, per-set progress), and it's read-only: no page header,
+no Personalized Collections, no Shift+Click/double-tap add or eBay ⌘-click, prices zeroed (so no
+tooltip/zoom prices), view-only zoom, and it never touches the URL (no ?game=&set= deep links).
+
+- **Shared Cardex:** while `privacy.cardex` is on, `FriendsProvider` keeps `shared_cardex/{uid}` =
+  `{ cards: JSON }` in step with the inventory (debounced, skips unchanged writes) — only the fields
+  ownership needs (`toSharedCards()`: apiId, set, number, quantity, foil, grade… no prices, dates or
+  groups). Turning sharing off deletes it. Rules: readable by the owner, or by an accepted friend
+  (`isFriendOf()`) while the profile's `privacy.cardex` is true. One doc (~150 bytes/card, so the
+  1MiB limit is ~6k distinct inventory rows — chunk it if someone gets close).
+- The Filters summary bar (Floor / Games / Hidden · Edit) shows only on Portfolio pages
+  (`FilterPanel.tsx`) — the filters don't affect anything else.
+
 ## Pack Analysis — Removed
 
 The `/pack-analysis` page (expected value per booster pack for Lorcana/Riftbound/Pokémon) was
@@ -2135,9 +2218,8 @@ TCGHaven/
 │   ├── inventory/page.tsx         ← Inventory page wrapper
 │   ├── cardex/page.tsx            ← Cardex page wrapper (includes Personal Collections tab, §6)
 │   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
-│   ├── settings/page.tsx          ← Settings page wrapper — inventory number repair (any signed-
-│   │                                 in user) + Needs Review editor (isAdmin-gated, §5); "Sync
-│   │                                 Card Data" itself lives at /admin, see §17
+│   ├── settings/page.tsx          ← Redirects to /profile?settings=1 (Settings is a panel on the
+│   │                                 profile now — see the staff-portal note in §5)
 │   ├── portfolio/
 │   │   ├── [cardId]/page.tsx      ← Individual card detail page → CardDetailPage.tsx
 │   │   └── analytics/page.tsx     ← Portfolio analytics (dynamic-imported, ssr:false) →
@@ -2233,8 +2315,8 @@ TCGHaven/
     │   ├── AdminCatalogPage.tsx    ← Admin Catalog page (§5): SyncPanel (§17), CatalogBrowser
     │   │                             (incl. whole-catalog search), CardTable, AddCardForm,
     │   │                             EditCardForm, NewSetForm, RawSourceCheckPanel
-    │   └── SettingsPage.tsx        ← Inventory number repair (any signed-in user) + Needs Review
-    │                                 editor (isAdmin-gated, §5, §17)
+    │   └── ProfilePage.tsx         ← Your profile / someone else's (§19 Friends) — banner ⚙️ opens
+    │                                 Settings (components/friends/SettingsDialog.tsx)
     └── portfolio/
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
         ├── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
@@ -2688,3 +2770,28 @@ field whole); only new docs use `set`. And Firestore hands map keys back in its 
 "did this field change?" check compared `JSON.stringify` output that differed only in key order —
 the second Japanese sync rewrote 1,378 unchanged cards before this was caught. The comparison now
 uses `stableStringify()` (sorted keys). A repeat sync with no price changes writes nothing.
+
+### 30. A page.tsx must wrap its lazy component, never `export default` it directly
+Every page is `dynamic(() => import('@/components/pages/X'), { ssr: false })`. Exporting that
+loadable directly (`export default Page`) hands it Next's page props, including `searchParams` —
+and forwarding them counts as reading them, so Next renders that page on the server for **every**
+request instead of serving a pre-built copy. On Vercel that meant each click into Portfolio,
+Inventory or Sold waited ~0.5–1s for a server render before the page even switched, while Settings
+and Cardex (already wrapped) were instant. Always `export default function Page() { return
+<PageContent /> }`, and check `next build`'s route table: content pages should be ○ (static). Pages
+with an id in the path (`/portfolio/[cardId]`, `/u/[username]`, …) are necessarily ƒ; `app/loading.tsx`
+gives those an instant loading state. Related: Inventory draws its rows 50 at a time as you scroll
+(`renderLimit`) — drawing all 900+ at once blocked the page for ~0.4s on every visit.
+`npm run dev` runs with a 4GB heap (`NODE_OPTIONS=--max-old-space-size=4096`): with every game's
+catalog cached in one process, the default ~2GB made Next restart the dev server ("approaching the
+used memory threshold") several times a session.
+
+### 31. Old inventory cards saved thumbnail-size images — `sharpImageUrl()` upgrades them on load
+Cards added before Pokémon search went catalog-first saved pokemontcg.io's small image
+(`…/swsh4/12.png`, 245px); old Lorcana cards saved lorcast's `/digital/small/`. Both looked blurry
+at card size (20 of 47 Pokémon cards in one real inventory). `sharpImageUrl()` (`lib/utils.ts`)
+rewrites them to the full-size copy (`…/12_hires.png`, `/digital/large/` — verified to exist for
+every affected card) as cards enter the store (`withLivePrice`, sold-card loaders), so every page
+gets the sharp image with no Firestore writes. Anything that saves a card image should save the
+large one (`images.large ?? images.small`).
+
