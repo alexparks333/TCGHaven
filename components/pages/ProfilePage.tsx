@@ -15,6 +15,8 @@ import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
+import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
+import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
 import {
   getProfile, resolveUsername, profilePath, updateProfileDetails, loadFriendCardex, sendFriendRequest, acceptFriendRequest, removeFriendship,
@@ -254,7 +256,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   )
 }
 
-// ── What friends can see (compact, inside your header) ─────────────────────────────────────
+// ── What others can see (compact, inside your header) ─────────────────────────────────────
 
 function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profile) => void }) {
   const [saving, setSaving] = useState<keyof ProfilePrivacy | null>(null)
@@ -273,14 +275,14 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
 
   const rows: { key: keyof ProfilePrivacy; icon: typeof Award; label: string; hint: string }[] = [
     { key: 'cardex', icon: BookOpen, label: 'Cardex', hint: 'Which cards you own — never prices or what you paid' },
-    { key: 'badges', icon: Award, label: 'Badges', hint: 'Badges are coming soon' },
+    { key: 'badges', icon: Award, label: 'Badges', hint: 'Your Haven Badges pin book' },
   ]
 
   return (
     <div className="flex-1 md:flex-none md:w-[290px] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
       <div className="flex items-center gap-1.5 px-1 mb-2">
         <Eye size={13} className="text-slate-500" />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Friends can see</span>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Public on your Haven</span>
       </div>
       <div className="flex flex-col gap-1">
         {rows.map(({ key, icon: Icon, label, hint }) => {
@@ -297,7 +299,6 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
             >
               <Icon size={15} className={on ? 'text-violet-700' : 'text-slate-500'} />
               <span className="text-sm font-semibold text-ink flex-1">{label}</span>
-              {key === 'badges' && <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Soon</span>}
               <Switch on={on} saving={saving === key} />
             </button>
           )
@@ -332,7 +333,7 @@ function Showcase({ profile, isMe, isFriend }: { profile: Profile; isMe: boolean
   const [tab, setTab] = useState<ShowcaseTab>('cardex')
   // Cardex tab: "Top cards" (best-first showcase) or "Full Cardex" (every set, owned and missing)
   const [view, setView] = useState<CardexView>('top')
-  const cardexVisible = isMe || (isFriend && profile.privacy.cardex)
+  const cardexVisible = isMe || profile.privacy.cardex
   const shared = tab === 'cardex' ? profile.privacy.cardex : profile.privacy.badges
   const tabs: { id: ShowcaseTab; label: string; icon: typeof Award }[] = [
     { id: 'cardex', label: 'Cardex', icon: BookOpen },
@@ -362,7 +363,7 @@ function Showcase({ profile, isMe, isFriend }: { profile: Profile; isMe: boolean
               'flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full',
               shared ? 'bg-emerald-600/15 text-emerald-700' : 'bg-slate-800 text-slate-500',
             )}>
-              {shared ? <Eye size={11} /> : <EyeOff size={11} />}{shared ? 'Friends can see' : 'Only you'}
+              {shared ? <Eye size={11} /> : <EyeOff size={11} />}{shared ? 'Public' : 'Only you'}
             </span>
           )}
           {tab === 'cardex' && cardexVisible && (
@@ -418,7 +419,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   const [limit, setLimit] = useState(FIRST_PAGE)
   const [zoom, setZoom] = useState<ZoomCardData | null>(null)
   useScrollLock(zoom !== null)
-  const canView = isMe || (isFriend && profile.privacy.cardex)
+  const canView = isMe || profile.privacy.cardex
 
   useEffect(() => {
     if (isMe || !canView) return
@@ -458,7 +459,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   if (!canView || friendCards === 'private') {
     return (
       <Locked>
-        {isFriend ? `${first} keeps their Cardex private.` : `Only ${first}'s friends can see their Cardex — and only if ${first} shares it.`}
+        {`${first} keeps their Cardex private.`}
       </Locked>
     )
   }
@@ -594,32 +595,27 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   )
 }
 
-// ── Badges (coming soon) ────────────────────────────────────────────────────────────────────
-
-const PREVIEW_BADGES = ['First Pull', 'Set Master', 'Gem Mint', 'Century Club', 'Chase Card', 'Good Friend']
+// ── Badges: the Haven Badges pin book ──────────────────────────────────────────────────────
 
 function BadgesTab({ profile, isMe, isFriend }: { profile: Profile; isMe: boolean; isFriend: boolean }) {
+  const { myBadges } = useFriends()
+  const [theirs, setTheirs] = useState<SharedBadges | 'private' | undefined>(undefined)
+  const canView = isMe || profile.privacy.badges
+
+  useEffect(() => {
+    if (isMe || !canView) return
+    let live = true
+    loadBadges(profile.uid).then((b) => { if (live) setTheirs(b) })
+    return () => { live = false }
+  }, [isMe, canView, profile.uid])
+
   const first = profile.displayName.split(' ')[0]
-  if (!isMe && !(isFriend && profile.privacy.badges)) {
-    return <Locked>{isFriend ? `${first} hasn't shared their badges.` : `Only ${first}'s friends can see their badges.`}</Locked>
+  if (!canView || theirs === 'private') {
+    return <Locked>{`${first} keeps their badges private.`}</Locked>
   }
-  return (
-    <div className="flex flex-col items-center py-4">
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 md:gap-6">
-        {PREVIEW_BADGES.map((name) => (
-          <div key={name} className="flex flex-col items-center gap-2 opacity-60">
-            <div
-              className="w-16 h-[72px] flex items-center justify-center bg-gradient-to-br from-slate-700 to-slate-800 text-slate-500 shadow-inner"
-              style={{ clipPath: 'polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)' }}
-            >
-              <Lock size={18} />
-            </div>
-            <span className="text-[11px] font-semibold text-slate-500 text-center">{name}</span>
-          </div>
-        ))}
-      </div>
-      <span className="mt-6 text-[11px] font-bold uppercase tracking-wider text-violet-700 bg-violet-600/15 px-3 py-1 rounded-full">Coming soon</span>
-      <p className="text-xs text-slate-500 mt-2 text-center max-w-sm">Earn badges for collecting milestones and show them off right here.</p>
-    </div>
-  )
+  const badges = isMe ? myBadges : theirs ?? null
+  if (!badges) {
+    return <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-slate-500" /></div>
+  }
+  return <BadgeLibrary ownerName={profile.displayName} badges={badges} isMe={isMe} />
 }

@@ -14,7 +14,10 @@ import { DevPanel } from '@/components/dev/DevPanel'
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   // The staff portal (/admin) has its own sign-in and layout (app/admin/layout.tsx) — none of the
   // collector app's shell, session or background price loading applies there.
-  if (usePathname()?.startsWith('/admin')) return <>{children}</>
+  const pathname = usePathname()
+  if (pathname?.startsWith('/admin')) return <>{children}</>
+  // The Badges pin book fills the whole window, so that page drops the usual content-width cap.
+  const fullWidth = pathname === '/badges'
   return (
     <AuthProvider>
       <FriendsProvider>
@@ -31,7 +34,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
                 Admin catalog table's own intentional sideways scroll. */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-x-none">
               {/* Bottom padding on phones clears the fixed bottom nav (plus the iPhone home bar) */}
-              <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-5 md:pt-8 pb-[calc(env(safe-area-inset-bottom)+88px)] md:pb-8">
+              <div className={`${fullWidth ? '' : 'max-w-7xl '}mx-auto w-full px-4 sm:px-6 lg:px-8 pt-5 md:pt-8 pb-[calc(env(safe-area-inset-bottom)+88px)] md:pb-8`}>
                 {children}
               </div>
             </main>

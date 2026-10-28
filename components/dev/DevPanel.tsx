@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw } from 'lucide-react'
+import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award } from 'lucide-react'
+import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { ADMIN_UID } from '@/lib/firebase/config'
@@ -66,6 +67,16 @@ function Panel({ uid }: { uid: string }) {
   }, [])
 
   useEffect(() => { if (open && !status) call('status') }, [open, status, call])
+
+  // Badges: pretend every badge is earned (only on this device, only on the dev server).
+  const [allBadges, setAllBadges] = useState(false)
+  useEffect(() => { try { setAllBadges(localStorage.getItem(DEV_ALL_BADGES_KEY) === '1') } catch { /* storage blocked */ } }, [])
+  function toggleAllBadges() {
+    const next = !allBadges
+    setAllBadges(next)
+    try { localStorage.setItem(DEV_ALL_BADGES_KEY, next ? '1' : '0') } catch { /* storage blocked */ }
+    window.dispatchEvent(new Event(DEV_ALL_BADGES_EVENT))
+  }
 
   function replayPopups() {
     try { localStorage.removeItem(`tcghaven-seen-requests:${uid}`) } catch { /* storage blocked */ }
@@ -146,6 +157,11 @@ function Panel({ uid }: { uid: string }) {
             <ExternalLink size={15} />View Tess&rsquo;s profile
           </Link>
         )}
+        <button onClick={toggleAllBadges} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+          <Award size={15} />
+          <span className="flex-1">Show all badges as earned</span>
+          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', allBadges ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>{allBadges ? 'ON' : 'OFF'}</span>
+        </button>
         <button onClick={replayPopups} className={cn(btn, 'text-slate-400 hover:text-ink hover:bg-slate-800')}>
           <BellRing size={15} />Replay request popups
         </button>

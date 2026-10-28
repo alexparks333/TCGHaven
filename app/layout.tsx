@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Cinzel } from 'next/font/google'
 import dynamic from 'next/dynamic'
 import './globals.css'
 
@@ -9,6 +9,8 @@ const ClientWrapper = dynamic(
 )
 
 const inter = Inter({ subsets: ['latin'] })
+// Engraved lettering in the Haven Badges pin books (page titles, nameplates — .pinbook-serif)
+const cinzel = Cinzel({ subsets: ['latin'], weight: ['500', '700'], variable: '--font-engraved', display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'TCGHaven',
@@ -38,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preload" as="image" href="/logo.png" />
         <link rel="preload" as="image" href="/logo-text.png" />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${cinzel.variable}`}>
         <ClientWrapper>{children}</ClientWrapper>
       </body>
     </html>

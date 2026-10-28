@@ -429,3 +429,169 @@
 @media (prefers-reduced-motion: reduce) {
   .friend-toast, .friend-toast.friend-toast-out { animation: none; }
 }
+
+/* Haven Badges pin book (components/badges/BadgeBook.tsx) — a collector's album: the book's own
+   leather (its set's cover colours, --leather-from/--leather-to, stitched in --accent) with gold
+   corners, deep velvet pages in a gold-foil frame, gilded page edges, a riveted ring mechanism,
+   engraved serif lettering (--font-engraved, Cinzel) and a brass nameplate under every spot. The
+   turning page is a 3D leaf (two faces, backface hidden) rotating around the spine. */
+.pinbook { perspective: 2600px; }
+.pinbook-serif { font-family: var(--font-engraved), Georgia, serif; }
+.pinbook-cover {
+  background-color: var(--leather-to, #33363b);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(130% 90% at 25% 10%, rgba(255, 255, 255, 0.16), transparent 55%),
+    linear-gradient(150deg, var(--leather-from, #6a6e75), var(--leather-to, #33363b));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 -14px 30px rgba(0, 0, 0, 0.35),
+    0 22px 48px -18px rgba(30, 18, 8, 0.8), 0 5px 12px rgba(30, 18, 8, 0.3);
+}
+.pinbook-stitch {
+  border: 1.5px dashed color-mix(in srgb, var(--accent, #d9b25e) 70%, transparent);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  z-index: 25;
+}
+.pinbook-corner { filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55)); }
+.pinbook-strap {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"), linear-gradient(90deg, var(--leather-to, #3f4349), var(--leather-from, #62666d));
+  box-shadow: 2px 3px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border: 1px dashed color-mix(in srgb, var(--accent, #d9b25e) 55%, transparent);
+}
+.pinbook-snap {
+  background: radial-gradient(circle at 35% 30%, #fff4cf, var(--accent, #d9b25e) 45%, #6e4b16 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 -1px 1px rgba(0, 0, 0, 0.3);
+}
+/* Velvet: warm near-black, a fine pile texture, lighter toward the middle like light falling on it */
+.pinbook-page {
+  background-color: #14100d;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(120% 90% at 50% 42%, #2a221c 0%, #1b1612 48%, #0c0a08 100%);
+}
+.pinbook-page-left { box-shadow: inset -26px 0 30px -18px rgba(0, 0, 0, 0.9), inset 1px 0 0 rgba(255, 255, 255, 0.05); }
+.pinbook-page-right { box-shadow: inset 26px 0 30px -18px rgba(0, 0, 0, 0.9), inset -1px 0 0 rgba(255, 255, 255, 0.05); }
+/* Gold-foil frame: a fine outer line and a hairline inside it */
+.pinbook-frame {
+  border: 1px solid rgba(214, 177, 104, 0.42);
+  box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4px rgba(214, 177, 104, 0.18);
+  border-radius: 3px;
+}
+.pinbook-ornament { color: rgba(226, 190, 116, 0.6); filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.6)); }
+/* Engraved gold lettering + rules with diamond ends */
+.pinbook-title {
+  background: linear-gradient(180deg, #fff1c4 0%, #e3bb67 45%, #b07f2c 60%, #f2d38c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.75)) drop-shadow(0 0 6px rgba(226, 180, 90, 0.18));
+}
+.pinbook-rule {
+  height: 1px;
+  position: relative;
+  background: linear-gradient(90deg, transparent, rgba(226, 190, 116, 0.75));
+}
+.pinbook-rule-r { background: linear-gradient(90deg, rgba(226, 190, 116, 0.75), transparent); }
+.pinbook-rule::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  right: -3px;
+  transform: translateY(-50%) rotate(45deg);
+  background: linear-gradient(135deg, #fbe7a6, #b8862b);
+}
+.pinbook-rule-r::after { right: auto; left: -3px; }
+/* Gilded page edges */
+.pinbook-edge { border: 1px solid #3a2a12; }
+.pinbook-edge-left { background: linear-gradient(90deg, #8a6420, #e2bd6a 35%, #a37a2c 70%, #5e420f); }
+.pinbook-edge-right { background: linear-gradient(90deg, #5e420f, #a37a2c 30%, #e2bd6a 65%, #8a6420); }
+.pinbook-spine { background: linear-gradient(90deg, #050404, #231d18 50%, #050404); z-index: 20; }
+.pinbook-plate {
+  z-index: 20;
+  background: linear-gradient(90deg, #6d7279, #d5d9de 35%, #f4f6f8 50%, #b9bec4 65%, #5b6066);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+.pinbook-rivet { background: radial-gradient(circle at 35% 30%, #ffffff, #9aa0a7 60%, #4b5056); box-shadow: 0 1px 1px rgba(0, 0, 0, 0.6); }
+.pinbook-ring {
+  z-index: 21;
+  background: linear-gradient(180deg, #ffffff 0%, #c9ced3 30%, #7e858c 55%, #e6e9ec 78%, #8b9299 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.7), inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+.pinbook-leaf { transform-style: preserve-3d; z-index: 15; will-change: transform; }
+.pinbook-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.pinbook-face-back { transform: rotateY(180deg); }
+.pinbook-pin {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  filter: drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.75)) drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55));
+}
+.pinbook-plate-name { line-height: 1.5; }
+.pinbook-plate-lit {
+  color: #3b2709;
+  background: linear-gradient(180deg, #f6dc98, #c99a42 55%, #e8c779);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.5);
+}
+.pinbook-plate-dim {
+  color: rgba(226, 190, 116, 0.32);
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 235, 200, 0.04);
+}
+.pinbook-label {
+  background: #ecdfc2;
+  border: 2px dashed rgba(74, 47, 20, 0.4);
+  outline: 5px solid #ecdfc2;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pinbook-leaf { transition: none !important; }
+}
+
+/* Badges shelf (components/badges/BadgeLibrary.tsx): closed pin books in each set's leather. */
+.badge-cover {
+  container-type: inline-size;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -12px 24px rgba(0, 0, 0, 0.35);
+}
+.badge-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 30% 10%, rgba(255, 255, 255, 0.14), transparent 55%),
+    repeating-radial-gradient(circle at 20% 30%, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+.badge-cover-inside {
+  background: linear-gradient(90deg, #2e3136, #474b51);
+  box-shadow: inset -8px 0 18px rgba(0, 0, 0, 0.45);
+}
+.badge-book-tile { transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1); perspective: 900px; }
+.badge-book-tile:hover, .badge-book-tile:focus-visible { transform: translateY(-6px) rotate(-1.5deg); }
+.badge-book-tile:focus-visible [data-cover] { outline: 3px solid #8a5d36; outline-offset: 3px; border-radius: 14px; }
+@keyframes badge-shelf-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.badge-shelf-in { animation: badge-shelf-in 0.35s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .badge-shelf-in { animation: none; }
+  .badge-book-tile, .badge-book-tile:hover { transition: none; transform: none; }
+}
+/* A completed pin book's progress bar: a slow gold shine sweeping across */
+@keyframes badge-bar-shine { from { background-position: -120px 0, 0 0; } to { background-position: 260px 0, 0 0; } }
+.badge-bar-complete {
+  background-image: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.75) 50%, transparent 70%), linear-gradient(90deg, #b8862b, #fbe7a1, #d4a640) !important;
+  background-size: 120px 100%, 100% 100%;
+  background-repeat: no-repeat;
+  animation: badge-bar-shine 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .badge-bar-complete { animation: none; } }
+/* An earned pin's moving glint (BadgeBook BadgeSpot) — clipped to the pin's shape */
+.pinbook-glint {
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 112'%3E%3Cpath d='M50 3 C52 3 54 4 55.5 5 L91 25 C94 27 96 30 96 33.5 L96 78.5 C96 82 94 85 91 87 L55.5 107 C52 109 48 109 44.5 107 L9 87 C6 85 4 82 4 78.5 L4 33.5 C4 30 6 27 9 25 L44.5 5 C46 4 48 3 50 3 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 112'%3E%3Cpath d='M50 3 C52 3 54 4 55.5 5 L91 25 C94 27 96 30 96 33.5 L96 78.5 C96 82 94 85 91 87 L55.5 107 C52 109 48 109 44.5 107 L9 87 C6 85 4 82 4 78.5 L4 33.5 C4 30 6 27 9 25 L44.5 5 C46 4 48 3 50 3 Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+@keyframes pin-inspector-in { from { opacity: 0; } to { opacity: 1; } }
+.pin-inspector-in { animation: pin-inspector-in 0.25s ease-out both; }

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert } from 'lucide-react'
+import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { friendlyAuthError } from '@/lib/auth-errors'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -17,6 +17,7 @@ const NAV = [
   { href: '/admin', label: 'Catalog', icon: Library, ownerOnly: false },
   { href: '/admin/sync', label: 'Sync', icon: RefreshCw, ownerOnly: false },
   { href: '/admin/review', label: 'Needs Review', icon: ClipboardCheck, ownerOnly: false },
+  { href: '/admin/badges', label: 'Badges', icon: Award, ownerOnly: false },
   { href: '/admin/team', label: 'Team', icon: Users, ownerOnly: true },
 ]
 

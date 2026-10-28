@@ -131,14 +131,34 @@ service cloud.firestore {
     }
 
     // A copy of which cards someone owns (no prices or purchase info), kept only while they share
-    // their Cardex. Their friends can read it while the profile's privacy.cardex is on. The
+    // their Cardex. Any signed-in collector can read it while the profile's privacy.cardex is on (the default). The
     // Portfolio has no shared copy at all — it's never visible to anyone else.
     match /shared_cardex/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
-        (isFriendOf(uid) && get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('cardex', false) == true)
+        get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('cardex', false) == true
       );
       allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // The badge catalog — every pin book and badge (lib/badgeCatalog.ts), edited in the staff
+    // portal's Badges page. Anyone can read it; only staff change it.
+    match /badge_catalog/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Haven Badges (lib/badges.ts): { earned: { badgeId: earnedAtMillis }, progress: { badgeId:
+    // [have, total] } }, kept up to date by the owner's own app. Readable by the owner, or by any
+    // signed-in collector while the profile's privacy.badges is on (the default).
+    match /shared_badges/{uid} {
+      allow read: if signedIn() && (
+        request.auth.uid == uid ||
+        get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('badges', false) == true
+      );
+      allow write: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['earned', 'progress', 'updatedAt'])
+        && request.resource.data.earned is map && request.resource.data.progress is map;
     }
 
     // Old personal invite links — /invite/{code} now just opens that person's Haven. Looked up one

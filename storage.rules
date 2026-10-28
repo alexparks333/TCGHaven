@@ -8,6 +8,15 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    // Badge files (pin art, 3D models, normal maps) uploaded from the staff portal's Badges page.
+    match /badges/{badgeId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && (
+        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'] ||
+        firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid))
+      ) && request.resource.size < 25 * 1024 * 1024;
+    }
+
     match /catalog/{game}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null && (

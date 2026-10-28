@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
+import { loadBadges, computeBadges, saveBadges, sameBadges, type SharedBadges } from '@/lib/firebase/badges'
+import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import {
   ensureProfile, getProfile, watchFriendships, otherUid, DEFAULT_PRIVACY, readSharedCardexRaw, writeSharedCardex, toSharedCards,
   type Friendship, type Profile,
@@ -24,6 +26,7 @@ interface FriendsContextValue {
   outgoing: FriendEntry[]  // requests I sent, newest first
   byUid: Map<string, Friendship>
   ready: boolean
+  myBadges: SharedBadges | null  // your Haven Badges, kept in step with your collection
   // The Friends popup (FriendsDialog) — the quick list; /friends is the full page
   open: boolean
   tab: FriendsTab
@@ -103,6 +106,35 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; clearTimeout(t) }
   }, [user, sharing, cards, dataLoading])
 
+  // Haven Badges (lib/badges.ts): recomputed whenever the collection changes; anything newly earned
+  // is saved to shared_badges/{uid} (earned badges are kept for good). Skips writes when unchanged.
+  const { catalog: badgeCatalog, loaded: badgeCatalogLoaded } = useBadgeCatalog()
+  const [myBadges, setMyBadges] = useState<SharedBadges | null>(null)
+  const savedBadges = useRef<SharedBadges | null>(null)
+  useEffect(() => { savedBadges.current = null; setMyBadges(null) }, [user])
+  useEffect(() => {
+    if (!user || dataLoading || !badgeCatalogLoaded) return
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        if (!savedBadges.current) {
+          const prev = await loadBadges(user.uid)
+          savedBadges.current = prev === 'private' ? { earned: {}, progress: {} } : prev
+        }
+        const next = computeBadges(cards, savedBadges.current, badgeCatalog)
+        if (cancelled) return
+        setMyBadges(next)
+        if (!sameBadges(next, savedBadges.current)) {
+          await saveBadges(user.uid, next)
+          savedBadges.current = next
+        }
+      } catch (e) {
+        console.error('Updating your badges failed:', e)
+      }
+    }, 800)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [user, cards, dataLoading, badgeCatalog, badgeCatalogLoaded])
+
   const value = useMemo<FriendsContextValue>(() => {
     const uid = user?.uid ?? ''
     const entry = (f: Friendship): FriendEntry => ({ uid: otherUid(f, uid), profile: profiles.get(otherUid(f, uid)) ?? null, friendship: f })
@@ -115,13 +147,14 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       outgoing: list.filter((f) => f.status === 'pending' && f.requester === uid).map(entry).sort(newest),
       byUid: new Map(list.map((f) => [otherUid(f, uid), f])),
       ready,
+      myBadges,
       open, tab, focusUid,
       openFriends: (t, focus) => { if (t) setTab(t); setFocusUid(focus ?? null); setOpen(true) },
       closeFriends: () => setOpen(false),
       setTab,
       cacheProfile,
     }
-  }, [user, me, list, profiles, ready, open, tab, focusUid, cacheProfile])
+  }, [user, me, list, profiles, ready, myBadges, open, tab, focusUid, cacheProfile])
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>
 }

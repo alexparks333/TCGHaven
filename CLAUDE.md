@@ -1635,12 +1635,153 @@ The first community feature (Creators/Communities come next). `lib/firebase/frie
   first request creates the account, a profile and a shared Cardex: ~half of Riftbound Origins and
   Pokémon Base Set plus a few chase cards (seeded, so it's the same every time; top 3 PSA 10).
 
+### Haven Badges — the pin book (2026-10-27)
+
+Trophies for collecting milestones, made only by TCG Haven and added over time.
+- **Managed in the staff portal: `/admin/badges`** (`components/admin/BadgesAdmin.tsx`). Books and
+  badges live in ONE Firestore doc, `badge_catalog/main` = `{ sets, badges }` (public read, staff
+  write), read live everywhere through `useBadgeCatalog()` (`lib/badgeCatalog.ts`, one shared
+  `onSnapshot`); `DEFAULT_BADGE_CATALOG` in `lib/badges.ts` is only the fallback until that doc exists.
+  The admin page: book tabs (add/edit/delete — name, subtitle, monogram, game, cover colours with a
+  live cover preview), the book's badges by page (preview in 3D, move up/down, edit, delete), and a
+  badge editor — name (id is slugged from it once), book, page, description, slot noun, requirement
+  slots (each: a label + cards found with the admin catalog search; picked cards' name/photo are
+  saved on the slot as `cards` for display), and uploads to Storage `badges/{id}/…`: pin art
+  (`imageUrl`, PNG with transparency — the book shows it, its holes and glint use its shape as a
+  mask), a `.glb` model, a normal map. Uploaded files are loaded through `/api/badge-asset`
+  (`lib/badgeAssets.ts`) because WebGL/masks need same-origin files and the bucket has no CORS.
+  A badge with no slots can't be earned (0/0 isn't "complete").
+- **Definitions** (`lib/badges.ts`): each badge is "collect one of each" — `slots`, each
+  filled by owning ANY of its catalog ids (matched on inventory `apiId`). First badge: **Origins
+  Overnumbered** — for each of the 12 Origins Legends, own its Overnumbered (`ogn-{n}-298`) or
+  Signature (`ogn-{n}-star-298`) printing (n = 299–310). Add a badge = add an entry (+ pin art).
+- **Earning** (`lib/firebase/badges.ts`): `FriendsProvider` recomputes on every collection change
+  and saves `shared_badges/{uid}` = `{ earned: { id: earnedAtMs }, progress: { id: [have, total] } }`.
+  Earned badges are kept for good (a trophy — selling the cards doesn't take it back). Computed on
+  the owner's device, like the shared Cardex. Rules: owner reads/writes; any signed-in user reads
+  while `privacy.badges` is on (the default).
+- **Badges page** `/badges` (`BadgesPage.tsx`, sidebar + phone bar under Cardex): your own book,
+  `full` size — the page drops the usual `max-w-7xl` content cap (`ClientWrapper.tsx`) and on desktop
+  the book stretches to fill the window below the title (phones keep a book's proportions); pins
+  size to the tighter of page width/height.
+- **Pin book** (`components/badges/BadgeBook.tsx`, also a profile's Badges tab for friends; styles `.pinbook-*` in
+  `globals.css`): a collector's album (restyled 2026-10-28) — the book's own
+  leather (its set's `cover` colours as CSS vars, grain, saddle stitching in its accent, gold corner
+  protectors, matching strap), velvet pages in a gold-foil double frame with engraved corner
+  ornaments, gilded page edges, a riveted ring mechanism, engraved serif lettering (Cinzel —
+  `--font-engraved` from app/layout.tsx, `.pinbook-serif`), and a brass nameplate under every spot
+  (the badge's name once earned, "? ? ?" before). No title page — pins start on page one (the book's name + earned count
+  sit next to "All pin books" instead). Each badge has a `page` (e.g. "Origins"): badges are grouped
+  by page, 6 a page (2 × 3 grid), and each page's name is across its top
+  (gold engraved lettering between gold rules, `PageTitle`). Spots no badge uses yet are left blank (no placeholders); always ≥4 pages so it turns.
+  The Badges page has no heading — the book gets the room. The arrows (or ←/→) turn
+  the page in 3D: a two-faced leaf hinged at the spine rotates 180° (front = page being turned,
+  back = page landing), then the spread changes. Nothing may change when the turn ends (that read as
+  a jump cut): the stacked page edges fade to their new counts during the turn, the turning page has
+  the same styling as a flat page (no extra shadow), and lighting overlays run during it — the front
+  darkens toward upright, the back brightens as it lays down, the uncovered page starts in its
+  shadow (`TurnShadow`) — all ending exactly at the flat look. An unearned badge is a pin-shaped hole in the felt;
+  hover/tap shows the pin (greyed), name, how to earn it and progress (e.g. 2 / 12 Legends).
+- **Badge Sets & the shelf** (`BADGE_SETS` in `lib/badges.ts`; each badge has a `set`): every set
+  is its own pin book — one per game: Riftbound (holds Origins Overnumbered), Pokémon, Lorcana,
+  One Piece, Magic. A book with no badges yet shows its `monogram` medallion and "Coming soon". `components/badges/BadgeLibrary.tsx` (Badges page + profile Badges tab)
+  starts on a shelf of closed books (`BookCover`: leather in the set's `cover` colors, stitched
+  spine, strap + snap, the set's first pin or its monogram, earned count; everything centred on the
+  stitched frame, not the whole cover). Under each book, `CompletionBar`: pins earned / total in the
+  book's colours (animates in), gold with a shine (`.badge-bar-complete`) once the book is complete. Clicking one: the open
+  book is laid out invisibly to measure where its cover lands → the closed book flies there from
+  the shelf (FLIP: translate+scale) → its cover swings open around the spine (rotateY −180°; back
+  face = the book's first page: `BadgeBook coverOnly` drawn at full width, clipped to its left
+  half — so the page is visible as the cover swings over and lands exactly on the real one) while
+  the right page shows through → the flyer is swapped for the real book (no wipe). "All pin books" goes back to the shelf. Reduced motion skips straight to open.
+  Choreography: the closed book flies to the middle (centred = the open book's right half shifted
+  left by half a page), then the cover swings open WHILE everything glides right into place (same
+  duration + easing). All positions are relative to the library's own box and the flying book is
+  drawn inside it (not `position: fixed`) — window-relative coordinates drifted whenever the page
+  scrolled. The flying book is three nested layers, one motion each — fly (translate+scale),
+  glide (translateX + the perspective), swing (pure rotateY 0→−180°). When the fly's scale and the
+  swing shared one element and their timing overlapped, the browser interpolated the two matrices
+  and squashed the cover flat instead of turning it (it looked right only some of the time).
+  The 3D perspective lives on the moving book, looking from the spine, so the cover
+  doesn't warp as it glides; the book scrolls into view (centred) once laid out. In a profile the
+  book is capped by window height so it always fits on screen.
+- **3D inspect view** (`components/badges/PinInspector.tsx`, three.js — loaded only when a pin is
+  clicked; `next/dynamic` from `BadgeBook`): click a pin or its hole in the book → full-screen viewer,
+  drag to turn it over, scroll/pinch to zoom, slow auto-turn until you touch it (OrbitControls,
+  RoomEnvironment reflections, ACES tone mapping). A badge's `model` (.glb/.gltf in /public) is shown
+  when set (centred + scaled to fit); otherwise a **stand-in** built from the 2D art: bevelled gold
+  body (the silhouette extruded), an enamel face textured with the SVG art (outer band metal, middle
+  glossy enamel via a roughness/metalness map + bump), the star and ribbon (`PIN_STAR`/`PIN_RIBBON`)
+  raised in relief, and a back with a brushed "TCG HAVEN" back stamp, post and clutch. Dev server
+  only: the Dev panel's "Show all badges as earned" (localStorage, this device only). The camera is
+  fitted to the pin (fills ~84% of the shorter side of the view, refitted on resize).
+  In the book, an earned pin tilts toward the pointer with a moving glint (`.pinbook-glint`).
+- **3D models from Meshy (the real pins, 2026-10-28)** — the relief below can't sculpt figures, so
+  pins are made as models: art → Meshy image-to-3D (GLB + base colour/metal-rough/normal maps) →
+  upload the raw .glb in the badge editor — the upload field compresses it in the browser first
+  (`lib/pinOptimize.ts`: gltf-transform dedup/weld/prune, WebP textures via OffscreenCanvas,
+  meshopt; same mesh; loaded on demand; Umbreon 31MB → 8MB). `next.config.js` strips the `node:`
+  scheme on the client so gltf-transform's Node-only reader doesn't break the bundle. The CLI
+  equivalent is `npm run optimize-pin -- in.glb out.glb` (gltf-transform: the exact mesh, no simplifying — the
+  owner wants the Meshy mesh as generated — meshopt-compressed, WebP textures at 2048: Meshy's
+  118MB/1.2M-triangle file → 20.4MB; the Storage rule caps uploads at 25MB) → upload as the badge's
+  3D model → "Book picture from 3D model" in the badge editor (`pinSnapshot.ts`: a straight-on,
+  transparent render of the assembled pin saved as `imageUrl`, so the book shows exactly that pin).
+  The model is shown as-is: no displacement or extra normal map (those are only for the relief). `PinInspector` loads it with the meshopt decoder and
+  `assemblePin()` (`components/badges/pinBacks.ts`) makes it a pin: Meshy's back is a mirror of the
+  front and Meshy is NOT consistent about which side is the real one (Origins' faces −z,
+  Umbreon's +z) — so the badge editor's "Front of the pin" (`ModelFront` in BadgesAdmin.tsx)
+  renders both sides (`renderPinSides`), auto-picks the one matching the uploaded pin art
+  (`guessFront`: cropped 48px greyscale correlation — the wrong side is the art's mirror image),
+  lets staff click the other, and remakes the book picture from the choice (saved as
+  `picture-*.png`; uploaded art is `art-*.png`, which is how the art is told apart). The choice is
+  `modelFrontPositiveZ` (unset = −z). The model is turned to its front, cut through its middle with the back half flattened, and given a
+  standard back — a brushed-gold plate cut to the pin's own silhouette (vertex splat → close → fill
+  holes → `traceOutline`) with the TCG HAVEN stamp, plus the badge's `pinBack` hardware
+  (`PIN_BACKS` in `lib/badges.ts`: post & clutch, two posts, magnet). Back plates are built facing −z
+  with reversed winding and mirrored UVs (`backPlateGeometry()`) — rotating a front-facing shape
+  180° mirrors it, which only looked right on symmetric pins. Plan: Creators make pins by prompt →
+  image → Meshy API → preview/confirm → this same assembly.
+- **Art → 3D relief, no mesh** (`components/badges/pinRelief.ts`): a badge with uploaded art (and no
+  `model`) is built into a 3D pin from the image in the browser: cut-out (alpha, or flood-fill of a
+  white background), outline traced (Moore-neighbour) and extruded into a bevelled gold body, a
+  560×560 grid (320 on phones) displaced by the broad shape only, while the fine detail (filigree,
+  fur, lettering) is a 1024px normal map — putting fine detail in the mesh made it spiky. The broad
+  shape comes from the badge's **depth map** when it has one (`depthMapUrl`, uploaded in the admin;
+  white = near): made from the art with a depth model (Depth Anything V2 — `transformers`
+  `pipeline('depth-estimation', 'depth-anything/Depth-Anything-V2-Base-hf')` on the art over white,
+  normalised inside the opaque area). Without one it's guessed from colour (gold raised, figures
+  mid, scene recessed), which gives flat, even-height plateaus per colour — always add a depth map.
+  Relief height: 0.03 with a depth map, 0.018 guessed, on a 0.047 body; eased to 0 at the outline.
+  Maps read from colour: gold → metal (roughness from brightness), small saturated
+  blobs touching gold → gems (very glossy, faint inner glow), pale cyan → emissive glow, the rest
+  enamel. Fixes that matter: transparent PNG pixels get the edge colours bled into them (else hidden
+  white leaks in as a pale rim), gold is "de-lit" toward a true gold tone (art with painted-in
+  highlights otherwise reflects as white), pale bands at the outline count as gold (AI art paints
+  the coin's side in perspective), light clear coat only. Limits: depth is guessed from colour, so
+  faces/figures aren't truly sculpted — a depth map or a .glb gets past that.
+- **HavenRelief** (`tools/havenrelief/`, 2026-10-28) — our own image → bas-relief tool, replacing
+  paid ones (bas-relief.ai) and Meshy for flat-art pins: Depth Anything V2 Small (Apache-2.0) for
+  layers + Marigold Normals v1.1 (Open-RAIL++) for detail, integrated and compressed into coin
+  depth. One command (`python havenrelief.py art.png`; README has Windows/Linux + NVIDIA setup —
+  seconds on the owner's RTX 4090, ~1h on the Intel MacBook) writes `art.webp` (Pin art),
+  `height.png` (Depth map) and `normal.png` (Normal map) for the badge editor. A badge with a
+  depth map (and no `model`) is built by `buildRelief()` in "clean" mode: the height used as made
+  (read at 2048, meshed at 1100², cut cleanly at the outline), the art's own colours, metal only
+  in solid gold areas (`solidifyGold`), no invented detail. `--depth` must match `RELIEF_DEPTH`
+  (0.055) — the normal map is baked for that height. Never swap in Depth Anything V2 Base/Large:
+  they're non-commercial. Still slow to build in the browser (~40s on the MacBook): next step is
+  baking the finished pin to a GLB at save time.
+- **Pin art** (`components/badges/BadgePin.tsx`): temporary SVG enamel pins (gold hexagon rim,
+  enamel, emblem, ribbon) keyed by `art`; `PIN_SILHOUETTE` is the hole's shape.
+
 ### Profiles & what friends can see
 
 `/profile` (`components/pages/ProfilePage.tsx`) is your profile — exactly what friends see — opened
 from the sidebar's profile button (its own box; Sign out sits separately below it). You curate it:
-a bio (≤160 chars) and `privacy` on `profiles/{uid}` — `cardex` (friends can browse your Cardex) and
-`badges` (badges are coming soon); both off by default. **The Portfolio is never shared** — there is
+a bio (≤160 chars) and `privacy` on `profiles/{uid}` — `cardex` and `badges`. Both are **public by
+default** (2026-10-28): any signed-in collector can see them on your Haven, friend or not, until you
+switch them off ("Public on your Haven" on your profile). **The Portfolio is never shared** — there is
 no shared copy of values, prices or purchase info anywhere. `/u/{username}` (`profilePath()`; the
 profile's "Share profile" button copies it) — or `/profile/{uid}` as a fallback — shows someone else's
 profile with only what they share (non-friends see name/bio and an Add button).
@@ -1663,8 +1804,8 @@ tooltip/zoom prices), view-only zoom, and it never touches the URL (no ?game=&se
 - **Shared Cardex:** while `privacy.cardex` is on, `FriendsProvider` keeps `shared_cardex/{uid}` =
   `{ cards: JSON }` in step with the inventory (debounced, skips unchanged writes) — only the fields
   ownership needs (`toSharedCards()`: apiId, set, number, quantity, foil, grade… no prices, dates or
-  groups). Turning sharing off deletes it. Rules: readable by the owner, or by an accepted friend
-  (`isFriendOf()`) while the profile's `privacy.cardex` is true. One doc (~150 bytes/card, so the
+  groups). Turning sharing off deletes it. Rules: readable by the owner, or by any signed-in
+  user while the profile's `privacy.cardex` is true (the default). One doc (~150 bytes/card, so the
   1MiB limit is ~6k distinct inventory rows — chunk it if someone gets close).
 - The Filters summary bar (Floor / Games / Hidden · Edit) shows only on Portfolio pages
   (`FilterPanel.tsx`) — the filters don't affect anything else.

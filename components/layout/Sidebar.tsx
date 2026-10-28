@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Package, TrendingUp, BookOpen, SlidersHorizontal, Banknote, Users, ChevronRight, CircleUserRound } from 'lucide-react'
+import { Package, TrendingUp, BookOpen, SlidersHorizontal, Banknote, Users, ChevronRight, CircleUserRound, Award } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
@@ -15,6 +15,7 @@ const BASE_NAV = [
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/sold', label: 'Sold', icon: Banknote },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
+  { href: '/badges', label: 'Badges', icon: Award },
 ]
 // Phone bottom bar, in display order. Profile holds Settings (the ⚙️ on its banner — account,
 // username, Sign out); Filters is a button in the phone top bar (MobileHeader).
@@ -22,6 +23,7 @@ const MOBILE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
   { href: '/inventory', label: 'Inventory', icon: Package },
   { href: '/cardex', label: 'Cardex', icon: BookOpen },
+  { href: '/badges', label: 'Badges', icon: Award },
   { href: '/sold', label: 'Sold', icon: Banknote },
   { href: '/profile', label: 'Profile', icon: CircleUserRound },
 ]

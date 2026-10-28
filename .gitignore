@@ -20,3 +20,8 @@ public/uploads/
 
 # Claude Code local settings (not part of the app)
 .claude/
+/public/dev-pins/
+
+# HavenRelief local Python env + model outputs
+/tools/havenrelief/.venv/
+/tools/havenrelief/out/

@@ -27,10 +27,16 @@ const nextConfig = {
       ],
     }]
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, webpack }) => {
     if (!isServer) {
       // fs/path are Node-only — catalog loading always runs server-side via /api/cards/search
-      config.resolve.fallback = { ...config.resolve.fallback, fs: false, path: false }
+      config.resolve.fallback = { ...config.resolve.fallback, fs: false, path: false, 'fs/promises': false }
+      // @gltf-transform/core (the staff portal's in-browser pin compression, lib/pinOptimize.ts)
+      // references node:fs / node:path for its Node-only file reader; webpack can't resolve the
+      // node: scheme, so strip it and let the fallbacks above stub the modules out
+      config.plugins.push(new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
+        resource.request = resource.request.replace(/^node:/, '')
+      }))
     }
     return config
   },

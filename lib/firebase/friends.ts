@@ -17,9 +17,10 @@ import type { Card, Game } from '../types'
 //   invite_codes/{code}     — { uid }: old personal invite links. They no longer create friendships —
 //                              /invite/{code} just opens that person's Haven (InvitePage.tsx).
 //   shared_cardex/{uid}     — a copy of which cards the user owns (no prices, no purchase info),
-//                              written only while they share their Cardex; readable by their
-//                              friends while profiles/{uid}.privacy.cardex is on.
-// What friends can see is the user's choice (profile `privacy`). The Portfolio is never shared.
+//                              written only while they share their Cardex; readable by any
+//                              signed-in collector while profiles/{uid}.privacy.cardex is on.
+// Cardex and Badges are public (to signed-in collectors) unless the user makes them private
+// (profile `privacy`). The Portfolio is never shared.
 // The invite code itself lives in users/{uid}/private/invite, readable only by its owner.
 
 export interface ProfilePrivacy {
@@ -27,7 +28,9 @@ export interface ProfilePrivacy {
   badges: boolean  // friends can see your badges (badges are coming soon)
 }
 
-export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: false, badges: false }
+// Public by default: anyone signed in can see your Cardex and Badges until you make them private
+// on your profile.
+export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: true, badges: true }
 export const BIO_MAX = 160
 
 export interface Profile {
