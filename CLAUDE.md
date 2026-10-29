@@ -1720,7 +1720,12 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   the page you're on, then the closed book flies home into its spot (left empty while it's out —
   `Shelf away`). Timing: page turn 640ms, pan 420ms, cover 820ms. It's one "scene" — the spread as two screen-wide pages
   either side of the spine, with a translateX camera — and every motion's end state is laid out
-  exactly as the motion finishes. A slight pull-back (scale ~0.93–0.95) during moves; the moving
+  exactly as the motion finishes. Page turns (here and in BadgeBook) are two flat halves, not one 3D
+  sheet: the front swings up to edge-on and hides, then the back swings down — iPhone/iPad Safari
+  broke the sheet's hidden back face (black patches, pins blinking) when pages hold pin shadows and
+  pinhole filters. Swipes turn as soon as they're clear (touchmove), not on lift. The flying cover
+  animates its real size (left/top/width/height), not a scale, so it lands matching the shelf book.
+  Page titles size to the page (`cqw`, `.pinbook-page` is a size container), shrinking for long names. A slight pull-back (scale ~0.93–0.95) during moves; the moving
   layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG
   filters every frame). Uses `PinPage`/`PinholeFilter`/`buildPages` exported from BadgeBook.
 - **3D inspect view** (`components/badges/PinInspector.tsx`, three.js — loaded only when a pin is
@@ -1815,6 +1820,13 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   (0.055) — the normal map is baked for that height. Never swap in Depth Anything V2 Base/Large:
   they're non-commercial. Still slow to build in the browser (~40s on the MacBook): next step is
   baking the finished pin to a GLB at save time.
+- **Pin Display (profile Badges tab, 2026-10-29)** — `components/badges/BadgeShowcase.tsx`: the
+  Badges tab opens on a velvet display pad (book velvet + gold frame in a leather border) with
+  `PIN_DISPLAY_SPOTS` (6) spots the owner fills: click an empty spot (a round carved pinhole,
+  `#pinhole-inset`) → pick one of your earned pins; click a pin → swap / take off / view in 3D.
+  Saved as `profiles/{uid}.pinDisplay` (badge ids, '' = empty; rules allow a list ≤ 6) via
+  `updateProfileDetails`, shown at once and put back if the save fails. Only earned pins show.
+  The tab's top-right switch "Pin Display | Full Badges" (Full = the shelf of books).
 - **Pin art** (`components/badges/BadgePin.tsx`): temporary SVG enamel pins (gold hexagon rim,
   enamel, emblem, ribbon) keyed by `art`; `PIN_SILHOUETTE` is the hole's shape.
 

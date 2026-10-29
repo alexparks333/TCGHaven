@@ -464,6 +464,7 @@
 }
 /* Velvet: warm near-black, a fine pile texture, lighter toward the middle like light falling on it */
 .pinbook-page {
+  container-type: inline-size; /* the page title sizes to the page (BadgeBook PageTitle) */
   background-color: #14100d;
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
@@ -523,7 +524,7 @@
    the open chapter's gilded and standing out further */
 .pinbook-tab {
   margin-left: -3px;
-  padding: 9px 12px 9px 12px;
+  padding: 7px 8px 7px 6px;
   min-height: 40px;
   line-height: 1.15;
   border: 1px solid rgba(0, 0, 0, 0.35);
@@ -532,7 +533,7 @@
 }
 /* Closed chapters: the book's leather, cream lettering, tucked a little under the cover */
 .pinbook-tab-shut {
-  width: clamp(40px, 11.5vw, 164px);
+  width: clamp(36px, 6vw, 84px);
   transform: translateX(-8px);
   color: #f6ead0;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
@@ -541,7 +542,7 @@
 .pinbook-tab-shut:hover { transform: translateX(-2px); filter: brightness(1.15); }
 /* The open chapter: gilded, standing proud of the others */
 .pinbook-tab-open {
-  width: clamp(44px, 12.5vw, 176px);
+  width: clamp(40px, 6.6vw, 92px);
   color: #2e1d06;
   text-shadow: 0 1px 0 rgba(255, 245, 215, 0.6);
   background-image: linear-gradient(90deg, rgba(0, 0, 0, 0.14), transparent 25%), linear-gradient(180deg, #fbe4a6, #d3a64c 55%, #eccd80);
@@ -557,8 +558,8 @@
   opacity: 0.75;
 }
 .pinbook-tab-label {
-  font-size: clamp(10px, 0.8vw, 12.5px);
-  letter-spacing: 0.03em;
+  font-size: clamp(8.5px, 0.62vw, 10.5px);
+  letter-spacing: 0.02em;
   word-break: keep-all;
   overflow-wrap: normal;
   text-transform: uppercase;

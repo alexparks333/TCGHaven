@@ -205,17 +205,21 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
           {turn?.dir === 1 && <TurnShadow from="left" on={!go} ms={TURN_MS} />}
         </div>
 
-        {/* The turning page: pinned at the spine, it swings across — its front is the page
-            being turned, its back is the page that lands on the other side. */}
+        {/* The turning page, pinned at the spine — as two flat halves rather than one 3D sheet:
+            the front (the page being turned) swings up to edge-on and is gone, then the back (the
+            page that lands) swings down from edge-on onto the other side. Safari (iPhone/iPad)
+            breaks a 3D sheet's hidden back face when the page holds layered effects (pin shadows,
+            pinhole filters) — black patches, pins blinking. Flat halves need no backface tricks. */}
         {leaf && (
-          <div
-            className={cn('pinbook-leaf absolute inset-y-0 w-1/2', leaf.side === 'right' ? 'left-1/2 origin-left' : 'left-0 origin-right')}
-            style={{
-              transform: turn?.go ? `rotateY(${leaf.side === 'right' ? -180 : 180}deg)` : 'rotateY(0deg)',
-              transition: turn?.go ? `transform ${TURN_MS}ms cubic-bezier(0.45, 0.05, 0.25, 1)` : 'none',
-            }}
-          >
-            <div className="pinbook-face absolute inset-0">
+          <>
+            <div
+              className={cn('absolute inset-y-0 w-1/2 z-[15]', leaf.side === 'right' ? 'left-1/2 origin-left' : 'left-0 origin-right')}
+              style={{
+                transform: go ? `rotateY(${leaf.side === 'right' ? -90 : 90}deg)` : 'rotateY(0deg)',
+                visibility: go ? 'hidden' : 'visible',
+                transition: go ? `transform ${half}ms cubic-bezier(0.5, 0, 0.9, 0.55), visibility 0s linear ${half}ms` : 'none',
+              }}
+            >
               <PinPage page={leaf.front} side={leaf.side} {...props} turning />
               {/* darkens as it rises toward upright */}
               <div
@@ -223,15 +227,22 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
                 style={{ background: `linear-gradient(to ${away}, rgba(0,0,0,0.25), rgba(0,0,0,0.7))`, opacity: go ? 1 : 0, transition: `opacity ${half}ms ease-in` }}
               />
             </div>
-            <div className="pinbook-face pinbook-face-back absolute inset-0">
+            <div
+              className={cn('absolute inset-y-0 w-1/2 z-[15]', leaf.side === 'right' ? 'left-0 origin-right' : 'left-1/2 origin-left')}
+              style={{
+                transform: go ? 'rotateY(0deg)' : `rotateY(${leaf.side === 'right' ? 90 : -90}deg)`,
+                visibility: go ? 'visible' : 'hidden',
+                transition: go ? `transform ${half}ms cubic-bezier(0.1, 0.45, 0.5, 1) ${half}ms, visibility 0s linear ${half}ms` : 'none',
+              }}
+            >
               <PinPage page={leaf.back} side={leaf.side === 'right' ? 'left' : 'right'} {...props} turning />
-              {/* starts dark past upright, brightens as it lays down */}
+              {/* starts dark just past upright, brightens as it lays down */}
               <div
                 className="absolute inset-0 pointer-events-none"
                 style={{ background: `linear-gradient(to ${leaf.side}, rgba(0,0,0,0.25), rgba(0,0,0,0.7))`, opacity: go ? 0 : 1, transition: `opacity ${half}ms ease-out ${half}ms` }}
               />
             </div>
-          </div>
+          </>
         )}
 
         {/* Spine + binder rings */}
@@ -264,7 +275,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       {/* In a profile the book keeps a book's proportions, so it's capped by the window's height
           (the whole book always fits on screen); on the Badges page it fills the page instead. */}
       <div
-        className={cn('relative w-full mx-auto', chapters.length ? 'pl-7 pr-12 sm:pl-12 sm:pr-44' : 'px-7 sm:px-12')}
+        className={cn('relative w-full mx-auto', chapters.length ? 'pl-7 pr-12 sm:pl-12 sm:pr-28' : 'px-7 sm:px-12')}
         style={full ? undefined : { maxWidth: 'max(360px, calc((100dvh - 190px) * 1.42 + 96px))' }}
       >
 
@@ -314,7 +325,7 @@ function ChapterTabs({ chapters, open, onPick }: { chapters: string[]; open: num
           onClick={() => onPick(i)}
           title={name}
           aria-current={i === open ? 'true' : undefined}
-          className={cn('pinbook-tab pinbook-serif pointer-events-auto relative flex items-center gap-2 rounded-r-xl text-left font-bold transition-all duration-200',
+          className={cn('pinbook-tab pinbook-serif pointer-events-auto relative flex items-center gap-1 rounded-r-xl text-left font-bold transition-all duration-200',
             i === open ? 'pinbook-tab-open' : 'pinbook-tab-shut')}
         >
           <span className="pinbook-tab-num">{ROMAN[i] ?? i + 1}</span>
@@ -371,7 +382,7 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 // `below`: top-row spots open their preview downward so it isn't cut off above the book.
 // Hover: a quick preview. Click (tap on phones): the 3D inspect view. An earned pin tilts toward
 // the pointer and a glint of light moves across it, like a real enamel pin catching the light.
-function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
+export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
   const earnedAt = badges?.earned[def.id]
@@ -552,14 +563,21 @@ function PageTitle({ title, flash }: { title: string; flash?: boolean }) {
   return (
     <div className={cn('absolute inset-x-[10%] top-[4.2%] flex items-center justify-center gap-[3%] pointer-events-none', flash && 'pinbook-title-flash')}>
       <span className="pinbook-rule flex-1 max-w-[22%]" />
-      <span className="pinbook-title pinbook-serif text-[clamp(12px,1.55vw,22px)] font-bold uppercase tracking-[0.32em] whitespace-nowrap">{title}</span>
+      {/* Sized to the page (cqw), not the window — on a phone the page is the screen — and down a
+          little for long names so they still fit on one line between the rules */}
+      <span
+        className="pinbook-title pinbook-serif font-bold uppercase tracking-[0.32em] whitespace-nowrap"
+        style={{ fontSize: `clamp(11px, min(5.4cqw, ${(74 / Math.max(1, title.length * 1.1)).toFixed(2)}cqw), 22px)` }}
+      >
+        {title}
+      </span>
       <span className="pinbook-rule pinbook-rule-r flex-1 max-w-[22%]" />
     </div>
   )
 }
 
 // Engraved flourish in a page frame's corner
-function FrameOrnament({ at }: { at: 'tl' | 'tr' | 'bl' | 'br' }) {
+export function FrameOrnament({ at }: { at: 'tl' | 'tr' | 'bl' | 'br' }) {
   const flip = { tl: '', tr: 'scale(-1,1)', bl: 'scale(1,-1)', br: 'scale(-1,-1)' }[at]
   return (
     <svg viewBox="0 0 40 40" className={cn('pinbook-ornament absolute w-[11%] max-w-[54px] aspect-square', at[0] === 't' ? '-top-[2px]' : '-bottom-[2px]', at[1] === 'l' ? '-left-[2px]' : '-right-[2px]')} aria-hidden>

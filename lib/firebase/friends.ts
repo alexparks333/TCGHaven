@@ -32,6 +32,9 @@ export interface ProfilePrivacy {
 // on your profile.
 export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: true, badges: true }
 export const BIO_MAX = 160
+// The pin display pad on a profile's Badges tab: this many spots, each holding a badge id the owner
+// picked ('' = empty). Only earned badges are shown, whatever is stored.
+export const PIN_DISPLAY_SPOTS = 6
 
 export interface Profile {
   uid: string
@@ -40,6 +43,12 @@ export interface Profile {
   photoURL: string
   bio: string
   privacy: ProfilePrivacy
+  pinDisplay: string[]  // PIN_DISPLAY_SPOTS long, '' for an empty spot
+}
+
+export function toPinDisplay(v: unknown): string[] {
+  const list = Array.isArray(v) ? v : []
+  return Array.from({ length: PIN_DISPLAY_SPOTS }, (_, i) => (typeof list[i] === 'string' ? (list[i] as string).slice(0, 64) : ''))
 }
 
 export type FriendshipStatus = 'pending' | 'accepted'
@@ -76,6 +85,7 @@ function toProfile(uid: string, d: Record<string, unknown> | undefined): Profile
     photoURL: String(d.photoURL ?? ''),
     bio: String(d.bio ?? ''),
     privacy: { ...DEFAULT_PRIVACY, ...(d.privacy as Partial<ProfilePrivacy> | undefined) },
+    pinDisplay: toPinDisplay(d.pinDisplay),
   }
 }
 
@@ -115,7 +125,7 @@ export async function ensureProfile(user: User): Promise<Profile> {
     })
     try {
       await batch.commit()
-      return { uid: user.uid, username, displayName, photoURL, bio: '', privacy: DEFAULT_PRIVACY }
+      return { uid: user.uid, username, displayName, photoURL, bio: '', privacy: DEFAULT_PRIVACY, pinDisplay: toPinDisplay([]) }
     } catch {
       // Someone claimed it between the check and the write — try another.
     }
@@ -190,9 +200,10 @@ export async function searchProfiles(term: string, me: string): Promise<Profile[
   return Array.from(out.values()).slice(0, 10)
 }
 
-/** Saves what the user curates on their profile: bio and what friends can see. */
-export async function updateProfileDetails(uid: string, patch: { bio?: string; privacy?: ProfilePrivacy }): Promise<void> {
+/** Saves what the user curates on their profile: bio, what friends can see, and the pins on display. */
+export async function updateProfileDetails(uid: string, patch: { bio?: string; privacy?: ProfilePrivacy; pinDisplay?: string[] }): Promise<void> {
   const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
+  if (patch.pinDisplay) data.pinDisplay = toPinDisplay(patch.pinDisplay)
   if (patch.bio !== undefined) data.bio = patch.bio.trim().slice(0, BIO_MAX)
   if (patch.privacy) data.privacy = { cardex: !!patch.privacy.cardex, badges: !!patch.privacy.badges }
   await updateDoc(doc(db, 'profiles', uid), data)

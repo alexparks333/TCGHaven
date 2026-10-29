@@ -6,7 +6,7 @@ import { useStore } from '@/lib/store'
 import { loadBadges, computeBadges, saveBadges, sameBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import {
-  ensureProfile, getProfile, watchFriendships, otherUid, DEFAULT_PRIVACY, readSharedCardexRaw, writeSharedCardex, toSharedCards,
+  ensureProfile, getProfile, watchFriendships, otherUid, DEFAULT_PRIVACY, toPinDisplay, readSharedCardexRaw, writeSharedCardex, toSharedCards,
   type Friendship, type Profile,
 } from '@/lib/firebase/friends'
 
@@ -75,7 +75,7 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       if (requested.current.has(uid)) continue
       requested.current.add(uid)
       getProfile(uid).then((p) => {
-        setProfiles((prev) => new Map(prev).set(uid, p ?? { uid, username: '', displayName: 'Collector', photoURL: '', bio: '', privacy: DEFAULT_PRIVACY }))
+        setProfiles((prev) => new Map(prev).set(uid, p ?? { uid, username: '', displayName: 'Collector', photoURL: '', bio: '', privacy: DEFAULT_PRIVACY, pinDisplay: toPinDisplay([]) }))
       }).catch(() => requested.current.delete(uid))
     }
   }, [list, user])

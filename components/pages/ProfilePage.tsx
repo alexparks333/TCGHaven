@@ -16,6 +16,7 @@ import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
+import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
 import {
@@ -92,7 +93,7 @@ function ProfileBody({ uid, viaUsername }: { uid?: string; viaUsername?: string 
   return (
     <div className="flex flex-col gap-6 max-w-5xl mx-auto">
       <ProfileHeader profile={profile} isMe={isMe} onSaved={setMe} friendship={friendship} />
-      <Showcase profile={profile} isMe={isMe} isFriend={isFriend} />
+      <Showcase profile={profile} isMe={isMe} isFriend={isFriend} onSaved={setMe} />
     </div>
   )
 }
@@ -329,12 +330,16 @@ function Switch({ on, saving }: { on: boolean; saving: boolean }) {
 
 type ShowcaseTab = 'cardex' | 'badges'
 type CardexView = 'top' | 'full'
+type BadgesView = 'display' | 'full'
 
-function Showcase({ profile, isMe, isFriend }: { profile: Profile; isMe: boolean; isFriend: boolean }) {
+function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe: boolean; isFriend: boolean; onSaved: (p: Profile) => void }) {
   const [tab, setTab] = useState<ShowcaseTab>('cardex')
   // Cardex tab: "Top cards" (best-first showcase) or "Full Cardex" (every set, owned and missing)
   const [view, setView] = useState<CardexView>('top')
+  // Badges tab: the pins the owner put on display, or every book ("Full Badges")
+  const [badgesView, setBadgesView] = useState<BadgesView>('display')
   const cardexVisible = isMe || profile.privacy.cardex
+  const badgesVisible = isMe || profile.privacy.badges
   const shared = tab === 'cardex' ? profile.privacy.cardex : profile.privacy.badges
   const tabs: { id: ShowcaseTab; label: string; icon: typeof Award }[] = [
     { id: 'cardex', label: 'Cardex', icon: BookOpen },
@@ -368,27 +373,37 @@ function Showcase({ profile, isMe, isFriend }: { profile: Profile; isMe: boolean
             </span>
           )}
           {tab === 'cardex' && cardexVisible && (
-            <div className="ml-auto flex gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
-              {([['top', 'Top cards', Sparkles], ['full', 'Full Cardex', LayoutGrid]] as const).map(([id, label, Icon]) => (
-                <button
-                  key={id}
-                  onClick={() => setView(id)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all outline-none focus-visible:ring-2 focus-visible:ring-violet-600',
-                    view === id ? 'bg-slate-800 text-ink shadow-sm' : 'text-slate-500 hover:text-ink',
-                  )}
-                >
-                  <Icon size={13} />{label}
-                </button>
-              ))}
-            </div>
+            <ViewSwitch value={view} onChange={setView} options={[['top', 'Top cards', Sparkles], ['full', 'Full Cardex', LayoutGrid]]} />
+          )}
+          {tab === 'badges' && badgesVisible && (
+            <ViewSwitch value={badgesView} onChange={setBadgesView} options={[['display', 'Pin Display', Sparkles], ['full', 'Full Badges', BookOpen]]} />
           )}
         </div>
         {tab === 'cardex'
           ? <CardexTab profile={profile} isMe={isMe} isFriend={isFriend} view={view} />
-          : <BadgesTab profile={profile} isMe={isMe} isFriend={isFriend} />}
+          : <BadgesTab profile={profile} isMe={isMe} view={badgesView} onSaved={onSaved} />}
       </div>
     </section>
+  )
+}
+
+// The showcase's top-right switch between a tab's two views
+function ViewSwitch<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: readonly (readonly [T, string, typeof Sparkles])[] }) {
+  return (
+    <div className="ml-auto flex gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
+      {options.map(([id, label, Icon]) => (
+        <button
+          key={id}
+          onClick={() => onChange(id)}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all outline-none focus-visible:ring-2 focus-visible:ring-violet-600',
+            value === id ? 'bg-slate-800 text-ink shadow-sm' : 'text-slate-500 hover:text-ink',
+          )}
+        >
+          <Icon size={13} />{label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -598,7 +613,8 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
 
 // ── Badges: the Haven Badges pin book ──────────────────────────────────────────────────────
 
-function BadgesTab({ profile, isMe, isFriend }: { profile: Profile; isMe: boolean; isFriend: boolean }) {
+function BadgesTab({ profile, isMe, view, onSaved }: { profile: Profile; isMe: boolean; view: BadgesView; onSaved: (p: Profile) => void }) {
+  const [saveError, setSaveError] = useState(false)
   const { myBadges } = useFriends()
   const [theirs, setTheirs] = useState<SharedBadges | 'private' | undefined>(undefined)
   const canView = isMe || profile.privacy.badges
@@ -618,5 +634,19 @@ function BadgesTab({ profile, isMe, isFriend }: { profile: Profile; isMe: boolea
   if (!badges) {
     return <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-slate-500" /></div>
   }
-  return <BadgeLibrary ownerName={profile.displayName} badges={badges} isMe={isMe} />
+  if (view === 'full') return <BadgeLibrary ownerName={profile.displayName} badges={badges} isMe={isMe} />
+
+  // Arranging your own display: shown at once, saved in the background (put back if it fails)
+  async function arrange(pinDisplay: string[]) {
+    const before = profile
+    setSaveError(false)
+    onSaved({ ...profile, pinDisplay })
+    try { await updateProfileDetails(profile.uid, { pinDisplay }) } catch { onSaved(before); setSaveError(true) }
+  }
+  return (
+    <>
+      <BadgeShowcase badges={badges} isMe={isMe} ownerName={profile.displayName} ids={profile.pinDisplay} onChange={isMe ? arrange : undefined} />
+      {saveError && <p className="mt-2 text-xs text-red-500">Couldn’t save your display — try again.</p>}
+    </>
+  )
 }

@@ -100,10 +100,11 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.uid == uid
-        && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'pinDisplay', 'createdAt', 'updatedAt'])
         && (!('previousUsernames' in request.resource.data) || (request.resource.data.previousUsernames is list && request.resource.data.previousUsernames.size() <= 3))
         && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
         && (!('privacy' in request.resource.data) || request.resource.data.privacy.keys().hasOnly(['cardex', 'badges']))
+        && (!('pinDisplay' in request.resource.data) || (request.resource.data.pinDisplay is list && request.resource.data.pinDisplay.size() <= 6))
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
       allow delete: if false;
     }

@@ -37,6 +37,7 @@ export function BadgePin({ art, imageUrl, size = 72, ghost = false }: { art: str
         alt=""
         aria-hidden
         draggable={false}
+        decoding="sync"
         crossOrigin="anonymous"
         style={{ width: size, height: size * 1.12, objectFit: 'contain', ...(ghost ? { filter: 'grayscale(1)', opacity: 0.55 } : {}) }}
       />

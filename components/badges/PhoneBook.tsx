@@ -165,16 +165,17 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [next, prev, close, inspect])
 
-  // Swipe to turn
-  const touch = useRef<{ x: number; y: number } | null>(null)
-  const onTouchStart = (e: React.TouchEvent) => { touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }
-  const onTouchEnd = (e: React.TouchEvent) => {
+  // Swipe to turn — the page goes as soon as the swipe is clear, without waiting for the finger
+  // to lift
+  const touch = useRef<{ x: number; y: number; done: boolean } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => { touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, done: false } }
+  const onTouchMove = (e: React.TouchEvent) => {
     const s = touch.current
-    touch.current = null
-    if (!s) return
-    const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y
-    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.4) (dx < 0 ? next : prev)()
+    if (!s || s.done) return
+    const dx = e.touches[0].clientX - s.x, dy = e.touches[0].clientY - s.y
+    if (Math.abs(dx) > 28 && Math.abs(dx) > Math.abs(dy) * 1.3) { s.done = true; (dx < 0 ? next : prev)() }
   }
+  const onTouchEnd = () => { touch.current = null }
 
   const W = box?.width ?? 0
   const H = box?.height ?? 0
@@ -298,6 +299,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         className="relative flex-1 overflow-hidden"
         style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
         onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         onClick={() => menu && setMenu(false)}
       >
@@ -341,36 +343,54 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
               />
             )}
 
-            {/* The turning page (or the cover), pinned at the spine */}
-            {leaf && (
-              <div
-                className="absolute top-0 z-[15]"
-                style={{
-                  left: leaf.side === 'right' ? W : 0, width: W, height: H,
-                  transformStyle: 'preserve-3d',
-                  transformOrigin: leaf.side === 'right' ? 'left center' : 'right center',
-                  transform: go ? `rotateY(${leaf.side === 'right' ? -180 : 180}deg)` : 'rotateY(0deg)',
-                  transition: go ? `transform ${ms}ms ${EASE_TURN}` : 'none',
-                }}
-              >
-                <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
-                  <Face content={leaf.front} side={leaf.side} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
-                  {/* darkens as it rises toward upright */}
+            {/* The turning page (or the cover), pinned at the spine — as two flat halves rather
+                than one 3D sheet: the front swings up to edge-on and is gone, then the back swings
+                down from edge-on onto the other side. iPhone Safari breaks a 3D sheet's hidden back
+                face when the page holds layered effects (pin shadows, pinhole filters): it showed
+                black patches and pins blinking in and out. Flat halves need no backface tricks. */}
+            {leaf && (() => {
+              const half = ms / 2
+              const flipSide: Side = leaf.side === 'right' ? 'left' : 'right'
+              const free = leaf.side === 'right' ? -90 : 90 // the page's outer edge lifts toward you
+              return (
+                <>
                   <div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ background: `linear-gradient(to ${leaf.side}, rgba(0,0,0,0.2), rgba(0,0,0,0.7))`, opacity: go ? 1 : 0, transition: `opacity ${ms / 2}ms ease-in` }}
-                  />
-                </div>
-                <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-                  <Face content={leaf.back} side={leaf.side === 'right' ? 'left' : 'right'} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
-                  {/* starts dark past upright, brightens as it lays down */}
+                    className="absolute top-0 z-[15]"
+                    style={{
+                      left: leaf.side === 'right' ? W : 0, width: W, height: H,
+                      transformOrigin: leaf.side === 'right' ? 'left center' : 'right center',
+                      transform: go ? `rotateY(${free}deg)` : 'rotateY(0deg)',
+                      visibility: go ? 'hidden' : 'visible',
+                      transition: go ? `transform ${half}ms cubic-bezier(0.5, 0, 0.9, 0.55), visibility 0s linear ${half}ms` : 'none',
+                    }}
+                  >
+                    <Face content={leaf.front} side={leaf.side} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
+                    {/* darkens as it rises toward upright */}
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ background: `linear-gradient(to ${leaf.side}, rgba(0,0,0,0.15), rgba(0,0,0,0.6))`, opacity: go ? 1 : 0, transition: `opacity ${half}ms ease-in` }}
+                    />
+                  </div>
                   <div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ background: `linear-gradient(to ${leaf.side === 'right' ? 'left' : 'right'}, rgba(0,0,0,0.2), rgba(0,0,0,0.7))`, opacity: go ? 0 : 1, transition: `opacity ${ms / 2}ms ease-out ${ms / 2}ms` }}
-                  />
-                </div>
-              </div>
-            )}
+                    className="absolute top-0 z-[15]"
+                    style={{
+                      left: leaf.side === 'right' ? 0 : W, width: W, height: H,
+                      transformOrigin: leaf.side === 'right' ? 'right center' : 'left center',
+                      transform: go ? 'rotateY(0deg)' : `rotateY(${-free}deg)`,
+                      visibility: go ? 'visible' : 'hidden',
+                      transition: go ? `transform ${half}ms cubic-bezier(0.1, 0.45, 0.5, 1) ${half}ms, visibility 0s linear ${half}ms` : 'none',
+                    }}
+                  >
+                    <Face content={leaf.back} side={flipSide} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
+                    {/* starts in shadow, brightens as it lays down */}
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ background: `linear-gradient(to ${flipSide}, rgba(0,0,0,0.15), rgba(0,0,0,0.6))`, opacity: go ? 0 : 1, transition: `opacity ${half}ms ease-out ${half}ms` }}
+                    />
+                  </div>
+                </>
+              )
+            })()}
 
             {/* Spine + rings: fade in as the cover opens, out as it shuts (a shut book shows none) */}
             {(L !== null || anim?.kind === 'turn' || anim?.kind === 'shut') && (
@@ -421,20 +441,25 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         </div>
       </div>
 
-      {/* The closed book flying between its shelf spot and the page area (up to open, home to close) */}
-      {flying && box && spot && (
-        <div
-          className="absolute z-40 pointer-events-none"
-          style={{
-            left: box.left, top: box.top, width: W, height: H,
-            transformOrigin: '0 0',
-            transform: atShelf ? `translate(${spot.left - box.left}px, ${spot.top - box.top}px) scale(${spot.width / W}, ${spot.height / H})` : 'none',
-            transition: go ? `transform ${FLY_MS}ms ${anim?.kind === 'flyBack' ? 'cubic-bezier(0.5, 0, 0.3, 1)' : 'cubic-bezier(0.22, 0.8, 0.25, 1)'}` : 'none',
-          }}
-        >
-          <BookCover set={set} badges={badges} />
-        </div>
-      )}
+      {/* The closed book flying between its shelf spot and the page area (up to open, home to
+          close). Its real size is animated, not a scale: the cover re-lays out every frame (the
+          artwork's crop and the title stay true), so it lands looking exactly like the shelf's
+          book — a scaled full-screen cover kept the tall crop and snapped to the shelf's at the end. */}
+      {flying && box && spot && (() => {
+        const r = atShelf ? spot : box
+        const curve = anim?.kind === 'flyBack' ? 'cubic-bezier(0.5, 0, 0.3, 1)' : 'cubic-bezier(0.22, 0.8, 0.25, 1)'
+        return (
+          <div
+            className="fixed z-40 pointer-events-none"
+            style={{
+              left: r.left, top: r.top, width: r.width, height: r.height,
+              transition: go ? ['left', 'top', 'width', 'height'].map((k) => `${k} ${FLY_MS}ms ${curve}`).join(', ') : 'none',
+            }}
+          >
+            <BookCover set={set} badges={badges} />
+          </div>
+        )
+      })()}
 
       {inspect && (
         <PinInspector
