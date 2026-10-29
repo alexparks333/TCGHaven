@@ -1703,7 +1703,11 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   swing shared one element and their timing overlapped, the browser interpolated the two matrices
   and squashed the cover flat instead of turning it (it looked right only some of the time).
   The 3D perspective lives on the moving book, looking from the spine, so the cover
-  doesn't warp as it glides; the book scrolls into view (centred) once laid out. In a profile the
+  doesn't warp as it glides; the book scrolls into view (centred) once laid out.
+  Closing ("All pin books") runs it backwards (`mode: 'closing'`): the shelf is laid out unseen to
+  find the book's spot, the open cover (showing the spread you were on — BadgeBook `startSpread`)
+  swings shut while the book glides back to the middle, then flies home; the shelf stays mounted
+  and doesn't replay its fade-in (`Shelf intro`). In a profile the
   book is capped by window height so it always fits on screen.
 - **Phones held upright** (`components/badges/PhoneBook.tsx`, 2026-10-29): a two-page spread made
   every pin tiny, so on `(max-width: 767px) and (orientation: portrait)` BadgeLibrary opens the book
@@ -1712,7 +1716,9 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   the first (left) page. Next on a left page = the camera pans across the spread to the right page;
   next on a right page = the page turns over in 3D while the camera follows it onto the next left
   page (the same motion as the cover). Back reverses each; swipes work too; a chapter menu in the
-  top bar jumps (the new page slides in). It's one "scene" — the spread as two screen-wide pages
+  top bar jumps (the new page slides in). Close (✕) is opening backwards: the cover swings shut over
+  the page you're on, then the closed book flies home into its spot (left empty while it's out —
+  `Shelf away`). Timing: page turn 640ms, pan 420ms, cover 820ms. It's one "scene" — the spread as two screen-wide pages
   either side of the spine, with a translateX camera — and every motion's end state is laid out
   exactly as the motion finishes. A slight pull-back (scale ~0.93–0.95) during moves; the moving
   layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG

@@ -24,14 +24,18 @@ const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 //            glides with it, landing on the next left page — the same motion as opening the cover.
 //   back   — the reverse of each.
 //   jump   — a chapter picked from the menu: the new page slides in over the old one.
+//   close  — the reverse of opening: the cover swings shut over the page you're on, then the closed
+//            book flies back into its (empty) spot on the shelf.
 //
 // Everything is drawn on one "scene": the open spread, two screen-wide pages either side of the
 // spine, with the camera (a translateX) choosing which half is on screen. The state after every
 // motion is laid out exactly as the motion ends, so nothing ever jumps when it finishes.
 
 const FLY_MS = 560
-const TURN_MS = 900
-const PAN_MS = 560
+const OPEN_MS = 820 // the cover swinging open — a little grander than a page
+const TURN_MS = 640
+const PAN_MS = 420
+const SHUT_MS = 700
 const JUMP_MS = 420
 const CLOSE_MS = 260
 const EASE_TURN = 'cubic-bezier(0.55, 0.05, 0.25, 1)'
@@ -43,17 +47,21 @@ type Anim =
   | { kind: 'pan'; to: number; go: boolean }
   | { kind: 'turn'; dir: 1 | -1; to: number; go: boolean }
   | { kind: 'jump'; to: number; go: boolean }
-  | { kind: 'close'; go: boolean }
+  | { kind: 'close'; go: boolean }          // a plain fade (reduced motion, or the shelf spot is gone)
+  | { kind: 'shut'; go: boolean }           // the cover swinging shut
+  | { kind: 'flyBack'; to: DOMRect; go: boolean }
 
 type Content = Page | 'cover' | null
 type Side = 'left' | 'right'
 
-export function PhoneBook({ set, badges, isMe, from, onClose }: {
+export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   set: BadgeSet
   badges: SharedBadges | null
   isMe: boolean
   /** Where the closed book was on the shelf (window coordinates); null = open without the flight */
   from: DOMRect | null
+  /** Where the book's spot on the shelf is now (window coordinates), to fly back to */
+  getShelfSpot: () => DOMRect | null
   onClose: () => void
 }) {
   const { catalog } = useBadgeCatalog()
@@ -95,10 +103,19 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
       const r = requestAnimationFrame(() => requestAnimationFrame(() => setAnim((a) => (a ? { ...a, go: true } : a))))
       return () => cancelAnimationFrame(r)
     }
-    const ms = { fly: FLY_MS + 40, pan: PAN_MS, turn: TURN_MS, jump: JUMP_MS, close: CLOSE_MS }[anim.kind]
+    const ms = {
+      fly: FLY_MS + 40, flyBack: FLY_MS + 40, pan: PAN_MS, turn: p === -1 ? OPEN_MS : TURN_MS,
+      shut: SHUT_MS, jump: JUMP_MS, close: CLOSE_MS,
+    }[anim.kind]
     const t = setTimeout(() => {
       if (anim.kind === 'fly') setAnim({ kind: 'turn', dir: 1, to: 0, go: false }) // now the cover opens
-      else if (anim.kind === 'close') onClose()
+      else if (anim.kind === 'close' || anim.kind === 'flyBack') onClose()
+      else if (anim.kind === 'shut') {
+        // Shut: the closed cover now fills the screen — fly it home
+        setP(-1)
+        const spot = getShelfSpot()
+        setAnim(spot ? { kind: 'flyBack', to: spot, go: false } : { kind: 'close', go: false })
+      }
       else {
         setP(anim.to)
         setAnim(null)
@@ -109,7 +126,7 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
       }
     }, ms)
     return () => clearTimeout(t)
-  }, [anim, box, onClose, PAGES])
+  }, [anim, box, onClose, PAGES, p, getShelfSpot])
 
   const busy = !!anim
   const next = useCallback(() => {
@@ -122,7 +139,11 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
     setMenu(false)
     setAnim(p % 2 === 1 ? { kind: 'pan', to: p - 1, go: false } : { kind: 'turn', dir: -1, to: p - 1, go: false })
   }, [busy, p])
-  const close = useCallback(() => { if (anim?.kind !== 'close') setAnim({ kind: 'close', go: false }) }, [anim])
+  const close = useCallback(() => {
+    if (busy || p < 0) return
+    setMenu(false)
+    setAnim(window.matchMedia('(prefers-reduced-motion: reduce)').matches ? { kind: 'close', go: false } : { kind: 'shut', go: false })
+  }, [busy, p])
   const pickChapter = (i: number) => {
     setMenu(false)
     const t = starts[i]
@@ -178,20 +199,32 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
     R = page(p + 1)
     leaf = { front: page(p), back: page(anim.to), side: 'left' }
     camFrom = 0; camTo = -W
+  } else if (anim?.kind === 'shut') {
+    // Closing: the left page (the inside of the cover) swings over onto the right page, showing the
+    // front of the cover; the camera ends on the right half, where the closed book now is.
+    const left = p % 2 === 0 ? p : p - 1
+    L = null
+    R = page(left + 1)
+    leaf = { front: page(left), back: 'cover', side: 'left' }
+    camFrom = p % 2 === 0 ? 0 : -W; camTo = -W
   } else {
     if (p === -1) { L = null; R = 'cover' } else if (p % 2 === 0) { L = page(p); R = page(p + 1) } else { L = page(p - 1); R = page(p) }
     camFrom = p === -1 || p % 2 === 1 ? -W : 0
     camTo = anim?.kind === 'pan' ? (anim.to % 2 === 1 ? -W : 0) : camFrom
   }
   const cam = go ? camTo : camFrom
-  const moving = go && (anim?.kind === 'turn' || anim?.kind === 'pan')
+  const moving = go && (anim?.kind === 'turn' || anim?.kind === 'pan' || anim?.kind === 'shut')
   const ease = anim?.kind === 'pan' ? EASE_PAN : EASE_TURN
-  const ms = anim?.kind === 'pan' ? PAN_MS : TURN_MS
-  const flying = anim?.kind === 'fly'
-  const opened = p >= 0 || (anim?.kind === 'turn' && go)
+  const ms = anim?.kind === 'pan' ? PAN_MS : anim?.kind === 'shut' ? SHUT_MS : p === -1 ? OPEN_MS : TURN_MS
+  const flying = anim?.kind === 'fly' || anim?.kind === 'flyBack'
+  const leaving = anim?.kind === 'shut' || anim?.kind === 'flyBack' || anim?.kind === 'close'
+  const opened = !leaving && (p >= 0 || (anim?.kind === 'turn' && go))
   const closing = anim?.kind === 'close'
   const jumpDir = anim?.kind === 'jump' ? (anim.to > p ? 1 : -1) : 1
-  const shownPage = anim && anim.kind !== 'fly' && anim.kind !== 'close' && go ? anim.to : p
+  const shownPage = anim && (anim.kind === 'pan' || anim.kind === 'turn' || anim.kind === 'jump') && go ? anim.to : Math.max(0, p)
+  // The flight's two ends: the shelf spot and the page area
+  const spot = anim?.kind === 'fly' ? from : anim?.kind === 'flyBack' ? anim.to : null
+  const atShelf = (anim?.kind === 'fly' && !go) || (anim?.kind === 'flyBack' && go)
   const shownChapter = (() => { const pg = PAGES[Math.max(0, shownPage)]; return pg?.kind === 'badges' ? pg.chapter : -1 })()
 
   const coverVars = {
@@ -214,8 +247,8 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
       role="dialog"
       aria-label={`${set.name} pin book`}
     >
-      {/* Backdrop for the flight: fades in while the book flies up */}
-      {flying && <div className="absolute inset-0 bg-[#0b0908]" style={{ opacity: go ? 1 : 0, transition: `opacity ${FLY_MS}ms ease` }} />}
+      {/* Backdrop for the flights: fades in as the book flies up, out as it flies home */}
+      {flying && <div className="absolute inset-0 bg-[#0b0908]" style={{ opacity: atShelf ? 0 : 1, transition: `opacity ${FLY_MS}ms ease` }} />}
       <PinholeFilter />
 
       {/* Top bar */}
@@ -271,7 +304,7 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
         {box && !flying && (
           // A slight camera pull-back while the page moves — it dips away a touch and settles back
           <div
-            className={cn('absolute inset-0 will-change-transform', go && anim?.kind === 'pan' && 'phonebook-pull-pan', go && anim?.kind === 'turn' && p >= 0 && 'phonebook-pull-turn')}
+            className={cn('absolute inset-0 will-change-transform', go && anim?.kind === 'pan' && 'phonebook-pull-pan', go && anim?.kind === 'turn' && p >= 0 && 'phonebook-pull-turn', go && anim?.kind === 'shut' && 'phonebook-pull-shut')}
           >
           <div
             className="absolute top-0 left-0 will-change-transform"
@@ -288,6 +321,13 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
             <Half content={L} side="left" W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
             <Half content={R} side="right" W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
 
+            {/* Closing: the right page darkens as the cover comes down over it */}
+            {anim?.kind === 'shut' && (
+              <div
+                className="absolute top-0 pointer-events-none z-[5]"
+                style={{ left: W, width: W, height: H, background: 'linear-gradient(to right, rgba(0,0,0,0.75), rgba(0,0,0,0.3))', opacity: go ? 1 : 0, transition: `opacity ${SHUT_MS}ms ease-in` }}
+              />
+            )}
             {/* Under the turning page: the page it uncovers starts in its shadow */}
             {anim?.kind === 'turn' && (
               <div
@@ -296,7 +336,7 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
                   left: anim.dir === 1 ? W : 0, width: W, height: H,
                   background: `linear-gradient(to ${anim.dir === 1 ? 'right' : 'left'}, rgba(0,0,0,0.75), rgba(0,0,0,0.25))`,
                   opacity: go ? 0 : 1,
-                  transition: `opacity ${TURN_MS}ms ease-out`,
+                  transition: `opacity ${ms}ms ease-out`,
                 }}
               />
             )}
@@ -310,7 +350,7 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
                   transformStyle: 'preserve-3d',
                   transformOrigin: leaf.side === 'right' ? 'left center' : 'right center',
                   transform: go ? `rotateY(${leaf.side === 'right' ? -180 : 180}deg)` : 'rotateY(0deg)',
-                  transition: go ? `transform ${TURN_MS}ms ${EASE_TURN}` : 'none',
+                  transition: go ? `transform ${ms}ms ${EASE_TURN}` : 'none',
                 }}
               >
                 <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
@@ -318,7 +358,7 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
                   {/* darkens as it rises toward upright */}
                   <div
                     className="absolute inset-0 pointer-events-none"
-                    style={{ background: `linear-gradient(to ${leaf.side}, rgba(0,0,0,0.2), rgba(0,0,0,0.7))`, opacity: go ? 1 : 0, transition: `opacity ${TURN_MS / 2}ms ease-in` }}
+                    style={{ background: `linear-gradient(to ${leaf.side}, rgba(0,0,0,0.2), rgba(0,0,0,0.7))`, opacity: go ? 1 : 0, transition: `opacity ${ms / 2}ms ease-in` }}
                   />
                 </div>
                 <div className="absolute inset-0" style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
@@ -326,15 +366,21 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
                   {/* starts dark past upright, brightens as it lays down */}
                   <div
                     className="absolute inset-0 pointer-events-none"
-                    style={{ background: `linear-gradient(to ${leaf.side === 'right' ? 'left' : 'right'}, rgba(0,0,0,0.2), rgba(0,0,0,0.7))`, opacity: go ? 0 : 1, transition: `opacity ${TURN_MS / 2}ms ease-out ${TURN_MS / 2}ms` }}
+                    style={{ background: `linear-gradient(to ${leaf.side === 'right' ? 'left' : 'right'}, rgba(0,0,0,0.2), rgba(0,0,0,0.7))`, opacity: go ? 0 : 1, transition: `opacity ${ms / 2}ms ease-out ${ms / 2}ms` }}
                   />
                 </div>
               </div>
             )}
 
-            {/* Spine + rings: fade in as the cover opens (there's no spine to see on a shut book) */}
-            {(L !== null || anim?.kind === 'turn') && (
-              <div style={p === -1 ? { opacity: go ? 1 : 0, transition: `opacity ${TURN_MS}ms ease` } : undefined}>
+            {/* Spine + rings: fade in as the cover opens, out as it shuts (a shut book shows none) */}
+            {(L !== null || anim?.kind === 'turn' || anim?.kind === 'shut') && (
+              <div
+                style={
+                  p === -1 ? { opacity: go ? 1 : 0, transition: `opacity ${ms}ms ease` }
+                  : anim?.kind === 'shut' ? { opacity: go ? 0 : 1, transition: `opacity ${ms}ms ease` }
+                  : undefined
+                }
+              >
                 <Spine x={W} H={H} />
               </div>
             )}
@@ -363,7 +409,7 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
         {/* Turn arrows + where you are, over the bottom of the page */}
         <div
           className="absolute inset-x-0 bottom-0 z-30 flex items-center justify-between px-4 pb-4 pointer-events-none transition-opacity duration-300"
-          style={{ opacity: opened && !closing ? 1 : 0 }}
+          style={{ opacity: opened ? 1 : 0 }}
         >
           <button onClick={prev} disabled={busy || p <= 0} aria-label="Previous page" className="phonebook-arrow pointer-events-auto disabled:opacity-0">
             <ChevronLeft size={24} strokeWidth={2.25} className="-ml-0.5" />
@@ -375,15 +421,15 @@ export function PhoneBook({ set, badges, isMe, from, onClose }: {
         </div>
       </div>
 
-      {/* The closed book flying up from the shelf to fill the page area */}
-      {flying && box && from && (
+      {/* The closed book flying between its shelf spot and the page area (up to open, home to close) */}
+      {flying && box && spot && (
         <div
           className="absolute z-40 pointer-events-none"
           style={{
             left: box.left, top: box.top, width: W, height: H,
             transformOrigin: '0 0',
-            transform: go ? 'none' : `translate(${from.left - box.left}px, ${from.top - box.top}px) scale(${from.width / W}, ${from.height / H})`,
-            transition: go ? `transform ${FLY_MS}ms cubic-bezier(0.22, 0.8, 0.25, 1)` : 'none',
+            transform: atShelf ? `translate(${spot.left - box.left}px, ${spot.top - box.top}px) scale(${spot.width / W}, ${spot.height / H})` : 'none',
+            transition: go ? `transform ${FLY_MS}ms ${anim?.kind === 'flyBack' ? 'cubic-bezier(0.5, 0, 0.3, 1)' : 'cubic-bezier(0.22, 0.8, 0.25, 1)'}` : 'none',
           }}
         >
           <BookCover set={set} badges={badges} />

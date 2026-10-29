@@ -14,7 +14,9 @@ import { badgeAsset } from '@/lib/badgeAssets'
 // The Badges shelf: every Badge Set is its own closed pin book. Click one and it opens: the closed
 // book flies from the shelf to the middle of the page, and its cover swings open on the spine while
 // the whole book glides right into place — one fluid motion (the open pin book, BadgeBook, sits
-// under the cover the whole time). Used on the Badges page and a profile's Badges tab.
+// under the cover the whole time). "All pin books" runs it backwards: the cover swings shut over the
+// open spread as the book glides back to the middle, then it flies home to its (empty) spot on the
+// shelf. Used on the Badges page and a profile's Badges tab.
 
 const FLY_MS = 560
 const TURN_MS = 900
@@ -23,10 +25,14 @@ const REVEAL_MS = 60 // the cover has landed: swap it for the real book (they lo
 const EASE = 'cubic-bezier(0.55, 0.05, 0.25, 1)'
 
 type Phase = 'measure' | 'fly' | 'flyGo' | 'turn' | 'reveal'
+// prep: the open cover is laid over the open book (they look identical) and the shelf is laid out
+// unseen, to find the book's spot · shut: the cover swings shut · home: it flies to its spot
+type ClosePhase = 'prep' | 'shut' | 'home'
 type View =
   | { mode: 'shelf' }
   | { mode: 'opening'; set: BadgeSet; from: DOMRect; to?: DOMRect; phase: Phase }
   | { mode: 'open'; set: BadgeSet }
+  | { mode: 'closing'; set: BadgeSet; to: DOMRect; spread: number; spot?: DOMRect; phase: ClosePhase }
   // An upright phone: the book opens full screen, a page at a time (PhoneBook), over the shelf
   | { mode: 'phone'; set: BadgeSet; from: DOMRect | null }
 
@@ -60,7 +66,12 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
     ? { earned: Object.fromEntries(catalog.badges.map((b) => [b.id, realBadges?.earned[b.id] ?? Date.now()])), progress: Object.fromEntries(catalog.badges.map((b) => [b.id, [b.slots.length, b.slots.length] as [number, number]])) } // (all complete, so growing ones show Mastered too)
     : realBadges
   const [view, setView] = useState<View>({ mode: 'shelf' })
-  const closePhone = useCallback(() => setView({ mode: 'shelf' }), [])
+  // The shelf fades in when the page first shows it — not when a book is put back on it
+  const [shelfIntro, setShelfIntro] = useState(true)
+  const closePhone = useCallback(() => { setShelfIntro(false); setView({ mode: 'shelf' }) }, [])
+  // The open book's current spread, so the closing cover shows the page you were on
+  const spreadRef = useRef(0)
+  const onSpread = useCallback((n: number) => { spreadRef.current = n }, [])
   const coverRef = useRef<HTMLDivElement>(null)
   // Every position in the animation is relative to this box (not the window), and the flying book
   // is drawn inside it — so scrolling, before or during the animation, can't pull the flying book
@@ -71,7 +82,21 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
     return new DOMRect(r.left - o.left, r.top - o.top, r.width, r.height)
   }
 
+  // A book's spot on the shelf (window coordinates)
+  const shelfSpot = (id: string) => rootRef.current?.querySelector(`[data-book="${id}"] [data-cover]`)?.getBoundingClientRect() ?? null
+  const phoneSpot = useCallback(() => (view.mode === 'phone' ? shelfSpot(view.set.id) : null), [view])
+
+  function close() {
+    if (view.mode !== 'open' || !coverRef.current) return
+    setShelfIntro(false)
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setView({ mode: 'shelf' }); return }
+    const r = relative(coverRef.current.getBoundingClientRect())
+    const to = new DOMRect(r.left + r.width / 2, r.top, r.width / 2, r.height)
+    setView({ mode: 'closing', set: view.set, to, spread: spreadRef.current, phase: 'prep' })
+  }
+
   function open(set: BadgeSet, el: HTMLElement) {
+    spreadRef.current = 0
     const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (window.matchMedia(PHONE_QUERY).matches) { setView({ mode: 'phone', set, from: still ? null : el.getBoundingClientRect() }); return }
     if (still) { setView({ mode: 'open', set }); return }
@@ -103,17 +128,41 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
     return () => { if (t) clearTimeout(t); cancelAnimationFrame(raf) }
   }, [view])
 
+  // Closing. prep: find the book's spot on the (unseen) shelf, then start on the next frame.
+  useLayoutEffect(() => {
+    if (view.mode !== 'closing' || view.phase !== 'prep' || view.spot) return
+    const spot = shelfSpot(view.set.id)
+    if (!spot) { setView({ mode: 'shelf' }); return }
+    setView({ ...view, spot: relative(spot) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
+  useEffect(() => {
+    if (view.mode !== 'closing' || !view.spot) return
+    let t: ReturnType<typeof setTimeout> | undefined
+    let raf = 0
+    if (view.phase === 'prep') raf = requestAnimationFrame(() => requestAnimationFrame(() => setView((v) => (v.mode === 'closing' ? { ...v, phase: 'shut' } : v))))
+    if (view.phase === 'shut') t = setTimeout(() => {
+      // The shelf's spot may be above the fold (the open book is tall): bring it into view
+      const top = rootRef.current?.getBoundingClientRect().top ?? 0
+      if (top < 0) rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setView((v) => (v.mode === 'closing' ? { ...v, phase: 'home' } : v))
+    }, TURN_MS)
+    if (view.phase === 'home') t = setTimeout(() => setView({ mode: 'shelf' }), FLY_MS + 40)
+    return () => { if (t) clearTimeout(t); cancelAnimationFrame(raf) }
+  }, [view])
+
   if (view.mode === 'shelf' || view.mode === 'phone') {
     return (
       <div ref={rootRef} className="relative scroll-mt-4">
-        <Shelf badges={badges} full={full} onOpen={open} />
+        <Shelf badges={badges} full={full} onOpen={open} intro={shelfIntro} away={view.mode === 'phone' ? view.set.id : undefined} />
         {view.mode === 'phone' && (
-          <PhoneBook set={view.set} badges={badges} isMe={isMe} from={view.from} onClose={closePhone} />
+          <PhoneBook set={view.set} badges={badges} isMe={isMe} from={view.from} getShelfSpot={phoneSpot} onClose={closePhone} />
         )}
       </div>
     )
   }
 
+  const closing = view.mode === 'closing' ? view : null
   const opening = view.mode === 'opening' ? view : null
   const phase = opening?.phase
   // While opening, only the right half of the open book shows (the cover is still over it), then
@@ -121,7 +170,8 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   // The cut is at the book's spine, measured (`to.left`) — not 50% of this box: the box also holds
   // the arrows and the chapter tabs, so its middle isn't the spine (that cut off a strip of the
   // right page until the book had opened).
-  const clip = !opening ? undefined
+  const clip = closing ? `inset(-20% -20% -20% ${closing.to.left}px)`
+    : !opening ? undefined
     : phase === 'reveal' ? 'inset(-20% -20% -20% 0%)'
     : opening.to ? `inset(-20% -20% -20% ${opening.to.left}px)` : 'inset(-20% -20% -20% 50%)'
   // The book opens in the middle: while closed, everything sits half a page to the left (so the
@@ -132,9 +182,9 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   return (
     <div ref={rootRef} className="relative scroll-mt-4">
       {/* Which book this is (it has no title page — pins start on page one) */}
-      <div className={cn('mb-3 flex items-center gap-3 flex-wrap transition-opacity', opening ? 'opacity-0' : 'opacity-100')}>
+      <div className={cn('mb-3 flex items-center gap-3 flex-wrap transition-opacity', opening || closing ? 'opacity-0' : 'opacity-100')}>
         <button
-          onClick={() => setView({ mode: 'shelf' })}
+          onClick={close}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-950/60 text-sm font-semibold text-slate-400 hover:text-ink hover:border-slate-600 transition-colors"
         >
           <ArrowLeft size={15} />All pin books
@@ -142,16 +192,44 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
         <BookHeader set={view.set} badges={badges} ownerName={ownerName} isMe={isMe} />
       </div>
       <div
-        style={{
+        style={closing ? {
+          // closing: the right page stays while the cover swings shut over it and glides back left
+          visibility: closing.phase === 'home' ? 'hidden' : 'visible',
+          clipPath: clip,
+          transform: closing.phase === 'prep' ? undefined : `translateX(${-closing.to.width / 2}px)`,
+          transition: closing.phase === 'shut' ? `transform ${TURN_MS}ms ${EASE}` : undefined,
+        } : {
           visibility: phase === 'measure' || phase === 'fly' || phase === 'flyGo' ? 'hidden' : 'visible',
           clipPath: clip,
           transform: settled ? undefined : `translateX(${-shift}px)`,
           transition: phase === 'turn' ? `transform ${TURN_MS}ms ${EASE}` : undefined,
         }}
       >
-        <BadgeBook set={view.set} badges={badges} isMe={isMe} full={full} coverRef={coverRef} />
+        <BadgeBook set={view.set} badges={badges} isMe={isMe} full={full} coverRef={coverRef} onSpreadChange={onSpread} />
       </div>
-      {opening?.to && <Flyer opening={opening} badges={badges} isMe={isMe} full={full} />}
+      {opening?.to && (
+        <Flyer
+          set={opening.set} badges={badges} isMe={isMe} full={full} spot={opening.from} to={opening.to} spread={0}
+          atShelf={phase === 'fly'} turned={phase === 'turn' || phase === 'reveal'} fade={phase === 'reveal'}
+          anim={phase === 'flyGo' ? 'fly' : phase === 'turn' ? 'turn' : null}
+        />
+      )}
+      {/* Closing: the shelf, laid out unseen (to find the book's spot), shows as the book flies home */}
+      {closing && (
+        <div
+          className="absolute inset-x-0 top-0"
+          style={{ visibility: closing.phase === 'home' ? 'visible' : 'hidden', opacity: closing.phase === 'home' ? 1 : 0, transition: 'opacity 320ms ease' }}
+        >
+          <Shelf badges={badges} full={full} onOpen={() => {}} intro={false} away={closing.set.id} />
+        </div>
+      )}
+      {closing?.spot && (
+        <Flyer
+          set={closing.set} badges={badges} isMe={isMe} full={full} spot={closing.spot} to={closing.to} spread={closing.spread}
+          atShelf={closing.phase === 'home'} turned={closing.phase === 'prep'} fade={false}
+          anim={closing.phase === 'shut' ? 'turn' : closing.phase === 'home' ? 'home' : null}
+        />
+      )}
     </div>
   )
 }
@@ -162,14 +240,21 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
 // — a pure rotateY(0 → −180°) around the spine. Sharing one element made the browser blend the
 // fly's resize into the swing whenever their timing overlapped, squashing the cover flat instead
 // of turning it.
-function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode: 'opening' }>; badges: SharedBadges | null; isMe: boolean; full: boolean }) {
-  const { from, to, phase, set } = opening
-  if (!to) return null
+function Flyer({ set, badges, isMe, full, spot, to, spread, atShelf, turned, fade, anim }: {
+  set: BadgeSet; badges: SharedBadges | null; isMe: boolean; full: boolean
+  spot: DOMRect                    // the book's spot on the shelf
+  to: DOMRect                      // where the cover lies on the open book (its right half)
+  spread: number                   // the spread the inside of the cover shows
+  atShelf: boolean                 // sitting in its shelf spot (else in the middle of the page)
+  turned: boolean                  // the cover swung open
+  fade: boolean                    // the real book has taken over
+  anim: 'fly' | 'home' | 'turn' | null // which motion is running
+}) {
   const shift = to.width / 2
   const left = to.left - shift // centred
-  const start = `translate(${from.left - left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`
-  const turning = phase === 'turn' || phase === 'reveal'
-  const fade = phase === 'reveal'
+  const start = `translate(${spot.left - left}px, ${spot.top - to.top}px) scale(${spot.width / to.width}, ${spot.height / to.height})`
+  const turning = turned
+  const swinging = anim === 'turn'
   const hidden: React.CSSProperties = { backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }
   return (
     <div className="absolute inset-0 z-[45] pointer-events-none">
@@ -179,8 +264,8 @@ function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode:
         style={{
           left, top: to.top, width: to.width, height: to.height,
           transformOrigin: '0 0',
-          transform: phase === 'fly' ? start : 'none',
-          transition: phase === 'flyGo' ? `transform ${FLY_MS}ms cubic-bezier(0.22, 0.8, 0.25, 1)` : 'none',
+          transform: atShelf ? start : 'none',
+          transition: anim === 'fly' ? `transform ${FLY_MS}ms cubic-bezier(0.22, 0.8, 0.25, 1)` : anim === 'home' ? `transform ${FLY_MS}ms cubic-bezier(0.5, 0, 0.3, 1)` : 'none',
           opacity: fade ? 0 : 1,
         }}
       >
@@ -191,7 +276,7 @@ function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode:
             perspective: `${Math.round(to.width * 5)}px`,
             perspectiveOrigin: '0% 50%',
             transform: turning ? `translateX(${shift}px)` : 'translateX(0px)',
-            transition: phase === 'turn' ? `transform ${TURN_MS}ms ${EASE}` : 'none',
+            transition: swinging ? `transform ${TURN_MS}ms ${EASE}` : 'none',
           }}
         >
           {/* 3 · swing */}
@@ -201,7 +286,7 @@ function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode:
               transformStyle: 'preserve-3d',
               transformOrigin: 'left center',
               transform: turning ? 'rotateY(-180deg)' : 'rotateY(0deg)',
-              transition: phase === 'turn' ? `transform ${TURN_MS}ms ${EASE}` : 'none',
+              transition: swinging ? `transform ${TURN_MS}ms ${EASE}` : 'none',
             }}
           >
             <div className="absolute inset-0" style={hidden}>
@@ -209,7 +294,7 @@ function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode:
               {/* Light falloff: the front of the cover darkens as it turns away */}
               <div
                 className="absolute inset-0 rounded-[14px] bg-black"
-                style={{ opacity: turning ? 0.45 : 0, transition: phase === 'turn' ? `opacity ${TURN_MS * 0.5}ms ease-in` : 'none' }}
+                style={{ opacity: turning ? 0.45 : 0, transition: swinging ? `opacity ${TURN_MS * 0.5}ms ease-in` : 'none' }}
               />
             </div>
             {/* Inside of the cover = the book's first page (its left half), so you see the page as the
@@ -217,11 +302,11 @@ function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode:
                 lightens as it lands. */}
             <div className="absolute inset-0 overflow-hidden" style={{ ...hidden, transform: 'rotateY(180deg)' }}>
               <div className="absolute left-0 top-0" style={{ width: to.width * 2 }}>
-                <BadgeBook set={set} badges={badges} isMe={isMe} full={full} coverOnly />
+                <BadgeBook set={set} badges={badges} isMe={isMe} full={full} coverOnly startSpread={spread} />
               </div>
               <div
                 className="absolute inset-0 bg-black"
-                style={{ opacity: turning ? 0 : 0.5, transition: phase === 'turn' ? `opacity ${TURN_MS * 0.5}ms ease-out ${TURN_MS * 0.5}ms` : 'none' }}
+                style={{ opacity: turning ? 0 : 0.5, transition: swinging ? `opacity ${TURN_MS * 0.5}ms ease-out ${TURN_MS * 0.5}ms` : 'none' }}
               />
             </div>
           </div>
@@ -233,10 +318,11 @@ function Flyer({ opening, badges, isMe, full }: { opening: Extract<View, { mode:
 
 // ── The shelf ───────────────────────────────────────────────────────────────────────────────
 
-function Shelf({ badges, full, onOpen }: { badges: SharedBadges | null; full: boolean; onOpen: (set: BadgeSet, el: HTMLElement) => void }) {
+// `away`: the book that's out (open, or flying) — its spot is left empty until it's put back
+function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBadges | null; full: boolean; onOpen: (set: BadgeSet, el: HTMLElement) => void; intro?: boolean; away?: string }) {
   const { catalog } = useBadgeCatalog()
   return (
-    <div className="badge-shelf-in">
+    <div className={cn(intro && 'badge-shelf-in')}>
       <div className="text-sm text-slate-500 mb-4 flex items-center gap-1.5"><BookOpen size={15} />Pick a pin book to open it.</div>
       <div className={cn('grid gap-6 sm:gap-8', full ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')}>
         {catalog.sets.map((set) => {
@@ -245,7 +331,9 @@ function Shelf({ badges, full, onOpen }: { badges: SharedBadges | null; full: bo
           return (
             <div key={set.id} className="flex flex-col items-center">
               <button
+                data-book={set.id}
                 onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
+                style={away === set.id ? { visibility: 'hidden' } : undefined}
                 className="badge-book-tile group relative w-full max-w-[240px] aspect-[0.71] outline-none"
                 aria-label={`Open the ${set.name} pin book`}
               >

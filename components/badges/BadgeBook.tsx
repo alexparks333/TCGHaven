@@ -45,9 +45,13 @@ const TURN_MS = 750
 
 // One Badge Set's book. `full`: the Badges page, where on desktop the book stretches to fill the
 // window; otherwise (a profile's Badges tab) it keeps a book's proportions at full width.
-export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly = false }: {
+export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly = false, startSpread = 0, onSpreadChange }: {
   set: BadgeSet
   coverOnly?: boolean
+  /** The spread to open at (the closing animation draws the page you were on) */
+  startSpread?: number
+  /** Told the spread whenever it changes */
+  onSpreadChange?: (spread: number) => void
   badges: SharedBadges | null
   isMe: boolean
   full?: boolean
@@ -58,7 +62,8 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   const chapters = useMemo(() => chaptersOf(catalog, set.id), [catalog, set.id])
   const { pages: PAGES, starts } = useMemo(() => buildPages(setBadges, chapters), [setBadges, chapters])
   const SPREADS = PAGES.length / 2
-  const [spread, setSpread] = useState(0)
+  const [spread, setSpread] = useState(() => Math.min(startSpread, Math.max(0, SPREADS - 1)))
+  useEffect(() => { onSpreadChange?.(spread) }, [spread, onSpreadChange])
   // A turn goes to any spread (`to`): the arrows go one either way, a chapter tab jumps straight there
   const [turn, setTurn] = useState<{ dir: 1 | -1; to: number; go: boolean } | null>(null)
   const bookRef = useRef<HTMLDivElement>(null)
