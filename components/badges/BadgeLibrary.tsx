@@ -1,13 +1,15 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgesInSet, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { BadgeBook } from './BadgeBook'
+import { PhoneBook } from './PhoneBook'
 import { BadgePin } from './BadgePin'
+import { badgeAsset } from '@/lib/badgeAssets'
 
 // The Badges shelf: every Badge Set is its own closed pin book. Click one and it opens: the closed
 // book flies from the shelf to the middle of the page, and its cover swings open on the spine while
@@ -25,6 +27,11 @@ type View =
   | { mode: 'shelf' }
   | { mode: 'opening'; set: BadgeSet; from: DOMRect; to?: DOMRect; phase: Phase }
   | { mode: 'open'; set: BadgeSet }
+  // An upright phone: the book opens full screen, a page at a time (PhoneBook), over the shelf
+  | { mode: 'phone'; set: BadgeSet; from: DOMRect | null }
+
+// An upright phone (portrait, narrow): a two-page spread there makes every pin tiny
+const PHONE_QUERY = '(max-width: 767px) and (orientation: portrait)'
 
 // Dev server only: the Dev panel's "Show all badges as earned" — to see earned pins in the books.
 export const DEV_ALL_BADGES_KEY = 'tcghaven-dev-all-badges'
@@ -50,9 +57,10 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   const devAll = useDevAllBadges()
   const { catalog } = useBadgeCatalog()
   const badges = devAll && isMe
-    ? { earned: Object.fromEntries(catalog.badges.map((b) => [b.id, realBadges?.earned[b.id] ?? Date.now()])), progress: realBadges?.progress ?? {} }
+    ? { earned: Object.fromEntries(catalog.badges.map((b) => [b.id, realBadges?.earned[b.id] ?? Date.now()])), progress: Object.fromEntries(catalog.badges.map((b) => [b.id, [b.slots.length, b.slots.length] as [number, number]])) } // (all complete, so growing ones show Mastered too)
     : realBadges
   const [view, setView] = useState<View>({ mode: 'shelf' })
+  const closePhone = useCallback(() => setView({ mode: 'shelf' }), [])
   const coverRef = useRef<HTMLDivElement>(null)
   // Every position in the animation is relative to this box (not the window), and the flying book
   // is drawn inside it — so scrolling, before or during the animation, can't pull the flying book
@@ -64,7 +72,9 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   }
 
   function open(set: BadgeSet, el: HTMLElement) {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setView({ mode: 'open', set }); return }
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (window.matchMedia(PHONE_QUERY).matches) { setView({ mode: 'phone', set, from: still ? null : el.getBoundingClientRect() }); return }
+    if (still) { setView({ mode: 'open', set }); return }
     setView({ mode: 'opening', set, from: relative(el.getBoundingClientRect()), phase: 'measure' })
   }
 
@@ -93,17 +103,27 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
     return () => { if (t) clearTimeout(t); cancelAnimationFrame(raf) }
   }, [view])
 
-  if (view.mode === 'shelf') {
-    return <div ref={rootRef} className="relative scroll-mt-4"><Shelf badges={badges} full={full} onOpen={open} /></div>
+  if (view.mode === 'shelf' || view.mode === 'phone') {
+    return (
+      <div ref={rootRef} className="relative scroll-mt-4">
+        <Shelf badges={badges} full={full} onOpen={open} />
+        {view.mode === 'phone' && (
+          <PhoneBook set={view.set} badges={badges} isMe={isMe} from={view.from} onClose={closePhone} />
+        )}
+      </div>
+    )
   }
 
   const opening = view.mode === 'opening' ? view : null
   const phase = opening?.phase
   // While opening, only the right half of the open book shows (the cover is still over it), then
   // the left half is revealed as the cover lands.
+  // The cut is at the book's spine, measured (`to.left`) — not 50% of this box: the box also holds
+  // the arrows and the chapter tabs, so its middle isn't the spine (that cut off a strip of the
+  // right page until the book had opened).
   const clip = !opening ? undefined
     : phase === 'reveal' ? 'inset(-20% -20% -20% 0%)'
-    : 'inset(-20% -20% -20% 50%)'
+    : opening.to ? `inset(-20% -20% -20% ${opening.to.left}px)` : 'inset(-20% -20% -20% 50%)'
   // The book opens in the middle: while closed, everything sits half a page to the left (so the
   // closed book is centred); as the cover swings open it glides right into place at the same pace.
   const shift = opening?.to ? opening.to.width / 2 : 0
@@ -303,6 +323,28 @@ export function BookCover({ set, badges }: { set: BadgeSet; badges: SharedBadges
   const first = inSet[0]
   const earned = inSet.filter((b) => badges?.earned[b.id]).length
   const { from, to, accent } = set.cover
+  if (set.coverImage) {
+    return (
+      <div className="absolute inset-0 rounded-[10px] overflow-hidden shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+        {/* A soft shadow fading down from the top, so the name reads over any artwork */}
+        <div className="absolute inset-x-0 top-0 h-[34%] pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(6,4,12,0.82), rgba(6,4,12,0.55) 45%, transparent)' }} />
+        {/* The book's name, engraved in gold across the top of the cover */}
+        <div className="absolute inset-x-[8%] top-[6.5%] flex flex-col items-center text-center pointer-events-none" style={{ containerType: 'inline-size' }}>
+          <span className="cover-title-plate pinbook-serif px-[7%] py-[2.5%] rounded-[4px]">
+            <span className="cover-subtitle block text-[clamp(6px,4.2cqw,11px)] font-bold uppercase tracking-[0.32em]" style={{ color: accent }}>{set.subtitle}</span>
+            <span className="cover-title block mt-[2%] text-[clamp(13px,11cqw,34px)] font-bold uppercase tracking-[0.12em] leading-none whitespace-nowrap">{set.name}</span>
+          </span>
+        </div>
+        <div className="absolute inset-x-0 bottom-[5%] flex justify-center">
+          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.55)', color: accent }}>
+            {inSet.length ? `${earned} / ${inSet.length} earned` : 'Coming soon'}
+          </span>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="badge-cover absolute inset-0 rounded-[14px] overflow-hidden" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
       {/* Spine */}

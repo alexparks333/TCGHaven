@@ -279,6 +279,13 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             <textarea className="input-field resize-none" rows={2} value={b.description} onChange={(e) => patch({ description: e.target.value })}
               placeholder="Collect the Overnumbered or Signature printing of every Legend in Riftbound: Origins." />
           </Field>
+          <label className="flex items-start gap-2.5 rounded-xl border border-slate-800 p-3 cursor-pointer">
+            <input type="checkbox" className="mt-0.5" checked={!!b.growing} onChange={(e) => patch({ growing: e.target.checked || undefined })} />
+            <span>
+              <span className="block text-sm font-semibold text-ink">Growing badge</span>
+              <span className="block text-[11px] text-slate-500 leading-snug">You&rsquo;ll add cards to it as new sets come out. Collectors keep it once earned; holding every card it asks for right now makes it <b>Mastered</b> (the pin glows). Leave off for badges that never change.</span>
+            </span>
+          </label>
           <Field label="What each slot is called" hint={`Progress reads like "3 / ${b.slots.length || 12} ${b.slotNoun || 'cards'}".`}>
             <input className="input-field" value={b.slotNoun} onChange={(e) => patch({ slotNoun: e.target.value })} placeholder="Legends" />
           </Field>
@@ -462,6 +469,43 @@ function FileField({ label, accept, badgeId, kind, value, onChange, icon }: {
   )
 }
 
+// A book's cover picture: upload a photo/render of the cover on a plain light background — the
+// background is removed in the browser (lib/coverCutout.ts) before it's uploaded.
+function CoverImageField({ bookId, value, onChange }: { bookId: string; value?: string; onChange: (url: string | undefined) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [status, setStatus] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  async function upload(file: File) {
+    setError('')
+    try {
+      setStatus('Removing background…')
+      const { cutOutCover } = await import('@/lib/coverCutout')
+      const blob = await cutOutCover(file)
+      setStatus('Uploading…')
+      const r = ref(staffStorage, `badges/book-${bookId}/cover-${Date.now()}.webp`)
+      await uploadBytes(r, blob, { contentType: 'image/webp' })
+      onChange(await getDownloadURL(r))
+    } catch (e) {
+      console.error(e); setError('Couldn’t use that image')
+    } finally { setStatus(null) }
+  }
+  return (
+    <div className="w-[200px]">
+      <div className="flex gap-1.5">
+        <button type="button" onClick={() => input.current?.click()} disabled={status !== null}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-slate-700 text-xs font-semibold text-slate-400 hover:text-ink disabled:opacity-60">
+          {status ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+          {status ?? (value ? 'Replace cover image' : 'Cover image')}
+        </button>
+        {value && <button type="button" onClick={() => onChange(undefined)} title="Use the plain leather cover" className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-slate-800"><X size={14} /></button>}
+      </div>
+      <p className="text-[10px] text-slate-500 mt-1 leading-snug">A picture of the cover on a plain light background — the background is removed for you.</p>
+      {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+      <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+    </div>
+  )
+}
+
 // ── Requirements: slots, each filled by owning any of its cards ────────────────────────────
 
 function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]; onChange: (s: BadgeSlot[]) => void }) {
@@ -626,22 +670,28 @@ function SetEditor({ catalog, initial, onClose, onSave }: {
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Small line above the name"><input className="input-field" value={s.subtitle} onChange={(e) => patch({ subtitle: e.target.value })} /></Field>
-            <Field label="Monogram" hint="Shown on the cover until it has badges."><input className="input-field" maxLength={3} value={s.monogram} onChange={(e) => patch({ monogram: e.target.value })} placeholder="R" /></Field>
+            {!s.coverImage && <Field label="Monogram" hint="Shown on the cover until it has badges."><input className="input-field" maxLength={3} value={s.monogram} onChange={(e) => patch({ monogram: e.target.value })} placeholder="R" /></Field>}
           </div>
           <Field label="Game" hint="Card searches for this book's badges use this game.">
             <select className="input-field" value={s.game} onChange={(e) => patch({ game: e.target.value as Game })}>
               {GAMES.map((g) => <option key={g} value={g}>{GAME_LABELS[g]}</option>)}
             </select>
           </Field>
+          {/* With a cover picture these only tint the chapter tabs, the shelf's progress bar and the
+              small title line; without one they're the leather cover itself */}
+          {s.coverImage && <p className="text-[11px] text-slate-500 -mb-2">Book colours — for the chapter tabs, the progress bar under the book and the small title line.</p>}
           <div className="grid grid-cols-3 gap-3">
             {(['from', 'to', 'accent'] as const).map((k) => (
-              <Field key={k} label={k === 'from' ? 'Leather (light)' : k === 'to' ? 'Leather (dark)' : 'Gold accent'}>
+              <Field key={k} label={k === 'from' ? (s.coverImage ? 'Tabs (light)' : 'Leather (light)') : k === 'to' ? (s.coverImage ? 'Tabs (dark)' : 'Leather (dark)') : 'Gold accent'}>
                 <input type="color" className="w-full h-10 rounded-lg border border-slate-800 bg-transparent cursor-pointer" value={s.cover[k]} onChange={(e) => color(k, e.target.value)} />
               </Field>
             ))}
           </div>
         </div>
-        <div className="relative w-[200px] aspect-[0.71] mx-auto"><BookCover set={{ ...s, id: id || 'preview', name: s.name || 'Book name' }} badges={null} /></div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative w-[200px] aspect-[0.71]"><BookCover set={{ ...s, id: id || 'preview', name: s.name || 'Book name' }} badges={null} /></div>
+          <CoverImageField bookId={id || 'new'} value={s.coverImage} onChange={(coverImage) => patch({ coverImage })} />
+        </div>
       </div>
     </Modal>
   )

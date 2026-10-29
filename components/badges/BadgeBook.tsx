@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, chaptersOf, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, chaptersOf, isMastered, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import dynamic from 'next/dynamic'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -22,13 +22,13 @@ const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 const PER_PAGE = 6 // 2 × 3
 const MIN_PAGES = 4 // always at least two spreads, so the book turns
 
-type Page = { kind: 'badges'; title: string; badges: BadgeDef[]; chapter: number } | { kind: 'blank' }
+export type Page = { kind: 'badges'; title: string; badges: BadgeDef[]; chapter: number } | { kind: 'blank' }
 
 // Pins start on the very first page (no title page). The book is in chapters (BadgeSet.chapters, in
 // order): each chapter starts on a fresh page titled with its name and takes as many pages as its
 // badges need (six a page), so adding a badge to a chapter only ever pushes the chapters after it
 // along — nothing is reordered. A chapter with no badges yet still gets its (empty) titled page.
-function buildPages(badges: BadgeDef[], chapters: string[]): { pages: Page[]; starts: number[] } {
+export function buildPages(badges: BadgeDef[], chapters: string[]): { pages: Page[]; starts: number[] } {
   const pages: Page[] = []
   const starts: number[] = []
   chapters.forEach((title, chapter) => {
@@ -160,12 +160,17 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
     <div
       ref={coverRef}
       className="pinbook-cover relative rounded-[16px]"
-      style={{ padding: 'clamp(10px, 1.4%, 20px)', ['--leather-from' as string]: set.cover.from, ['--leather-to' as string]: set.cover.to, ['--accent' as string]: set.cover.accent }}
+      style={{
+        padding: 'clamp(10px, 1.4%, 20px)', ['--leather-from' as string]: set.cover.from, ['--leather-to' as string]: set.cover.to, ['--accent' as string]: set.cover.accent,
+        // A cover picture is the open book's cover too: it shows round the pages as the rim
+        ...(set.coverImage && { backgroundImage: `url("${badgeAsset(set.coverImage)}")`, backgroundSize: '100% 100%' }),
+      }}
     >
       <PinholeFilter />
       {/* Saddle stitching around the cover, and gold corner protectors */}
-      <div className="pinbook-stitch absolute inset-[5px] rounded-[12px] pointer-events-none" />
-      {(['tl', 'tr', 'bl', 'br'] as const).map((c) => <CoverCorner key={c} at={c} />)}
+      {/* (a cover picture brings its own frame) */}
+      {!set.coverImage && <div className="pinbook-stitch absolute inset-[5px] rounded-[12px] pointer-events-none" />}
+      {!set.coverImage && (['tl', 'tr', 'bl', 'br'] as const).map((c) => <CoverCorner key={c} at={c} />)}
       {/* Chapter tabs down the right edge (they replace the strap — the book's open) */}
       {chapters.length > 0 && (
         <ChapterTabs chapters={chapters} open={openChapter} onPick={pickChapter} />
@@ -315,11 +320,11 @@ function ChapterTabs({ chapters, open, onPick }: { chapters: string[]; open: num
   )
 }
 
-const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV']
+export const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV']
 
 // ── A page ──────────────────────────────────────────────────────────────────────────────────
 
-interface PageProps {
+export interface PageProps {
   page: Page
   side: 'left' | 'right'
   badges: SharedBadges | null
@@ -330,7 +335,7 @@ interface PageProps {
   flash?: { chapter: number; n: number } | null
 }
 
-function PinPage({ page, side, badges, isMe, pin, onInspect, turning, flash }: PageProps) {
+export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, flash }: PageProps) {
   return (
     <div className={cn('pinbook-page absolute inset-0 overflow-visible', side === 'left' ? 'rounded-l-xl pinbook-page-left' : 'rounded-r-xl pinbook-page-right')}>
       {/* Gold-foil double frame with engraved corner ornaments */}
@@ -366,6 +371,9 @@ function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { 
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
   const earnedAt = badges?.earned[def.id]
   const [have, total] = badges?.progress[def.id] ?? [0, def.slots.length]
+  const mastered = isMastered(def, badges?.progress[def.id], !!earnedAt)
+  // An earned growing badge that has new cards since: how many to master it again
+  const toMaster = def.growing && earnedAt && !mastered ? Math.max(0, def.slots.length - have) : 0
 
   return (
     <button
@@ -378,19 +386,27 @@ function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { 
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
       }}
-      aria-label={`${def.name}${earnedAt ? ' — earned' : ' — not earned yet'} — view in 3D`}
+      aria-label={`${def.name}${mastered ? ' — mastered' : earnedAt ? ' — earned' : ' — not earned yet'} — view in 3D`}
       className="relative flex flex-col items-center justify-center outline-none cursor-pointer"
       style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}
     >
       {earnedAt ? (
         <span
-          className="pinbook-pin block relative"
+          className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
           style={{
             transform: tilt
               ? `perspective(600px) rotateY(${(tilt.x - 0.5) * 22}deg) rotateX(${(0.5 - tilt.y) * 22}deg) translateY(-3px) scale(1.06)`
               : undefined,
           }}
         >
+          {/* Mastered: a polished platinum rim around the pin's own silhouette, with a highlight
+              slowly travelling around it (the silhouette drawn a little larger behind the pin) */}
+          {mastered && (
+            <>
+              <span className="pinbook-platinum absolute inset-[-3.6%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(def.imageUrl), mask: pinMask(def.imageUrl) }} />
+              <span className="pinbook-platinum-gap absolute inset-[-0.8%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(def.imageUrl), mask: pinMask(def.imageUrl) }} />
+            </>
+          )}
           <BadgePin art={def.art} imageUrl={def.imageUrl} size={pin} />
           {tilt && (
             <span
@@ -406,7 +422,7 @@ function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { 
         <PinHole size={pin} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={total ? have / total : 0} />
       )}
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
-      <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} gap={-pin * 0.02} />
+      <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} mastered={mastered} gap={-pin * 0.02} />
 
       {open && interactive && (
         <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
@@ -414,8 +430,10 @@ function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { 
           <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
             {earnedAt ? <><Check size={10} />Earned {new Date(earnedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</> : <><Lock size={10} />Not earned yet</>}
           </span>
+          {mastered && <span className="block mt-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">✦ Mastered — every {def.slotNoun.replace(/s$/, '')} so far</span>}
+          {toMaster > 0 && <span className="block mt-1 text-[10px] font-semibold text-slate-500">{toMaster} more {def.slotNoun} to master it{have > 0 ? ' again' : ''}</span>}
           <span className="block text-[11px] text-slate-400 mt-2 leading-snug">{def.description}</span>
-          {!earnedAt && (
+          {(!earnedAt || toMaster > 0) && (
             <span className="block mt-2">
               <span className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1">
                 <span>{isMe ? 'Your progress' : 'Progress'}</span>
@@ -469,7 +487,7 @@ function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hov
 // The filter behind PinHole — an inset shadow cut to any shape (its alpha), like a pin pressed into velvet
 // (a translucent dark floor; a soft inner shadow, offset down; a faint warm highlight inside the
 // bottom edge). Rendered once per book.
-function PinholeFilter() {
+export function PinholeFilter() {
   return (
     <svg width="0" height="0" className="absolute" aria-hidden focusable="false">
       <filter id="pinhole-inset" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
@@ -505,13 +523,21 @@ function EmptySpot({ size }: { size: number }) {
 }
 
 // A small engraved brass plate under each spot: the badge's name once earned
-function Nameplate({ size, text, lit, gap }: { size: number; text: string; lit: boolean; gap: number }) {
+// A CSS mask in the pin's shape: its uploaded art, or the built-in pins' silhouette
+function pinMask(imageUrl?: string) {
+  const src = imageUrl
+    ? `url("${badgeAsset(imageUrl)}")`
+    : `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='${PIN_VIEWBOX}'><path d='${PIN_SILHOUETTE}'/></svg>`)}")`
+  return `${src} center / contain no-repeat`
+}
+
+function Nameplate({ size, text, lit, gap, mastered }: { size: number; text: string; lit: boolean; gap: number; mastered?: boolean }) {
   return (
     <span
-      className={cn('pinbook-plate-name pinbook-serif relative block max-w-full truncate rounded-[2px] text-center font-bold uppercase', lit ? 'pinbook-plate-lit' : 'pinbook-plate-dim')}
+      className={cn('pinbook-plate-name pinbook-serif relative block max-w-full truncate rounded-[2px] text-center font-bold uppercase', lit ? 'pinbook-plate-lit' : 'pinbook-plate-dim', mastered && 'pinbook-plate-mastered')}
       style={{ marginTop: gap, fontSize: Math.max(7, size * 0.068), padding: `${size * 0.018}px ${size * 0.07}px`, letterSpacing: '0.14em' }}
     >
-      {text}
+      {mastered && '✦ '}{text}
     </span>
   )
 }

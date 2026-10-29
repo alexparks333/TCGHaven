@@ -25,3 +25,4 @@ public/uploads/
 # HavenRelief local Python env + model outputs
 /tools/havenrelief/.venv/
 /tools/havenrelief/out/
+/tools/havenrelief/in/

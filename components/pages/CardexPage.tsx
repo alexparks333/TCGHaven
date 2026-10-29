@@ -91,6 +91,9 @@ export interface ZoomCardData {
   // rarity pill's color elsewhere in the app) — the user wants a distinct, simpler palette just
   // for this glow effect.
   glowColor: string
+  // Touch: a second tap right after the one that opened the zoom view = add this card (the old
+  // double-tap gesture, without delaying every single tap to wait for it)
+  onDoubleTap?: () => void
   ebayCard: Parameters<typeof openEbaySearch>[0]
   originRect: DOMRect
 }
@@ -579,6 +582,21 @@ function matchesSearch(query: string, name: string, number: string): boolean {
 // no prices, and it leaves the page's URL alone.
 const NO_CARDS: Card[] = []
 
+// Catalog sets fetched this session (and prefetched neighbours): `${game}:${setName}` → the request,
+// then its cards once they arrive — so revisiting or switching to a prefetched set needs no wait.
+const cardexCache = new Map<string, { promise: Promise<CatalogCard[]> } | { cards: CatalogCard[] }>()
+function fetchCardexSet(game: CatalogGame, setName: string): Promise<CatalogCard[]> {
+  const key = `${game}:${setName}`
+  const hit = cardexCache.get(key)
+  if (hit) return 'cards' in hit ? Promise.resolve(hit.cards) : hit.promise
+  const promise = fetch(`/api/cardex?game=${baseGameOf(game)}&set=${encodeURIComponent(setName)}${game === 'pokemon-jp' ? '&lang=ja' : ''}`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((cards: CatalogCard[]) => { cardexCache.set(key, { cards }); return cards })
+    .catch((e) => { cardexCache.delete(key); throw e })
+  cardexCache.set(key, { promise })
+  return promise
+}
+
 // The picker lives in the staff portal, which has its own sign-in — the collector sign-in check
 // would send staff to the collector login page
 function MaybeAuthGuard({ guard, children }: { guard: boolean; children: React.ReactNode }) {
@@ -901,16 +919,37 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
       setLoadedSetKey(`${activeGame}:${activeSet.name}`)
       return
     }
+    const key = `${activeGame}:${activeSet.name}`
+    // Seen this session (or prefetched): show it at once, no request
+    const cached = cardexCache.get(key)
+    if (cached && 'cards' in cached) {
+      setCatalogCards(cached.cards)
+      setLoading(false)
+      setLoadedSetKey(key)
+      return
+    }
     let stale = false // rapid set switching: ignore responses for a set we've left
     setLoading(true)
     setCatalogCards([])
-    fetch(`/api/cardex?game=${baseGameOf(activeGame)}&set=${encodeURIComponent(activeSet.name)}${activeGame === 'pokemon-jp' ? '&lang=ja' : ''}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((cards: CatalogCard[]) => { if (!stale) setCatalogCards(cards) })
+    fetchCardexSet(activeGame, activeSet.name)
+      .then((cards) => { if (!stale) setCatalogCards(cards) })
       .catch(() => {})
-      .finally(() => { if (!stale) { setLoading(false); setLoadedSetKey(`${activeGame}:${activeSet.name}`) } })
+      .finally(() => { if (!stale) { setLoading(false); setLoadedSetKey(key) } })
     return () => { stale = true }
   }, [activeGame, activeSet])
+
+  // Once a set has loaded, quietly fetch the other sets in its group (small JSON, cached by the CDN)
+  // so switching between them is instant
+  useEffect(() => {
+    if (loading || activeGame === 'personal' || !activeSet.name) return
+    const group = groupsByGame[activeGame]?.find((g) => g.sets.some((x) => x.name === activeSet.name))
+    if (!group) return
+    const t = setTimeout(() => {
+      for (const set of group.sets) if (!set.fromInventory && set.name !== activeSet.name) fetchCardexSet(activeGame, set.name).catch(() => {})
+    }, 600)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, activeGame, activeSet])
 
   // A search left over from a previous set/game is almost never what you want on the next one.
   useEffect(() => { setSearchQuery('') }, [activeGame, activeSet])
@@ -1196,7 +1235,9 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
             {!setReady && (
               <LogoLoader
                 label={`Loading ${activeSet.label || activeSet.name || 'cards'}…`}
-                progress={artPending ? { done: artCount, total: firstScreenArtIds.length, unit: 'card images' } : undefined}
+                // One bar from the moment a set is picked: while its card list is still on the way
+                // it sits at 0 of the first screen's images, then counts them in as they arrive
+                progress={artPending ? { done: artCount, total: firstScreenArtIds.length, unit: 'card images' } : catalogPending ? { done: 0, total: FIRST_SCREEN_ART, unit: 'card images' } : undefined}
               />
             )}
 
@@ -1372,8 +1413,8 @@ interface CardTileProps {
   pick?: { on: boolean; onClick: (shift: boolean) => void }
 }
 
-// How long a tap waits for a second one before it counts as a single tap (opening the zoom view)
-const DOUBLE_TAP_MS = 260
+// A second tap within this long of the one that opened a card's zoom view counts as a double tap
+const DOUBLE_TAP_MS = 350
 
 function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone, pick }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#7a6a55'
@@ -1385,8 +1426,6 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
   const slab = card.owned ? card.slab : undefined
   const ebayCard = { name: card.name, number: card.number, set: card.setName, game, gradingCompany: slab?.company, grade: slab?.grade, language }
   const lastPointerType = useRef('')
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current) }, [])
 
   // Shift+Click / double-tap: open Add Card on this exact card. AddCardDialog re-fetches it as a
   // search row; this copy is only its fallback.
@@ -1415,6 +1454,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
       slab: card.owned ? card.slab : undefined,
       setName: card.setName,
       ebayCard,
+      onDoubleTap: onAdd && lastPointerType.current === 'touch' ? addToInventory : undefined,
     })
   }
 
@@ -1428,22 +1468,15 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
       // before clicking — so tapping a card took two taps to open the zoom view.
       onPointerEnter={(e) => { if (e.pointerType === 'mouse') onHover() }}
       onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
-      onPointerDown={(e) => { lastPointerType.current = e.pointerType }}
+      onPointerDown={(e) => { lastPointerType.current = e.pointerType; if (!pick) preloadFullCard(card.imageUrl) }}
       onClick={(e) => {
         if (pick) { pick.onClick(e.shiftKey); return }
         if (!onAdd) { zoom(e.currentTarget); return }
         if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
         if (e.shiftKey) { addToInventory(); return }
-        if (lastPointerType.current !== 'touch') { zoom(e.currentTarget); return }
-        // Touch: a second tap in time is a double tap (add); otherwise the first one zooms
-        if (tapTimer.current) {
-          clearTimeout(tapTimer.current)
-          tapTimer.current = null
-          addToInventory()
-          return
-        }
-        const el = e.currentTarget
-        tapTimer.current = setTimeout(() => { tapTimer.current = null; zoom(el) }, DOUBLE_TAP_MS)
+        // A tap opens the zoom view straight away (no waiting to see if it's a double tap) — a
+        // quick second tap lands on the zoom view, which hands it back here as "add" (onDoubleTap)
+        zoom(e.currentTarget)
       }}
       title={pick ? 'Click to select · Shift+Click to select everything up to here' : onAdd ? 'Click to view — Shift+Click to add to inventory — ⌘/Ctrl+Click to search eBay sold listings' : 'Click to view'}
     >
@@ -1805,6 +1838,39 @@ function useCardInspect() {
   return { ref, ready, setReady, reset, handlers }
 }
 
+// The zoomed card's picture: the tile's copy (already downloaded) straight away, and the clear
+// full-size copy laid exactly over it, fading in once it has loaded — same box, same fit, so the
+// swap never moves or snaps.
+function ZoomImage({ url, alt, filter }: { url: string; alt: string; filter?: string }) {
+  const [sharp, setSharp] = useState(false)
+  useEffect(() => { setSharp(false) }, [url])
+  return (
+    <span className="relative block w-full h-full" style={{ filter }}>
+      <img src={cardImage(url, 'grid')} alt="" aria-hidden draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+      <img
+        src={cardImage(url, 'full')}
+        alt={alt}
+        draggable={false}
+        decoding="async"
+        ref={(el) => { if (el?.complete && el.naturalWidth) setSharp(true) }}
+        onLoad={() => setSharp(true)}
+        className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+        style={{ opacity: sharp ? 1 : 0 }}
+      />
+    </span>
+  )
+}
+
+/** Start downloading a card's full-size copy (on the press that opens it), so it's often ready
+ *  by the time the zoom animation lands */
+export function preloadFullCard(url?: string) {
+  const full = cardImage(url, 'full')
+  if (!full || typeof window === 'undefined') return
+  const img = new Image()
+  img.decoding = 'async'
+  img.src = full
+}
+
 // ── Card zoom overlay ──────────────────────────────────────────────────────────
 // Clicking a Cardex tile (without ⌘/Ctrl, which is the eBay shortcut instead) pops the card open
 // here for an isolated look: it flies from wherever it actually was in the grid to center screen
@@ -1834,6 +1900,15 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   const lastData = useRef<ZoomCardData | null>(null)
   if (data) lastData.current = data
   const inspect = useCardInspect()
+  const openedAt = useRef(0)
+  // Touch double tap: the second tap of a quick pair lands here — close at once and add the card
+  const quickSecondTap = () => {
+    const d = lastData.current
+    if (!d?.onDoubleTap || performance.now() - openedAt.current > DOUBLE_TAP_MS) return false
+    d.onDoubleTap()
+    onClose()
+    return true
+  }
   const resetInspect = inspect.reset
   const setInspectReady = inspect.setReady
   // Grabbable once the fly-in flip (card-zoom-flip, 0.65s) has played out
@@ -1845,6 +1920,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
 
   useLayoutEffect(() => {
     if (!data || !moverRef.current) return
+    openedAt.current = performance.now()
     const el = moverRef.current
     setVisible(false)
     setClosing(false)
@@ -1900,6 +1976,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
     <div
       className={cn('fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 p-4 card-zoom-backdrop', closing && 'closing pointer-events-none')}
       style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}
+      onClickCapture={(e) => { if (quickSecondTap()) e.stopPropagation() }}
       onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
     >
       <button
@@ -1956,7 +2033,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               >
                 <FullSlab slab={d.slab} name={d.name} number={d.number} setName={d.setName}>
                   {d.imageUrl
-                    ? <img src={cardImage(d.imageUrl, 'full')} alt={d.name} draggable={false} className="w-full h-full object-cover" style={{ backgroundImage: `url("${cardImage(d.imageUrl, 'grid')}")`, backgroundSize: 'cover' }} />
+                    ? <ZoomImage url={d.imageUrl} alt={d.name} />
                     : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
                 </FullSlab>
                 <div className="card-zoom-glint absolute inset-0 rounded-[18px] pointer-events-none" />
@@ -1967,14 +2044,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
             >
               {d.imageUrl ? (
-                <img
-                  src={cardImage(d.imageUrl, 'full')}
-                  alt={d.name}
-                  draggable={false}
-                  className="w-full h-full object-cover"
-                  // the tile's copy (already loaded) shows until the full-size one arrives
-                  style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)', backgroundImage: `url("${cardImage(d.imageUrl, 'grid')}")`, backgroundSize: 'cover' }}
-                />
+                <ZoomImage url={d.imageUrl} alt={d.name} filter={d.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
               ) : (
                 <div
                   className="w-full h-full flex items-center justify-center text-lg font-bold"

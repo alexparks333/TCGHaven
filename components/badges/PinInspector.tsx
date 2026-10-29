@@ -10,7 +10,7 @@ import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 import { X, Lock, Check, Move3d } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { BadgeDef } from '@/lib/badges'
+import { isMastered, type BadgeDef } from '@/lib/badges'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_STAR, PIN_RIBBON } from './BadgePin'
 import { buildRelief } from './pinRelief'
@@ -97,6 +97,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
   }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery])
 
   const [have, total] = progress ?? [0, def.slots.length]
+  const mastered = isMastered(def, progress, !!earnedAt)
 
   return createPortal(
     // The blur lives on this outermost layer: an ancestor that fades in (opacity) cuts a child's
@@ -134,6 +135,10 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
             ? <><Check size={13} />Earned {new Date(earnedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</>
             : <><Lock size={13} />Not earned yet · {have} / {total} {def.slotNoun}</>}
         </div>
+        {mastered && <div className="mt-1 text-xs font-bold uppercase tracking-wider text-amber-300">✦ Mastered</div>}
+        {!!earnedAt && def.growing && !mastered && (
+          <div className="mt-1 text-xs font-semibold text-white/55">{have} / {def.slots.length} {def.slotNoun} · {Math.max(0, def.slots.length - have)} more to master it</div>
+        )}
         <p className="mt-2 text-sm text-white/60 max-w-md mx-auto">{def.description}</p>
         {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
       </div>

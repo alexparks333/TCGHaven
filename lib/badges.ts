@@ -36,6 +36,9 @@ export interface BadgeSet {
   monogram: string
   game: Game
   cover: { from: string; to: string; accent: string }
+  // A picture of the book's cover (staff upload, background removed): shown on the shelf and as the
+  // open book's cover instead of the plain leather in `cover`'s colours
+  coverImage?: string
   // The book's chapters, in order (e.g. "Overnumbers", "Alternative Arts"). Each chapter starts on
   // a fresh page with its own tab on the book's edge, and grows extra pages as it fills (6 pins a
   // page) without moving the chapters after it. A badge's `page` is the chapter it's in.
@@ -58,6 +61,10 @@ export interface BadgeDef {
   description: string  // how to earn it, shown on hover
   game: Game
   slotNoun: string     // "Legends" → "7 / 12 Legends"
+  // Growing badge: staff add slots as new sets come out (e.g. Overnumbered Legends Mastery). Earning
+  // it is still for good; holding every card it asks for *now* makes it Mastered — the pin glows.
+  // Fixed badges (unset) never change, so once earned they're simply done (no glow).
+  growing?: boolean
   slots: BadgeSlot[]
   art: string          // built-in pin art to draw when there's no imageUrl (components/badges/BadgePin.tsx)
   imageUrl?: string    // uploaded pin art (PNG with transparency) — shown in the book, and the 3D face
@@ -104,6 +111,12 @@ export const DEFAULT_BADGES: BadgeDef[] = [
     art: 'origins-overnumbered',
   },
 ]
+
+/** A growing badge whose every current slot the collector fills right now (`have` from their
+ *  progress, checked against the badge's slots today — a badge that grew since is not mastered). */
+export function isMastered(def: BadgeDef, progress: [number, number] | undefined, earned: boolean): boolean {
+  return !!def.growing && earned && def.slots.length > 0 && (progress?.[0] ?? 0) >= def.slots.length && (progress?.[1] ?? 0) === def.slots.length
+}
 
 export interface BadgeProgress {
   have: number

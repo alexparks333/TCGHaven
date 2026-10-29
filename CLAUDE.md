@@ -1705,6 +1705,18 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   The 3D perspective lives on the moving book, looking from the spine, so the cover
   doesn't warp as it glides; the book scrolls into view (centred) once laid out. In a profile the
   book is capped by window height so it always fits on screen.
+- **Phones held upright** (`components/badges/PhoneBook.tsx`, 2026-10-29): a two-page spread made
+  every pin tiny, so on `(max-width: 767px) and (orientation: portrait)` BadgeLibrary opens the book
+  full screen (a portal over the app) one page at a time. The closed book flies from the shelf to
+  fill the screen, its cover swings open on the spine while the camera glides with it, landing on
+  the first (left) page. Next on a left page = the camera pans across the spread to the right page;
+  next on a right page = the page turns over in 3D while the camera follows it onto the next left
+  page (the same motion as the cover). Back reverses each; swipes work too; a chapter menu in the
+  top bar jumps (the new page slides in). It's one "scene" — the spread as two screen-wide pages
+  either side of the spine, with a translateX camera — and every motion's end state is laid out
+  exactly as the motion finishes. A slight pull-back (scale ~0.93–0.95) during moves; the moving
+  layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG
+  filters every frame). Uses `PinPage`/`PinholeFilter`/`buildPages` exported from BadgeBook.
 - **3D inspect view** (`components/badges/PinInspector.tsx`, three.js — loaded only when a pin is
   clicked; `next/dynamic` from `BadgeBook`): click a pin or its hole in the book → full-screen viewer,
   drag to turn it over, scroll/pinch to zoom, slow auto-turn until you touch it (OrbitControls,
@@ -1760,6 +1772,19 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   highlights otherwise reflects as white), pale bands at the outline count as gold (AI art paints
   the coin's side in perspective), light clear coat only. Limits: depth is guessed from colour, so
   faces/figures aren't truly sculpted — a depth map or a .glb gets past that.
+- **Earned vs Mastered (2026-10-29):** earned is for good (never taken away — not when cards are
+  sold, not when a badge grows). A badge with `growing` (staff portal switch "Growing badge" — e.g.
+  Overnumbered Legends Mastery, which gains a slot per new set) is **Mastered** while the collector
+  holds every card it asks for today (`isMastered()`): its pin gets a polished platinum rim around its silhouette with a
+  highlight slowly travelling round it (`.pinbook-platinum`, a conic gradient on the pin mask drawn
+  slightly larger behind the pin; the owner rejected glows, rays and flames as too much), a "✦" gold nameplate, and "✦ Mastered" in the hover
+  and 3D view; earned-but-behind shows "N more to master it". Fixed badges never glow. The Dev
+  panel's "Show all badges as earned" also fills progress, so growing badges show Mastered.
+- **Cover pictures:** a book can have `coverImage` (staff portal → edit book → "Cover image"): a
+  picture of the cover on a plain light background, cut out in the browser (`lib/coverCutout.ts`:
+  light colourless pixels connected to the border — backdrop and shadow — go transparent, then
+  cropped, WebP). It replaces the plain leather on the shelf (`BookCover`) and is the open book's
+  cover/rim (the leather stitching and gold corners are hidden — the picture has its own frame).
 - **Chapters (2026-10-29):** a book is in ordered chapters — `BadgeSet.chapters` (e.g. Riftbound:
   "Overnumbers", "Alternative Arts"); a badge's `page` is its chapter (`chaptersOf()` = the book's
   list + any chapter a badge names that isn't listed). Each chapter starts on a fresh page and grows
@@ -2967,3 +2992,8 @@ public GET routes (`/api/sets`, `/api/set-registry`, `/api/cardex`, `/api/cards/
 tokens locally against Google's signing certs (REST lookup only as fallback); PriceAutoUpdater shows
 the prices/baselines saved on the device (`tcghaven-prices:{uid}`) instantly and refreshes in the
 background; the Cardex only fetches set lists for tracked games; the QR tools load on demand.
+Cardex follow-ups: sets are cached per session and the other sets in the open group are prefetched
+(`fetchCardexSet`/`cardexCache`), the loader's bar shows from the first moment; a tap opens the zoom
+view at once (double-tap-to-add is now a quick second tap landing on the zoom view —
+`ZoomCardData.onDoubleTap`), the full-size image is preloaded on press, and `ZoomImage` lays it
+exactly over the tile's copy and fades it in (no snap or shift).
