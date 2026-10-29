@@ -36,6 +36,10 @@ export interface BadgeSet {
   monogram: string
   game: Game
   cover: { from: string; to: string; accent: string }
+  // The book's chapters, in order (e.g. "Overnumbers", "Alternative Arts"). Each chapter starts on
+  // a fresh page with its own tab on the book's edge, and grows extra pages as it fills (6 pins a
+  // page) without moving the chapters after it. A badge's `page` is the chapter it's in.
+  chapters?: string[]
 }
 
 export const DEFAULT_BADGE_SETS: BadgeSet[] = [
@@ -49,7 +53,7 @@ export const DEFAULT_BADGE_SETS: BadgeSet[] = [
 export interface BadgeDef {
   id: string
   set: string          // which BadgeSet's book it lives in
-  page: string         // the page it's pinned on, titled at the top of the page (e.g. "Origins")
+  page: string         // its chapter (BadgeSet.chapters), titled at the top of the chapter's pages
   name: string
   description: string  // how to earn it, shown on hover
   game: Game
@@ -126,6 +130,14 @@ export const DEFAULT_BADGE_CATALOG: BadgeCatalog = { sets: DEFAULT_BADGE_SETS, b
 
 export function badgesInSet(catalog: BadgeCatalog, setId: string): BadgeDef[] {
   return catalog.badges.filter((b) => b.set === setId)
+}
+
+/** A book's chapters in order: its own list, then any chapter a badge names that isn't listed. */
+export function chaptersOf(catalog: BadgeCatalog, setId: string): string[] {
+  const set = catalog.sets.find((s) => s.id === setId)
+  const out = [...(set?.chapters ?? [])]
+  for (const b of badgesInSet(catalog, setId)) if (!out.includes(b.page)) out.push(b.page)
+  return out
 }
 
 /** A URL-safe id from a name ("Origins Overnumbered" → "origins-overnumbered"). */

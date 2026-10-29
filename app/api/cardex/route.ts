@@ -65,5 +65,7 @@ export async function GET(request: Request) {
       priceSource:     c.priceSource || undefined,
     }))
 
-  return NextResponse.json(cards)
+  // Public catalog data: cached by Vercel's CDN, refreshed in the background (prices change at most
+  // every few hours with the sync)
+  return NextResponse.json(cards, { headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400' } })
 }

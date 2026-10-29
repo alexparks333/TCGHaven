@@ -9,7 +9,11 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends, type FriendsTab, type FriendEntry } from './FriendsProvider'
 import { Avatar } from './Avatar'
-import { InviteQrCode, ScanFriendCode } from './FriendQr'
+import dynamic from 'next/dynamic'
+// The QR code maker and camera scanner only load when they're shown (they're ~45KB gzipped and this
+// dialog is mounted on every page)
+const InviteQrCode = dynamic(() => import('./FriendQr').then((m) => m.InviteQrCode), { ssr: false })
+const ScanFriendCode = dynamic(() => import('./FriendQr').then((m) => m.ScanFriendCode), { ssr: false })
 import {
   searchProfiles, profilePath, sendFriendRequest, acceptFriendRequest, removeFriendship, changeUsername,
   type Profile,

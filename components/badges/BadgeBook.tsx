@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, chaptersOf, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import dynamic from 'next/dynamic'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -22,19 +22,23 @@ const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 const PER_PAGE = 6 // 2 × 3
 const MIN_PAGES = 4 // always at least two spreads, so the book turns
 
-type Page = { kind: 'badges'; title: string; badges: BadgeDef[] } | { kind: 'blank' }
+type Page = { kind: 'badges'; title: string; badges: BadgeDef[]; chapter: number } | { kind: 'blank' }
 
-// Pins start on the very first page (no title page). Badges are grouped by their `page` (in the
-// order they're defined), six to a page; each page is titled with its name.
-function buildPages(badges: BadgeDef[]): Page[] {
+// Pins start on the very first page (no title page). The book is in chapters (BadgeSet.chapters, in
+// order): each chapter starts on a fresh page titled with its name and takes as many pages as its
+// badges need (six a page), so adding a badge to a chapter only ever pushes the chapters after it
+// along — nothing is reordered. A chapter with no badges yet still gets its (empty) titled page.
+function buildPages(badges: BadgeDef[], chapters: string[]): { pages: Page[]; starts: number[] } {
   const pages: Page[] = []
-  const groups = new Map<string, BadgeDef[]>()
-  for (const b of badges) groups.set(b.page, [...(groups.get(b.page) ?? []), b])
-  groups.forEach((list, title) => {
-    for (let i = 0; i < list.length; i += PER_PAGE) pages.push({ kind: 'badges', title, badges: list.slice(i, i + PER_PAGE) })
+  const starts: number[] = []
+  chapters.forEach((title, chapter) => {
+    starts.push(pages.length)
+    const list = badges.filter((b) => b.page === title)
+    if (!list.length) pages.push({ kind: 'badges', title, badges: [], chapter })
+    for (let i = 0; i < list.length; i += PER_PAGE) pages.push({ kind: 'badges', title, badges: list.slice(i, i + PER_PAGE), chapter })
   })
   while (pages.length < MIN_PAGES || pages.length % 2) pages.push({ kind: 'blank' })
-  return pages
+  return { pages, starts }
 }
 
 const TURN_MS = 750
@@ -51,10 +55,12 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
 }) {
   const { catalog } = useBadgeCatalog()
   const setBadges = useMemo(() => badgesInSet(catalog, set.id), [catalog, set.id])
-  const PAGES = useMemo(() => buildPages(setBadges), [setBadges])
+  const chapters = useMemo(() => chaptersOf(catalog, set.id), [catalog, set.id])
+  const { pages: PAGES, starts } = useMemo(() => buildPages(setBadges, chapters), [setBadges, chapters])
   const SPREADS = PAGES.length / 2
   const [spread, setSpread] = useState(0)
-  const [turn, setTurn] = useState<{ dir: 1 | -1; go: boolean } | null>(null)
+  // A turn goes to any spread (`to`): the arrows go one either way, a chapter tab jumps straight there
+  const [turn, setTurn] = useState<{ dir: 1 | -1; to: number; go: boolean } | null>(null)
   const bookRef = useRef<HTMLDivElement>(null)
   const [pageSize, setPageSize] = useState({ w: 300, h: 420 })
 
@@ -67,12 +73,23 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
     return () => ro.disconnect()
   }, [])
 
-  const flip = useCallback((dir: 1 | -1) => {
-    if (turn) return
-    const target = spread + dir
-    if (target < 0 || target >= SPREADS) return
-    setTurn({ dir, go: false })
+  const goTo = useCallback((target: number) => {
+    if (turn || target === spread || target < 0 || target >= SPREADS) return
+    setTurn({ dir: target > spread ? 1 : -1, to: target, go: false })
   }, [turn, spread, SPREADS])
+  const flip = useCallback((dir: 1 | -1) => { setFocus(null); goTo(spread + dir) }, [goTo, spread])
+  // A chapter picked from the tabs: it stays the highlighted one while it's on the open spread
+  // (two chapters can share a spread). Picking one that's already open flashes its page title.
+  const [focus, setFocus] = useState<number | null>(null)
+  const [flash, setFlash] = useState<{ chapter: number; n: number } | null>(null)
+  const flashAfterTurn = useRef<number | null>(null)
+  const pickChapter = (i: number) => {
+    const target = Math.floor(starts[i] / 2)
+    setFocus(i)
+    if (turn) return
+    if (target === spread) setFlash((f) => ({ chapter: i, n: (f?.n ?? 0) + 1 }))
+    else { flashAfterTurn.current = i; goTo(target) }
+  }
 
   // Start the turn on the next frame (so the page is laid flat first), then land on the new spread.
   useEffect(() => {
@@ -81,7 +98,13 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       const r = requestAnimationFrame(() => requestAnimationFrame(() => setTurn((t) => (t ? { ...t, go: true } : t))))
       return () => cancelAnimationFrame(r)
     }
-    const t = setTimeout(() => { setSpread((s) => s + turn.dir); setTurn(null) }, TURN_MS)
+    const t = setTimeout(() => {
+      setSpread(turn.to); setTurn(null)
+      // Arrived at a chapter picked from the tabs: its title glints once the page has landed
+      const c = flashAfterTurn.current
+      flashAfterTurn.current = null
+      if (c !== null) setFlash((f) => ({ chapter: c, n: (f?.n ?? 0) + 1 }))
+    }, TURN_MS)
     return () => clearTimeout(t)
   }, [turn])
 
@@ -102,21 +125,26 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   let right = page(spread * 2 + 1)
   let leaf: { front: Page; back: Page; side: 'right' | 'left' } | null = null
   if (turn?.dir === 1) {
-    right = page((spread + 1) * 2 + 1)
-    leaf = { front: page(spread * 2 + 1), back: page((spread + 1) * 2), side: 'right' }
+    right = page(turn.to * 2 + 1)
+    leaf = { front: page(spread * 2 + 1), back: page(turn.to * 2), side: 'right' }
   } else if (turn?.dir === -1) {
-    left = page((spread - 1) * 2)
-    leaf = { front: page(spread * 2), back: page((spread - 1) * 2 + 1), side: 'left' }
+    left = page(turn.to * 2)
+    leaf = { front: page(spread * 2), back: page(turn.to * 2 + 1), side: 'left' }
   }
+  // The chapter open now (the left page's, or the right's when the left belongs to none)
+  const shown = turn?.go ? turn.to : spread
+  const pageChapter = (p: Page | undefined) => (p && p.kind === 'badges' ? p.chapter : -1)
+  const onSpread = [pageChapter(PAGES[shown * 2]), pageChapter(PAGES[shown * 2 + 1])]
+  const openChapter = focus !== null && onSpread.includes(focus) ? focus : onSpread[0] >= 0 ? onSpread[0] : onSpread[1]
 
   // A page holds 2 × 3 pins: size them by whichever of its width or height is tighter.
   // Each page is a 2 × 3 grid: a pin (≈1.12× as tall as wide) fills most of its cell.
   const pin = Math.max(44, Math.min(200, pageSize.w * 0.33, pageSize.h * 0.215)) // leaves room for each spot's nameplate
   const [inspect, setInspect] = useState<BadgeDef | null>(null)
-  const props = { badges, isMe, pin, onInspect: setInspect }
+  const props = { badges, isMe, pin, onInspect: setInspect, flash }
   // Page edges peeking out on each side: more on whichever side has more pages left. They move to
   // the new counts during a turn (fading in step with the page), not with a cut afterwards.
-  const edgeSpread = turn?.go ? spread + turn.dir : spread
+  const edgeSpread = turn?.go ? turn.to : spread
   const leftEdges = Math.min(3, edgeSpread)
   const rightEdges = Math.min(3, SPREADS - 1 - edgeSpread)
   const edgeFade = `opacity ${TURN_MS}ms ease-in-out`
@@ -138,8 +166,12 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       {/* Saddle stitching around the cover, and gold corner protectors */}
       <div className="pinbook-stitch absolute inset-[5px] rounded-[12px] pointer-events-none" />
       {(['tl', 'tr', 'bl', 'br'] as const).map((c) => <CoverCorner key={c} at={c} />)}
+      {/* Chapter tabs down the right edge (they replace the strap — the book's open) */}
+      {chapters.length > 0 && (
+        <ChapterTabs chapters={chapters} open={openChapter} onPick={pickChapter} />
+      )}
       {/* Strap + snap on the right edge */}
-      <div className="pinbook-strap absolute -right-[2.2%] top-[34%] h-[26%] w-[4.5%] rounded-r-md" />
+      {chapters.length === 0 && <div className="pinbook-strap absolute -right-[2.2%] top-[34%] h-[26%] w-[4.5%] rounded-r-md" />}
       <div className="pinbook-snap absolute -left-[0.7%] top-1/2 -translate-y-1/2 w-[1.6%] aspect-square rounded-full z-30" />
 
       {/* Full page: on desktop the book stretches to fill the window (below the page title);
@@ -212,6 +244,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       def={inspect}
       earnedAt={badges?.earned[inspect.id]}
       progress={badges?.progress[inspect.id]}
+      mystery={!badges?.earned[inspect.id]}
       onClose={() => setInspect(null)}
     />
   )
@@ -221,9 +254,10 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       {/* In a profile the book keeps a book's proportions, so it's capped by the window's height
           (the whole book always fits on screen); on the Badges page it fills the page instead. */}
       <div
-        className="relative w-full px-7 sm:px-12 mx-auto"
+        className={cn('relative w-full mx-auto', chapters.length ? 'pl-7 pr-12 sm:pl-12 sm:pr-44' : 'px-7 sm:px-12')}
         style={full ? undefined : { maxWidth: 'max(360px, calc((100dvh - 190px) * 1.42 + 96px))' }}
       >
+
         <ArrowButton side="left" disabled={spread === 0 || !!turn} onClick={() => flip(-1)} />
         <ArrowButton side="right" disabled={spread === SPREADS - 1 || !!turn} onClick={() => flip(1)} />
 
@@ -240,6 +274,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   )
 }
 
+// Turn-the-page arrows either side of the book: frosted smoky-grey discs, quiet until hovered
 function ArrowButton({ side, disabled, onClick }: { side: 'left' | 'right'; disabled: boolean; onClick: () => void }) {
   const Icon = side === 'left' ? ChevronLeft : ChevronRight
   return (
@@ -248,14 +283,39 @@ function ArrowButton({ side, disabled, onClick }: { side: 'left' | 'right'; disa
       disabled={disabled}
       aria-label={side === 'left' ? 'Previous page' : 'Next page'}
       className={cn(
-        'absolute top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-white text-slate-50 shadow-lg flex items-center justify-center transition-all hover:scale-105 disabled:opacity-0 disabled:pointer-events-none',
+        'pinbook-arrow absolute top-1/2 -translate-y-1/2 z-20 w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center disabled:opacity-0 disabled:pointer-events-none',
         side === 'left' ? 'left-0' : 'right-0',
       )}
     >
-      <Icon size={22} />
+      <Icon size={22} strokeWidth={2.25} className={side === 'left' ? '-ml-0.5' : 'ml-0.5'} />
     </button>
   )
 }
+
+// Index tabs on the book's right edge, one per chapter, like a binder's dividers. The open
+// chapter's tab is gilded and stands out further; click one to turn straight to that chapter.
+function ChapterTabs({ chapters, open, onPick }: { chapters: string[]; open: number; onPick: (i: number) => void }) {
+  return (
+    <div className="absolute top-[5%] bottom-[5%] left-full z-10 flex flex-col gap-[0.8%] pointer-events-none" aria-label="Chapters">
+      {chapters.map((name, i) => (
+        <button
+          key={name + i}
+          type="button"
+          onClick={() => onPick(i)}
+          title={name}
+          aria-current={i === open ? 'true' : undefined}
+          className={cn('pinbook-tab pinbook-serif pointer-events-auto relative flex items-center gap-2 rounded-r-xl text-left font-bold transition-all duration-200',
+            i === open ? 'pinbook-tab-open' : 'pinbook-tab-shut')}
+        >
+          <span className="pinbook-tab-num">{ROMAN[i] ?? i + 1}</span>
+          <span className="pinbook-tab-label hidden sm:block">{name}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV']
 
 // ── A page ──────────────────────────────────────────────────────────────────────────────────
 
@@ -267,16 +327,17 @@ interface PageProps {
   pin: number
   onInspect: (def: BadgeDef) => void
   turning?: boolean
+  flash?: { chapter: number; n: number } | null
 }
 
-function PinPage({ page, side, badges, isMe, pin, onInspect, turning }: PageProps) {
+function PinPage({ page, side, badges, isMe, pin, onInspect, turning, flash }: PageProps) {
   return (
     <div className={cn('pinbook-page absolute inset-0 overflow-visible', side === 'left' ? 'rounded-l-xl pinbook-page-left' : 'rounded-r-xl pinbook-page-right')}>
       {/* Gold-foil double frame with engraved corner ornaments */}
       <div className={cn('pinbook-frame absolute top-[2.5%] bottom-[2.5%] pointer-events-none', side === 'left' ? 'left-[4%] right-[6%]' : 'left-[6%] right-[4%]')}>
         {(['tl', 'tr', 'bl', 'br'] as const).map((c) => <FrameOrnament key={c} at={c} />)}
       </div>
-      {page.kind === 'badges' && <PageTitle title={page.title} />}
+      {page.kind === 'badges' && <PageTitle key={flash?.chapter === page.chapter ? `f${flash.n}` : 't'} title={page.title} flash={flash?.chapter === page.chapter} />}
       {page.kind === 'badges' && (
         <div className="absolute inset-x-[7%] top-[13%] bottom-[5%] grid grid-cols-2 grid-rows-3 place-items-center">
           {Array.from({ length: PER_PAGE }, (_, i) => {
@@ -342,21 +403,16 @@ function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { 
           )}
         </span>
       ) : (
-        <PinHole size={pin} hovered={open} imageUrl={def.imageUrl} />
+        <PinHole size={pin} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={total ? have / total : 0} />
       )}
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
       <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} gap={-pin * 0.02} />
 
       {open && interactive && (
         <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
-          <span className="flex items-center gap-2.5">
-            <span className="shrink-0"><BadgePin art={def.art} imageUrl={def.imageUrl} size={44} ghost={!earnedAt} /></span>
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-ink leading-tight">{def.name}</span>
-              <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
-                {earnedAt ? <><Check size={10} />Earned {new Date(earnedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</> : <><Lock size={10} />Not earned yet</>}
-              </span>
-            </span>
+          <span className="block text-sm font-bold text-ink leading-tight">{def.name}</span>
+          <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
+            {earnedAt ? <><Check size={10} />Earned {new Date(earnedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</> : <><Lock size={10} />Not earned yet</>}
           </span>
           <span className="block text-[11px] text-slate-400 mt-2 leading-snug">{def.description}</span>
           {!earnedAt && (
@@ -376,19 +432,36 @@ function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { 
   )
 }
 
-function PinHole({ size, hovered, imageUrl }: { size: number; hovered: boolean; imageUrl?: string }) {
+function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hovered: boolean; imageUrl?: string; art: string; progress: number }) {
   // The pin's own shape pressed into the velvet: the
   // SVG filter #pinhole-inset (PinholeFilter) turns the art's outline into a tinted floor with an
   // inner shadow all round its edge (heavier at the top) and a faint lit lower edge.
   const src = imageUrl
     ? `url("${badgeAsset(imageUrl)}")`
     : `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='${PIN_VIEWBOX}'><path d='${PIN_SILHOUETTE}'/></svg>`)}")`
+  // Progress: the pin fills in from the bottom as a ghost (half opacity) — 2 of 12 cards shows its
+  // bottom sixth. The fill is measured over the art itself: uploaded art is square, centred in the
+  // 100 × 112 box; the built-in pins fill the box.
+  const p = Math.max(0, Math.min(1, progress))
+  const artTop = imageUrl ? (1.12 - 1) / 2 / 1.12 : 0 // fraction of the box above/below the art
+  const fill = p > 0 ? (artTop + p * (1 - 2 * artTop)) * 100 : 0
   return (
     <span className="relative block transition-transform duration-200" style={{ width: size, height: size * 1.12, transform: hovered ? 'scale(1.03)' : undefined }}>
       <span
         className="absolute inset-0"
         style={{ backgroundImage: src, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', filter: 'url(#pinhole-inset)' }}
       />
+      {p > 0 && (
+        <span
+          className="pinhole-fill absolute inset-x-0 bottom-0 overflow-hidden pointer-events-none"
+          style={{ height: `${fill}%`, opacity: hovered ? 0.62 : 0.5 }}
+        >
+          {/* the pin, anchored to the bottom so it doesn't move as the fill rises */}
+          <span className="absolute inset-x-0 bottom-0 flex justify-center" style={{ height: size * 1.12 }}>
+            <BadgePin art={art} imageUrl={imageUrl} size={size} />
+          </span>
+        </span>
+      )}
     </span>
   )
 }
@@ -444,9 +517,9 @@ function Nameplate({ size, text, lit, gap }: { size: number; text: string; lit: 
 }
 
 // A page's name in engraved gold lettering, between two fine gold rules with diamond ends.
-function PageTitle({ title }: { title: string }) {
+function PageTitle({ title, flash }: { title: string; flash?: boolean }) {
   return (
-    <div className="absolute inset-x-[10%] top-[4.2%] flex items-center justify-center gap-[3%] pointer-events-none">
+    <div className={cn('absolute inset-x-[10%] top-[4.2%] flex items-center justify-center gap-[3%] pointer-events-none', flash && 'pinbook-title-flash')}>
       <span className="pinbook-rule flex-1 max-w-[22%]" />
       <span className="pinbook-title pinbook-serif text-[clamp(12px,1.55vw,22px)] font-bold uppercase tracking-[0.32em] whitespace-nowrap">{title}</span>
       <span className="pinbook-rule pinbook-rule-r flex-1 max-w-[22%]" />

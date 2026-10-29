@@ -14,10 +14,11 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import { catalogPrice } from '@/lib/pricing'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import type { CardSearchResult } from '@/lib/api/search'
+import { cardImage } from '@/lib/cardImage'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface CatalogCard {
+export interface CatalogCard {
   id: string
   name: string
   number: string
@@ -576,26 +577,45 @@ function matchesSearch(query: string, name: string, number: string): boolean {
 // A friend's full Cardex inside their profile (ProfilePage.tsx): their shared cards (no prices or
 // purchase info) drive ownership, read-only — no header, no Personalized Collections, no adding,
 // no prices, and it leaves the page's URL alone.
+const NO_CARDS: Card[] = []
+
+// The picker lives in the staff portal, which has its own sign-in — the collector sign-in check
+// would send staff to the collector login page
+function MaybeAuthGuard({ guard, children }: { guard: boolean; children: React.ReactNode }) {
+  return guard ? <AuthGuard>{children}</AuthGuard> : <>{children}</>
+}
+
 export interface CardexViewer {
   cards: Card[]
 }
 
-export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
+// The Cardex as a card picker (the staff portal's badge editor): one game, every card in full
+// colour, click to select, Shift+Click to select a range. No owned state, prices, adding or URL.
+export interface CardexPicker {
+  game: Game
+  selected: Set<string>
+  /** `on`: whether these cards should end up selected */
+  onSelect: (cards: CatalogCard[], on: boolean) => void
+}
+
+export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
   const store = useStore()
-  const cards = viewer?.cards ?? store.cards
+  const readOnly = !!viewer || !!picker
+  const cards = picker ? NO_CARDS : viewer?.cards ?? store.cards
   const viewerGames = useMemo(() => {
+    if (picker) return [picker.game]
     if (!viewer) return null
     const games = Array.from(new Set(viewer.cards.map((c) => c.game)))
     return games.length ? games : DEFAULT_TRACKED_GAMES
-  }, [viewer])
+  }, [viewer, picker])
   const trackedGames = viewerGames ?? store.trackedGames
 
   // Deep-link support — e.g. clicking a "Card Unlocked" toast navigates to
   // /cardex?game=riftbound&set=Secret+Garden. Read once; a mid-session change to the URL isn't
   // expected to re-drive the page (the user is already browsing at that point).
   const searchParams = useSearchParams()
-  const urlGame = viewer ? null : searchParams.get('game')
-  const urlSet = viewer ? null : searchParams.get('set')
+  const urlGame = readOnly ? null : searchParams.get('game')
+  const urlSet = readOnly ? null : searchParams.get('set')
 
   // Starts on the deep-linked game if there is one, else the first game this user tracks
   // (trackedGames is already hydrated from localStorage by the time this first renders).
@@ -616,6 +636,7 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   const [artDone, setArtDone] = useState<{ key: string; ids: Set<string> }>({ key: '', ids: new Set() })
   const [revealedSetKey, setRevealedSetKey] = useState('')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const lastPicked = useRef<string | null>(null) // picker: the last clicked card, for Shift+Click ranges
   // The isolated "zoom" view a plain click on a tile opens — see CardZoomOverlay below. Holding
   // the clicked tile's own bounding rect here (captured at click time) is what lets the overlay
   // fly the card from wherever it actually was in the grid rather than a fixed spot.
@@ -698,6 +719,8 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   // on mount and derive Cardex groups from it client-side — see buildPokemonGroups() above for
   // why this doesn't need a registry entry per set the way Lorcana/Riftbound do.
   useEffect(() => {
+    // Only the games this person tracks (the Cardex shows tabs for those alone)
+    if (!trackedGames.includes('pokemon')) { setPokemonSetsLoading(false); return }
     let stale = false
     fetch('/api/sets?game=pokemon')
       .then((r) => (r.ok ? r.json() : []))
@@ -719,6 +742,8 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
 
   // Japanese Pokémon's set list (catalog_meta/pokemon-jp, written by its sync) — grouped by era.
   useEffect(() => {
+    // Only the games this person tracks (the Cardex shows tabs for those alone)
+    if (!trackedGames.includes('pokemon')) { setJpSetsLoading(false); return }
     let stale = false
     fetch('/api/sets?game=pokemon&lang=ja')
       .then((r) => (r.ok ? r.json() : []))
@@ -742,6 +767,8 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   // lib/api/onepiece.ts's getOnePieceSets()) once on mount and derive Cardex groups from it
   // client-side — see buildOnePieceGroups() above.
   useEffect(() => {
+    // Only the games this person tracks (the Cardex shows tabs for those alone)
+    if (!trackedGames.includes('onepiece')) { setOnepieceSetsLoading(false); return }
     let stale = false
     fetch('/api/sets?game=onepiece')
       .then((r) => (r.ok ? r.json() : []))
@@ -765,6 +792,8 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   // on mount and derive Cardex groups from it client-side — see buildMtgGroups() above for why
   // this doesn't need a registry entry per set the way Lorcana/Riftbound do.
   useEffect(() => {
+    // Only the games this person tracks (the Cardex shows tabs for those alone)
+    if (!trackedGames.includes('mtg')) { setMtgSetsLoading(false); return }
     let stale = false
     fetch('/api/sets?game=mtg')
       .then((r) => (r.ok ? r.json() : []))
@@ -822,7 +851,7 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   // set through the deep-link path above instead of resetting to the game's first set. Waits for
   // a deep link to be resolved first, so it never overwrites one with the placeholder set.
   useEffect(() => {
-    if (viewer) return
+    if (readOnly) return
     if (activeGame !== 'personal' && !activeSet.name) return
     if (!urlSetApplied.current) return
     const params = new URLSearchParams(window.location.search)
@@ -833,7 +862,7 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
     if (next !== window.location.pathname + window.location.search) {
       window.history.replaceState(window.history.state, '', next)
     }
-  }, [activeGame, activeSet, viewer])
+  }, [activeGame, activeSet, readOnly])
 
   const knownSets = useMemo(() => {
     const s = new Set<string>()
@@ -934,10 +963,11 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   // Inventory and Portfolio use — see lib/pricing.ts.
   const enriched = useMemo(
     () => catalogCards.map((cc) => {
-      const owned = getOwnedInfo(cc, gameCards, baseGame)
-      return { ...cc, ...owned, marketPrice: viewer ? 0 : catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
+      // Picker: everything shown in full (it's for choosing, not tracking)
+      const owned = picker ? { owned: true, quantity: 0, ownedFoil: false } : getOwnedInfo(cc, gameCards, baseGame)
+      return { ...cc, ...owned, marketPrice: readOnly ? 0 : catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
     }),
-    [catalogCards, gameCards, baseGame, viewer],
+    [catalogCards, gameCards, baseGame, readOnly, picker],
   )
 
   // Progress is always against the full set, not the filtered search view.
@@ -1012,9 +1042,9 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
   const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'pokemon-jp' ? jpSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading
 
   return (
-    <AuthGuard>
+    <MaybeAuthGuard guard={!picker}>
       <div>
-        {!viewer && (
+        {!readOnly && (
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-ink">Cardex</h1>
             <p className="text-slate-400 text-sm mt-0.5">
@@ -1026,7 +1056,7 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
         {/* Game tabs */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {/* Only the games this user tracks (added from Inventory's "+" game picker) */}
-          {[...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(baseGameOf(g))), ...(viewer ? [] : ['personal' as const])].map((game) => (
+          {[...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(baseGameOf(g))), ...(readOnly ? [] : ['personal' as const])].map((game) => (
             <button
               key={game}
               onClick={() => switchGame(game)}
@@ -1049,7 +1079,7 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
         {activeGame === 'personal' ? (
           <PersonalCollectionsView onZoom={openZoom} />
         ) : setsLoading ? (
-          <LogoLoader label={viewer ? 'Loading Cardex…' : 'Loading your Cardex…'} />
+          <LogoLoader label={readOnly ? 'Loading Cardex…' : 'Loading your Cardex…'} />
         ) : (
           <>
             {/* Two-tier set picker: pick a category (era/product group) from a dropdown, then a
@@ -1146,8 +1176,8 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
               </div>
             )}
 
-            {/* Progress bar (catalog-backed sets only) */}
-            {setReady && !isSpecial && totalCount > 0 && (
+            {/* Progress bar (catalog-backed sets only; not when picking cards) */}
+            {setReady && !isSpecial && totalCount > 0 && !picker && (
               <div className="mb-5 card-glass px-4 py-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-ink">{activeSet.label ?? activeSet.name}</span>
@@ -1186,7 +1216,21 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
                     onHover={() => setHoveredId(card.id)}
                     onLeave={() => setHoveredId(null)}
                     onZoom={openZoom}
-                    onAdd={viewer ? undefined : setAddPrefill}
+                    onAdd={readOnly ? undefined : setAddPrefill}
+                    pick={picker && {
+                      on: picker.selected.has(card.id),
+                      onClick: (shift) => {
+                        // Shift: select everything between the last clicked card and this one
+                        const last = lastPicked.current ? filteredEnriched.findIndex((c) => c.id === lastPicked.current) : -1
+                        if (shift && last >= 0) {
+                          const [a, b] = last < i ? [last, i] : [i, last]
+                          picker.onSelect(filteredEnriched.slice(a, b + 1), true)
+                        } else {
+                          picker.onSelect([card], !picker.selected.has(card.id))
+                        }
+                        lastPicked.current = card.id
+                      },
+                    }}
                   />
                 ))}
               </div>
@@ -1220,8 +1264,8 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
           </>
         )}
       </div>
-      <CardZoomOverlay data={zoomCard} onClose={() => setZoomCard(null)} viewOnly={!!viewer} />
-      {addPrefill && !viewer && (
+      <CardZoomOverlay data={zoomCard} onClose={() => setZoomCard(null)} viewOnly={readOnly} />
+      {addPrefill && !readOnly && (
         <AddCardDialog
           key={`${addPrefill.game}:${addPrefill.id}`}
           defaultGame={addPrefill.game}
@@ -1229,7 +1273,7 @@ export default function CardexPage({ viewer }: { viewer?: CardexViewer } = {}) {
           onClose={() => setAddPrefill(null)}
         />
       )}
-    </AuthGuard>
+    </MaybeAuthGuard>
   )
 }
 
@@ -1324,12 +1368,14 @@ interface CardTileProps {
   onAdd?: (card: CardSearchResult) => void // absent = read-only (a friend's Cardex)
   eagerArt?: boolean
   onArtDone?: (id: string) => void
+  /** Picker mode: a click selects instead (Shift = a range); `on` = selected */
+  pick?: { on: boolean; onClick: (shift: boolean) => void }
 }
 
 // How long a tap waits for a second one before it counts as a single tap (opening the zoom view)
 const DOUBLE_TAP_MS = 260
 
-function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone }: CardTileProps) {
+function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone, pick }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#7a6a55'
   // RARITY_LABELS_BY_GAME is keyed per-game (lib/utils.ts) — the same raw string can mean
   // something different in two games' catalogs (Riftbound's Rune "Promo" vs. Pokemon's real
@@ -1384,6 +1430,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
       onPointerLeave={(e) => { if (e.pointerType === 'mouse') onLeave() }}
       onPointerDown={(e) => { lastPointerType.current = e.pointerType }}
       onClick={(e) => {
+        if (pick) { pick.onClick(e.shiftKey); return }
         if (!onAdd) { zoom(e.currentTarget); return }
         if (e.ctrlKey || e.metaKey) { openEbaySearch(ebayCard); return }
         if (e.shiftKey) { addToInventory(); return }
@@ -1398,7 +1445,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
         const el = e.currentTarget
         tapTimer.current = setTimeout(() => { tapTimer.current = null; zoom(el) }, DOUBLE_TAP_MS)
       }}
-      title={onAdd ? 'Click to view — Shift+Click to add to inventory — ⌘/Ctrl+Click to search eBay sold listings' : 'Click to view'}
+      title={pick ? 'Click to select · Shift+Click to select everything up to here' : onAdd ? 'Click to view — Shift+Click to add to inventory — ⌘/Ctrl+Click to search eBay sold listings' : 'Click to view'}
     >
       <div
         className={cn('relative w-full rounded-lg overflow-hidden transition-all duration-200', card.owned ? 'shadow-lg' : 'opacity-30')}
@@ -1406,13 +1453,14 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
           aspectRatio: '5/7',
           containerType: 'inline-size',
           filter: card.owned ? 'none' : 'grayscale(1)',
-          outline: card.owned ? (card.slab ? '1px solid #9aa4b1' : `2px solid ${gameColor}40`) : '1px solid #d6c49f',
-          boxShadow: card.owned && isHovered ? `0 0 12px ${gameColor}60` : undefined,
+          outline: pick?.on ? '3px solid #7c3aed' : card.owned ? (card.slab ? '1px solid #9aa4b1' : `2px solid ${gameColor}40`) : '1px solid #d6c49f',
+          boxShadow: pick?.on ? '0 0 0 3px rgba(124,58,237,0.25)' : card.owned && isHovered ? `0 0 12px ${gameColor}60` : undefined,
+          opacity: pick && !pick.on ? 0.85 : undefined,
         }}
       >
         {card.imageUrl ? (
           <img
-            src={card.imageUrl}
+            src={cardImage(card.imageUrl, 'grid')}
             alt={card.name}
             loading={eagerArt ? 'eager' : 'lazy'}
             onLoad={() => onArtDone?.(card.id)}
@@ -1427,9 +1475,14 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
           </div>
         )}
         {card.owned && card.slab && <SlabTileOverlay slab={card.slab} />}
+        {pick?.on && (
+          <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow">
+            <svg width="10" height="10" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </div>
+        )}
 
         {/* A slab's grade banner owns the top edge, so its owned badge drops to the bottom corner */}
-        {card.owned && (
+        {card.owned && !pick && (
           card.quantity > 1 ? (
             <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none', card.slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
               ×{card.quantity > 99 ? '99+' : card.quantity}
@@ -1462,7 +1515,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
               </div>
             )}
             {card.owned && card.slab && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.slab.company}{card.slab.grade ? ` ${card.slab.grade}` : ''}</div>}
-            {card.owned
+            {pick ? null : card.owned
               ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
               : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
           </div>
@@ -1520,7 +1573,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         }}
       >
         {card.imageUrl ? (
-          <img src={card.imageUrl} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
+          <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-400 bg-slate-800">
             {card.number ? `#${card.number}` : '?'}
@@ -1903,7 +1956,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               >
                 <FullSlab slab={d.slab} name={d.name} number={d.number} setName={d.setName}>
                   {d.imageUrl
-                    ? <img src={d.imageUrl} alt={d.name} draggable={false} className="w-full h-full object-cover" />
+                    ? <img src={cardImage(d.imageUrl, 'full')} alt={d.name} draggable={false} className="w-full h-full object-cover" style={{ backgroundImage: `url("${cardImage(d.imageUrl, 'grid')}")`, backgroundSize: 'cover' }} />
                     : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
                 </FullSlab>
                 <div className="card-zoom-glint absolute inset-0 rounded-[18px] pointer-events-none" />
@@ -1915,11 +1968,12 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             >
               {d.imageUrl ? (
                 <img
-                  src={d.imageUrl}
+                  src={cardImage(d.imageUrl, 'full')}
                   alt={d.name}
                   draggable={false}
                   className="w-full h-full object-cover"
-                  style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }}
+                  // the tile's copy (already loaded) shows until the full-size one arrives
+                  style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)', backgroundImage: `url("${cardImage(d.imageUrl, 'grid')}")`, backgroundSize: 'cover' }}
                 />
               ) : (
                 <div

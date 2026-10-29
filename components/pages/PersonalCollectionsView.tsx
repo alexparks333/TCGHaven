@@ -26,6 +26,7 @@ import { cn, openEbaySearch, zoomGlowColor } from '@/lib/utils'
 import type { ZoomCardData } from './CardexPage'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { cardImage } from '@/lib/cardImage'
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
@@ -768,7 +769,7 @@ function AddCardToCollectionModal({
               >
                 {result.imageUrl ? (
                   <div className="w-12 h-16 rounded-lg bg-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
-                    <img src={result.imageUrl} alt={result.name} className="w-full h-full object-contain" />
+                    <img src={cardImage(result.imageUrl, 'thumb')} alt={result.name} className="w-full h-full object-contain" />
                   </div>
                 ) : (
                   <div className="w-12 h-16 bg-slate-800 rounded-lg flex-shrink-0 flex items-center justify-center text-slate-600 text-xs">?</div>
@@ -984,7 +985,7 @@ function PersonalCardTile({
         }}
       >
         {card.imageUrl ? (
-          <img src={card.imageUrl} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
+          <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: rarityColor + '18', color: rarityColor }}>
             #{card.number}

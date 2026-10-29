@@ -12,6 +12,7 @@ import {
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { cardImage } from '@/lib/cardImage'
 
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -487,7 +488,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                     {result.imageUrl ? (
                       <div className="w-16 h-[88px] rounded-lg bg-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
                         <img
-                          src={result.imageUrl}
+                          src={cardImage(result.imageUrl, 'thumb')}
                           alt={result.name}
                           className="w-full h-full object-contain"
                         />
@@ -822,7 +823,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           {/* Card preview */}
           {form.imageUrl && (
             <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
-              <img src={form.imageUrl} alt={form.name} className="w-12 h-16 object-contain rounded" />
+              <img src={cardImage(form.imageUrl, 'thumb')} alt={form.name} className="w-12 h-16 object-contain rounded" />
               <div>
                 <div className="text-sm font-medium text-ink">{form.name}</div>
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>

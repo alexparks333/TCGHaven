@@ -1760,6 +1760,18 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   highlights otherwise reflects as white), pale bands at the outline count as gold (AI art paints
   the coin's side in perspective), light clear coat only. Limits: depth is guessed from colour, so
   faces/figures aren't truly sculpted — a depth map or a .glb gets past that.
+- **Chapters (2026-10-29):** a book is in ordered chapters — `BadgeSet.chapters` (e.g. Riftbound:
+  "Overnumbers", "Alternative Arts"); a badge's `page` is its chapter (`chaptersOf()` = the book's
+  list + any chapter a badge names that isn't listed). Each chapter starts on a fresh page and grows
+  pages as it fills (6 a page), so adding a badge never reorders later chapters; an empty chapter
+  still gets its titled page. Chapter tabs (`ChapterTabs`, `.pinbook-tab*`) run down the book's right
+  edge (replacing the strap): numeral + name, the open one gilded and standing out (names hide on
+  phones). Clicking one turns straight to it (a turn has a target spread, `to`); one already on the
+  open spread just becomes the highlighted tab (`focus`) and its title glints.
+  Staff portal: `components/admin/ChaptersBoard.tsx` — each chapter is a leather card with its pages
+  as mini velvet pages of pins: rename inline, reorder, add/delete (only when empty), drag pins to
+  reorder or move between chapters, click a pin to edit; the badge editor picks a chapter (or starts
+  a new one, which joins the book's list).
 - **HavenRelief** (`tools/havenrelief/`, 2026-10-28) — our own image → bas-relief tool, replacing
   paid ones (bas-relief.ai) and Meshy for flat-art pins: Depth Anything V2 Small (Apache-2.0) for
   layers + Marigold Normals v1.1 (Open-RAIL++) for detail, integrated and compressed into coin
@@ -2941,3 +2953,17 @@ every affected card) as cards enter the store (`withLivePrice`, sold-card loader
 gets the sharp image with no Firestore writes. Anything that saves a card image should save the
 large one (`images.large ?? images.small`).
 
+
+### 32. Card images are served at the size they're shown — `lib/cardImage.ts`
+Card originals are 0.2–0.8MB (Riftbound 744×1039 PNG ≈ 780KB, Pokémon hi-res ≈ 845KB); a phone
+opening one Cardex set downloaded ~60MB (2026-10-29 diagnostic). Every `<img>` of a card goes through
+`cardImage(url, 'thumb' | 'grid' | 'full')`: thumb ≈200px (list rows), grid ≈400px (tiles — sharp at
+3×), full = the clear original-size copy (the Cardex zoom view only). Riftbound: Sanity's own
+`?w=&fm=webp` (779KB → 30KB at 400px); Pokémon: the free wsrv.nl proxy (845KB → 45KB), with a global
+`<img>` error listener in ClientWrapper falling back to the original if it fails; Lorcana/Scryfall/
+TCGplayer: each CDN's own sizes. New card image sites must use it. Also from that diagnostic:
+public GET routes (`/api/sets`, `/api/set-registry`, `/api/cardex`, `/api/cards/search`) send
+`s-maxage` + `stale-while-revalidate` so Vercel's CDN answers them; `verifyAdminRequest.ts` checks ID
+tokens locally against Google's signing certs (REST lookup only as fallback); PriceAutoUpdater shows
+the prices/baselines saved on the device (`tcghaven-prices:{uid}`) instantly and refreshes in the
+background; the Cardex only fetches set lists for tracked games; the QR tools load on demand.

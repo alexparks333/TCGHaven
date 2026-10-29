@@ -21,5 +21,6 @@ export async function GET(req: NextRequest) {
   }
 
   const results = id ? await findCardById(game, id, q, language) : await searchCards(game, q, language)
-  return NextResponse.json(results)
+  // Same query → same answer for everyone: Vercel's CDN keeps it for a few minutes
+  return NextResponse.json(results, { headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600' } })
 }

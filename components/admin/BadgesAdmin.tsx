@@ -1,19 +1,21 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import {
-  Plus, Pencil, Trash2, ArrowUp, ArrowDown, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon,
+  Plus, Pencil, Trash2, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
-import { PIN_BACKS, type PinBackId, badgeSlug, badgesInSet, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
+import { PIN_BACKS, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
+import ChaptersBoard from './ChaptersBoard'
+import CardexCardPicker from './CardexCardPicker'
 
 const PinInspector = dynamic(() => import('@/components/badges/PinInspector'), { ssr: false })
 
@@ -33,29 +35,12 @@ export function BadgesAdmin() {
   const [error, setError] = useState('')
 
   const selected = catalog.sets.find((s) => s.id === setId) ?? catalog.sets[0]
-  const pages = useMemo(() => {
-    const m = new Map<string, BadgeDef[]>()
-    for (const b of selected ? badgesInSet(catalog, selected.id) : []) m.set(b.page, [...(m.get(b.page) ?? []), b])
-    return Array.from(m.entries())
-  }, [catalog, selected])
-
   async function persist(next: BadgeCatalog) {
     setBusy(true); setError('')
     try { await saveBadgeCatalog(staffDb, next) } catch (e) {
       console.error(e); setError('Couldn’t save — check you’re signed in as staff and try again.')
       throw e
     } finally { setBusy(false) }
-  }
-
-  function moveBadge(id: string, dir: -1 | 1) {
-    const list = [...catalog.badges]
-    const i = list.findIndex((b) => b.id === id)
-    // Swap with the nearest badge in the same book
-    let j = i + dir
-    while (j >= 0 && j < list.length && list[j].set !== list[i].set) j += dir
-    if (j < 0 || j >= list.length) return
-    ;[list[i], list[j]] = [list[j], list[i]]
-    persist({ ...catalog, badges: list })
   }
 
   async function deleteBadge(b: BadgeDef) {
@@ -70,9 +55,9 @@ export function BadgesAdmin() {
     setSetId(null)
   }
 
-  function newBadge(): BadgeDef {
+  function newBadge(chapter: string): BadgeDef {
     return {
-      id: '', set: selected?.id ?? catalog.sets[0]?.id ?? '', page: pages[pages.length - 1]?.[0] ?? '',
+      id: '', set: selected?.id ?? catalog.sets[0]?.id ?? '', page: chapter,
       name: '', description: '', game: selected?.game ?? 'riftbound', slotNoun: 'cards', slots: [], art: 'crest',
     }
   }
@@ -128,47 +113,21 @@ export function BadgesAdmin() {
             <div className="text-[11px] text-slate-500 text-center">{GAME_LABELS[selected.game]} · id <code>{selected.id}</code></div>
           </div>
 
-          {/* Its badges, by page */}
+          {/* Its chapters, each with its pages of pins */}
           <div>
             <div className="flex items-center mb-3">
-              <h2 className="text-lg font-bold text-ink">{selected.name} badges</h2>
-              <button onClick={() => setEditBadge(newBadge())} className="btn-primary ml-auto"><Plus size={15} />New badge</button>
+              <h2 className="text-lg font-bold text-ink">{selected.name} · chapters</h2>
+              <span className="ml-3 text-xs text-slate-500 hidden md:inline">Drag pins to reorder or move them between chapters · click a chapter&rsquo;s name to rename it</span>
             </div>
-            {pages.length === 0 && (
-              <div className="card-glass p-8 text-center text-sm text-slate-500">No badges in this book yet — add the first one.</div>
-            )}
-            <div className="flex flex-col gap-5">
-              {pages.map(([page, list]) => (
-                <section key={page}>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 mb-2">Page · {page || '(untitled)'}</div>
-                  <div className="flex flex-col gap-2">
-                    {list.map((b) => (
-                      <div key={b.id} className="card-glass p-3 flex items-center gap-3">
-                        <div className="shrink-0"><BadgePin art={b.art} imageUrl={b.imageUrl} size={46} /></div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-bold text-ink truncate">{b.name}</div>
-                          <div className="text-xs text-slate-500 truncate">{b.slots.length} {b.slotNoun} · {b.description || 'No description'}</div>
-                          <div className="flex gap-1.5 mt-1">
-                            {b.imageUrl && <Tag>Art</Tag>}
-                            {b.model && <Tag>3D model</Tag>}
-                            {b.normalMapUrl && <Tag>Normal map</Tag>}
-                            {b.depthMapUrl && <Tag>Depth map</Tag>}
-                            {!b.slots.length && <Tag warn>No requirements</Tag>}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <IconBtn label="Preview in 3D" onClick={() => setPreview(b)}><Cuboid size={15} /></IconBtn>
-                          <IconBtn label="Move up" onClick={() => moveBadge(b.id, -1)}><ArrowUp size={15} /></IconBtn>
-                          <IconBtn label="Move down" onClick={() => moveBadge(b.id, 1)}><ArrowDown size={15} /></IconBtn>
-                          <IconBtn label="Edit" onClick={() => setEditBadge(b)}><Pencil size={15} /></IconBtn>
-                          <IconBtn label="Delete" danger onClick={() => deleteBadge(b)}><Trash2 size={15} /></IconBtn>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
+            <ChaptersBoard
+              catalog={catalog}
+              set={selected}
+              persist={persist}
+              onEdit={setEditBadge}
+              onNew={(chapter) => setEditBadge(newBadge(chapter))}
+              onPreview={setPreview}
+              onDelete={deleteBadge}
+            />
           </div>
         </div>
       )}
@@ -184,7 +143,9 @@ export function BadgesAdmin() {
           onSave={async (b, originalId) => {
             const exists = catalog.badges.some((x) => x.id === originalId && originalId)
             const badges = exists ? catalog.badges.map((x) => (x.id === originalId ? b : x)) : [...catalog.badges, b]
-            await persist({ ...catalog, badges })
+            // a chapter typed in the editor joins the book's chapter list (at the end)
+            const sets = catalog.sets.map((s) => (s.id === b.set && !chaptersOf(catalog, s.id).includes(b.page) ? { ...s, chapters: [...chaptersOf(catalog, s.id), b.page] } : s))
+            await persist({ ...catalog, sets, badges })
             setSetId(b.set)
             setEditBadge(null)
           }}
@@ -206,19 +167,6 @@ export function BadgesAdmin() {
       )}
       {preview && <PinInspector def={preview} onClose={() => setPreview(null)} />}
     </div>
-  )
-}
-
-function Tag({ children, warn }: { children: React.ReactNode; warn?: boolean }) {
-  return <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', warn ? 'bg-amber-500/20 text-amber-700' : 'bg-slate-800 text-slate-400')}>{children}</span>
-}
-
-function IconBtn({ label, onClick, danger, children }: { label: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} title={label} aria-label={label}
-      className={cn('w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-800 transition-colors', danger ? 'hover:text-red-600' : 'hover:text-ink')}>
-      {children}
-    </button>
   )
 }
 
@@ -269,7 +217,8 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const book = catalog.sets.find((s) => s.id === b.set)
-  const pagesInBook = Array.from(new Set(badgesInSet(catalog, b.set).map((x) => x.page)))
+  const chaptersInBook = chaptersOf(catalog, b.set)
+  const [newChapter, setNewChapter] = useState(!!initial.page && !chaptersOf(catalog, initial.set).includes(initial.page))
   const id = isNew ? badgeSlug(b.name) : b.id
   const patch = (p: Partial<BadgeDef>) => setB((x) => ({ ...x, ...p }))
 
@@ -277,7 +226,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
     setError('')
     if (!b.name.trim()) return setError('Give the badge a name.')
     if (!b.set) return setError('Pick a book.')
-    if (!b.page.trim()) return setError('Give it a page (e.g. the set name, like "Origins").')
+    if (!b.page.trim()) return setError('Pick a chapter (or start a new one).')
     if (isNew && catalog.badges.some((x) => x.id === id)) return setError(`A badge with the id "${id}" already exists — change the name.`)
     setSaving(true)
     try {
@@ -311,9 +260,19 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                 {catalog.sets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>
-            <Field label="Page" hint="Badges with the same page sit together under that title.">
-              <input className="input-field" list="badge-pages" value={b.page} onChange={(e) => patch({ page: e.target.value })} placeholder="Origins" />
-              <datalist id="badge-pages">{pagesInBook.map((p) => <option key={p} value={p} />)}</datalist>
+            <Field label="Chapter" hint="The chapter of the book it's pinned in.">
+              {newChapter || !chaptersInBook.length ? (
+                <div className="flex gap-1.5">
+                  <input className="input-field" autoFocus value={b.page} onChange={(e) => patch({ page: e.target.value })} placeholder="New chapter name" />
+                  {chaptersInBook.length > 0 && <button type="button" onClick={() => { setNewChapter(false); patch({ page: chaptersInBook[0] }) }} className="btn-secondary !px-2" title="Pick an existing chapter"><X size={14} /></button>}
+                </div>
+              ) : (
+                <select className="input-field" value={b.page} onChange={(e) => { if (e.target.value === '__new') { setNewChapter(true); patch({ page: '' }) } else patch({ page: e.target.value }) }}>
+                  {!b.page && <option value="">Pick a chapter…</option>}
+                  {chaptersInBook.map((c) => <option key={c} value={c}>{c}</option>)}
+                  <option value="__new">＋ New chapter…</option>
+                </select>
+              )}
             </Field>
           </div>
           <Field label="How to earn it" hint="Shown when collectors hover the pin.">
@@ -507,12 +466,32 @@ function FileField({ label, accept, badgeId, kind, value, onChange, icon }: {
 
 function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]; onChange: (s: BadgeSlot[]) => void }) {
   const update = (i: number, p: Partial<BadgeSlot>) => onChange(slots.map((s, j) => (j === i ? { ...s, ...p } : s)))
+  // The Cardex picker: 'new' = each picked card becomes a slot; a number = add the picked cards
+  // to that slot (more cards that fill it)
+  const [picking, setPicking] = useState<'new' | number | null>(null)
+  function addPicked(add: BadgeSlot[]) {
+    if (picking === 'new' || picking === null) return onChange([...slots, ...add])
+    const s = slots[picking]
+    const cards = [...(s.cards ?? [])]
+    const ids = [...s.cardIds]
+    for (const c of add.flatMap((x) => x.cards ?? [])) if (!ids.includes(c.id)) { ids.push(c.id); cards.push(c) }
+    update(picking, { cardIds: ids, cards, label: s.label || add[0]?.label || '' })
+  }
   return (
     <div>
       <div className="flex items-center mb-1.5">
         <span className="field-label !mb-0">Requirements · {slots.length} {slots.length === 1 ? 'slot' : 'slots'}</span>
       </div>
-      <p className="text-[11px] text-slate-500 mb-2">A collector earns the badge by filling every slot. A slot is filled by owning <b>any one</b> of its cards (e.g. a Legend&rsquo;s Overnumbered <i>or</i> Signature).</p>
+      <button onClick={() => setPicking('new')} className="btn-primary !px-3 !py-1.5 !text-xs mb-2"><Plus size={13} />Pick from the Cardex</button>
+      {picking !== null && (
+        <CardexCardPicker
+          game={game}
+          title={picking === 'new' ? undefined : `Add cards to “${slots[picking]?.label || `slot ${picking + 1}`}”`}
+          addLabel={picking === 'new' ? undefined : (n) => `Add ${n || ''} to this slot`}
+          onAdd={addPicked}
+          onClose={() => setPicking(null)}
+        />
+      )}
       <div className="flex flex-col gap-2">
         {slots.map((s, i) => (
           <div key={i} className="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5">
@@ -521,11 +500,13 @@ function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]
               <input className="input-field !py-1 !text-sm" value={s.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="Slot name, e.g. Lee Sin" />
               <button onClick={() => onChange(slots.filter((_, j) => j !== i))} title="Remove slot" className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-slate-800"><Trash2 size={14} /></button>
             </div>
-            <div className="flex flex-wrap gap-1.5 mb-2">
-              {s.cardIds.map((id) => {
+            <div className="flex flex-wrap items-center gap-1.5 mb-2">
+              {s.cardIds.map((id, k) => {
                 const info = s.cards?.find((c) => c.id === id)
                 return (
-                  <span key={id} className="flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-lg bg-slate-800 text-xs text-ink">
+                  <span key={id} className="contents">
+                  {k > 0 && <span className="text-[10px] font-bold uppercase text-slate-500">or</span>}
+                  <span className="flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-lg bg-slate-800 text-xs text-ink">
                     {info?.imageUrl
                       // eslint-disable-next-line @next/next/no-img-element
                       ? <img src={info.imageUrl} alt="" className="w-5 h-7 object-cover rounded-sm" />
@@ -533,11 +514,16 @@ function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]
                     <span className="max-w-[160px] truncate">{info ? `${info.name}${info.number ? ` #${info.number}` : ''}` : id}</span>
                     <button onClick={() => update(i, { cardIds: s.cardIds.filter((x) => x !== id), cards: s.cards?.filter((c) => c.id !== id) })} className="text-slate-500 hover:text-red-600"><X size={12} /></button>
                   </span>
+                  </span>
                 )
               })}
               {!s.cardIds.length && <span className="text-[11px] text-amber-700">No cards yet — search below.</span>}
+              <button onClick={() => setPicking(i)} title="Pick more cards from the Cardex that also fill this slot"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-ink">
+                <Plus size={11} />Add cards
+              </button>
             </div>
-            <CardSearch game={game} exclude={s.cardIds} onPick={(c) => update(i, { cardIds: [...s.cardIds, c.id], cards: [...(s.cards ?? []), c] })} />
+            <CardSearch game={game} exclude={s.cardIds} placeholder="Or search for a card to add to this slot" onPick={(c) => update(i, { cardIds: [...s.cardIds, c.id], cards: [...(s.cards ?? []), c] })} />
           </div>
         ))}
       </div>
@@ -548,7 +534,7 @@ function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]
   )
 }
 
-function CardSearch({ game, exclude, onPick }: { game: Game; exclude: string[]; onPick: (c: SlotCard) => void }) {
+function CardSearch({ game, exclude, onPick, placeholder }: { game: Game; exclude: string[]; onPick: (c: SlotCard) => void; placeholder?: string }) {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<SlotCard[]>([])
   const [loading, setLoading] = useState(false)
@@ -569,7 +555,7 @@ function CardSearch({ game, exclude, onPick }: { game: Game; exclude: string[]; 
     <div>
       <div className="relative">
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input className="input-field !py-1.5 !pl-7 !text-xs" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Add a card — search ${GAME_LABELS[game]} by name or number`} />
+        <input className="input-field !py-1.5 !pl-7 !text-xs" value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder ?? `Add a card — search ${GAME_LABELS[game]} by name or number`} />
         {loading && <Loader2 size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 animate-spin text-slate-500" />}
       </div>
       {results.length > 0 && (

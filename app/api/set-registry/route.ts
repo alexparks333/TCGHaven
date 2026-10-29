@@ -10,7 +10,9 @@ import type { Game } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  return NextResponse.json(await loadSetRegistry())
+  // Public: cached by Vercel's CDN for a minute, refreshed in the background (staff edits show
+  // within a minute)
+  return NextResponse.json(await loadSetRegistry(), { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=86400' } })
 }
 
 // Structured patch of a single set entry — used by the Settings "Needs Review" editor.

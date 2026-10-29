@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 
 const RENDER_STEP = 50
 import { useScrollLock } from '@/lib/useScrollLock'
+import { cardImage } from '@/lib/cardImage'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
@@ -664,7 +665,7 @@ export default function InventoryPage() {
                     <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                       <div className="relative shrink-0">
                         {rep.imageUrl ? (
-                          <img src={rep.imageUrl} alt={rep.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
+                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
                         ) : (
                           <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
@@ -847,7 +848,7 @@ export default function InventoryPage() {
                   <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={card.imageUrl} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
+                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
                       ) : (
                         <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
@@ -955,7 +956,7 @@ export default function InventoryPage() {
                 {/* Card preview */}
                 <div className="flex items-center gap-3 mb-5 p-3 bg-slate-800/60 rounded-xl border border-slate-700/40">
                   {sellCard.imageUrl ? (
-                    <img src={sellCard.imageUrl} alt={sellCard.name} className="w-12 h-[67px] object-contain rounded-lg flex-shrink-0" />
+                    <img src={cardImage(sellCard.imageUrl, 'thumb')} alt={sellCard.name} className="w-12 h-[67px] object-contain rounded-lg flex-shrink-0" />
                   ) : (
                     <div className="w-12 h-[67px] bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500 flex-shrink-0">#{sellCard.number}</div>
                   )}

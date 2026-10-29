@@ -2,7 +2,6 @@
 
 import { PrintingTags } from '@/components/PrintingTags'
 import { useEffect, useMemo, useState } from 'react'
-import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
@@ -11,6 +10,7 @@ import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySea
 import { conditionLabel, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 import { authFetch } from '@/lib/firebase/authFetch'
+import { cardImage } from '@/lib/cardImage'
 
 type Range = '30d' | '90d' | '1y' | 'all'
 
@@ -94,7 +94,8 @@ export default function CardDetailPage() {
             title="⌘/Ctrl+Click to search eBay sold listings"
           >
             {card.imageUrl ? (
-              <Image src={card.imageUrl} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
             ) : (
               <div className="w-28 h-40 bg-slate-800 rounded-xl flex items-center justify-center text-2xl text-slate-600">🃏</div>
             )}

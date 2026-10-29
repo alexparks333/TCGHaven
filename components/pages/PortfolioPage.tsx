@@ -11,6 +11,7 @@ import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
+import { cardImage } from '@/lib/cardImage'
 
 type SortKey = 'pnl' | 'pnlAsc' | 'pnlPct' | 'pnlPctAsc' | 'value' | 'valueAsc' | 'name' | 'nameDesc'
 
@@ -382,7 +383,7 @@ export default function PortfolioPage() {
                   className="flex items-center gap-3 hover:bg-slate-800/40 rounded-xl p-2 -mx-2 transition-colors group cursor-pointer"
                 >
                   {c.imageUrl ? (
-                    <img src={c.imageUrl} alt={c.name} className="w-8 h-11 object-contain rounded" />
+                    <img src={cardImage(c.imageUrl, 'thumb')} alt={c.name} className="w-8 h-11 object-contain rounded" />
                   ) : (
                     <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">#{c.number}</div>
                   )}
@@ -507,7 +508,7 @@ export default function PortfolioPage() {
                     onto its own line; on the web it stays next to the name. */}
                 <div className="relative shrink-0">
                   {card.imageUrl
-                    ? <img src={card.imageUrl} alt={card.name} className="w-8 h-11 object-contain rounded" />
+                    ? <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-8 h-11 object-contain rounded" />
                     : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
                   }
                   {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}

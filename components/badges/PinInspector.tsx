@@ -29,11 +29,14 @@ import { assemblePin, addBackHardware, type PinBackId } from './pinBacks'
 const TEX_W = 1000
 const TEX_H = 1120 // the art's 100 × 112 viewBox
 
-export default function PinInspector({ def, earnedAt, progress, onClose }: {
+export default function PinInspector({ def, earnedAt, progress, onClose, mystery = false }: {
   def: BadgeDef
   earnedAt?: number
   progress?: [number, number]
   onClose: () => void
+  /** Not earned yet: the pin is shown as a pitch-black mystery shape — you can turn it over and
+   *  see its silhouette against the light, but none of its design */
+  mystery?: boolean
 }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const artRef = useRef<HTMLDivElement>(null)
@@ -67,6 +70,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose }: {
       api.current = stage
       const done = async () => {
         if (disposed || !stage) return
+        if (mystery) stage.blackout()
         setProg(0.97)
         await stage.warm() // compile shaders + draw a frame while still hidden
         if (disposed) return
@@ -90,7 +94,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose }: {
       }
     }).catch((e) => { setError(String(e)); setLoading(false) })
     return () => { disposed = true; stage?.dispose(); api.current = null }
-  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.pinBack, def.modelFrontPositiveZ])
+  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery])
 
   const [have, total] = progress ?? [0, def.slots.length]
 
@@ -162,6 +166,7 @@ function PolishingBar({ value }: { value: number }) {
 interface StageApi {
   loadModel: (url: string, back?: PinBackId, frontPositiveZ?: boolean, onProgress?: (fraction: number) => void) => Promise<void>
   warm: () => Promise<void>
+  blackout: () => void
   useRelief: (url: string, depthUrl?: string) => Promise<void>
   setFaceImage: (url: string) => Promise<void>
   setNormalMap: (url: string) => Promise<void>
@@ -282,6 +287,18 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): Stag
       tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
       standIn.setFace(tex)
       show(standIn.group)
+    },
+    // The mystery look: every surface pitch black and unlit — a pure silhouette you can turn over
+    // (its outline changes as it rotates) but with no design, colour, shading or glow to read
+    blackout() {
+      const ink = new THREE.MeshBasicMaterial({ color: 0x000000 })
+      current.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (!m.isMesh) return
+        const old = Array.isArray(m.material) ? m.material : [m.material]
+        old.forEach((x) => x.dispose())
+        m.material = ink
+      })
     },
     async warm() {
       renderer.compile(scene, camera)

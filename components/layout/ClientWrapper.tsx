@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import { originalImage } from '@/lib/cardImage'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
@@ -12,6 +14,18 @@ import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
 import { DevPanel } from '@/components/dev/DevPanel'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
+  // A resized card image from the image proxy (lib/cardImage.ts) that fails to load falls back to
+  // the original — one listener for every <img> in the app (error events don't bubble; capture does)
+  useEffect(() => {
+    const onError = (e: Event) => {
+      const img = e.target as HTMLImageElement
+      if (img?.tagName !== 'IMG') return
+      const original = originalImage(img.currentSrc || img.src)
+      if (original) img.src = original
+    }
+    window.addEventListener('error', onError, true)
+    return () => window.removeEventListener('error', onError, true)
+  }, [])
   // The staff portal (/admin) has its own sign-in and layout (app/admin/layout.tsx) — none of the
   // collector app's shell, session or background price loading applies there.
   const pathname = usePathname()

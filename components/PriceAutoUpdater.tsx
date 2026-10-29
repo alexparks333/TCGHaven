@@ -38,6 +38,20 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
 // Everything that decides a card's price — a change to any of these reloads prices.
 const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}`
 
+// The last successful load, saved per account on this device (see the first-load note in check())
+const savedKey = (uid: string) => `tcghaven-prices:${uid}`
+function readSavedPrices(uid: string): { prices: Record<string, number>; baselines: never } | null {
+  try {
+    const raw = localStorage.getItem(savedKey(uid))
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+function savePrices(uid: string, data: { prices: Record<string, number>; baselines: unknown }) {
+  try { localStorage.setItem(savedKey(uid), JSON.stringify({ ...data, at: Date.now() })) } catch { /* full or blocked: fine */ }
+}
+
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
   const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines, setPriceLoad } = useStore()
@@ -62,6 +76,18 @@ export function PriceAutoUpdater() {
       const prev = loadedFor.current
       const statusPromise = loadPriceStatus(trackedGames)
 
+      // Opening the app: show the prices and baselines saved on this device last time straight
+      // away, then refresh them in the background (no loader) — the fresh load can take seconds on
+      // a phone (each is real server work), and yesterday's numbers are a fine first paint.
+      if (!prev && !useStore.getState().priceLoad.complete) {
+        const saved = readSavedPrices(user.uid)
+        if (saved) {
+          applyLivePrices(saved.prices)
+          setPriceBaselines(saved.baselines)
+          setPriceLoad({ done: 1, total: 1, complete: true })
+        }
+      }
+
       // Later background checks: look at the (cheap) status first and only reload prices if a new
       // sync landed or the owned cards changed. The first load of a session doesn't wait — status,
       // live prices and baselines all go out at once (they don't depend on each other).
@@ -82,6 +108,7 @@ export function PriceAutoUpdater() {
       if (firstLoad) setPriceLoad({ done: 0, total, complete: false })
 
       let failed = false
+      const fresh: { prices: Record<string, number>; baselines: unknown } = { prices: {}, baselines: null }
 
       // 1. Live prices (cheap server lookups), one request per game, in parallel.
       const pricesTask = (async () => {
@@ -103,6 +130,7 @@ export function PriceAutoUpdater() {
           }
         }))
         applyLivePrices(prices)
+        fresh.prices = prices
       })()
 
       // 2. Window baselines from the shared history — at the same time as the live prices.
@@ -116,7 +144,7 @@ export function PriceAutoUpdater() {
               items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language })),
             }),
           })
-          if (res.ok) setPriceBaselines(await res.json())
+          if (res.ok) { fresh.baselines = await res.json(); setPriceBaselines(fresh.baselines as Parameters<typeof setPriceBaselines>[0]) }
           else failed = true
         } catch {
           failed = true
@@ -133,6 +161,7 @@ export function PriceAutoUpdater() {
       if (!failed) {
         loadedFor.current = { syncAt: status.latestSyncAt?.getTime() ?? 0, cardsKey: key }
         if (status.latestSyncAt) setLastPriceRefresh(status.latestSyncAt.toISOString())
+        savePrices(user.uid, fresh)
       }
     } catch (err) {
       console.error('Loading prices failed:', err)

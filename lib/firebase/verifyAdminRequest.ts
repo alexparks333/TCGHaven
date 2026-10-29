@@ -27,12 +27,58 @@ async function callerUid(request: Request): Promise<string | null> {
   if (!idToken || !apiKey) return null
   const hit = verified.get(idToken)
   if (hit && Date.now() - hit.at < VERIFIED_TTL_MS) return hit.uid
-  const uid = await lookupUid(idToken, apiKey)
+  // Checked locally against Google's published signing keys (no round trip per request); the
+  // REST lookup is only the fallback if those keys can't be fetched
+  const local = await verifyLocally(idToken)
+  const uid = local === undefined ? await lookupUid(idToken, apiKey) : local
   if (uid) {
     if (verified.size > 500) verified.clear()
     verified.set(idToken, { uid, at: Date.now() })
   }
   return uid
+}
+
+// ── Local ID-token verification ─────────────────────────────────────────────────────────────
+// A Firebase ID token is a JWT signed (RS256) by one of Google's securetoken keys, published as
+// X.509 certs and rotated every few hours (the response's max-age says how long to keep them).
+// Returns the uid, null for a bad token, or undefined if the keys couldn't be fetched.
+const CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com'
+let certs: { keys: Record<string, string>; until: number } | null = null
+
+async function signingCerts(): Promise<Record<string, string> | null> {
+  if (certs && Date.now() < certs.until) return certs.keys
+  try {
+    const res = await fetch(CERTS_URL)
+    if (!res.ok) return null
+    const maxAge = Number(/max-age=(\d+)/.exec(res.headers.get('cache-control') ?? '')?.[1] ?? 3600)
+    certs = { keys: await res.json(), until: Date.now() + maxAge * 1000 }
+    return certs.keys
+  } catch {
+    return null
+  }
+}
+
+async function verifyLocally(idToken: string): Promise<string | null | undefined> {
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  const parts = idToken.split('.')
+  if (!projectId || parts.length !== 3) return null
+  try {
+    const decode = (x: string) => JSON.parse(Buffer.from(x, 'base64url').toString('utf8'))
+    const header = decode(parts[0]), payload = decode(parts[1])
+    if (header.alg !== 'RS256' || !header.kid) return null
+    const keys = await signingCerts()
+    if (!keys) return undefined
+    const cert = keys[header.kid]
+    if (!cert) return null
+    const { createVerify } = await import('crypto')
+    const ok = createVerify('RSA-SHA256').update(`${parts[0]}.${parts[1]}`).verify(cert, Buffer.from(parts[2], 'base64url'))
+    const now = Math.floor(Date.now() / 1000)
+    if (!ok || payload.aud !== projectId || payload.iss !== `https://securetoken.google.com/${projectId}`) return null
+    if (!(payload.exp > now) || !(payload.iat <= now + 300) || typeof payload.sub !== 'string' || !payload.sub) return null
+    return payload.sub
+  } catch {
+    return null
+  }
 }
 
 async function lookupUid(idToken: string, apiKey: string): Promise<string | null> {
