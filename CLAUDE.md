@@ -1723,8 +1723,12 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   exactly as the motion finishes. Page turns (here and in BadgeBook) are two flat halves, not one 3D
   sheet: the front swings up to edge-on and hides, then the back swings down — iPhone/iPad Safari
   broke the sheet's hidden back face (black patches, pins blinking) when pages hold pin shadows and
-  pinhole filters. Swipes turn as soon as they're clear (touchmove), not on lift. The flying cover
-  animates its real size (left/top/width/height), not a scale, so it lands matching the shelf book.
+  pinhole filters. Swipes turn as soon as they're clear (touchmove), not on lift. Every page is ONE
+  element keyed by page number that only changes role (flat / under / front / back / ready — the
+  next turn's pages are already drawn, out of sight); remounting pages mid-turn re-loaded their pin
+  images and masks (pins blinking). The flight keeps the book's shape: a pure scale between the
+  shelf and the middle of the screen, and only there grows to fill it / settles back (`grow`,
+  `shrink`) — re-sizing in flight morphed the art (looked squished).
   Page titles size to the page (`cqw`, `.pinbook-page` is a size container), shrinking for long names. A slight pull-back (scale ~0.93–0.95) during moves; the moving
   layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG
   filters every frame). Uses `PinPage`/`PinholeFilter`/`buildPages` exported from BadgeBook.

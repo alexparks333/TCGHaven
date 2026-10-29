@@ -27,11 +27,21 @@ const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 //   close  — the reverse of opening: the cover swings shut over the page you're on, then the closed
 //            book flies back into its (empty) spot on the shelf.
 //
+// No page is ever drawn twice. Every page is one element, keyed by its page number, that keeps its
+// place (even pages on the left, odd on the right) and only changes its role — flat on the spread,
+// underneath it, the front of a turning page, the back of one landing, or "ready" (out of sight,
+// already drawn) for the next turn either way. Redrawing a page as a new element made its pin
+// pictures and pinhole masks load again mid-motion: pins blinking in and out.
+//
+// The flight keeps the book's own shape: it flies (a pure, even scale) between the shelf and the
+// middle of the screen, and only there grows to fill the screen (or settles back from it).
+//
 // Everything is drawn on one "scene": the open spread, two screen-wide pages either side of the
 // spine, with the camera (a translateX) choosing which half is on screen. The state after every
 // motion is laid out exactly as the motion ends, so nothing ever jumps when it finishes.
 
 const FLY_MS = 560
+const GROW_MS = 240 // the closed book filling the screen (or settling back) in place
 const OPEN_MS = 820 // the cover swinging open — a little grander than a page
 const TURN_MS = 640
 const PAN_MS = 420
@@ -43,7 +53,9 @@ const EASE_PAN = 'cubic-bezier(0.65, 0, 0.3, 1)'
 const RIM = 7 // the cover showing round the page (top, bottom and the outer edge)
 
 type Anim =
-  | { kind: 'fly'; go: boolean }
+  | { kind: 'fly'; go: boolean }            // shelf → the middle, in the book's own shape
+  | { kind: 'grow'; go: boolean }           // the middle → filling the page area
+  | { kind: 'shrink'; to: DOMRect; go: boolean } // filling the page area → the middle
   | { kind: 'pan'; to: number; go: boolean }
   | { kind: 'turn'; dir: 1 | -1; to: number; go: boolean }
   | { kind: 'jump'; to: number; go: boolean }
@@ -104,18 +116,20 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
       return () => cancelAnimationFrame(r)
     }
     const ms = {
-      fly: FLY_MS + 40, flyBack: FLY_MS + 40, pan: PAN_MS, turn: p === -1 ? OPEN_MS : TURN_MS,
-      shut: SHUT_MS, jump: JUMP_MS, close: CLOSE_MS,
+      fly: FLY_MS + 20, grow: GROW_MS + 20, shrink: GROW_MS + 20, flyBack: FLY_MS + 40,
+      pan: PAN_MS, turn: p === -1 ? OPEN_MS : TURN_MS, shut: SHUT_MS, jump: JUMP_MS, close: CLOSE_MS,
     }[anim.kind]
     const t = setTimeout(() => {
-      if (anim.kind === 'fly') setAnim({ kind: 'turn', dir: 1, to: 0, go: false }) // now the cover opens
+      if (anim.kind === 'fly') setAnim({ kind: 'grow', go: false })
+      else if (anim.kind === 'grow') setAnim({ kind: 'turn', dir: 1, to: 0, go: false }) // now the cover opens
       else if (anim.kind === 'close' || anim.kind === 'flyBack') onClose()
       else if (anim.kind === 'shut') {
-        // Shut: the closed cover now fills the screen — fly it home
+        // Shut: the closed cover fills the screen — settle it into its own shape, then fly it home
         setP(-1)
         const spot = getShelfSpot()
-        setAnim(spot ? { kind: 'flyBack', to: spot, go: false } : { kind: 'close', go: false })
+        setAnim(spot ? { kind: 'shrink', to: spot, go: false } : { kind: 'close', go: false })
       }
+      else if (anim.kind === 'shrink') setAnim({ kind: 'flyBack', to: anim.to, go: false })
       else {
         setP(anim.to)
         setAnim(null)
@@ -184,48 +198,93 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const page = (i: number): Content => (i === -1 ? 'cover' : PAGES[i] ?? { kind: 'blank' })
   const go = !!anim?.go
 
-  // What's on the spread, and where the camera is (0 = the left page on screen, −W = the right)
-  let L: Content, R: Content
-  let leaf: { front: Content; back: Content; side: Side } | null = null
+  // Every page in play and its role (see the top of the file). First role given to a page wins.
+  type Role = 'flat' | 'under' | 'front' | 'back' | 'ready' | 'hidden'
+  const roles = new Map<number, Role>()
+  const give = (i: number, r: Role) => { if (i >= -1 && i < N && !roles.has(i)) roles.set(i, r) }
   let camFrom: number, camTo: number
   if (anim?.kind === 'turn' && anim.dir === 1) {
     // Turning the right-hand page (or the cover) over to the left: under it, the next spread's
     // right page; the camera glides left to follow the page's back as it lands.
-    L = p === -1 ? null : page(p - 1)
-    R = page(anim.to + 1)
-    leaf = { front: page(p), back: page(anim.to), side: 'right' }
+    give(p, 'front'); give(anim.to, 'back'); give(p - 1, 'flat'); give(anim.to + 1, 'under')
     camFrom = -W; camTo = 0
   } else if (anim?.kind === 'turn') {
-    L = page(anim.to - 1)
-    R = page(p + 1)
-    leaf = { front: page(p), back: page(anim.to), side: 'left' }
+    give(p, 'front'); give(anim.to, 'back'); give(p + 1, 'flat'); give(anim.to - 1, 'under')
     camFrom = 0; camTo = -W
   } else if (anim?.kind === 'shut') {
-    // Closing: the left page (the inside of the cover) swings over onto the right page, showing the
-    // front of the cover; the camera ends on the right half, where the closed book now is.
+    // Closing: the left page (the inside of the cover) swings over onto the right page, landing as
+    // the front of the cover; the camera ends on the right half, where the closed book now is.
     const left = p % 2 === 0 ? p : p - 1
-    L = null
-    R = page(left + 1)
-    leaf = { front: page(left), back: 'cover', side: 'left' }
+    give(left, 'front'); give(-1, 'back'); give(left + 1, 'under')
     camFrom = p % 2 === 0 ? 0 : -W; camTo = -W
+  } else if (p === -1) {
+    // The shut book — its first two pages already drawn, out of sight, for the cover to open onto
+    give(-1, 'flat'); give(0, 'ready'); give(1, 'under')
+    camFrom = camTo = -W
   } else {
-    if (p === -1) { L = null; R = 'cover' } else if (p % 2 === 0) { L = page(p); R = page(p + 1) } else { L = page(p - 1); R = page(p) }
-    camFrom = p === -1 || p % 2 === 1 ? -W : 0
+    const left = p % 2 === 0 ? p : p - 1
+    give(left, 'flat'); give(left + 1, 'flat')
+    if (anim?.kind === 'jump') { give(anim.to, 'hidden'); give(anim.to % 2 === 0 ? anim.to + 1 : anim.to - 1, 'hidden') }
+    // ready for the next turn either way
+    if (left + 2 < N) { give(left + 2, 'ready'); give(left + 3, 'under') }
+    if (left - 1 >= 0) { give(left - 1, 'ready'); give(left - 2, 'under') }
+    camFrom = p % 2 === 1 ? -W : 0
     camTo = anim?.kind === 'pan' ? (anim.to % 2 === 1 ? -W : 0) : camFrom
   }
   const cam = go ? camTo : camFrom
   const moving = go && (anim?.kind === 'turn' || anim?.kind === 'pan' || anim?.kind === 'shut')
   const ease = anim?.kind === 'pan' ? EASE_PAN : EASE_TURN
   const ms = anim?.kind === 'pan' ? PAN_MS : anim?.kind === 'shut' ? SHUT_MS : p === -1 ? OPEN_MS : TURN_MS
-  const flying = anim?.kind === 'fly' || anim?.kind === 'flyBack'
-  const leaving = anim?.kind === 'shut' || anim?.kind === 'flyBack' || anim?.kind === 'close'
+  const flying = anim?.kind === 'fly' || anim?.kind === 'grow' || anim?.kind === 'shrink' || anim?.kind === 'flyBack'
+  const leaving = anim?.kind === 'shut' || anim?.kind === 'shrink' || anim?.kind === 'flyBack' || anim?.kind === 'close'
   const opened = !leaving && (p >= 0 || (anim?.kind === 'turn' && go))
   const closing = anim?.kind === 'close'
   const jumpDir = anim?.kind === 'jump' ? (anim.to > p ? 1 : -1) : 1
   const shownPage = anim && (anim.kind === 'pan' || anim.kind === 'turn' || anim.kind === 'jump') && go ? anim.to : Math.max(0, p)
-  // The flight's two ends: the shelf spot and the page area
-  const spot = anim?.kind === 'fly' ? from : anim?.kind === 'flyBack' ? anim.to : null
+  // The flight: the shelf spot, and the book at its own shape in the middle of the page area
+  const spot = anim?.kind === 'fly' || anim?.kind === 'grow' ? from : anim?.kind === 'shrink' || anim?.kind === 'flyBack' ? anim.to : null
+  const mid = (() => {
+    if (!box || !spot) return null
+    const aspect = spot.width / spot.height
+    const w = Math.min(W * 0.84, H * 0.84 * aspect), h = w / aspect
+    return new DOMRect(box.left + (W - w) / 2, box.top + (H - h) / 2, w, h)
+  })()
   const atShelf = (anim?.kind === 'fly' && !go) || (anim?.kind === 'flyBack' && go)
+  // How a page looks in its role; `go` = the motion is running
+  const half = ms / 2
+  const pageStyle = (i: number, role: Role): React.CSSProperties => {
+    const area: Side = i === -1 || i % 2 === 1 ? 'right' : 'left'
+    const lift = area === 'right' ? -90 : 90 // edge-on, its outer edge lifted toward you
+    const base: React.CSSProperties = {
+      left: area === 'left' ? 0 : W, width: W, height: H,
+      transformOrigin: area === 'right' ? 'left center' : 'right center',
+    }
+    switch (role) {
+      case 'flat': return { ...base, zIndex: 3, transform: 'rotateY(0deg)', opacity: 1 }
+      case 'under': return { ...base, zIndex: 2, transform: 'rotateY(0deg)', opacity: 1 }
+      case 'hidden': return { ...base, zIndex: 0, transform: 'rotateY(0deg)', opacity: 0 }
+      case 'ready': return { ...base, zIndex: 1, transform: `rotateY(${lift}deg)`, opacity: 0 }
+      case 'front': return {
+        ...base, zIndex: 15,
+        transform: go ? `rotateY(${lift}deg)` : 'rotateY(0deg)',
+        opacity: go ? 0 : 1,
+        transition: go ? `transform ${half}ms cubic-bezier(0.5, 0, 0.9, 0.55), opacity 0s linear ${half}ms` : 'none',
+      }
+      case 'back': return {
+        ...base, zIndex: 15,
+        transform: go ? 'rotateY(0deg)' : `rotateY(${lift}deg)`,
+        opacity: go ? 1 : 0,
+        transition: go ? `transform ${half}ms cubic-bezier(0.1, 0.45, 0.5, 1) ${half}ms, opacity 0s linear ${half}ms` : 'none',
+      }
+    }
+  }
+  const shadeStyle = (i: number, role: Role): React.CSSProperties => {
+    const area: Side = i === -1 || i % 2 === 1 ? 'right' : 'left'
+    const bg = `linear-gradient(to ${area}, rgba(0,0,0,0.15), rgba(0,0,0,0.6))`
+    if (role === 'front') return { background: bg, opacity: go ? 1 : 0, transition: `opacity ${half}ms ease-in` } // darkens rising
+    if (role === 'back' || role === 'ready') return { background: bg, opacity: go && role === 'back' ? 0 : 1, transition: go ? `opacity ${half}ms ease-out ${half}ms` : 'none' } // brightens landing
+    return { background: bg, opacity: 0 }
+  }
   const shownChapter = (() => { const pg = PAGES[Math.max(0, shownPage)]; return pg?.kind === 'badges' ? pg.chapter : -1 })()
 
   const coverVars = {
@@ -249,7 +308,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
       aria-label={`${set.name} pin book`}
     >
       {/* Backdrop for the flights: fades in as the book flies up, out as it flies home */}
-      {flying && <div className="absolute inset-0 bg-[#0b0908]" style={{ opacity: atShelf ? 0 : 1, transition: `opacity ${FLY_MS}ms ease` }} />}
+      {flying && <div className="absolute inset-0 bg-[#0b0908]" style={{ opacity: atShelf || (anim?.kind === 'fly' && !go) ? 0 : 1, transition: `opacity ${FLY_MS}ms ease` }} />}
       <PinholeFilter />
 
       {/* Top bar */}
@@ -303,9 +362,11 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         onTouchEnd={onTouchEnd}
         onClick={() => menu && setMenu(false)}
       >
-        {box && !flying && (
-          // A slight camera pull-back while the page moves — it dips away a touch and settles back
+        {box && (
+          // A slight camera pull-back while the page moves — it dips away a touch and settles back.
+          // Kept (invisible) during the flights too, so the first pages are drawn before the cover opens.
           <div
+            style={flying ? { opacity: 0, pointerEvents: 'none' } : undefined}
             className={cn('absolute inset-0 will-change-transform', go && anim?.kind === 'pan' && 'phonebook-pull-pan', go && anim?.kind === 'turn' && p >= 0 && 'phonebook-pull-turn', go && anim?.kind === 'shut' && 'phonebook-pull-shut')}
           >
           <div
@@ -320,8 +381,15 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
               ...(anim?.kind === 'jump' && { opacity: go ? 0 : 1, transform: `translateX(${cam - (go ? jumpDir * W * 0.18 : 0)}px)`, transition: `transform ${JUMP_MS}ms ${EASE_PAN}, opacity ${JUMP_MS}ms ease` }),
             }}
           >
-            <Half content={L} side="left" W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
-            <Half content={R} side="right" W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
+            {/* Every page in play, one element each (keyed by page number) — see the top of the file */}
+            {Array.from(roles.entries()).map(([i, role]) => (
+              <div key={`page${i}`} className="absolute top-0" style={pageStyle(i, role)}>
+                {i === -1 ? <BookCover set={set} badges={badges} /> : (
+                  <Half content={page(i)} side={i % 2 === 1 ? 'right' : 'left'} W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
+                )}
+                <div className="absolute inset-0 pointer-events-none" style={shadeStyle(i, role)} />
+              </div>
+            ))}
 
             {/* Closing: the right page darkens as the cover comes down over it */}
             {anim?.kind === 'shut' && (
@@ -343,57 +411,8 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
               />
             )}
 
-            {/* The turning page (or the cover), pinned at the spine — as two flat halves rather
-                than one 3D sheet: the front swings up to edge-on and is gone, then the back swings
-                down from edge-on onto the other side. iPhone Safari breaks a 3D sheet's hidden back
-                face when the page holds layered effects (pin shadows, pinhole filters): it showed
-                black patches and pins blinking in and out. Flat halves need no backface tricks. */}
-            {leaf && (() => {
-              const half = ms / 2
-              const flipSide: Side = leaf.side === 'right' ? 'left' : 'right'
-              const free = leaf.side === 'right' ? -90 : 90 // the page's outer edge lifts toward you
-              return (
-                <>
-                  <div
-                    className="absolute top-0 z-[15]"
-                    style={{
-                      left: leaf.side === 'right' ? W : 0, width: W, height: H,
-                      transformOrigin: leaf.side === 'right' ? 'left center' : 'right center',
-                      transform: go ? `rotateY(${free}deg)` : 'rotateY(0deg)',
-                      visibility: go ? 'hidden' : 'visible',
-                      transition: go ? `transform ${half}ms cubic-bezier(0.5, 0, 0.9, 0.55), visibility 0s linear ${half}ms` : 'none',
-                    }}
-                  >
-                    <Face content={leaf.front} side={leaf.side} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
-                    {/* darkens as it rises toward upright */}
-                    <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{ background: `linear-gradient(to ${leaf.side}, rgba(0,0,0,0.15), rgba(0,0,0,0.6))`, opacity: go ? 1 : 0, transition: `opacity ${half}ms ease-in` }}
-                    />
-                  </div>
-                  <div
-                    className="absolute top-0 z-[15]"
-                    style={{
-                      left: leaf.side === 'right' ? 0 : W, width: W, height: H,
-                      transformOrigin: leaf.side === 'right' ? 'right center' : 'left center',
-                      transform: go ? 'rotateY(0deg)' : `rotateY(${-free}deg)`,
-                      visibility: go ? 'visible' : 'hidden',
-                      transition: go ? `transform ${half}ms cubic-bezier(0.1, 0.45, 0.5, 1) ${half}ms, visibility 0s linear ${half}ms` : 'none',
-                    }}
-                  >
-                    <Face content={leaf.back} side={flipSide} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
-                    {/* starts in shadow, brightens as it lays down */}
-                    <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{ background: `linear-gradient(to ${flipSide}, rgba(0,0,0,0.15), rgba(0,0,0,0.6))`, opacity: go ? 0 : 1, transition: `opacity ${half}ms ease-out ${half}ms` }}
-                    />
-                  </div>
-                </>
-              )
-            })()}
-
             {/* Spine + rings: fade in as the cover opens, out as it shuts (a shut book shows none) */}
-            {(L !== null || anim?.kind === 'turn' || anim?.kind === 'shut') && (
+            {(p >= 0 || anim?.kind === 'turn' || anim?.kind === 'shut') && (
               <div
                 style={
                   p === -1 ? { opacity: go ? 1 : 0, transition: `opacity ${ms}ms ease` }
@@ -441,19 +460,24 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         </div>
       </div>
 
-      {/* The closed book flying between its shelf spot and the page area (up to open, home to
-          close). Its real size is animated, not a scale: the cover re-lays out every frame (the
-          artwork's crop and the title stay true), so it lands looking exactly like the shelf's
-          book — a scaled full-screen cover kept the tall crop and snapped to the shelf's at the end. */}
-      {flying && box && spot && (() => {
-        const r = atShelf ? spot : box
-        const curve = anim?.kind === 'flyBack' ? 'cubic-bezier(0.5, 0, 0.3, 1)' : 'cubic-bezier(0.22, 0.8, 0.25, 1)'
+      {/* The closed book between its shelf spot and the page area. It flies in its own shape (a pure,
+          even scale — nothing re-lays out, so it can't squish), and only in the middle of the screen
+          grows to fill it (opening) or settles back from it (closing). */}
+      {flying && box && spot && mid && (() => {
+        const toShelf = `translate(${spot.left - mid.left}px, ${spot.top - mid.top}px) scale(${spot.width / mid.width})`
+        const k = anim?.kind
+        const r = (k === 'grow' && go) || (k === 'shrink' && !go) ? box : mid
         return (
           <div
             className="fixed z-40 pointer-events-none"
             style={{
               left: r.left, top: r.top, width: r.width, height: r.height,
-              transition: go ? ['left', 'top', 'width', 'height'].map((k) => `${k} ${FLY_MS}ms ${curve}`).join(', ') : 'none',
+              transformOrigin: '0 0',
+              transform: atShelf ? toShelf : 'none',
+              transition: !go ? 'none'
+                : k === 'fly' ? `transform ${FLY_MS}ms cubic-bezier(0.22, 0.8, 0.25, 1)`
+                : k === 'flyBack' ? `transform ${FLY_MS}ms cubic-bezier(0.5, 0, 0.3, 1)`
+                : ['left', 'top', 'width', 'height'].map((x) => `${x} ${GROW_MS}ms cubic-bezier(0.3, 0, 0.2, 1)`).join(', '),
             }}
           >
             <BookCover set={set} badges={badges} />
