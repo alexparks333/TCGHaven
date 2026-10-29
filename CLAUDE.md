@@ -1728,7 +1728,11 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   next turn's pages are already drawn, out of sight); remounting pages mid-turn re-loaded their pin
   images and masks (pins blinking). The flight keeps the book's shape: a pure scale between the
   shelf and the middle of the screen, and only there grows to fill it / settles back (`grow`,
-  `shrink`) — re-sizing in flight morphed the art (looked squished).
+  `shrink`) — re-sizing in flight morphed the art (looked squished). The flight animates the real
+  size (left/top/width/height) at the shelf book's aspect, never a scale, so the cover (art crop,
+  title, earned pill) is drawn exactly like the shelf's the whole way. Desktop does the same
+  (BadgeLibrary `Flyer` `at: shelf | mid | cover`; phases `grow` / `settle`), and both flights draw
+  `BookThickness` (the shelf book's page block + shadow) under the cover until it opens.
   Page titles size to the page (`cqw`, `.pinbook-page` is a size container), shrinking for long names. A slight pull-back (scale ~0.93–0.95) during moves; the moving
   layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG
   filters every frame). Uses `PinPage`/`PinholeFilter`/`buildPages` exported from BadgeBook.

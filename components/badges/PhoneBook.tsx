@@ -10,7 +10,7 @@ import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { buildPages, PinPage, PinholeFilter, ROMAN, type Page } from './BadgeBook'
-import { BookCover } from './BadgeLibrary'
+import { BookCover, BookThickness } from './BadgeLibrary'
 
 const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 
@@ -33,8 +33,9 @@ const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 // already drawn) for the next turn either way. Redrawing a page as a new element made its pin
 // pictures and pinhole masks load again mid-motion: pins blinking in and out.
 //
-// The flight keeps the book's own shape: it flies (a pure, even scale) between the shelf and the
-// middle of the screen, and only there grows to fill the screen (or settles back from it).
+// The flight keeps the shelf book's own shape: it flies between the shelf and the middle of the
+// screen changing only its real size (no stretch or scale, so it always looks like the shelf's book),
+// and only there grows to fill the screen (or settles back from it).
 //
 // Everything is drawn on one "scene": the open spread, two screen-wide pages either side of the
 // spine, with the camera (a translateX) choosing which half is on screen. The state after every
@@ -116,7 +117,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
       return () => cancelAnimationFrame(r)
     }
     const ms = {
-      fly: FLY_MS + 20, grow: GROW_MS + 20, shrink: GROW_MS + 20, flyBack: FLY_MS + 40,
+      fly: FLY_MS + 60, grow: GROW_MS + 80, shrink: GROW_MS + 80, flyBack: FLY_MS + 40,
       pan: PAN_MS, turn: p === -1 ? OPEN_MS : TURN_MS, shut: SHUT_MS, jump: JUMP_MS, close: CLOSE_MS,
     }[anim.kind]
     const t = setTimeout(() => {
@@ -460,26 +461,25 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         </div>
       </div>
 
-      {/* The closed book between its shelf spot and the page area. It flies in its own shape (a pure,
-          even scale — nothing re-lays out, so it can't squish), and only in the middle of the screen
-          grows to fill it (opening) or settles back from it (closing). */}
+      {/* The closed book between its shelf spot and the page area. It flies in the shelf book's own
+          shape — its real size changes, nothing is stretched or scaled, so it looks exactly like the
+          shelf's book the whole way and lands without a change — and only in the middle of the
+          screen grows to fill it (opening) or settles back from it (closing). */}
       {flying && box && spot && mid && (() => {
-        const toShelf = `translate(${spot.left - mid.left}px, ${spot.top - mid.top}px) scale(${spot.width / mid.width})`
         const k = anim?.kind
-        const r = (k === 'grow' && go) || (k === 'shrink' && !go) ? box : mid
+        const r = atShelf ? spot : (k === 'grow' && go) || (k === 'shrink' && !go) ? box : mid
+        const curve = k === 'fly' ? 'cubic-bezier(0.22, 0.8, 0.25, 1)' : k === 'flyBack' ? 'cubic-bezier(0.5, 0, 0.3, 1)' : 'cubic-bezier(0.3, 0, 0.2, 1)'
+        const dur = k === 'fly' || k === 'flyBack' ? FLY_MS : GROW_MS
         return (
           <div
             className="fixed z-40 pointer-events-none"
             style={{
               left: r.left, top: r.top, width: r.width, height: r.height,
-              transformOrigin: '0 0',
-              transform: atShelf ? toShelf : 'none',
-              transition: !go ? 'none'
-                : k === 'fly' ? `transform ${FLY_MS}ms cubic-bezier(0.22, 0.8, 0.25, 1)`
-                : k === 'flyBack' ? `transform ${FLY_MS}ms cubic-bezier(0.5, 0, 0.3, 1)`
-                : ['left', 'top', 'width', 'height'].map((x) => `${x} ${GROW_MS}ms cubic-bezier(0.3, 0, 0.2, 1)`).join(', '),
+              transition: go ? ['left', 'top', 'width', 'height'].map((x) => `${x} ${dur}ms ${curve}`).join(', ') : 'none',
             }}
           >
+            {/* The closed book's thickness and shadow: there while it flies, gone as it fills the screen */}
+            <BookThickness style={{ opacity: r === box ? 0 : 1, transition: k === 'grow' || k === 'shrink' ? `opacity ${GROW_MS}ms ease` : 'none' }} />
             <BookCover set={set} badges={badges} />
           </div>
         )
