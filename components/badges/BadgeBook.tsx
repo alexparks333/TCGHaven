@@ -69,11 +69,15 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   const bookRef = useRef<HTMLDivElement>(null)
   const [pageSize, setPageSize] = useState({ w: 300, h: 420 })
 
-  // Pins scale with the page.
+  // Pins scale with the page. Measured right away, before the book is first painted — waiting for
+  // the ResizeObserver drew one frame of pins at the default size, then popped them to the real one
+  // (seen as the pins shrinking when the closing animation's copy of the page appeared).
   useLayoutEffect(() => {
     const el = bookRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => setPageSize({ w: el.clientWidth / 2, h: el.clientHeight }))
+    const measure = () => setPageSize((s) => (s.w === el.clientWidth / 2 && s.h === el.clientHeight ? s : { w: el.clientWidth / 2, h: el.clientHeight }))
+    measure()
+    const ro = new ResizeObserver(measure)
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
