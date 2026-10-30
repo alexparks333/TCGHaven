@@ -411,11 +411,15 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}
     >
       {earnedAt ? (
+        // The shadow sits on a wrapper that doesn't tilt, and the pin isn't scaled up: a drop-shadow
+        // filter on the tilting element (and a 6% scale-up) made the browser stretch a flat bitmap
+        // of the pin — blurry on hover
+        <span className="pinbook-pin-shadow block">
         <span
           className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
           style={{
             transform: tilt
-              ? `perspective(600px) rotateY(${(tilt.x - 0.5) * 22}deg) rotateX(${(0.5 - tilt.y) * 22}deg) translateY(-3px) scale(1.06)`
+              ? `perspective(700px) rotateY(${(tilt.x - 0.5) * 16}deg) rotateX(${(0.5 - tilt.y) * 16}deg) translateY(-3px)`
               : undefined,
           }}
         >
@@ -437,6 +441,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
               }}
             />
           )}
+        </span>
         </span>
       ) : (
         <PinHole size={pin} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={total ? have / total : 0} />

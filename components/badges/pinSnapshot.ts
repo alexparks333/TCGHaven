@@ -51,7 +51,7 @@ async function renderFront(pin: THREE.Group, size: number): Promise<Blob> {
 
     const scene = new THREE.Scene()
     const pmrem = new THREE.PMREMGenerator(renderer)
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04, 0.1, 100, { size: 1024 }).texture
     // Head-on, a metal pin mostly mirrors the studio and reads flat and pale; at book size that
     // turns the detail to mush. So: less studio reflection, and a low raking key from the top left
     // so every ridge of the relief throws a highlight and a shadow (like a product photo).

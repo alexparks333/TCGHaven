@@ -26,3 +26,5 @@ public/uploads/
 /tools/havenrelief/.venv/
 /tools/havenrelief/out/
 /tools/havenrelief/in/
+/tools/havenrelief/cache/
+/tools/havenrelief/__pycache__/

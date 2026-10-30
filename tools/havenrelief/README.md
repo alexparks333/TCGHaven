@@ -5,6 +5,16 @@ licensed), running on your own machine. No per-pin fees.
 
 - **Layers:** Depth Anything V2 Small (Apache-2.0).
 - **Detail:** Marigold Normals v1.1 (Open-RAIL++).
+- **Pieces:** Segment Anything ViT-B (Apache-2.0).
+
+The AI makes a **relief kit** (raw results, no styling choices); the staff portal's **Relief
+Studio** turns it into a pin with live controls. Run the server for the Studio:
+
+```powershell
+.venv\Scripts\python server.py          # http://127.0.0.1:7861 — the Studio analyzes through it
+```
+
+Every analysis is cached in `cache/` by the image's bytes, so the same art again is instant.
 
 ## Speed
 
@@ -25,7 +35,7 @@ The first run also downloads the models once (about 5 GB).
 ```powershell
 py -3.11 -m venv .venv
 .venv\Scripts\activate
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
@@ -36,7 +46,7 @@ The last line should print `True NVIDIA GeForce RTX 4090`.
 
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 ```
 
@@ -45,11 +55,9 @@ pip install -r requirements.txt
 ```bash
 python havenrelief.py "C:\path\to\jinx.png"
 python havenrelief.py jinx.png --quality high
-python havenrelief.py jinx.png --depth 0.07
 ```
 
 - **`--quality high`** averages more AI passes, for cleaner detail.
-- **`--depth 0.07`** makes the relief deeper.
 
 Output goes to `out/<art name>/`:
 
@@ -59,7 +67,7 @@ Output goes to `out/<art name>/`:
 | `height.png` | relief height (white = high) | badge editor → **Depth map** |
 | `normal.png` | full-detail lighting for the relief | badge editor → **Normal map** |
 | `clay.png`, `color.png` | previews, to judge it before uploading | none |
-| `height16.png` | full-precision height, for later use | none |
+| `layers.png`, `detail.png`, `pieces.png`, `kit.json` | the kit the Relief Studio works from | uploaded by the Studio |
 
 Then in the staff portal: **Badges → edit the badge**.
 1. Upload the three files.
@@ -75,5 +83,5 @@ Then in the staff portal: **Badges → edit the badge**.
 
 ## Keep in sync with the app
 
-- **Relief height:** `--depth` (default 0.055) must match `RELIEF_DEPTH` in `components/badges/pinRelief.ts`. The normal map is baked for that height.
+- **Relief height** is set by the app alone (`RELIEF_DEPTH` in `components/badges/pinRelief.ts`). The normal map is Marigold's raw object-space normals, so it fits any height.
 - **Height map orientation:** white = high, black = the pin's base. Outside the cutout it's 0.

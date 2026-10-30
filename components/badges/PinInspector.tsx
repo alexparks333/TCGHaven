@@ -13,7 +13,8 @@ import { cn } from '@/lib/utils'
 import { isMastered, type BadgeDef } from '@/lib/badges'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_STAR, PIN_RIBBON } from './BadgePin'
-import { buildRelief } from './pinRelief'
+import { buildRelief, type ReliefLook } from './pinRelief'
+import { lenticularPictures, reliefSettings } from '@/lib/reliefStudio'
 import { assemblePin, addBackHardware, type PinBackId } from './pinBacks'
 
 // Inspect a Haven Badge in 3D — drag to turn it over, scroll/pinch to zoom, like the pin inspect
@@ -85,7 +86,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       } else if (def.imageUrl) {
         // No model: a relief built from the uploaded art
         setProg(0.3)
-        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl))
+        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined }, badgeAsset(def.finishMapUrl))
           .then(() => (def.normalMapUrl ? stage?.setNormalMap(badgeAsset(def.normalMapUrl)!) : undefined))
           .then(done)
           .catch((e) => { setError(`Couldn't build the pin from the art: ${e.message}`); setLoading(false) })
@@ -94,7 +95,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       }
     }).catch((e) => { setError(String(e)); setLoading(false) })
     return () => { disposed = true; stage?.dispose(); api.current = null }
-  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery])
+  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery])
 
   const [have, total] = progress ?? [0, def.slots.length]
   const mastered = isMastered(def, progress, !!earnedAt)
@@ -172,12 +173,16 @@ interface StageApi {
   loadModel: (url: string, back?: PinBackId, frontPositiveZ?: boolean, onProgress?: (fraction: number) => void) => Promise<void>
   warm: () => Promise<void>
   blackout: () => void
-  useRelief: (url: string, depthUrl?: string) => Promise<void>
+  useRelief: (url: string, depthUrl?: string, look?: ReliefLook, finishUrl?: string) => Promise<void>
   setFaceImage: (url: string) => Promise<void>
   setNormalMap: (url: string) => Promise<void>
   reset: () => void
   dispose: () => void
 }
+
+// The studio's reflections, sharp enough that polished gold doesn't mirror its pixels as little
+// staircase blocks (three.js's default 256 did); phones get a lighter one
+const ENV_SIZE = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches ? 512 : 1024
 
 function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): StageApi {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -190,7 +195,7 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): Stag
 
   const scene = new THREE.Scene()
   const pmrem = new THREE.PMREMGenerator(renderer)
-  const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+  const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04, 0.1, 100, { size: ENV_SIZE }).texture
   scene.environment = envTex
   // Dramatic, not flat: only a little all-round studio reflection (a lot of it lights the front
   // evenly and reads overexposed); the shape comes from a strong low key light instead
@@ -310,8 +315,8 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): Stag
       renderer.render(scene, camera)
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
     },
-    async useRelief(url, depthUrl) {
-      const r = await buildRelief(url, renderer.capabilities.getMaxAnisotropy(), depthUrl)
+    async useRelief(url, depthUrl, look, finishUrl) {
+      const r = await buildRelief(url, renderer.capabilities.getMaxAnisotropy(), depthUrl, look, finishUrl)
       addBackHardware(r.group, r.backZ)
       reliefMat = r.faceMaterial
       show(r.group)
@@ -319,7 +324,10 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): Stag
     async setNormalMap(url) {
       const tex = await loadTex(url)
       if (reliefMat && current !== standIn.group) {
+        // HavenRelief's normals are object space (x right, y up, z out of the pin): they replace
+        // the displaced mesh's normals rather than tilting them a second time
         reliefMat.normalMap = tex
+        reliefMat.normalMapType = THREE.ObjectSpaceNormalMap
         reliefMat.needsUpdate = true
         return
       }

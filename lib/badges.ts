@@ -1,4 +1,5 @@
 import type { Card, Game } from './types'
+import type { ReliefSettings } from './reliefStudio'
 
 // Haven Badges — trophies for collecting milestones, shown in each profile's pin book
 // (components/badges/BadgeBook.tsx). Badges are made only by TCG Haven, in the staff portal's
@@ -75,6 +76,12 @@ export interface BadgeDef {
   reliefDepth?: number  // squash a 3D model's front into a bas-relief at most this tall (pin = 1 wide); unset = as modelled
   modelFrontPositiveZ?: boolean // the model's real front faces +z (Meshy's face −z — the default)
   depthMapUrl?: string  // optional depth map of the art (white = near) — gives the relief its real shape
+  // Made in the Relief Studio (components/admin/ReliefStudio.tsx): the HavenRelief kit's files
+  // (name → URL, so the Studio can reopen and re-tune) and the settings depthMapUrl was baked with
+  // (the viewer also reads its depth and wall)
+  reliefKit?: Record<string, string>
+  relief?: ReliefSettings
+  finishMapUrl?: string // the Relief Studio's per-pixel finishes (R = FINISHES id in lib/reliefStudio.ts); unset = all Auto
 }
 
 // The standard pin backs every 3D pin gets (built in components/badges/pinBacks.ts)

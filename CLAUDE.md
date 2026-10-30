@@ -1818,16 +1818,56 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   a new one, which joins the book's list).
 - **HavenRelief** (`tools/havenrelief/`, 2026-10-28) — our own image → bas-relief tool, replacing
   paid ones (bas-relief.ai) and Meshy for flat-art pins: Depth Anything V2 Small (Apache-2.0) for
-  layers + Marigold Normals v1.1 (Open-RAIL++) for detail, integrated and compressed into coin
-  depth. One command (`python havenrelief.py art.png`; README has Windows/Linux + NVIDIA setup —
+  layers + Marigold Normals v1.1 (Open-RAIL++) for detail, integrated and linearly scaled to 0..1
+  — no compression, clipping, rims or smoothing (2026-10-29: all of that made pins look gummy).
+  One command (`python havenrelief.py art.png`; README has Windows/Linux + NVIDIA setup —
   seconds on the owner's RTX 4090, ~1h on the Intel MacBook) writes `art.webp` (Pin art),
   `height.png` (Depth map) and `normal.png` (Normal map) for the badge editor. A badge with a
   depth map (and no `model`) is built by `buildRelief()` in "clean" mode: the height used as made
   (read at 2048, meshed at 1100², cut cleanly at the outline), the art's own colours, metal only
-  in solid gold areas (`solidifyGold`), no invented detail. `--depth` must match `RELIEF_DEPTH`
-  (0.055) — the normal map is baked for that height. Never swap in Depth Anything V2 Base/Large:
-  they're non-commercial. Still slow to build in the browser (~40s on the MacBook): next step is
-  baking the finished pin to a GLB at save time.
+  in solid gold areas (`solidifyGold`), no invented detail. `normal.png` is Marigold's raw normals,
+  applied as an **object-space** map that replaces the displaced mesh's normals — a tangent-space
+  map of the same relief on top of the displaced mesh counted every slope twice (pillowy, molten).
+  `RELIEF_DEPTH` is 0.026 (the default; the Studio sets it per badge — 0.055 stood taller than the
+  body). Steep walls (`setWalls()`) are plain gold lit by the mesh's real normal, since the head-on
+  art and normals only smear down them; the relief's cut edge is snapped onto the smooth outline
+  with a gold skirt down into the body (no see-through gap, no stair-steps). Body gold stays
+  shiny (roughness 0.3 + mirror clear coat); the studio environment is rendered at 1024px
+  (`ENV_SIZE`, 512 on phones) because three.js's default 256 showed as staircase blocks in it.
+  Run on a Windows PC: `.venv` built with Python 3.13 + cu124 torch + torchvision works.
+  Never swap in Depth Anything V2 Base/Large: they're non-commercial.
+- **Relief Studio** (staff portal → Badges → edit badge → Relief Studio, 2026-10-29) —
+  `components/admin/ReliefStudio.tsx` + `lib/reliefStudio.ts`. The AI runs **once per picture**
+  on `tools/havenrelief/server.py` (`http://127.0.0.1:7861`, this PC's GPU for now —
+  `NEXT_PUBLIC_HAVENRELIEF_URL` points it at a cloud GPU later), which returns a **kit**: art,
+  depth layers, integrated detail, Marigold normals, and Segment Anything **pieces** (16-bit
+  values split across two 8-bit channels; see havenrelief.py). The server caches every analysis
+  on disk by the image's bytes (`cache/`, git-ignored) and frees GPU memory between models (with
+  all three resident the card spilled into system RAM: 150s → 58s). Uploading pin art in the
+  badge editor auto-analyzes and saves the kit with the badge (`reliefKit`); the Studio then opens
+  straight onto live controls — everything below runs in the browser, no AI re-run:
+  - **Relief tab:** stepped/smooth, levels (each can be switched off), Flatten all pieces
+    (default 100%), soften, depth, detail (default 80%), gold walls; per piece raise/lower,
+    flatten, smooth edges. The gaps between Segment Anything objects are split into pieces too
+    (`splitGaps`), so every area is selectable.
+  - **Material tab:** Photoshop-style Layers (one per piece; thumbnail, rename, eye = hide its
+    finish) + Material properties: a finish per layer — Auto, Regular, Gold, Gemstone (real light
+    transmission), Holographic, Color Fresnel, Hole (cut through relief, body and back, one gold
+    wall), Lenticular (named picture sets, each layer picks one, seamless crossfade driven by the
+    whole pin's tilt), Pattern Foil (micro-ridges steered by Swirl/Perlin/Turbulence/Cracked
+    Ice/Gem Facets/Sunburst noise + seed) — each with its own settings and Feather edges.
+  - Selection: click; Ctrl/⌘-click adds; Shift-click ranges rows; **hold Tab to paint** pieces
+    into the selection (Alt erases, scroll/[ ] resizes). Edits apply to every selected layer.
+    Undo/redo: Ctrl+Z / Ctrl+X, Y, Shift+Z. H toggles the selection highlight.
+  - **Finish map** (`finishMapUrl`, also read by the collector's 3D view): RGBA, R = finish id
+    (0–15) + 16 × coverage (0–15, feathered edges), G/B = that finish's settings (some packed two
+    per channel). Coverage rides in R, not alpha — a PNG's alpha gets premultiplied and scrambled
+    the ids. Narrow unfinished slivers between same-finish pieces are closed (`closeSlivers`).
+    Holes are cut by geometry only (a shader discard by this pixel map left a pixel staircase).
+  - "Save relief to badge" bakes the full-size height + finish maps, uploads them with the kit,
+    and **saves the badge** in the same click. Unsaved Studio work is kept per badge in
+    localStorage (`tcghaven-relief-draft:{id}`), so a reload never loses it.
+  - Storage: kits live in `badges/{id}/kit-{time}/` — `storage.rules` matches `{path=**}`.
 - **Pin Display (profile Badges tab, 2026-10-29)** — `components/badges/BadgeShowcase.tsx`: the
   Badges tab opens on a velvet display pad (book velvet + gold frame in a leather border) with
   `PIN_DISPLAY_SPOTS` (6) spots the owner fills: click an empty spot (a round carved pinhole,

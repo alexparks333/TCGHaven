@@ -666,6 +666,10 @@
 .pinbook-pin {
   display: inline-block;
   transition: transform 0.2s ease;
+}
+/* The pin's shadow, on a wrapper that never tilts (a filter on the tilting pin itself made it blurry) */
+.pinbook-pin-shadow {
+  display: inline-block;
   filter: drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.75)) drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55));
 }
 .pinbook-plate-name { line-height: 1.5; }

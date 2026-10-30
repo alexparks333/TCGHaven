@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import {
-  Plus, Pencil, Trash2, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon,
+  Plus, Pencil, Trash2, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon, Sparkles, CheckCircle2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -14,10 +14,12 @@ import { PIN_BACKS, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type Bad
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
+import { analyzeArt, loadKit, reliefServerUp, reliefSettings, saveKit } from '@/lib/reliefStudio'
 import ChaptersBoard from './ChaptersBoard'
 import CardexCardPicker from './CardexCardPicker'
 
 const PinInspector = dynamic(() => import('@/components/badges/PinInspector'), { ssr: false })
+const ReliefStudio = dynamic(() => import('./ReliefStudio'), { ssr: false })
 
 // Staff portal → Badges: the pin books (badge sets) and Haven Badges every collector sees. Saved to
 // Firestore badge_catalog/main (one doc — lib/badgeCatalog.ts); changes go live for everyone
@@ -221,8 +223,28 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
   const [newChapter, setNewChapter] = useState(!!initial.page && !chaptersOf(catalog, initial.set).includes(initial.page))
   const id = isNew ? badgeSlug(b.name) : b.id
   const patch = (p: Partial<BadgeDef>) => setB((x) => ({ ...x, ...p }))
+  const badgeNow = b
+  const [studio, setStudio] = useState(false)
+  // New pin art is analyzed for the Relief Studio straight away, so the Studio opens ready
+  const [reliefJob, setReliefJob] = useState<{ state: 'running' | 'done' | 'offline' | 'error'; msg?: string } | null>(null)
+  async function autoAnalyze(artUrl: string) {
+    if (!(await reliefServerUp())) return setReliefJob({ state: 'offline' })
+    setReliefJob({ state: 'running' })
+    try {
+      const r = await fetch(badgeAsset(artUrl)!)
+      if (!r.ok) throw new Error('couldn’t read the art back')
+      const kit = await loadKit(await analyzeArt(await r.blob(), 'high'))
+      const reliefKit = await saveKit(staffStorage, id || 'new', kit)
+      // piece edits belong to one analysis — keep the rest of the settings
+      setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), pieces: {}, soft: {}, off: [] } }))
+      setReliefJob({ state: 'done' })
+    } catch (e) {
+      setReliefJob({ state: 'error', msg: e instanceof Error ? e.message : String(e) })
+    }
+  }
 
-  async function save() {
+  async function save(override?: BadgeDef) {
+    const b = override ?? badgeNow
     setError('')
     if (!b.name.trim()) return setError('Give the badge a name.')
     if (!b.set) return setError('Pick a book.')
@@ -246,7 +268,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
         <button onClick={() => onPreview({ ...b, id: id || 'preview' })} className="btn-secondary mr-auto"><Cuboid size={15} />Preview in 3D</button>
         {error && <span className="text-xs text-red-600 mr-2">{error}</span>}
         <button onClick={onClose} className="btn-secondary">Cancel</button>
-        <button onClick={save} disabled={saving} className="btn-primary disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Save badge</button>
+        <button onClick={() => save()} disabled={saving} className="btn-primary disabled:opacity-60">{saving ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Save badge</button>
       </>}
     >
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_200px]">
@@ -298,7 +320,10 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
           <div className="rounded-2xl bg-[#181513] p-4 flex items-center justify-center">
             <BadgePin art={b.art} imageUrl={b.imageUrl} size={120} />
           </div>
-          <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => patch({ imageUrl })} />
+          <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { patch({ imageUrl }); if (imageUrl) autoAnalyze(imageUrl) }}
+            note={reliefJob?.state === 'running'
+              ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300"><Loader2 size={12} className="animate-spin" />Analyzing…</span>
+              : b.reliefKit && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"><CheckCircle2 size={12} />Relief ready</span>} />
           {!b.imageUrl && (
             <Field label="Built-in art">
               <select className="input-field" value={b.art} onChange={(e) => patch({ art: e.target.value })}>
@@ -315,6 +340,20 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
               </select>
             </Field>
           )}
+          <button type="button" onClick={() => setStudio(true)} disabled={reliefJob?.state === 'running'} className="btn-secondary justify-center text-xs disabled:opacity-60">
+            {reliefJob?.state === 'running' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{reliefJob?.state === 'running' ? 'Analyzing for the Relief Studio…' : 'Relief Studio'}
+          </button>
+          {reliefJob && reliefJob.state !== 'running' && (
+            <span className={cn('text-[11px] leading-snug -mt-1', reliefJob.state === 'done' ? 'text-emerald-600' : 'text-amber-600')}>
+              {reliefJob.state === 'done' ? 'Relief kit ready — the Studio opens straight onto the controls.'
+                : reliefJob.state === 'offline' ? 'Relief server not running — start it and open the Studio to analyze.'
+                : `Analysis failed: ${reliefJob.msg}`}
+            </span>
+          )}
+          {reliefJob?.state === 'running' && <span className="text-[11px] text-slate-500 -mt-1">About a minute — keep this editor open.</span>}
+          {studio && <ReliefStudio badge={{ ...b, id: id || 'new' }} onClose={() => setStudio(false)}
+            // the Studio's result is saved with the badge straight away — a separate "Save badge" was easy to miss
+            onApply={async (p) => { const next = { ...b, ...p }; setB(next); await save(next) }} />}
           <FileField label="Normal map" accept="image/*" badgeId={id || 'new'} kind="normal" value={b.normalMapUrl} onChange={(normalMapUrl) => patch({ normalMapUrl })} />
           <FileField label="Depth map" accept="image/*" badgeId={id || 'new'} kind="depth" value={b.depthMapUrl} onChange={(depthMapUrl) => patch({ depthMapUrl })} />
           <p className="text-[11px] text-slate-500 leading-snug">
@@ -412,8 +451,9 @@ function ModelFront({ badge, badgeId, patch }: { badge: BadgeDef; badgeId: strin
 }
 
 // Upload a badge file to Storage (badges/{id}/{kind}-{time}.{ext}) and hand back its URL.
-function FileField({ label, accept, badgeId, kind, value, onChange, icon }: {
+function FileField({ label, accept, badgeId, kind, value, onChange, icon, note }: {
   label: string; accept: string; badgeId: string; kind: string; value?: string; onChange: (url: string | undefined) => void; icon?: React.ReactNode
+  note?: React.ReactNode // shown beside the label (Pin art: the Relief Studio's status)
 }) {
   const input = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<string | null>(null) // what it's doing, while busy
@@ -454,7 +494,7 @@ function FileField({ label, accept, badgeId, kind, value, onChange, icon }: {
   }
   return (
     <div>
-      <span className="field-label">{label}</span>
+      <div className="flex items-center gap-2"><span className="field-label">{label}</span>{note && <span className="ml-auto -mt-1">{note}</span>}</div>
       <div className="flex items-center gap-2">
         <button type="button" onClick={() => input.current?.click()} disabled={busy}
           className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-slate-700 text-xs font-semibold text-slate-400 hover:text-ink hover:border-slate-600 disabled:opacity-60">
