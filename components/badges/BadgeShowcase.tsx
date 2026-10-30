@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { Plus, X, Box, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { BadgeDef } from '@/lib/badges'
+import { badgeTier, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { BadgeSpot, FrameOrnament, PinholeFilter } from './BadgeBook'
@@ -30,9 +30,10 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
 }) {
   const { catalog } = useBadgeCatalog()
   const byId = useMemo(() => new Map(catalog.badges.map((b) => [b.id, b])), [catalog.badges])
-  const earned = useMemo(() => catalog.badges.filter((d) => badges.earned[d.id]), [catalog.badges, badges])
-  // Only pins actually earned are shown, whatever is stored
-  const shown = ids.map((id) => (id && badges.earned[id] ? byId.get(id) ?? null : null))
+  const tierOf = (d: BadgeDef) => badgeTier(d, badges.progress[d.id])
+  const earned = useMemo(() => catalog.badges.filter((d) => badgeTier(d, badges.progress[d.id]) > 0), [catalog.badges, badges])
+  // Only pins actually unlocked (any tier) are shown, whatever is stored — in their tier's look
+  const shown = ids.map((id) => { const d = id ? byId.get(id) : undefined; return d && tierOf(d) > 0 ? d : null })
   const [picking, setPicking] = useState<number | null>(null)
   const [inspect, setInspect] = useState<BadgeDef | null>(null)
 
@@ -101,6 +102,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
         <PinPicker
           current={shown[picking]}
           earned={earned}
+          tierOf={tierOf}
           displayed={new Set(ids.filter(Boolean))}
           onPick={(id) => place(picking, id)}
           onRemove={() => remove(picking)}
@@ -146,9 +148,10 @@ function EmptyDisplaySpot({ size, canAdd, onClick }: { size: number; canAdd: boo
 }
 
 // Choose which earned pin goes in a spot (a pin already on display moves here)
-function PinPicker({ current, earned, displayed, onPick, onRemove, onView, onClose }: {
+function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove, onView, onClose }: {
   current: BadgeDef | null
   earned: BadgeDef[]
+  tierOf: (d: BadgeDef) => number
   displayed: Set<string>
   onPick: (id: string) => void
   onRemove: () => void
@@ -191,7 +194,7 @@ function PinPicker({ current, earned, displayed, onPick, onRemove, onView, onClo
                 onClick={() => (here ? onClose() : onPick(d.id))}
                 className={cn('relative flex flex-col items-center gap-1.5 rounded-xl p-2 border transition-colors text-center', here ? 'border-violet-600 bg-violet-600/10' : 'border-slate-800 hover:border-slate-600 hover:bg-slate-900')}
               >
-                <BadgePin art={d.art} imageUrl={d.imageUrl} size={64} />
+                <span className={cn(tierOf(d) === 1 && 'grayscale')}><BadgePin art={d.art} imageUrl={d.imageUrl} size={64} /></span>
                 <span className="text-[11px] font-semibold text-ink leading-tight line-clamp-2">{d.name}</span>
                 {(here || elsewhere) && (
                   <span className="absolute top-1 right-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400">

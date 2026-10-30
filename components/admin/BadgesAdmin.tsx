@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
-import { PIN_BACKS, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
+import { DEFAULT_TIERS, TIER_NAMES, PIN_BACKS, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
@@ -310,6 +310,31 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
           </label>
           <Field label="What each slot is called" hint={`Progress reads like "3 / ${b.slots.length || 12} ${b.slotNoun || 'cards'}".`}>
             <input className="input-field" value={b.slotNoun} onChange={(e) => patch({ slotNoun: e.target.value })} placeholder="Legends" />
+          </Field>
+
+          <Field label="Tier percentages" hint="How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed.">
+            <div className="grid grid-cols-3 gap-2">
+              {([1, 2, 3] as const).map((t) => {
+                const tiers = b.tiers ?? DEFAULT_TIERS
+                return (
+                  <label key={t} className="block">
+                    <span className="block text-[11px] text-slate-500 mb-0.5">{TIER_NAMES[t]}</span>
+                    <div className="flex items-center gap-1">
+                      <input type="number" min={1} max={100} value={tiers[t - 1]} className="input-field !py-1.5 text-sm"
+                        onChange={(e) => {
+                          const next = [...tiers] as [number, number, number]
+                          next[t - 1] = Math.min(100, Math.max(1, Math.round(Number(e.target.value) || 0)))
+                          // keep them in order: Grayscale ≤ Painted ≤ Full
+                          for (let i: number = t; i < 3; i++) next[i] = Math.max(next[i], next[i - 1])
+                          for (let i: number = t - 2; i >= 0; i--) next[i] = Math.min(next[i], next[i + 1])
+                          patch({ tiers: next.join() === DEFAULT_TIERS.join() ? undefined : next })
+                        }} />
+                      <span className="text-xs text-slate-500">%</span>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
           </Field>
 
           <SlotsEditor game={book?.game ?? b.game} slots={b.slots} onChange={(slots) => patch({ slots })} />

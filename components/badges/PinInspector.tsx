@@ -10,7 +10,7 @@ import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 import { X, Lock, Check, Move3d } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { isMastered, type BadgeDef } from '@/lib/badges'
+import { badgeTier, isMastered, toNextTier, TIER_NAMES, type BadgeDef } from '@/lib/badges'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_STAR, PIN_RIBBON } from './BadgePin'
 import { buildRelief, type ReliefLook } from './pinRelief'
@@ -39,6 +39,8 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
    *  see its silhouette against the light, but none of its design */
   mystery?: boolean
 }) {
+  // Which look: the collector's tier from their progress; no progress (the staff portal's preview) = Full
+  const tier = progress ? badgeTier(def, progress) : 3
   const mountRef = useRef<HTMLDivElement>(null)
   const artRef = useRef<HTMLDivElement>(null)
   const api = useRef<StageApi | null>(null)
@@ -86,7 +88,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       } else if (def.imageUrl) {
         // No model: a relief built from the uploaded art
         setProg(0.3)
-        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined }, badgeAsset(def.finishMapUrl))
+        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier > 0 ? tier as 1 | 2 | 3 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined }, badgeAsset(def.finishMapUrl))
           .then(() => (def.normalMapUrl ? stage?.setNormalMap(badgeAsset(def.normalMapUrl)!) : undefined))
           .then(done)
           .catch((e) => { setError(`Couldn't build the pin from the art: ${e.message}`); setLoading(false) })
@@ -95,7 +97,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       }
     }).catch((e) => { setError(String(e)); setLoading(false) })
     return () => { disposed = true; stage?.dispose(); api.current = null }
-  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery])
+  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery, tier])
 
   const [have, total] = progress ?? [0, def.slots.length]
   const mastered = isMastered(def, progress, !!earnedAt)
@@ -131,11 +133,14 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       <div className="relative pointer-events-none pb-[calc(env(safe-area-inset-bottom)+20px)] px-5 text-center">
         <div className="inline-flex items-center gap-1.5 text-[11px] text-white/45 mb-2"><Move3d size={13} />Drag to turn it over · scroll to zoom</div>
         <div className="text-2xl font-black text-[#fbe9c4] tracking-tight">{def.name}</div>
-        <div className={cn('mt-1 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-400' : 'text-white/50')}>
-          {earnedAt
-            ? <><Check size={13} />Earned {new Date(earnedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</>
+        <div className={cn('mt-1 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', tier ? 'text-emerald-400' : 'text-white/50')}>
+          {tier
+            ? <><Check size={13} />{TIER_NAMES[tier]}{progress ? ` · ${have} / ${total} ${def.slotNoun}` : ''}</>
             : <><Lock size={13} />Not earned yet · {have} / {total} {def.slotNoun}</>}
         </div>
+        {progress && tier > 0 && tier < 3 && (
+          <div className="mt-1 text-xs font-semibold text-white/55">{toNextTier(def, progress)} more {def.slotNoun} for the {TIER_NAMES[tier + 1]} pin</div>
+        )}
         {mastered && <div className="mt-1 text-xs font-bold uppercase tracking-wider text-amber-300">✦ Mastered</div>}
         {!!earnedAt && def.growing && !mastered && (
           <div className="mt-1 text-xs font-semibold text-white/55">{have} / {def.slots.length} {def.slotNoun} · {Math.max(0, def.slots.length - have)} more to master it</div>

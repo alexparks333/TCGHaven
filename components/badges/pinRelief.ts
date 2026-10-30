@@ -45,6 +45,7 @@ export interface ReliefLook {
   depth?: number
   wall?: number
   lenticular?: string[][] // the Lenticular finish's picture sets, as URLs the browser may load (via badgeAsset)
+  tier?: 1 | 2 | 3        // which look (setTier); unset = Full
 }
 
 /** A real relief whose surface can be re-shaped in place — the Relief Studio's live preview. */
@@ -57,6 +58,9 @@ export interface LiveRelief extends Relief {
   /** The Lenticular finish's picture sets (each: URLs, left to right), every picture the whole pin
    *  framed like the art. A lenticular pixel's set is in the finish map's blue channel. */
   setLenticular(sets: string[][]): Promise<void>
+  /** Which of the badge's three looks (lib/badges.ts badgeTier): 1 Grayscale — no colour, matte, no
+   *  finishes; 2 Painted — colour, satin, no finishes; 3 Full — as designed. */
+  setTier(tier: 1 | 2 | 3): void
   /** Each pixel's finish, RGBA (R = FINISHES id in lib/reliefStudio.ts, G/B = its settings), size²;
    *  null = all Auto. Holes are cut when the pin is built (cleanRelief's `holes`), not here. */
   setFinish(finish: Uint8Array | null, size: number): void
@@ -77,6 +81,7 @@ export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?:
   r.setHeight(fineHeight.h, HN, look)
   if (finish) r.setFinish(finish, HN)
   if (look?.lenticular?.some((s) => s.length)) await r.setLenticular(look.lenticular)
+  if (look?.tier && look.tier < 3) r.setTier(look.tier)
   return r
 }
 
@@ -288,7 +293,23 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     finishUniforms.lentAtlas.value = t
     finishUniforms.lentGrid.value.set(cols, rows, frames.length)
   }
-  return { group, faceMaterial, backZ, outline, setHeight, setHighlight, setOverlay, setFinish, setLenticular }
+  // The metal (body, skirt, back) follows the tier too: grey for Grayscale, satin below Full
+  const metals: { m: THREE.MeshPhysicalMaterial; color: THREE.Color; roughness: number; clearcoat: number }[] = []
+  group.traverse((o) => {
+    const m = (o as THREE.Mesh).material as THREE.MeshPhysicalMaterial | undefined
+    if (m && m !== faceMaterial && 'clearcoat' in m) metals.push({ m, color: m.color.clone(), roughness: m.roughness, clearcoat: m.clearcoat })
+  })
+  function setTier(tier: 1 | 2 | 3) {
+    finishUniforms.tierLook.value = tier
+    if (tier < 3 && faceMaterial.transmission > 0) { faceMaterial.transmission = 0; faceMaterial.needsUpdate = true }
+    for (const { m, color, roughness, clearcoat } of metals) {
+      const l = color.r * 0.299 + color.g * 0.587 + color.b * 0.114
+      m.color.copy(tier === 1 ? new THREE.Color(l, l, l) : color)
+      m.roughness = tier < 3 ? Math.max(roughness, 0.6) : roughness
+      m.clearcoat = tier < 3 ? 0 : clearcoat
+    }
+  }
+  return { group, faceMaterial, backZ, outline, setHeight, setHighlight, setOverlay, setFinish, setLenticular, setTier }
 }
 
 // A hole mask's openings as paths (each enclosed area large enough to matter), grown by `grow` px.
@@ -433,6 +454,7 @@ uniform float hasFinish;
 uniform sampler2D lentAtlas;
 uniform vec3 lentGrid; // the lenticular pictures' grid: columns, rows, how many
 uniform vec2 lentSets[8]; // each lenticular set: its first picture in the grid, how many
+uniform float tierLook;   // 1 Grayscale, 2 Painted, 3 Full (the badge's tier)
 varying float vWall;
 varying vec3 vFoilT;
 varying vec3 vFoilB;
@@ -471,12 +493,13 @@ vec3 hueRotate(vec3 c, float a) {
   read: `
 vec4 finTex = hasFinish > 0.5 ? texture2D(finishMap, vMapUv) : vec4(0.0);
 float finV = floor(finTex.r * 255.0 + 0.5);
-float fin = mod(finV, 16.0);             // which finish
+float fin = tierLook < 2.5 ? 0.0 : mod(finV, 16.0); // which finish (none below the Full tier)
 float finCov = floor(finV / 16.0) / 15.0; // how much of it shows (feathered edges fade it out)
 float finA = finTex.g, finB = finTex.b;
 // (no discard for holes: the geometry cuts them along a smooth outline; discarding by this pixel
 // map as well punched a stair-step of see-through pixels along the hole's edge)
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.40, 0.12), vWall);`,
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.40, 0.12), vWall);
+if (tierLook < 1.5) diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)));`,
   surface: `
 if (fin > 0.5) {
   float m0 = metalnessFactor, r0 = roughnessFactor;
@@ -490,7 +513,8 @@ if (fin > 0.5) {
   roughnessFactor = mix(r0, roughnessFactor, finCov);
 }
 metalnessFactor = mix(metalnessFactor, 1.0, vWall);
-roughnessFactor = mix(roughnessFactor, 0.32, vWall);`,
+roughnessFactor = mix(roughnessFactor, 0.32, vWall);
+if (tierLook < 2.5) { roughnessFactor = max(roughnessFactor, 0.6); metalnessFactor *= 0.6; }`,
   look: `
 if (fin > 2.5 && vWall < 0.99) {
   vec3 dBase = diffuseColor.rgb, eBase = totalEmissiveRadiance;
@@ -594,6 +618,7 @@ function installWallShader(mat: THREE.MeshPhysicalMaterial) {
     finishMap: { value: blankFinish() as THREE.Texture }, hasFinish: { value: 0 },
     lentAtlas: { value: blankFinish() as THREE.Texture }, lentGrid: { value: new THREE.Vector3(1, 1, 0) },
     lentSets: { value: Array.from({ length: 8 }, () => new THREE.Vector2(0, 0)) },
+    tierLook: { value: 3 },
   }
   mat.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, uniforms)
@@ -606,6 +631,7 @@ function installWallShader(mat: THREE.MeshPhysicalMaterial) {
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>' + FINISH_GLSL.surface)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize(mix(normal, nonPerturbedNormal, vWall));')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + FINISH_GLSL.look)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nif (tierLook < 1.5) totalEmissiveRadiance = vec3(dot(totalEmissiveRadiance, vec3(0.299, 0.587, 0.114)));')
       .replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment.replace(
         'material.transmission = transmission;',
         'material.transmission = transmission * ((fin > 2.5 && fin < 3.5) ? finB * finCov * (1.0 - vWall) : 0.0);'))

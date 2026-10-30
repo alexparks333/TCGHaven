@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { BadgeBook } from './BadgeBook'
@@ -46,19 +46,30 @@ type View =
 // An upright phone (portrait, narrow): a two-page spread there makes every pin tiny
 const PHONE_QUERY = '(max-width: 767px) and (orientation: portrait)'
 
-// Dev server only: the Dev panel's "Show all badges as earned" — to see earned pins in the books.
+// Dev server only: the Dev panel's "Preview badge progress" — every badge as if that % of it were
+// collected (so each tier's look can be checked in the books). Stored as the % ('' = off; the old
+// "show all as earned" '1' reads as 100).
 export const DEV_ALL_BADGES_KEY = 'tcghaven-dev-all-badges'
 export const DEV_ALL_BADGES_EVENT = 'tcghaven-dev-all-badges'
-function useDevAllBadges(): boolean {
-  const [on, setOn] = useState(false)
+export function readDevBadgePct(): number | null {
+  try {
+    const v = localStorage.getItem(DEV_ALL_BADGES_KEY)
+    if (v === '1') return 100
+    if (!v || v === '0' || v === 'off') return null
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null
+  } catch { return null }
+}
+function useDevBadgePct(): number | null {
+  const [pct, setPct] = useState<number | null>(null)
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return
-    const read = () => { try { setOn(localStorage.getItem(DEV_ALL_BADGES_KEY) === '1') } catch { setOn(false) } }
+    const read = () => setPct(readDevBadgePct())
     read()
     window.addEventListener(DEV_ALL_BADGES_EVENT, read)
     return () => window.removeEventListener(DEV_ALL_BADGES_EVENT, read)
   }, [])
-  return on
+  return pct
 }
 
 export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false }: {
@@ -67,10 +78,13 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   isMe: boolean
   full?: boolean
 }) {
-  const devAll = useDevAllBadges()
+  const devPct = useDevBadgePct()
   const { catalog } = useBadgeCatalog()
-  const badges = devAll && isMe
-    ? { earned: Object.fromEntries(catalog.badges.map((b) => [b.id, realBadges?.earned[b.id] ?? Date.now()])), progress: Object.fromEntries(catalog.badges.map((b) => [b.id, [b.slots.length, b.slots.length] as [number, number]])) } // (all complete, so growing ones show Mastered too)
+  const badges = devPct !== null && isMe
+    ? {
+        earned: Object.fromEntries(catalog.badges.filter(() => devPct >= 100).map((b) => [b.id, realBadges?.earned[b.id] ?? Date.now()])),
+        progress: Object.fromEntries(catalog.badges.map((b) => [b.id, [Math.round((devPct / 100) * b.slots.length), b.slots.length] as [number, number]])),
+      }
     : realBadges
   const [view, setView] = useState<View>({ mode: 'shelf' })
   // The shelf fades in when the page first shows it — not when a book is put back on it
@@ -347,7 +361,7 @@ function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBad
       <div className={cn('grid gap-6 sm:gap-8', full ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')}>
         {catalog.sets.map((set) => {
           const inSet = badgesInSet(catalog, set.id)
-          const earned = inSet.filter((b) => badges?.earned[b.id]).length
+          const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
           return (
             <div key={set.id} className="flex flex-col items-center">
               <button
@@ -375,7 +389,7 @@ function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBad
 function BookHeader({ set, badges, ownerName, isMe }: { set: BadgeSet; badges: SharedBadges | null; ownerName: string; isMe: boolean }) {
   const { catalog } = useBadgeCatalog()
   const inSet = badgesInSet(catalog, set.id)
-  const earned = inSet.filter((b) => badges?.earned[b.id]).length
+  const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
   return (
     <div className="flex items-center gap-2 min-w-0">
       <span className="w-3 h-3 rounded-full shrink-0" style={{ background: `linear-gradient(135deg, ${set.cover.from}, ${set.cover.accent})` }} />
@@ -439,7 +453,7 @@ export function BookCover({ set, badges }: { set: BadgeSet; badges: SharedBadges
   const { catalog } = useBadgeCatalog()
   const inSet = badgesInSet(catalog, set.id)
   const first = inSet[0]
-  const earned = inSet.filter((b) => badges?.earned[b.id]).length
+  const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
   const { from, to, accent } = set.cover
   if (set.coverImage) {
     return (
@@ -481,7 +495,7 @@ export function BookCover({ set, badges }: { set: BadgeSet; badges: SharedBadges
         <div className="mt-1 font-black leading-none text-[clamp(18px,9cqw,40px)]" style={{ color: '#fbe9c4', textShadow: '0 2px 0 rgba(0,0,0,0.45)' }}>{set.name}</div>
         <div className="mt-[10%] drop-shadow-[0_6px_6px_rgba(0,0,0,0.5)]">
           {first ? (
-            <BadgePin art={first.art} imageUrl={first.imageUrl} size={70} ghost={!badges?.earned[first.id]} />
+            <BadgePin art={first.art} imageUrl={first.imageUrl} size={70} ghost={badgeTier(first, badges?.progress[first.id]) === 0} />
           ) : (
             // No pins in this book yet: an embossed medallion with the game's monogram
             <span

@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, chaptersOf, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, chaptersOf, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -82,7 +82,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const chapters = useMemo(() => chaptersOf(catalog, set.id), [catalog, set.id])
   const { pages: PAGES, starts } = useMemo(() => buildPages(setBadges, chapters), [setBadges, chapters])
   const N = PAGES.length
-  const earned = setBadges.filter((b) => badges?.earned[b.id]).length
+  const earned = setBadges.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
 
   // -1 = the closed cover (before it opens); otherwise the page on screen
   const [p, setP] = useState(from ? -1 : 0)
@@ -490,7 +490,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           def={inspect}
           earnedAt={badges?.earned[inspect.id]}
           progress={badges?.progress[inspect.id]}
-          mystery={!badges?.earned[inspect.id]}
+          mystery={badgeTier(inspect, badges?.progress[inspect.id]) === 0}
           onClose={() => setInspect(null)}
         />
       )}

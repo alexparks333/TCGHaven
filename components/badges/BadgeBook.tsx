@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, chaptersOf, isMastered, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, chaptersOf, isMastered, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import dynamic from 'next/dynamic'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -269,7 +269,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       def={inspect}
       earnedAt={badges?.earned[inspect.id]}
       progress={badges?.progress[inspect.id]}
-      mystery={!badges?.earned[inspect.id]}
+      mystery={badgeTier(inspect, badges?.progress[inspect.id]) === 0}
       onClose={() => setInspect(null)}
     />
   )
@@ -389,11 +389,14 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
-  const earnedAt = badges?.earned[def.id]
+  // The pin shows once its first tier is reached, in that tier's look (Grayscale / Painted / Full)
+  const tier = badgeTier(def, badges?.progress[def.id])
+  const earnedAt = tier > 0 ? badges?.earned[def.id] ?? 1 : undefined
   const [have, total] = badges?.progress[def.id] ?? [0, def.slots.length]
-  const mastered = isMastered(def, badges?.progress[def.id], !!earnedAt)
+  const mastered = isMastered(def, badges?.progress[def.id], !!badges?.earned[def.id]) && tier === 3
+  const nextTier = toNextTier(def, badges?.progress[def.id])
   // An earned growing badge that has new cards since: how many to master it again
-  const toMaster = def.growing && earnedAt && !mastered ? Math.max(0, def.slots.length - have) : 0
+  const toMaster = def.growing && earnedAt && tier === 3 && !mastered ? Math.max(0, def.slots.length - have) : 0
 
   return (
     <button
@@ -402,11 +405,11 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       onPointerEnter={(e) => { if (interactive && e.pointerType === 'mouse') setOpen(true) }}
       onPointerLeave={() => { setOpen(false); setTilt(null) }}
       onPointerMove={(e) => {
-        if (!earnedAt || e.pointerType !== 'mouse') return
+        if (tier < 3 || e.pointerType !== 'mouse') return // the light-catching tilt is the Full pin's
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
       }}
-      aria-label={`${def.name}${mastered ? ' — mastered' : earnedAt ? ' — earned' : ' — not earned yet'} — view in 3D`}
+      aria-label={`${def.name} — ${mastered ? 'mastered' : tier ? TIER_NAMES[tier] : 'not earned yet'} — view in 3D`}
       className="relative flex flex-col items-center justify-center outline-none cursor-pointer"
       style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}
     >
@@ -414,7 +417,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
         // The shadow sits on a wrapper that doesn't tilt, and the pin isn't scaled up: a drop-shadow
         // filter on the tilting element (and a 6% scale-up) made the browser stretch a flat bitmap
         // of the pin — blurry on hover
-        <span className="pinbook-pin-shadow block">
+        <span className={cn('pinbook-pin-shadow block', `pinbook-tier-${tier}`)}>
         <span
           className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
           style={{
@@ -453,12 +456,12 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
         <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
           <span className="block text-sm font-bold text-ink leading-tight">{def.name}</span>
           <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
-            {earnedAt ? <><Check size={10} />Earned {new Date(earnedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</> : <><Lock size={10} />Not earned yet</>}
+            {tier ? <><Check size={10} />{TIER_NAMES[tier]}{tier < 3 ? ` · ${nextTier} more ${def.slotNoun} for ${TIER_NAMES[tier + 1]}` : ''}</> : <><Lock size={10} />Not earned yet{nextTier ? ` · ${nextTier} more ${def.slotNoun} to unlock` : ''}</>}
           </span>
           {mastered && <span className="block mt-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">✦ Mastered — every {def.slotNoun.replace(/s$/, '')} so far</span>}
           {toMaster > 0 && <span className="block mt-1 text-[10px] font-semibold text-slate-500">{toMaster} more {def.slotNoun} to master it{have > 0 ? ' again' : ''}</span>}
           <span className="block text-[11px] text-slate-400 mt-2 leading-snug">{def.description}</span>
-          {(!earnedAt || toMaster > 0) && (
+          {(tier < 3 || toMaster > 0) && (
             <span className="block mt-2">
               <span className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1">
                 <span>{isMe ? 'Your progress' : 'Progress'}</span>

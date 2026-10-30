@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award } from 'lucide-react'
-import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT } from '@/components/badges/BadgeLibrary'
+import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT, readDevBadgePct } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { ADMIN_UID } from '@/lib/firebase/config'
@@ -68,13 +68,13 @@ function Panel({ uid }: { uid: string }) {
 
   useEffect(() => { if (open && !status) call('status') }, [open, status, call])
 
-  // Badges: pretend every badge is earned (only on this device, only on the dev server).
-  const [allBadges, setAllBadges] = useState(false)
-  useEffect(() => { try { setAllBadges(localStorage.getItem(DEV_ALL_BADGES_KEY) === '1') } catch { /* storage blocked */ } }, [])
-  function toggleAllBadges() {
-    const next = !allBadges
-    setAllBadges(next)
-    try { localStorage.setItem(DEV_ALL_BADGES_KEY, next ? '1' : '0') } catch { /* storage blocked */ }
+  // Badges: preview every badge as if this % of it were collected — each tier's look (only on this
+  // device, only on the dev server). null = off: the real progress.
+  const [badgePct, setBadgePct] = useState<number | null>(null)
+  useEffect(() => { setBadgePct(readDevBadgePct()) }, [])
+  function setDevBadgePct(next: number | null) {
+    setBadgePct(next)
+    try { localStorage.setItem(DEV_ALL_BADGES_KEY, next === null ? '' : String(next)) } catch { /* storage blocked */ }
     window.dispatchEvent(new Event(DEV_ALL_BADGES_EVENT))
   }
 
@@ -157,11 +157,24 @@ function Panel({ uid }: { uid: string }) {
             <ExternalLink size={15} />View Tess&rsquo;s profile
           </Link>
         )}
-        <button onClick={toggleAllBadges} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
-          <Award size={15} />
-          <span className="flex-1">Show all badges as earned</span>
-          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', allBadges ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>{allBadges ? 'ON' : 'OFF'}</span>
-        </button>
+        <div className="rounded-xl bg-slate-800 px-3 py-2 flex flex-col gap-1.5">
+          <button onClick={() => setDevBadgePct(badgePct === null ? 100 : null)} className="flex items-center gap-2 text-sm text-ink">
+            <Award size={15} />
+            <span className="flex-1 text-left">Preview badge progress</span>
+            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', badgePct !== null ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>{badgePct !== null ? `${badgePct}%` : 'OFF'}</span>
+          </button>
+          {badgePct !== null && (
+            <>
+              <input type="range" min={0} max={100} step={1} value={badgePct} onChange={(e) => setDevBadgePct(Number(e.target.value))} className="w-full accent-emerald-500" aria-label="Badge progress %" />
+              <div className="flex gap-1">
+                {[0, 50, 75, 90, 100].map((v) => (
+                  <button key={v} onClick={() => setDevBadgePct(v)} className={cn('flex-1 rounded-md py-0.5 text-[11px] font-semibold', badgePct === v ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:text-ink')}>{v}%</button>
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-500">Every badge as if this much of it were collected — this device only</span>
+            </>
+          )}
+        </div>
         <button onClick={replayPopups} className={cn(btn, 'text-slate-400 hover:text-ink hover:bg-slate-800')}>
           <BellRing size={15} />Replay request popups
         </button>

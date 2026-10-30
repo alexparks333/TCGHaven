@@ -81,6 +81,9 @@ export interface BadgeDef {
   // (the viewer also reads its depth and wall)
   reliefKit?: Record<string, string>
   relief?: ReliefSettings
+  // Tiers: how far through the badge a collector is (have / total, %) decides which look their pin
+  // has — [Grayscale, Painted, Full], each the % that unlocks it. Unset = DEFAULT_TIERS.
+  tiers?: [number, number, number]
   finishMapUrl?: string // the Relief Studio's per-pixel finishes (R = FINISHES id in lib/reliefStudio.ts); unset = all Auto
 }
 
@@ -121,6 +124,28 @@ export const DEFAULT_BADGES: BadgeDef[] = [
 
 /** A growing badge whose every current slot the collector fills right now (`have` from their
  *  progress, checked against the badge's slots today — a badge that grew since is not mastered). */
+// The three looks a pin can have, unlocked by progress (each badge's tiers, set in the staff
+// portal): 1 Grayscale — no colour, matte, no finishes; 2 Painted — full colour, satin (little
+// shine), no finishes; 3 Full — the pin as designed. 0 = not unlocked yet (a hole in the book).
+// Follows current progress: selling cards below a tier drops the pin back down.
+export type BadgeTier = 0 | 1 | 2 | 3
+export const DEFAULT_TIERS: [number, number, number] = [50, 75, 90]
+export const TIER_NAMES = ['Locked', 'Grayscale', 'Painted', 'Full'] as const
+export function badgeTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
+  const [have, total] = progress ?? [0, def.slots.length]
+  if (!total) return 0
+  const pct = (have / total) * 100
+  const [t1, t2, t3] = def.tiers ?? DEFAULT_TIERS
+  return pct >= t3 ? 3 : pct >= t2 ? 2 : pct >= t1 ? 1 : 0
+}
+/** How many more of the badge's slots unlock the next tier (0 at the top). */
+export function toNextTier(def: BadgeDef, progress: [number, number] | undefined): number {
+  const [have, total] = progress ?? [0, def.slots.length]
+  const tier = badgeTier(def, progress)
+  if (tier === 3 || !total) return 0
+  return Math.max(0, Math.ceil(((def.tiers ?? DEFAULT_TIERS)[tier] / 100) * total) - have)
+}
+
 export function isMastered(def: BadgeDef, progress: [number, number] | undefined, earned: boolean): boolean {
   return !!def.growing && earned && def.slots.length > 0 && (progress?.[0] ?? 0) >= def.slots.length && (progress?.[1] ?? 0) === def.slots.length
 }
