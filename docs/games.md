@@ -441,6 +441,11 @@ whole group list and skips the main sets' groups and any group a `tcgplayerOnly`
   (`components/admin/PlacementsReview.tsx`): move a card to any set, leave it out, start a new set,
   or approve. `POST /api/set-registry/placements` saves it and moves the catalog card at once
   (+ `regenerateSnapshot`). Dry run: `discoverRiftboundProducts(registry, gallery, undefined, { save: false })`.
+- **Deny / recover / rename:** a placement can be `denied` (hidden; it stays in `placements`, so
+  discovery never offers it again) and recovered into `previousSetName` or any set. `displayName`
+  is the name the website shows (`placementCard()` applies it every sync; default =
+  `placementDefaultName()`). A placement with no set that's already reviewed (old "Leave out")
+  counts as denied; an unreviewed one is "Couldn't place".
 - First run placed 172 backlog products (Organized Play, Promotional Cards, Judge groups).
 
 **Images:** `tcgPhoto(row)` — TCGplayer's CSV links a thumbnail even for products with

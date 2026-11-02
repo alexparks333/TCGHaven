@@ -1133,11 +1133,19 @@ function placedExtraCard(set, row, nameSuffix) {
 // A product the sync placed (or staff moved) via `riftbound.placements` — see
 // discoverRiftboundProducts(). Its id is `tcg-{productId}` whatever set it's in, so moving it
 // between sets in the staff portal keeps the same card (and every collector's link to it).
-function placementCard(set, row) {
-  if (set.tcgplayerOnly) return { ...tcgplayerOnlyCard(set, row), id: `tcg-${row.productId}` }
-  const base = row.name.replace(/\s*\([^)]*\)/g, '').trim()
-  const parens = [...row.name.matchAll(/\(([^)]*)\)/g)].map((m) => m[1].trim()).filter(Boolean)
-  return { ...placedExtraCard(set, row, parens.join(', ') || 'Promo'), id: `tcg-${row.productId}`, name: `${base} (${parens.join(', ') || 'Promo'})` }
+// `displayName` is a name staff gave it on Needs Review, which every sync keeps.
+export function placementDefaultName(tcgplayerName) {
+  const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
+  const parens = [...tcgplayerName.matchAll(/\(([^)]*)\)/g)].map((m) => m[1].trim()).filter(Boolean)
+  return `${base} (${parens.join(', ') || 'Promo'})`
+}
+
+function placementCard(set, row, displayName) {
+  const card = set.tcgplayerOnly
+    ? { ...tcgplayerOnlyCard(set, row), id: `tcg-${row.productId}` }
+    : { ...placedExtraCard(set, row, ''), id: `tcg-${row.productId}`, name: placementDefaultName(row.name) }
+  if (displayName) card.name = displayName
+  return card
 }
 
 function tcgplayerRowCache() {
@@ -1198,7 +1206,7 @@ async function fetchTcgplayerOnlyRiftboundSets({ sets, placements = [], allSets 
       const rows = new Map(oneRowPerProduct(await rowsOf(groupId)).map((r) => [r.productId, r]))
       const placedCards = list
         .filter((p) => rows.has(String(p.productId)))
-        .map((p) => placementCard(setByName.get(p.setName), rows.get(String(p.productId))))
+        .map((p) => placementCard(setByName.get(p.setName), rows.get(String(p.productId)), p.displayName))
       await borrowMissingPhotos(placedCards)
       cards.push(...placedCards)
       console.log(`   TCGCSV group ${groupId}: ${placedCards.length} placed cards`)
@@ -1691,7 +1699,8 @@ export async function downloadRiftbound() {
   } catch (err) {
     console.warn(`   ⚠️  Looking for new TCGplayer products failed: ${err.message}`)
   }
-  // A product staff left out (or the sync couldn't place) is hidden if it was ever a card.
+  // A product staff denied (or the sync couldn't place) is hidden if it was ever a card — and,
+  // being in `placements`, never offered again.
   const leftOutIds = (registry?.riftbound?.placements ?? []).filter((p) => !p.setName).map((p) => `tcg-${p.productId}`)
 
   useGalleryArtForPhotoless(tcgplayerOnlyCards, all)

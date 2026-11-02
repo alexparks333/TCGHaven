@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Check, Plus, X, ChevronLeft, ChevronRight, ExternalLink, EyeOff, FolderInput, Sparkles } from 'lucide-react'
+import { Loader2, Check, Plus, X, ChevronLeft, ChevronRight, ExternalLink, Ban, FolderInput, Sparkles, RotateCcw, Pencil } from 'lucide-react'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -23,6 +23,9 @@ interface Placement {
   setName: string | null
   auto: boolean
   reviewed: boolean
+  denied?: boolean
+  previousSetName?: string | null
+  displayName?: string
 }
 
 interface RegistrySet {
@@ -36,14 +39,16 @@ interface RegistryResponse {
 
 interface CatalogCard {
   id: string
+  name?: string
   imageUrl?: string
   marketPrice?: number
 }
 
-type Change = { productId: number; setName?: string | null; reviewed?: boolean }
+type Change = { productId: number; setName?: string | null; reviewed?: boolean; denied?: boolean; displayName?: string }
 
 const ALL = '__all__'
 const LEFT_OUT = '__left_out__'
+const DENIED = '__denied__'
 const ACCENT = '#b5532f' // Riftbound
 
 const tcgPhotoUrl = (productId: number) => `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`
@@ -51,6 +56,16 @@ const tcgPhotoUrl = (productId: number) => `https://tcgplayer-cdn.tcgplayer.com/
 const sourceLabel = (p: Placement) =>
   (p.groupName ?? '').replace(/^riftbound:?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
 const numberSortKey = (n: string) => parseInt(n.replace(/^\D+/, ''), 10) || 0
+// Denied = staff don't want the card (hidden, never re-added by a sync). A card left out before
+// Deny existed (no set, already reviewed) counts too; an unreviewed one with no set is one the
+// sync couldn't place.
+const isDenied = (p: Placement) => !!p.denied || (p.setName === null && p.reviewed)
+// Same as placementDefaultName() in catalog-sync.mjs
+export function defaultCardName(tcgplayerName: string): string {
+  const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
+  const parens = Array.from(tcgplayerName.matchAll(/\(([^)]*)\)/g)).map((m) => m[1].trim()).filter(Boolean)
+  return `${base} (${parens.join(', ') || 'Promo'})`
+}
 
 export function PlacementsReview() {
   const [registry, setRegistry] = useState<RegistryResponse['riftbound'] | null>(null)
@@ -96,15 +111,16 @@ export function PlacementsReview() {
 
   const pool = useMemo(
     () => placements
-      .filter((p) => showReviewed || !p.reviewed)
+      .filter((p) => !isDenied(p) && (showReviewed || !p.reviewed))
       .sort((a, b) =>
         (a.setName ? setOrder.get(a.setName) ?? 9e5 : -1) - (b.setName ? setOrder.get(b.setName) ?? 9e5 : -1)
         || numberSortKey(a.number) - numberSortKey(b.number)),
     [placements, showReviewed, setOrder],
   )
+  const deniedList = useMemo(() => placements.filter(isDenied).sort((a, b) => a.name.localeCompare(b.name)), [placements])
   const visible = useMemo(
-    () => (filter === ALL ? pool : pool.filter((p) => (p.setName ?? LEFT_OUT) === filter)),
-    [pool, filter],
+    () => (filter === ALL ? pool : filter === DENIED ? deniedList : pool.filter((p) => (p.setName ?? LEFT_OUT) === filter)),
+    [pool, filter, deniedList],
   )
   const counts = useMemo(() => {
     const m = new Map<string, number>()
@@ -125,6 +141,18 @@ export function PlacementsReview() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       setRegistry((r) => (r ? { ...r, placements: data.placements } : r))
+      const renamed = changes.filter((c) => c.displayName !== undefined)
+      if (renamed.length) {
+        setCards((m) => {
+          const next = new Map(m)
+          for (const c of renamed) {
+            const p = (data.placements as Placement[]).find((x) => x.productId === c.productId)
+            const card = next.get(`tcg-${c.productId}`)
+            if (p && card) next.set(card.id, { ...card, name: p.displayName ?? defaultCardName(p.name) })
+          }
+          return next
+        })
+      }
       return true
     } catch (err) {
       setError((err as Error).message)
@@ -179,7 +207,8 @@ export function PlacementsReview() {
     if (!focus) return
     // With reviewed cards hidden, the card leaves the list (its neighbour slides in); otherwise step on.
     const next = showReviewed ? visible[focusIndex + 1] ?? null : visible[focusIndex + 1] ?? visible[focusIndex - 1] ?? null
-    if (await save([{ productId: focus.productId, reviewed: true, ...change }])) setFocusId(next?.productId ?? null)
+    const base: Change = change.denied === false ? { productId: focus.productId } : { productId: focus.productId, reviewed: true }
+    if (await save([{ ...base, ...change }])) setFocusId(next?.productId ?? null)
   }
 
   if (loading) {
@@ -197,6 +226,7 @@ export function PlacementsReview() {
     ...(counts.has(LEFT_OUT) ? [{ key: LEFT_OUT, label: 'Couldn’t place', category: null as string | null }] : []),
     ...categories.flatMap((cat) => registry.sets.filter((s) => s.cardexGroup === cat && counts.has(s.setName)).map((s) => ({ key: s.setName, label: s.setName, category: cat as string | null }))),
   ]
+  const nameOf = (p: Placement) => cards.get(`tcg-${p.productId}`)?.name ?? p.displayName ?? defaultCardName(p.name)
   const imageOf = (p: Placement) => {
     const art = cards.get(`tcg-${p.productId}`)?.imageUrl
     return art || tcgPhotoUrl(p.productId)
@@ -253,6 +283,12 @@ export function PlacementsReview() {
                 />
               </div>
             ))}
+            {deniedList.length > 0 && (
+              <div className="contents lg:block">
+                <div className="hidden lg:block text-[10px] uppercase tracking-wider text-slate-500 px-2 pt-3 pb-1">Not used</div>
+                <DestinationButton active={filter === DENIED} onClick={() => setFilter(DENIED)} label="Denied" count={deniedList.length} muted />
+              </div>
+            )}
           </div>
         </aside>
 
@@ -260,8 +296,9 @@ export function PlacementsReview() {
         <div className="flex-1 min-w-0 p-4 md:p-5">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <h3 className="text-ink font-semibold">
-              {filter === ALL ? (showReviewed ? 'All cards' : 'Everything to review') : filter === LEFT_OUT ? 'Couldn’t place — left out' : filter}
+              {filter === ALL ? (showReviewed ? 'All cards' : 'Everything to review') : filter === LEFT_OUT ? 'Couldn’t place' : filter === DENIED ? 'Denied cards' : filter}
             </h3>
+            {filter === DENIED && <span className="text-xs text-slate-500">— hidden from the site, and syncs won’t add them back. Recover any you want after all.</span>}
             <span className="text-xs text-slate-500">{visible.length} card{visible.length === 1 ? '' : 's'}</span>
             {visible.length > 0 && (
               <div className="ml-auto flex items-center gap-2">
@@ -271,14 +308,30 @@ export function PlacementsReview() {
                 >
                   {selected.size === visible.length ? 'Clear selection' : 'Select all'}
                 </button>
-                {visible.some((p) => !p.reviewed) && (
+                {filter === DENIED ? (
                   <button
                     disabled={busy}
-                    onClick={() => bulk(visible.filter((p) => !p.reviewed).map((p) => ({ productId: p.productId, reviewed: true })))}
+                    onClick={() => bulk(visible.map((p) => ({ productId: p.productId, denied: false })))}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 text-ink hover:bg-slate-700 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <RotateCcw size={13} /> Recover all ({visible.length})
+                  </button>
+                ) : filter === LEFT_OUT ? (
+                  <button
+                    disabled={busy}
+                    onClick={() => bulk(visible.map((p) => ({ productId: p.productId, denied: true })))}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Ban size={13} /> Deny all ({visible.length})
+                  </button>
+                ) : visible.some((p) => !p.reviewed && p.setName) && (
+                  <button
+                    disabled={busy}
+                    onClick={() => bulk(visible.filter((p) => !p.reviewed && p.setName).map((p) => ({ productId: p.productId, reviewed: true })))}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
                     style={{ background: ACCENT }}
                   >
-                    <Check size={13} /> All look right ({visible.filter((p) => !p.reviewed).length})
+                    <Check size={13} /> All look right ({visible.filter((p) => !p.reviewed && p.setName).length})
                   </button>
                 )}
               </div>
@@ -288,8 +341,8 @@ export function PlacementsReview() {
           {visible.length === 0 ? (
             <div className="py-20 text-center">
               <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: `${ACCENT}22`, color: ACCENT }}><Check size={22} /></div>
-              <div className="text-ink font-semibold">All caught up</div>
-              <div className="text-sm text-slate-400 mt-1">Nothing left to review here.</div>
+              <div className="text-ink font-semibold">{filter === DENIED ? 'No denied cards' : 'All caught up'}</div>
+              <div className="text-sm text-slate-400 mt-1">{filter === DENIED ? 'Cards you deny show up here, ready to recover.' : 'Nothing left to review here.'}</div>
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(150px,1fr))]">
@@ -297,6 +350,8 @@ export function PlacementsReview() {
                 <CardTile
                   key={p.productId}
                   placement={p}
+                  name={nameOf(p)}
+                  denied={isDenied(p)}
                   image={cardImage(imageOf(p), 'grid') ?? imageOf(p)}
                   price={cards.get(`tcg-${p.productId}`)?.marketPrice}
                   selected={selected.has(p.productId)}
@@ -306,6 +361,7 @@ export function PlacementsReview() {
                   onToggle={() => toggle(p.productId)}
                   onOpen={() => setFocusId(p.productId)}
                   onApprove={() => save([{ productId: p.productId, reviewed: true }])}
+                  onRecover={() => save([{ productId: p.productId, denied: false }])}
                 />
               ))}
             </div>
@@ -317,9 +373,15 @@ export function PlacementsReview() {
       {selected.size > 0 && createPortal(
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-2xl bg-[#2a2018] text-[#f3e8d2] shadow-2xl px-3 py-2 border border-black/20">
           <span className="text-sm font-semibold px-2 whitespace-nowrap">{selected.size} selected</span>
-          <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, reviewed: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" style={{ background: ACCENT }}>
-            <Check size={13} /> Looks right
-          </button>
+          {filter === DENIED ? (
+            <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, denied: false })))} className="text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" style={{ background: ACCENT }}>
+              <RotateCcw size={13} /> Recover
+            </button>
+          ) : (
+            <button disabled={busy} onClick={() => bulk(placements.filter((p) => selected.has(p.productId) && p.setName).map((p) => ({ productId: p.productId, reviewed: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" style={{ background: ACCENT }}>
+              <Check size={13} /> Looks right
+            </button>
+          )}
           <div className="relative">
             <button disabled={busy} onClick={() => setMoveMenu((v) => !v)} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
               <FolderInput size={13} /> Move to…
@@ -328,15 +390,17 @@ export function PlacementsReview() {
               <SetMenu
                 categories={categories}
                 sets={registry.sets}
-                onPick={(setName) => bulk(selectedIds.map((productId) => ({ productId, setName, reviewed: true })))}
+                onPick={(setName: string) => bulk(selectedIds.map((productId) => (filter === DENIED ? { productId, denied: false, setName } : { productId, setName, reviewed: true })))}
                 onNewSet={() => { setMoveMenu(false); setNewSetFor(selectedIds) }}
                 onClose={() => setMoveMenu(false)}
               />
             )}
           </div>
-          <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, setName: null, reviewed: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
-            <EyeOff size={13} /> Leave out
-          </button>
+          {filter !== DENIED && (
+            <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, denied: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-500/80 hover:bg-red-500 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
+              <Ban size={13} /> Deny
+            </button>
+          )}
           <button onClick={() => setSelected(new Set())} title="Clear selection" className="p-2 rounded-xl hover:bg-white/10"><X size={14} /></button>
         </div>,
         document.body,
@@ -345,6 +409,8 @@ export function PlacementsReview() {
       {focus && (
         <FocusViewer
           placement={focus}
+          name={nameOf(focus)}
+          denied={isDenied(focus)}
           index={focusIndex}
           total={visible.length}
           image={imageOf(focus)}
@@ -356,7 +422,10 @@ export function PlacementsReview() {
           onPrev={() => focusIndex > 0 && setFocusId(visible[focusIndex - 1].productId)}
           onNext={() => focusIndex < visible.length - 1 && setFocusId(visible[focusIndex + 1].productId)}
           onApprove={() => actOnFocus({})}
-          onMove={(setName) => actOnFocus({ setName })}
+          onMove={(setName) => actOnFocus(isDenied(focus) ? { denied: false, setName } : { setName })}
+          onDeny={() => actOnFocus({ denied: true })}
+          onRecover={() => actOnFocus({ denied: false })}
+          onRename={(displayName) => save([{ productId: focus.productId, displayName }])}
           onNewSet={() => setNewSetFor([focus.productId])}
         />
       )}
@@ -373,13 +442,13 @@ export function PlacementsReview() {
   )
 }
 
-function DestinationButton({ active, onClick, label, count, warn }: { active: boolean; onClick: () => void; label: string; count: number; warn?: boolean }) {
+function DestinationButton({ active, onClick, label, count, warn, muted }: { active: boolean; onClick: () => void; label: string; count: number; warn?: boolean; muted?: boolean }) {
   return (
     <button
       onClick={onClick}
       className={cn(
         'shrink-0 lg:w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-sm text-left transition-colors',
-        active ? 'text-white shadow-sm' : warn ? 'text-amber-700 hover:bg-amber-100/50' : 'text-slate-300 hover:bg-slate-800/60',
+        active ? 'text-white shadow-sm' : warn ? 'text-amber-700 hover:bg-amber-100/50' : muted ? 'text-slate-500 hover:bg-slate-800/60' : 'text-slate-300 hover:bg-slate-800/60',
       )}
       style={active ? { background: ACCENT } : undefined}
     >
@@ -390,9 +459,11 @@ function DestinationButton({ active, onClick, label, count, warn }: { active: bo
 }
 
 function CardTile({
-  placement: p, image, price, selected, selecting, busy, showSet, onToggle, onOpen, onApprove,
+  placement: p, name, denied, image, price, selected, selecting, busy, showSet, onToggle, onOpen, onApprove, onRecover,
 }: {
   placement: Placement
+  name: string
+  denied: boolean
   image: string
   price?: number
   selected: boolean
@@ -402,6 +473,7 @@ function CardTile({
   onToggle: () => void
   onOpen: () => void
   onApprove: () => void
+  onRecover: () => void
 }) {
   return (
     <div className="group">
@@ -414,11 +486,16 @@ function CardTile({
         style={selected ? { boxShadow: `0 0 0 3px #efe4cc, 0 0 0 6px ${ACCENT}` } : undefined}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={image} alt={p.name} loading="lazy" className={cn('w-full h-full object-cover', p.reviewed && 'opacity-60')} />
+        <img src={image} alt={name} loading="lazy" className={cn('w-full h-full object-cover', denied ? 'grayscale opacity-50' : p.reviewed && 'opacity-60')} />
         <span className="absolute left-1.5 bottom-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-sm">
           {sourceLabel(p)}
         </span>
-        {p.reviewed && (
+        {denied && (
+          <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
+            <span className="px-2.5 py-1 rounded-full bg-red-700/90 text-white text-[11px] font-bold uppercase tracking-wide flex items-center gap-1 shadow"><Ban size={11} /> Denied</span>
+          </span>
+        )}
+        {p.reviewed && !denied && (
           <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <span className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg" style={{ background: ACCENT }}><Check size={20} /></span>
           </span>
@@ -436,8 +513,19 @@ function CardTile({
         >
           <Check size={14} />
         </button>
+        {/* Quick recover */}
+        {denied && !selecting && (
+          <button
+            disabled={busy}
+            onClick={(e) => { e.stopPropagation(); onRecover() }}
+            title="Recover — use this card after all"
+            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
+          >
+            <RotateCcw size={12} /> Recover
+          </button>
+        )}
         {/* Quick approve */}
-        {!p.reviewed && !selecting && (
+        {!p.reviewed && !denied && !!p.setName && !selecting && (
           <button
             disabled={busy}
             onClick={(e) => { e.stopPropagation(); onApprove() }}
@@ -450,9 +538,11 @@ function CardTile({
         )}
       </div>
       <div className="mt-2 px-0.5">
-        <div className="text-sm font-medium text-ink leading-tight line-clamp-2">{p.name}</div>
+        <div className="text-sm font-medium text-ink leading-tight line-clamp-2" title={name}>
+          {name}{p.displayName && <Pencil size={10} className="inline ml-1 text-slate-500" />}
+        </div>
         <div className="flex items-center justify-between gap-2 mt-0.5 text-[11px] text-slate-500">
-          <span className="truncate">{p.number}{showSet ? ` · ${p.setName ?? 'Left out'}` : ''}</span>
+          <span className="truncate">{p.number}{denied && p.previousSetName ? ` · was ${p.previousSetName}` : showSet ? ` · ${p.setName ?? 'Couldn’t place'}` : ''}</span>
           {!!price && <span className="font-semibold text-slate-400 shrink-0">{formatCurrency(price)}</span>}
         </div>
       </div>
@@ -463,7 +553,7 @@ function CardTile({
 // Pick a set: categories as headings, sets as buttons.
 function SetChoices({
   categories, sets, current, busy, onPick, onNewSet,
-}: { categories: string[]; sets: RegistrySet[]; current?: string | null; busy?: boolean; onPick: (setName: string | null) => void; onNewSet: () => void }) {
+}: { categories: string[]; sets: RegistrySet[]; current?: string | null; busy?: boolean; onPick: (setName: string) => void; onNewSet: () => void }) {
   return (
     <div className="space-y-3">
       {categories.map((cat) => {
@@ -495,13 +585,6 @@ function SetChoices({
         <button disabled={busy} onClick={onNewSet} className="text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-slate-600 text-slate-300 hover:text-ink flex items-center gap-1 disabled:opacity-50">
           <Plus size={12} /> New set…
         </button>
-        <button
-          disabled={busy}
-          onClick={() => onPick(null)}
-          className={cn('text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1 disabled:opacity-50', current === null ? 'bg-amber-600 text-white border-transparent' : 'border-slate-700 text-amber-700 hover:border-amber-500')}
-        >
-          <EyeOff size={12} /> Leave out
-        </button>
       </div>
     </div>
   )
@@ -509,7 +592,7 @@ function SetChoices({
 
 function SetMenu({
   categories, sets, onPick, onNewSet, onClose,
-}: { categories: string[]; sets: RegistrySet[]; onPick: (setName: string | null) => void; onNewSet: () => void; onClose: () => void }) {
+}: { categories: string[]; sets: RegistrySet[]; onPick: (setName: string) => void; onNewSet: () => void; onClose: () => void }) {
   return (
     <>
       <div className="fixed inset-0" onClick={onClose} />
@@ -522,9 +605,11 @@ function SetMenu({
 }
 
 function FocusViewer({
-  placement: p, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onApprove, onMove, onNewSet,
+  placement: p, name, denied, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onApprove, onMove, onNewSet, onDeny, onRecover, onRename,
 }: {
   placement: Placement
+  name: string
+  denied: boolean
   index: number
   total: number
   image: string
@@ -536,14 +621,17 @@ function FocusViewer({
   onPrev: () => void
   onNext: () => void
   onApprove: () => void
-  onMove: (setName: string | null) => void
+  onMove: (setName: string) => void
   onNewSet: () => void
+  onDeny: () => void
+  onRecover: () => void
+  onRename: (displayName: string) => void
 }) {
   const [tcgOk, setTcgOk] = useState(true)
   useEffect(() => setTcgOk(true), [p.productId])
   // Latest handlers for the one window key listener
-  const keys = useRef({ onClose, onPrev, onNext, onApprove, busy })
-  keys.current = { onClose, onPrev, onNext, onApprove, busy }
+  const keys = useRef({ onClose, onPrev, onNext, onApprove: denied ? onRecover : onApprove, busy })
+  keys.current = { onClose, onPrev, onNext, onApprove: denied ? onRecover : onApprove, busy }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select')) return
@@ -565,7 +653,7 @@ function FocusViewer({
       <div className="relative w-full max-w-4xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-[#f3e8d2] shadow-2xl border border-[#d6c49f]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#d6c49f]/70 text-xs text-slate-500">
           <span>Card {index + 1} of {total}</span>
-          <span className="hidden sm:inline">Enter = looks right · ← → to browse · Esc to close</span>
+          <span className="hidden sm:inline">Enter = {denied ? 'recover' : 'looks right'} · ← → to browse · Esc to close</span>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/5 text-slate-500"><X size={16} /></button>
         </div>
 
@@ -574,7 +662,7 @@ function FocusViewer({
           <div className="flex items-start justify-center gap-3">
             <div className="flex-1 max-w-[280px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cardImage(image, 'full') ?? image} alt={p.name} className="w-full aspect-[5/7] object-cover rounded-2xl shadow-[0_18px_40px_-14px_rgba(60,40,20,0.6)]" />
+              <img src={cardImage(image, 'full') ?? image} alt={name} className={cn('w-full aspect-[5/7] object-cover rounded-2xl shadow-[0_18px_40px_-14px_rgba(60,40,20,0.6)]', denied && 'grayscale opacity-60')} />
               <div className="text-[11px] text-slate-500 text-center mt-2">{artIsTcgPhoto ? 'TCGplayer photo' : 'Card art (from Riot)'}</div>
             </div>
             {!artIsTcgPhoto && (
@@ -594,7 +682,7 @@ function FocusViewer({
           {/* Details + decision */}
           <div className="min-w-0 flex flex-col">
             <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: ACCENT }}>{sourceLabel(p)}</div>
-            <h3 className="text-2xl font-bold text-ink leading-tight mt-1">{p.name}</h3>
+            <NameEditor key={p.productId} name={name} tcgplayerName={p.name} custom={!!p.displayName} busy={busy} onSave={onRename} />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500 mt-1.5">
               <span>#{p.number}</span>
               {!!price && <span className="font-semibold text-ink">{formatCurrency(price)}</span>}
@@ -603,22 +691,50 @@ function FocusViewer({
               </a>
             </div>
 
-            <div className="mt-5 rounded-2xl bg-white/40 border border-[#d6c49f]/70 p-4">
-              <div className="text-xs text-slate-500 mb-1">{p.auto ? 'The sync put it in' : 'Placed in'}</div>
-              <div className="text-lg font-semibold text-ink mb-4">{p.setName ?? 'Nowhere — left out'}</div>
-              <button
-                disabled={busy}
-                onClick={onApprove}
-                className="w-full py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60"
-                style={{ background: ACCENT }}
-              >
-                {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Looks right
-              </button>
-            </div>
+            {denied ? (
+              <div className="mt-5 rounded-2xl bg-red-50/60 border border-red-200 p-4">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 mb-1"><Ban size={12} /> Denied</div>
+                <div className="text-sm text-slate-600 mb-4">Hidden from the site, and syncs won’t add it back.</div>
+                <button
+                  disabled={busy}
+                  onClick={onRecover}
+                  className="w-full py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60"
+                  style={{ background: ACCENT }}
+                >
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                  Recover{p.previousSetName ? ` into ${p.previousSetName}` : ''}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-2xl bg-white/40 border border-[#d6c49f]/70 p-4">
+                <div className="text-xs text-slate-500 mb-1">{p.auto ? 'The sync put it in' : 'Placed in'}</div>
+                <div className="text-lg font-semibold text-ink mb-4">{p.setName ?? 'Nowhere yet — the sync couldn’t place it'}</div>
+                <div className="flex gap-2">
+                  {p.setName && (
+                    <button
+                      disabled={busy}
+                      onClick={onApprove}
+                      className="flex-1 py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60"
+                      style={{ background: ACCENT }}
+                    >
+                      {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Looks right
+                    </button>
+                  )}
+                  <button
+                    disabled={busy}
+                    onClick={onDeny}
+                    title="Don't use this card — hidden, and syncs won't add it back"
+                    className={cn('py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-60', !p.setName && 'flex-1')}
+                  >
+                    <Ban size={16} /> Deny
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-5">
-              <div className="text-xs text-slate-500 mb-2">Or move it to</div>
-              <SetChoices categories={categories} sets={sets} current={p.setName} busy={busy} onPick={onMove} onNewSet={onNewSet} />
+              <div className="text-xs text-slate-500 mb-2">{denied ? 'Or recover it into' : 'Or move it to'}</div>
+              <SetChoices categories={categories} sets={sets} current={denied ? undefined : p.setName} busy={busy} onPick={onMove} onNewSet={onNewSet} />
             </div>
           </div>
         </div>
@@ -628,6 +744,54 @@ function FocusViewer({
       </div>
     </div>,
     document.body,
+  )
+}
+
+// The name the website shows for this card — click to edit; empty / "Reset" goes back to the
+// name built from TCGplayer's.
+function NameEditor({
+  name, tcgplayerName, custom, busy, onSave,
+}: { name: string; tcgplayerName: string; custom: boolean; busy: boolean; onSave: (displayName: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(name)
+  useEffect(() => { if (!editing) setValue(name) }, [name, editing])
+  const commit = () => {
+    setEditing(false)
+    if (value.trim() !== name) onSave(value.trim())
+  }
+  if (editing) {
+    return (
+      <div className="mt-1">
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation() // keep Enter / arrows / Esc away from the viewer's shortcuts
+            if (e.key === 'Enter') commit()
+            if (e.key === 'Escape') { setValue(name); setEditing(false) }
+          }}
+          onBlur={commit}
+          className="input-field !text-xl !font-bold"
+        />
+        <div className="text-[11px] text-slate-500 mt-1">The name shown on the website. Enter to save, Esc to cancel. Leave empty for the default.</div>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-1">
+      <button disabled={busy} onClick={() => setEditing(true)} className="group/name text-left w-full" title="Rename — how it shows on the website">
+        <h3 className="text-2xl font-bold text-ink leading-tight inline">{name}</h3>
+        <Pencil size={14} className="inline ml-2 -mt-1 text-slate-400 group-hover/name:text-ink" />
+      </button>
+      <div className="text-[11px] text-slate-500 mt-0.5">
+        {custom ? (
+          <>Renamed · TCGplayer calls it “{tcgplayerName}” · <button disabled={busy} onClick={() => onSave('')} className="underline hover:text-ink">Reset</button></>
+        ) : (
+          <>TCGplayer calls it “{tcgplayerName}”</>
+        )}
+      </div>
+    </div>
   )
 }
 

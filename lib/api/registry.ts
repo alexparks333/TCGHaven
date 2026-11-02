@@ -76,6 +76,12 @@ export interface RiftboundPlacement {
   auto: boolean    // still the sync's guess (false once staff chose)
   reviewed: boolean
   addedAt: string
+  // Staff said "don't use this card": hidden, and syncs never add it back. Recoverable from the
+  // Denied list, back into `previousSetName` (where it was) unless staff pick another set.
+  denied?: boolean
+  previousSetName?: string | null
+  // The name the website shows, set by staff; otherwise it's built from TCGplayer's name.
+  displayName?: string
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching
