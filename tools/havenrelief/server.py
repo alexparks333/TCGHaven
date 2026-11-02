@@ -7,6 +7,8 @@ kit back (see havenrelief.py for what's in it). Runs on the machine with the GPU
 
   GET  /health                -> { ok, device, version }
   POST /analyze?quality=high  body: the image file -> { meta, files: { "layers.png": base64, ... } }
+  POST /normals?quality=high  body: a kit's art.webp -> just { normal.png, detail.png } again
+                              (&alpha=0: ignore the art's transparency, cut out only the white around it)
 
 Every analysis is kept in cache/ by the image's exact bytes + quality: the same art again is
 answered instantly from disk — and it's saved before it's sent, so an analysis whose page was
@@ -72,8 +74,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         url = urlparse(self.path)
-        if url.path != "/analyze":
+        if url.path not in ("/analyze", "/normals"):
             return self.reply(404, {"error": "not found"})
+        just_normals = url.path == "/normals"
         if self.headers.get("Origin") and self.headers.get("Origin") not in ORIGINS:
             return self.reply(403, {"error": "origin not allowed"})
         size = int(self.headers.get("Content-Length") or 0)
@@ -82,8 +85,9 @@ class Handler(BaseHTTPRequestHandler):
         quality = parse_qs(url.query).get("quality", ["normal"])[0]
         if quality not in hr.QUALITY:
             return self.reply(400, {"error": f"quality must be one of {list(hr.QUALITY)}"})
+        use_alpha = parse_qs(url.query).get("alpha", ["1"])[0] != "0"
         data = self.rfile.read(size)
-        cached = os.path.join(CACHE, f"{hashlib.sha256(data).hexdigest()}-{quality}-v{hr.KIT_VERSION}.json")
+        cached = os.path.join(CACHE, f"{hashlib.sha256(data).hexdigest()}-{quality}{'' if use_alpha else '-noalpha'}{'-normals' if just_normals else ''}-v{hr.KIT_VERSION}r{hr.ANALYSIS_REV}.json")
         if os.path.exists(cached):
             hr.log("same art as before: answered from the cache")
             with open(cached, encoding="utf-8") as f:
@@ -99,15 +103,19 @@ class Handler(BaseHTTPRequestHandler):
                     with open(cached, encoding="utf-8") as f:
                         return self.reply(200, json.load(f))
                 t0 = time.time()
-                img, on_white, mask = hr.prepare(src)
-                layers, detail, normals, pieces = hr.analyze(models, img, mask, quality)
-                images, meta = hr.kit_images(on_white, mask, layers, detail, normals, pieces)
+                img, on_white, mask = hr.prepare(src, use_alpha)
+                if just_normals:
+                    hr.log("normals again (Marigold)")
+                    images, meta = hr.renormal(models, img, mask, quality), {"version": hr.KIT_VERSION, "size": hr.MAX_SIDE}
+                else:
+                    layers, detail, normals, pieces = hr.analyze(models, img, mask, quality)
+                    images, meta = hr.kit_images(on_white, mask, layers, detail, normals, pieces)
             files = {}
             for name, im in images.items():
                 buf = io.BytesIO()
                 hr.save_image(im, buf, name)
                 files[name] = base64.b64encode(buf.getvalue()).decode()
-            hr.log(f"analyzed in {time.time() - t0:.0f}s ({meta['pieces']} pieces)")
+            hr.log(f"{'normals' if just_normals else 'analyzed'} in {time.time() - t0:.0f}s" + (f" ({meta['pieces']} pieces)" if 'pieces' in meta else ''))
             body = {"meta": meta, "files": files}
             os.makedirs(CACHE, exist_ok=True)
             with open(cached + ".tmp", "w", encoding="utf-8") as f:

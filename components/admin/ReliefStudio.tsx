@@ -1,22 +1,23 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffStorage } from '@/lib/firebase/staff'
 import type { BadgeDef } from '@/lib/badges'
 import {
-  FINISHES, FINISH_HOLE, LENTICULAR_MAX_PER_SET, LENTICULAR_MAX_SETS, LENTICULAR_MAX_TOTAL, RELIEF_SERVER, lenticularPictures,
-  type LenticularSet, analyzeArt, compose, finishMap, finishPng, heightPng, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
+  BASE_FINISH_IDS, DETAILS, FINISHES, FINISH_HOLE, LENTICULAR_MAX_PER_SET, LENTICULAR_MAX_SETS, LENTICULAR_MAX_TOTAL, RELIEF_SERVER, lenticularPictures,
+  DEFAULT_METAL, layerLook, withFinishLayers, type FinishLayer,
+  type DetailKind, type LenticularSet, analyzeArt, recalculateNormals, compose, detailMap, finishMap, finishPng, heightPng, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
   type Composed, type ReliefKit, type ReliefSettings,
 } from '@/lib/reliefStudio'
-import { cleanRelief, type LiveRelief } from '@/components/badges/pinRelief'
+import { HOLE_SMOOTH, cleanRelief, disposeRelief, type LiveRelief } from '@/components/badges/pinRelief'
 
 // Staff portal → Badges → edit badge → Relief Studio. Uploading pin art in the editor already sent
 // it to the HavenRelief analysis server (tools/havenrelief/server.py — the GPU PC for now, a cloud
@@ -25,11 +26,11 @@ import { cleanRelief, type LiveRelief } from '@/components/badges/pinRelief'
 // switched off), softness, depth, detail, gold walls, and per piece (click one on the pin) raise /
 // lower / flatten / smooth edges; and on the Material tab, each piece's finish (gold, gemstone,
 // holo, lenticular… or a hole right through the pin). "Use this relief" bakes the height and finish
-// maps and hands the badge editor its new imageUrl / depthMapUrl / normalMapUrl / finishMapUrl /
+// maps and hands the badge editor its new imageUrl / depthMapUrl / normalMapUrl / finishMapUrl / detailMapUrl /
 // reliefKit / relief — saved with the badge.
 
 const PREVIEW_GRID = 512
-type View = 'art' | 'pieces' | 'levels'
+type View = 'art' | 'pieces' | 'levels' | 'normals'
 // Level colours, lowest → highest (the Levels view and the levels list)
 const LEVEL_COLORS = ['#3b4cc0', '#2f8fd8', '#25b8a6', '#7cc54a', '#e3c735', '#f08a2c', '#e0453a', '#c2307f']
 
@@ -40,8 +41,10 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
 }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const stage = useRef<Stage | null>(null)
-  // Unsaved work from an earlier visit (this computer) wins over what the badge has saved
-  const [draft] = useState(() => readDraft(badge.id))
+  // Unsaved work from an earlier visit (this computer) wins over what the badge has saved — but only
+  // work on this same art: a new picture (or another new badge) starts fresh
+  const [base] = useState(() => draftBase(badge))
+  const [draft] = useState(() => readDraft(badge.id, base, badge.reliefKit?.['art.webp']))
   const restored = !!draft && (draft.kit['art.webp'] !== badge.reliefKit?.['art.webp'] || JSON.stringify(draft.settings) !== JSON.stringify(reliefSettings(badge.relief)))
   const [kitUrls, setKitUrls] = useState<Record<string, string> | null>(restored ? draft!.kit : badge.reliefKit ?? null)
   const [kit, setKit] = useState<ReliefKit | null>(null)
@@ -73,14 +76,21 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     }
     setSelected(id); setOthers([]); anchor.current = id
   }
-  const [tab, setTab] = useState<'relief' | 'material'>('relief')
+  const [tab, setTab] = useState<'global' | 'relief' | 'material' | 'normals'>('relief')
   const [view, setView] = useState<View>('art')
+  // The Normals tab shows the normal map on the pin; leaving it goes back to the art
+  const openTab = (t: typeof tab) => {
+    setTab(t)
+    if (t === 'normals') setView('normals')
+    else if (view === 'normals') setView('art')
+  }
   const [showSelection, setShowSelection] = useState(true) // the selected piece's tint (H)
-  const [hovered, setHovered] = useState(0) // a layer row under the mouse — lit up on the pin
-  const [layers, setLayers] = useState<Layer[]>([])
-  const [layerFilter, setLayerFilter] = useState<'all' | 'finished'>('all')
-  const [original, setOriginal] = useState(false) // Material properties' Finished / Original: the selected layer without its finish
-  const layerRows = useRef<Record<number, HTMLDivElement | null>>({})
+  const [hoverPieces, setHoverPieces] = useState<number[]>([]) // a layer row under the mouse — its pieces lit up on the pin
+  const [layers, setLayers] = useState<Layer[]>([]) // every piece, with a thumbnail (the layer rows show their first piece's)
+  const [original, setOriginal] = useState(false) // the Material tab's Finished / Original: the active layer without its look
+  // The Material tab's layer being edited (settings.finishLayers)
+  const [activeLayer, setActiveLayer] = useState<string | null>(null)
+  const cur = settings.finishLayers.find((l) => l.id === activeLayer) ?? null
   const [status, setStatus] = useState<string | null>(null) // what it's busy doing
   const [error, setError] = useState('')
   const [server, setServer] = useState<boolean | null>(null)
@@ -88,34 +98,39 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
   const fileInput = useRef<HTMLInputElement>(null)
   const set = (p: Partial<ReliefSettings>) => setSettings((s) => ({ ...s, ...p }))
 
-  // Undo / redo (Ctrl/⌘+Z; Ctrl+X, Ctrl+Y or Ctrl+Shift+Z): the settings as they were, one step per
-  // change — a slider drag settles into a single step after a short pause
-  const history = useRef<{ past: ReliefSettings[]; future: ReliefSettings[]; committed: ReliefSettings | null; timer: number; restoring: boolean }>(
+  // Undo / redo (Ctrl/⌘+Z; Ctrl+X, Ctrl+Y or Ctrl+Shift+Z): the settings and the selection as they
+  // were, one step per change — a slider drag or a brush stroke settles into a single step after a
+  // short pause
+  type Step = { settings: ReliefSettings; selected: number; others: number[] }
+  const now = useMemo<Step>(() => ({ settings, selected, others }), [settings, selected, others])
+  const history = useRef<{ past: Step[]; future: Step[]; committed: Step | null; timer: number; restoring: boolean }>(
     { past: [], future: [], committed: null, timer: 0, restoring: false })
   useEffect(() => {
     const h = history.current
-    if (!h.committed) { h.committed = settings; return }
-    if (h.restoring) { h.restoring = false; h.committed = settings; return }
+    if (!h.committed) { h.committed = now; return }
+    if (h.restoring) { h.restoring = false; h.committed = now; return }
     window.clearTimeout(h.timer)
     h.timer = window.setTimeout(() => {
-      if (h.committed === settings) return
+      if (h.committed === now) return
       h.past.push(h.committed!)
       if (h.past.length > 100) h.past.shift()
       h.future = []
-      h.committed = settings
+      h.committed = now
     }, 350)
-  }, [settings])
+  }, [now])
   const undoRedo = useRef((redo: boolean) => {})
   undoRedo.current = (redo: boolean) => {
     const h = history.current
     // a change still settling counts as a step of its own first
-    if (h.timer && h.committed !== settings) { window.clearTimeout(h.timer); h.past.push(h.committed!); h.future = []; h.committed = settings }
+    if (h.timer && h.committed !== now) { window.clearTimeout(h.timer); h.past.push(h.committed!); h.future = []; h.committed = now }
     const from = redo ? h.future : h.past, to = redo ? h.past : h.future
     const next = from.pop()
     if (!next) return
-    to.push(settings)
+    to.push(now)
     h.restoring = true
-    setSettings(next)
+    setSettings(next.settings)
+    setSelected(next.selected)
+    setOthers(next.others)
   }
 
   useEffect(() => {
@@ -155,7 +170,7 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
 
   // Every change is kept on this computer until it's saved with the badge — closing the Studio or
   // a page reload never loses a relief
-  useEffect(() => { if (kitUrls) writeDraft(badge.id, { kit: kitUrls, settings }) }, [badge.id, kitUrls, settings])
+  useEffect(() => { if (kitUrls) writeDraft(badge.id, { kit: kitUrls, settings, base }) }, [badge.id, kitUrls, settings, base])
   function discardDraft() {
     clearDraft(badge.id)
     setShowRestored(false)
@@ -169,9 +184,9 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
   const pickRef = useRef(pick)
   pickRef.current = pick
 
-  // The selection brush: hold Tab over the pin and the cursor becomes a circle — every piece it
-  // passes over joins the selection (with Alt held: leaves it). Scroll or [ ] while holding Tab
-  // resizes it. Turning the pin pauses while Tab is down so the mouse is free to paint.
+  // The selection brush: hold Tab over the pin and the cursor becomes a circle; click and drag to
+  // paint — every piece it passes over joins the selection (with Alt held: leaves it). Scroll or
+  // [ ] while holding Tab resizes it. Turning the pin (and click-to-pick) pause while Tab is down.
   const [brush, setBrush] = useState<{ on: boolean; x: number; y: number; r: number; inside: boolean }>({ on: false, x: 0, y: 0, r: 28, inside: false })
   const brushRef = useRef(brush)
   brushRef.current = brush
@@ -247,19 +262,28 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     if (kit && ready) stage.current?.relook(settings)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kit, ready, settings.depth, settings.wall])
+  useEffect(() => { if (kit && ready) stage.current?.normalStrength(settings.normalStrength) }, [kit, ready, settings.normalStrength])
   useEffect(() => {
-    if (kit && ready) stage.current?.highlight(kit, hovered ? [hovered] : showSelection ? selection : [])
+    if (kit && ready) stage.current?.highlight(kit, hoverPieces.length ? hoverPieces : showSelection ? selection : [])
     // selection is derived from selected + others
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kit, ready, selected, others, showSelection, hovered])
+  }, [kit, ready, selected, others, showSelection, hoverPieces])
   useEffect(() => {
     if (!kit) return
     let gone = false
     buildLayers(kit).then((l) => { if (!gone) setLayers(l) })
     return () => { gone = true }
   }, [kit])
-  useEffect(() => { layerRows.current[selected]?.scrollIntoView({ block: 'nearest' }) }, [selected, tab])
-  useEffect(() => { setOriginal(false) }, [selected, others])
+  useEffect(() => { setOriginal(false) }, [activeLayer])
+  // Clicking a piece of the pin that's in a layer opens that layer
+  useEffect(() => {
+    const l = tab === 'material' && selected ? settings.finishLayers.find((x) => x.pieces.includes(selected)) : null
+    if (l) setActiveLayer(l.id)
+    // only when the clicked piece changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected])
+  // The Global tab's metal
+  useEffect(() => { if (kit && ready) stage.current?.metal(settings.metalColor, settings.metalRough) }, [kit, ready, settings.metalColor, settings.metalRough])
   const artUrl = kitUrls?.['art.webp']
   useEffect(() => {
     if (kit && ready) stage.current?.lenticular(lenticularPictures(settings, artUrl).map((set) => set.map((u) => badgeAsset(u)!)))
@@ -270,30 +294,23 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
   // The Lenticular finish's picture sets (each layer picks one); pictures upload straight away
   const frameInput = useRef<HTMLInputElement>(null)
   const [uploadingFrames, setUploadingFrames] = useState(false)
-  const lentSetIndex = Math.min(settings.lenticularSets.length - 1, Math.max(0, settings.finishOpts[selected]?.set ?? 0))
+  const lentSetIndex = Math.min(settings.lenticularSets.length - 1, Math.max(0, cur?.details.lenticular?.set ?? 0))
   const lentSet = settings.lenticularSets[lentSetIndex]
   const lentTotal = lenticularPictures(settings, artUrl).reduce((n, s) => n + s.length, 0)
   const setLentSet = (i: number, patch: Partial<LenticularSet>) =>
     setSettings((s) => ({ ...s, lenticularSets: s.lenticularSets.map((x, j) => (j === i ? { ...x, ...patch } : x)) }))
-  const chooseLentSet = (i: number) => setOpt('set', i)
+  const chooseLentSet = (i: number) => setDetailParam('lenticular', 'set', i)
   function newLentSet() {
     const i = settings.lenticularSets.length
-    setSettings((s) => ({
-      ...s,
-      lenticularSets: [...s.lenticularSets, { name: `Set ${i + 1}`, frames: [], useArt: false }],
-      finishOpts: Object.fromEntries([...Object.entries(s.finishOpts), ...selection.map((id) => [String(id), { ...s.finishOpts[id], set: i }])]),
-    }))
+    setSettings((s) => ({ ...s, lenticularSets: [...s.lenticularSets, { name: `Set ${i + 1}`, frames: [], useArt: false }] }))
+    setDetailParam('lenticular', 'set', i)
   }
   function deleteLentSet(i: number) {
     // layers on it fall back to the first set; layers on later sets keep theirs (renumbered)
-    setSettings((s) => {
-      const finishOpts: ReliefSettings['finishOpts'] = {}
-      for (const [id, o] of Object.entries(s.finishOpts)) {
-        const v = o.set ?? 0
-        finishOpts[id] = { ...o, set: v === i ? 0 : v > i ? v - 1 : v }
-      }
-      return { ...s, lenticularSets: s.lenticularSets.filter((_, j) => j !== i), finishOpts }
-    })
+    setSettings((s) => withFinishLayers({ ...s, lenticularSets: s.lenticularSets.filter((_, j) => j !== i) }, s.finishLayers.map((l) => {
+      const v = l.details.lenticular?.set ?? 0
+      return l.details.lenticular ? { ...l, details: { ...l.details, lenticular: { ...l.details.lenticular, set: v === i ? 0 : v > i ? v - 1 : v } } } : l
+    })))
   }
   async function addFrames(files: FileList | null) {
     if (!files?.length) return
@@ -321,13 +338,16 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     ;[f[i], f[i + d]] = [f[i + d], f[i]]
     setLentSet(lentSetIndex, { frames: f })
   }
-  const materialsKey = JSON.stringify([settings.materials, settings.finishOpts, settings.finishOff, original && selection])
+  const materialsKey = JSON.stringify([settings.materials, settings.finishOpts, settings.details, settings.finishOff, settings.holeSmooth, settings.artHoles, original && cur?.pieces])
   useEffect(() => {
     if (!kit || !ready) return
     // a short pause: changing a hole rebuilds the pin, so a dragged slider rebuilds once, not per tick
     const shown = activeMaterials(settings)
-    if (original) for (const id of selection) delete shown[id]
-    const t = setTimeout(() => stage.current?.finishes(kit, shown, settings.finishOpts), original ? 0 : 150)
+    const compared = original ? cur?.pieces ?? [] : []
+    for (const id of compared) delete shown[id]
+    // details too, minus the hidden ones (and the selection, while comparing with the original)
+    const detailed = detailMap(kit.preview, { ...settings, finishOff: [...settings.finishOff, ...compared] })
+    const t = setTimeout(() => stage.current?.finishes(kit, shown, settings.finishOpts, settings.holeSmooth, settings.artHoles, detailed), original ? 0 : 150)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kit, ready, materialsKey])
@@ -349,10 +369,25 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     try {
       const art = await artBlob()
       setStatus(`Analyzing on ${new URL(RELIEF_SERVER).host}… (about a minute on the GPU)`)
-      const k = await loadKit(await analyzeArt(art, quality))
+      const k = await loadKit(await analyzeArt(art, quality, settings.artHoles))
       setKit(k); setSelected(0); setOthers([])
-      setSettings((s) => ({ ...s, pieces: {}, soft: {}, flat: {}, materials: {}, finishOpts: {}, finishOff: [], names: {}, off: [] })) // piece ids belong to one analysis
+      setSettings((s) => ({ ...s, pieces: {}, soft: {}, flat: {}, materials: {}, finishOpts: {}, details: {}, finishLayers: [], finishOff: [], names: {}, off: [] })) // piece ids belong to one analysis
       // saved straight away, so the analysis survives whatever happens next
+      setStatus('Saving the kit…')
+      setKitUrls(await saveKit(staffStorage, badge.id || 'new', k))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally { setStatus(null) }
+  }
+
+  // "Recalculate Normals": the same pin, new normal.png and detail.png — saved with the kit at once
+  async function recalcNormals() {
+    if (!kit) return
+    setError('')
+    try {
+      setStatus(`Recalculating the normals on ${new URL(RELIEF_SERVER).host}… (about a minute on the GPU)`)
+      const k = await loadKit({ ...kit.files, ...(await recalculateNormals(kit.art, 'high')) })
+      setKit(k)
       setStatus('Saving the kit…')
       setKitUrls(await saveKit(staffStorage, badge.id || 'new', k))
     } catch (e) {
@@ -377,10 +412,12 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
         return getDownloadURL(r)
       }
       const finish = finishMap(kit.full, activeMaterials(settings), settings.finishOpts)
+      const detailed = detailMap(kit.full, settings)
       setStatus('Saving the badge…')
       await onApply({
         imageUrl: reliefKit['art.webp'], normalMapUrl: reliefKit['normal.png'], depthMapUrl: await put('depth', height),
         finishMapUrl: finish ? await put('finish', await finishPng(finish.map, kit.full.size)) : undefined,
+        detailMapUrl: detailed ? await put('detail', await finishPng(detailed.map, kit.full.size)) : undefined,
         reliefKit, relief: settings,
       })
       onClose()
@@ -394,21 +431,8 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
   const offset = settings.pieces[selected] ?? 0
   const soft = settings.soft[selected] ?? 0
   const flat = settings.flat[selected] ?? settings.flatDefault
-  const finish = settings.materials[selected] ?? 0
-  const finishDef = FINISHES.find((f) => f.id === finish)
   const defaultName = (id: number) => (kit && id > kit.preview.objects ? `Area ${id}` : `Object ${id}`)
-  const rename = (id: number, name: string) => {
-    const names: Record<string, string> = { ...settings.names, [id]: name }
-    if (!name) delete names[id]
-    set({ names })
-  }
-  const toggleFinishOff = (id: number) => set({ finishOff: settings.finishOff.includes(id) ? settings.finishOff.filter((x) => x !== id) : [...settings.finishOff, id] })
-  // Layers: ones with a finish first, then the rest biggest first
-  const shownLayers = [...layers]
-    .filter((l) => layerFilter === 'all' || (settings.materials[l.id] ?? 0) > 0)
-    .sort((a, b) => Number((settings.materials[b.id] ?? 0) > 0) - Number((settings.materials[a.id] ?? 0) > 0) || b.area - a.area)
-  const usedFinishes = Object.entries(settings.materials).filter(([, f]) => f > 0).sort((x, y) => Number(x[0]) - Number(y[0]))
-  const setPiece = (key: 'pieces' | 'soft' | 'flat' | 'materials', value: number) => {
+  const setPiece = (key: 'pieces' | 'soft' | 'flat', value: number) => {
     const next: Record<string, number> = { ...settings[key] }
     // Flatten's "nothing set" means the all-pieces default, so a piece keeps an explicit 0 when that
     // default isn't 0; everything else's "nothing set" is 0
@@ -416,13 +440,41 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     for (const id of selection) { next[id] = value; if (value === unset) delete next[id] }
     set({ [key]: next })
   }
-  /** One finish setting (a param, feather, the lenticular set) on every selected layer. */
-  const setOpt = (key: string, value: number) => setSettings((s) => {
-    const finishOpts = { ...s.finishOpts }
-    for (const id of selection) finishOpts[id] = { ...finishOpts[id], [key]: value }
-    return { ...s, finishOpts }
-  })
-  const mixedFinish = selection.some((id) => (settings.materials[id] ?? 0) !== (settings.materials[selected] ?? 0))
+  // ── The Material tab's layers: groups of pieces sharing one look (settings.finishLayers) ──
+  const finishLayers = settings.finishLayers
+  const finish = cur?.material ?? 0
+  const finishDef = FINISHES.find((f) => f.id === finish)
+  const layerOf = (piece: number) => finishLayers.find((l) => l.pieces.includes(piece)) ?? null
+  const editLayers = (fn: (ls: FinishLayer[]) => FinishLayer[]) => setSettings((s) => withFinishLayers(s, fn(s.finishLayers)))
+  const editCur = (fn: (l: FinishLayer) => FinishLayer) => { if (cur) editLayers((ls) => ls.map((l) => (l.id === cur.id ? fn({ ...l }) : l))) }
+  const setMaterial = (m: number) => { setOriginal(false); editCur((l) => ({ ...l, material: m })) }
+  /** One finish setting (a param, or feather) on the active layer. */
+  const setOpt = (key: string, value: number) => editCur((l) => ({ ...l, opts: { ...l.opts, [key]: value } }))
+  const detailState = (kind: DetailKind): 'on' | 'off' => (cur?.details[kind] ? 'on' : 'off')
+  const detailValue = (kind: DetailKind, key: string) =>
+    cur?.details[kind]?.[key] ?? DETAILS.find((d) => d.kind === kind)!.params.find((p) => p.key === key)?.def ?? 0
+  const toggleDetail = (kind: DetailKind, on: boolean) => {
+    setOriginal(false)
+    editCur((l) => { const d = { ...l.details }; if (on) d[kind] = d[kind] ?? {}; else delete d[kind]; return { ...l, details: d } })
+  }
+  /** One detail setting on the active layer. */
+  function setDetailParam(kind: DetailKind, key: string, value: number) {
+    editCur((l) => (l.details[kind] ? { ...l, details: { ...l.details, [kind]: { ...l.details[kind], [key]: value } } } : l))
+  }
+  // Pieces go in one layer at most: putting them in one takes them out of any other
+  const without = (ls: FinishLayer[], ps: number[]) => ls.map((l) => ({ ...l, pieces: l.pieces.filter((p) => !ps.includes(p)) }))
+  function newLayer() {
+    const id = `l${Date.now().toString(36)}`
+    let n = finishLayers.length + 1
+    while (finishLayers.some((l) => l.name === `Layer ${n}`)) n++
+    editLayers((ls) => [...without(ls, selection), { id, name: `Layer ${n}`, material: 0, opts: {}, details: {}, pieces: [...selection] }])
+    setActiveLayer(id)
+  }
+  const addToLayer = (id: string) => editLayers((ls) => without(ls, selection).map((l) => (l.id === id ? { ...l, pieces: [...l.pieces, ...selection] } : l)))
+  const takeOutOfLayers = () => editLayers((ls) => without(ls, selection))
+  const deleteLayer = (id: string) => { editLayers((ls) => ls.filter((l) => l.id !== id)); if (activeLayer === id) setActiveLayer(null) }
+  const renameLayer = (id: string, name: string) => editLayers((ls) => ls.map((l) => (l.id === id ? { ...l, name } : l)))
+  const toggleLayerHidden = (id: string) => editLayers((ls) => ls.map((l) => (l.id === id ? { ...l, hidden: l.hidden ? undefined : true } : l)))
   const moved = Object.keys(settings.pieces).length + Object.keys(settings.soft).length + Object.keys(settings.flat).length
   const toggleLevel = (r: number) => set({ off: settings.off.includes(r) ? settings.off.filter((x) => x !== r) : [...settings.off, r] })
   const pieceLevel = composed && selected ? composed.level[selected] : -1
@@ -441,18 +493,19 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
           onMouseMove={(e) => {
             const r = e.currentTarget.getBoundingClientRect()
             setBrush((b) => ({ ...b, x: e.clientX - r.left, y: e.clientY - r.top, inside: true }))
-            if (brushRef.current.on) brushPaint(e.clientX, e.clientY, e.altKey)
+            if (brushRef.current.on && e.buttons & 1) brushPaint(e.clientX, e.clientY, e.altKey)
           }}
+          onMouseDown={(e) => { if (brushRef.current.on && e.button === 0) brushPaint(e.clientX, e.clientY, e.altKey) }}
           onMouseLeave={() => setBrush((b) => ({ ...b, inside: false }))}
           onWheel={(e) => { if (brushRef.current.on) setBrush((b) => ({ ...b, r: Math.min(160, Math.max(6, b.r * (e.deltaY < 0 ? 1.12 : 1 / 1.12))) })) }} />
         {brush.on && brush.inside && (
           <div className="absolute pointer-events-none rounded-full border-2 border-amber-400 bg-amber-400/10 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
             style={{ left: brush.x - brush.r, top: brush.y - brush.r, width: brush.r * 2, height: brush.r * 2 }} />
         )}
-        {kit && brush.on && <p className="absolute top-14 left-0 right-0 text-center text-[11px] text-amber-300 pointer-events-none">Painting the selection · hold Alt to erase · scroll or [ ] to resize</p>}
+        {kit && brush.on && <p className="absolute top-14 left-0 right-0 text-center text-[11px] text-amber-300 pointer-events-none">Click and drag to paint the selection · hold Alt to erase · scroll or [ ] to resize</p>}
         {kit && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 flex gap-1 p-1 rounded-xl bg-black/50 backdrop-blur">
-            {(['art', 'pieces', 'levels'] as const).map((v) => (
+            {(['art', 'pieces', 'levels', 'normals'] as const).map((v) => (
               <button key={v} onClick={() => setView(v)} disabled={v === 'levels' && !stepped}
                 className={cn('px-3 py-1 rounded-lg text-xs font-semibold capitalize disabled:opacity-30', view === v ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white')}>{v}</button>
             ))}
@@ -476,19 +529,19 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
         )}
       </div>
 
-      <aside className="w-[340px] shrink-0 border-l border-slate-800 bg-slate-900 flex flex-col">
+      <aside className="w-[408px] shrink-0 border-l border-slate-800 bg-slate-900 flex flex-col">
         <div className="flex items-center px-4 py-3 border-b border-slate-800">
           <h2 className="font-bold text-ink">Relief Studio</h2>
           <span className="ml-2 text-xs text-slate-500 truncate">{badge.name}</span>
           <button onClick={onClose} aria-label="Close" className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800"><X size={18} /></button>
         </div>
-        <div className="grid grid-cols-2 gap-1 m-3 mb-0 p-1 rounded-xl bg-slate-800">
-          {(['relief', 'material'] as const).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={cn('py-1.5 rounded-lg text-xs font-semibold capitalize', tab === t ? 'bg-slate-600 text-ink' : 'text-slate-400')}>{t}</button>
+        <div className="grid grid-cols-4 gap-1 m-3 mb-0 p-1 rounded-xl bg-slate-800">
+          {(['global', 'relief', 'material', 'normals'] as const).map((t) => (
+            <button key={t} onClick={() => openTab(t)} className={cn('py-1.5 rounded-lg text-xs font-semibold capitalize', tab === t ? 'bg-slate-600 text-ink' : 'text-slate-400')}>{t}</button>
           ))}
         </div>
 
-        <div className={cn('flex-1 p-4 flex flex-col gap-5', tab === 'material' ? 'min-h-0' : 'overflow-y-auto')}>
+        <div className="flex-1 min-h-0 p-4 flex flex-col gap-5 overflow-y-auto">
           {showRestored && (
             <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-3 text-xs text-amber-200 flex items-center gap-2">
               Restored your unsaved changes.
@@ -534,6 +587,8 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
                 hint={stepped ? 'Sculpted detail on top of the flat levels' : 'Sculpted detail on top of the depth'} />
               <Slider label="Gold walls" value={settings.wall} min={0.1} max={0.7} step={0.01} fmt={(v) => `${Math.round(v * 100)}`} onChange={(wall) => set({ wall })}
                 hint="Higher = more of each slope drawn as plain struck gold" />
+              {settings.artHoles && <Slider label="Smooth transparent edges" value={settings.holeSmooth} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(holeSmooth) => set({ holeSmooth })}
+                hint="Rounds off the edges of holes that come from transparency in the art" />}
 
               <div className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
                 <span className="text-xs font-semibold text-slate-300">
@@ -584,155 +639,284 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
                     </select>
                     <button onClick={analyze} disabled={!server || !!status} className="btn-secondary !py-1.5 text-xs disabled:opacity-50"><Sparkles size={14} />Analyze</button>
                   </div>
+                  <label className="flex items-center gap-2 text-xs text-slate-300">
+                    <input type="checkbox" checked={settings.artHoles} onChange={(e) => set({ artHoles: e.target.checked })} />
+                    Use transparency channel
+                  </label>
+                  <span className="text-[11px] text-slate-500">On: transparent areas inside the art become holes. Off: only the outside is cut out. Analyze again after changing it.</span>
                   <span className="text-[11px] text-slate-500">Starts over: piece edits belong to one analysis.</span>
                 </div>
               </details>
             </fieldset>
           )}
 
+          {tab === 'normals' && (
+            <fieldset disabled={!kit} className={cn('flex flex-col gap-4', !kit && 'opacity-40')}>
+              <p className="text-[11px] leading-snug text-slate-500">
+                The normal map is the fine surface detail read from the art: which way every spot faces, so it catches the light.
+                The pin shows it as colours while this tab is open — blue faces you, red leans right, green leans up.
+              </p>
+              <Slider label="Normal strength" value={settings.normalStrength} min={0} max={4} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(normalStrength) => set({ normalStrength })}
+                hint="0% = the sculpted shape alone · 100% = the normal map as made · more = its detail exaggerated" />
+              <div className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
+                <span className="text-xs font-semibold text-slate-300">Recalculate Normals</span>
+                <span className="text-[11px] leading-snug text-slate-500">Reads the normals from this pin’s picture again — for a kit whose normals came out weak or wrong. The shape, pieces and finishes stay as they are. About a minute on the GPU.</span>
+                <button onClick={recalcNormals} disabled={!server || !!status} className="btn-secondary justify-center text-xs disabled:opacity-50">
+                  <Sparkles size={14} />Recalculate Normals
+                </button>
+                {server === false && <span className="text-[11px] text-amber-500">The relief server isn’t running.</span>}
+              </div>
+            </fieldset>
+          )}
+
+          {tab === 'global' && (
+            <fieldset disabled={!kit} className={cn('flex flex-col gap-4', !kit && 'opacity-40')}>
+              <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Metal</span>
+                  <span className="text-[11px] text-slate-500">the pin’s sides, back and gold walls</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Metal">
+                  {METALS.map((m) => {
+                    const on = settings.metalColor.toLowerCase() === m.color
+                    return (
+                      <button key={m.color} role="radio" aria-checked={on} onClick={() => set({ metalColor: m.color })}
+                        className={cn('flex flex-col items-center gap-1 rounded-lg border p-1.5 text-[11px] font-semibold transition-colors',
+                          on ? 'border-amber-500 bg-amber-500/15 text-ink' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200')}>
+                        <span className="w-full h-6 rounded-md ring-1 ring-black/30" style={{ background: `linear-gradient(135deg, ${m.color}99, ${m.color} 45%, #ffffffaa 55%, ${m.color} 70%)` }} />
+                        {m.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+                  Colour
+                  <input type="color" value={settings.metalColor} onChange={(e) => set({ metalColor: e.target.value })} className="h-7 w-12 cursor-pointer rounded border border-slate-700 bg-transparent" />
+                  <span className="tabular-nums text-[11px] font-normal text-slate-500">{settings.metalColor}</span>
+                </label>
+                <Slider label="Roughness" value={settings.metalRough} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(metalRough) => set({ metalRough })}
+                  hint="Mirror-polished ← → brushed and satin" />
+                {(settings.metalColor.toLowerCase() !== DEFAULT_METAL.color || settings.metalRough !== DEFAULT_METAL.rough) && (
+                  <button onClick={() => set({ metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough })} className="self-start text-[11px] text-slate-400 underline">Back to the original gold</button>
+                )}
+              </div>
+            </fieldset>
+          )}
+
           {tab === 'material' && (
-            <fieldset disabled={!kit} className={cn('flex-1 min-h-0 flex flex-col gap-4', !kit && 'opacity-40')}>
-              <section className="shrink-0 flex flex-col gap-2">
-                <span className="field-label">Material properties</span>
-                {selected ? (
-                  <div className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
-                    {selection.length > 1 ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-ink">{selection.length} layers</span>
-                        <span className="text-[11px] text-slate-500">changes apply to all of them</span>
-                        <button onClick={() => pick(selected)} className="ml-auto text-[11px] text-slate-400 underline">Just this one</button>
+            <fieldset disabled={!kit} className={cn('flex flex-col gap-4', !kit && 'opacity-40')}>
+              {/* 1 · pick pieces of the pin, put them in a layer */}
+              <section className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Picked</span>
+                  <span className="text-[11px] text-slate-500">{selection.length ? `${selection.length} piece${selection.length > 1 ? 's' : ''} of the pin` : 'nothing yet'}</span>
+                  {selection.length > 0 && <button onClick={() => pick(0)} className="ml-auto text-[11px] text-slate-400 underline">Clear</button>}
+                </div>
+                {selection.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button onClick={newLayer} className="btn-secondary !py-1 text-xs"><Plus size={13} />New layer</button>
+                    {cur && <button onClick={() => addToLayer(cur.id)} className="btn-secondary !py-1 text-xs max-w-full truncate">Add to “{cur.name || layerLook(cur)}”</button>}
+                    {selection.some((p) => layerOf(p)) && <button onClick={takeOutOfLayers} className="text-[11px] text-slate-400 underline">Take out of layers</button>}
+                  </div>
+                ) : (
+                  <span className="text-[11px] leading-snug text-slate-500">Click pieces of the pin (Ctrl/⌘ or Shift-click for more, or hold Tab and drag), then make a layer of them or add them to one. Everything in a layer shares its look.</span>
+                )}
+              </section>
+
+              {/* 2 · the layers */}
+              <section className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="field-label !mb-0">Layers</span>
+                  <span className="text-[11px] text-slate-500">{finishLayers.length}</span>
+                  <button onClick={newLayer} className="ml-auto inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-ink"><Plus size={12} />{selection.length ? 'New from picked' : 'New layer'}</button>
+                </div>
+                <div className="rounded-xl border border-slate-800 divide-y divide-slate-800" onMouseLeave={() => setHoverPieces([])}>
+                  {finishLayers.map((l) => {
+                    const on = l.id === activeLayer
+                    return (
+                      <div key={l.id} onClick={() => setActiveLayer(on ? null : l.id)} onMouseEnter={() => setHoverPieces(l.pieces)}
+                        className={cn('flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none', on ? 'bg-amber-500/25' : 'hover:bg-slate-800')}>
+                        <button onClick={(e) => { e.stopPropagation(); toggleLayerHidden(l.id) }} aria-label={l.hidden ? 'Show layer' : 'Hide layer'} className="w-5 shrink-0 flex justify-center text-slate-300 hover:text-ink">
+                          {l.hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                        <span className="relative w-8 h-8 shrink-0 rounded-md ring-1 ring-black/30" style={{ background: FINISH_SWATCH[l.material] ?? FINISH_SWATCH[0] }}>
+                          {DETAILS.filter((d) => l.details[d.kind]).map((d, i) => (
+                            <span key={d.kind} className="absolute bottom-0.5 w-2.5 h-2.5 rounded-full ring-1 ring-black/40" style={{ right: 2 + i * 7, background: DETAIL_SWATCH[d.kind] }} />
+                          ))}
+                        </span>
+                        <span className={cn('flex-1 min-w-0', l.hidden && 'opacity-50')}>
+                          <span className="block truncate text-xs font-semibold text-ink">{l.name || layerLook(l)}</span>
+                          <span className="block truncate text-[11px] text-slate-500">{layerLook(l)} · {l.pieces.length} piece{l.pieces.length === 1 ? '' : 's'}</span>
+                        </span>
+                        {selection.length > 0 && (
+                          <button onClick={(e) => { e.stopPropagation(); addToLayer(l.id) }} title="Add the picked pieces to this layer"
+                            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-ink hover:bg-slate-700"><Plus size={13} /></button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); deleteLayer(l.id) }} aria-label="Delete layer" title="Delete the layer — its pieces go back to Auto"
+                          className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:text-red-500 hover:bg-slate-700"><Trash2 size={13} /></button>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element -- a tiny in-memory render */}
-                        {layers.find((l) => l.id === selected)?.thumb && <img src={layers.find((l) => l.id === selected)!.thumb} alt="" className="w-9 h-9 rounded-md bg-black/40 object-contain" />}
-                        <input value={settings.names[selected] ?? ''} placeholder={defaultName(selected)} onChange={(e) => rename(selected, e.target.value)}
-                          className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-ink placeholder:text-slate-300 outline-none border-b border-transparent focus:border-slate-600" aria-label="Layer name" />
-                      </div>
-                    )}
+                    )
+                  })}
+                  {!finishLayers.length && <p className="p-3 text-[11px] text-slate-500">No layers yet — pick pieces of the pin and make one.</p>}
+                </div>
+              </section>
+
+              {/* 3 · the open layer's look */}
+              {cur ? (
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <input value={cur.name} placeholder={layerLook(cur)} onChange={(e) => renameLayer(cur.id, e.target.value)} aria-label="Layer name"
+                      className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-ink placeholder:text-slate-400 outline-none border-b border-slate-700 focus:border-slate-500" />
                     <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-slate-800 text-xs" role="group" aria-label="Compare">
                       {([false, true] as const).map((o) => (
-                        <button key={String(o)} onClick={() => setOriginal(o)} disabled={!finish}
-                          className={cn('py-1 rounded-md font-semibold disabled:opacity-40', original === o ? 'bg-slate-600 text-ink' : 'text-slate-400')}>{o ? 'Original' : 'Finished'}</button>
+                        <button key={String(o)} onClick={() => setOriginal(o)}
+                          className={cn('px-2 py-1 rounded-md font-semibold', original === o ? 'bg-slate-600 text-ink' : 'text-slate-400')}>{o ? 'Original' : 'Finished'}</button>
                       ))}
                     </div>
-                    <select value={mixedFinish ? 'mixed' : finish} onChange={(e) => { if (e.target.value === 'mixed') return; setOriginal(false); setPiece('materials', Number(e.target.value)) }} className="input-field !py-1.5 text-sm" aria-label="Finish">
-                      {mixedFinish && <option value="mixed" disabled>Mixed</option>}
-                      {FINISHES.map((f) => <option key={f.id} value={f.id} disabled={f.soon}>{f.name}{f.soon ? ' (coming soon)' : ''}</option>)}
-                    </select>
-                    <span className="text-[11px] text-slate-500 -mt-1">{finishDef?.hint}</span>
+                  </div>
+                  {/* 1 · the finish: what the surface is */}
+                  <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Finish</span>
+                      <span className="text-[11px] text-slate-500">what the surface is made of</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Finish">
+                      {BASE_FINISH_IDS.map((fid) => {
+                        const f = FINISHES.find((x) => x.id === fid)!
+                        const on = finish === fid
+                        return (
+                          <button key={fid} role="radio" aria-checked={on} title={f.hint} onClick={() => setMaterial(fid)}
+                            className={cn('flex flex-col items-center gap-1 rounded-lg border p-1.5 text-[11px] font-semibold transition-colors',
+                              on ? 'border-amber-500 bg-amber-500/15 text-ink' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200')}>
+                            <span className="w-full h-7 rounded-md ring-1 ring-black/30" style={{ background: FINISH_SWATCH[fid] }} />
+                            {f.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <span className="text-[11px] text-slate-500">{finishDef?.hint}</span>
                     {finishDef?.params.map((prm) => prm.options ? (
                       <label key={prm.key} className="block">
                         <span className="text-xs font-semibold text-slate-300">{prm.label}</span>
-                        <select value={Math.round(settings.finishOpts[selected]?.[prm.key] ?? prm.def)} onChange={(e) => setOpt(prm.key, Number(e.target.value))}
+                        <select value={Math.round(cur.opts[prm.key] ?? prm.def)} onChange={(e) => setOpt(prm.key, Number(e.target.value))}
                           className="input-field !py-1.5 text-sm mt-1">
                           {prm.options.map((o, i) => <option key={o} value={i}>{o}</option>)}
                         </select>
                         {prm.hint && <span className="block text-[11px] text-slate-500 mt-0.5">{prm.hint}</span>}
                       </label>
                     ) : (
-                      <Slider key={prm.key} label={prm.label} value={settings.finishOpts[selected]?.[prm.key] ?? prm.def} min={0} max={1}
+                      <Slider key={prm.key} label={prm.label} value={cur.opts[prm.key] ?? prm.def} min={0} max={1}
                         step={prm.steps ? 1 / (prm.steps - 1) : 0.01} hint={prm.hint}
                         fmt={(v) => (prm.steps ? `${Math.round(v * (prm.steps - 1)) + 1} of ${prm.steps}` : `${Math.round(v * 100)}%`)}
                         onChange={(v) => setOpt(prm.key, v)} />
                     ))}
-                    {finish > 0 && finish !== FINISH_HOLE && (
-                      <Slider label="Feather edges" value={settings.finishOpts[selected]?.feather ?? 0} min={0} max={1} step={0.01}
-                        fmt={(v) => `${Math.round(v * 100)}%`} hint="Fades the finish out across the layer's edge instead of stopping sharp"
-                        onChange={(v) => setOpt('feather', v)} />
-                    )}
-                    {finish === 7 && lentSet && (
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-xs font-semibold text-slate-300">Picture set</span>
-                        <select value={lentSetIndex} aria-label="Picture set" className="input-field !py-1.5 text-sm"
-                          onChange={(e) => (e.target.value === 'new' ? newLentSet() : chooseLentSet(Number(e.target.value)))}>
-                          {settings.lenticularSets.map((s, i) => <option key={i} value={i}>{s.name || `Set ${i + 1}`}</option>)}
-                          {settings.lenticularSets.length < LENTICULAR_MAX_SETS && <option value="new">＋ New set</option>}
-                        </select>
-                        <div className="flex items-center gap-2">
-                          <input value={lentSet.name} onChange={(e) => setLentSet(lentSetIndex, { name: e.target.value })} placeholder={`Set ${lentSetIndex + 1}`}
-                            className="flex-1 min-w-0 bg-transparent text-xs text-ink outline-none border-b border-slate-700 focus:border-slate-500" aria-label="Set name" />
-                          {settings.lenticularSets.length > 1 && (
-                            <button onClick={() => deleteLentSet(lentSetIndex)} className="text-[11px] text-slate-400 hover:text-red-500 underline">Delete set</button>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-slate-500">{lenticularPictures(settings, artUrl)[lentSetIndex].length} of {LENTICULAR_MAX_PER_SET} pictures, left to right · {lentTotal} of {LENTICULAR_MAX_TOTAL} across all sets</span>
-                        <label className="flex items-center gap-2 text-xs text-slate-300">
-                          <input type="checkbox" checked={lentSet.useArt} onChange={(e) => setLentSet(lentSetIndex, { useArt: e.target.checked })} className="accent-amber-500" />
-                          Use pin art as picture 1
-                        </label>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {lentSet.useArt && artUrl && (
-                            <div className="relative">
-                              {/* eslint-disable-next-line @next/next/no-img-element -- a small preview */}
-                              <img src={badgeAsset(artUrl)} alt="Picture 1: the pin art" className="w-full aspect-square rounded bg-black/40 object-contain ring-1 ring-amber-500/60" />
-                              <span className="absolute top-0.5 left-1 text-[10px] font-bold text-white drop-shadow">1</span>
-                              <span className="absolute inset-x-0 bottom-0 text-center text-[9px] font-semibold text-white bg-black/50 rounded-b">Pin art</span>
-                            </div>
-                          )}
-                          {lentSet.frames.map((u, i) => (
-                            <div key={u} className="relative group">
-                              {/* eslint-disable-next-line @next/next/no-img-element -- a small preview */}
-                              <img src={badgeAsset(u)} alt={`Picture ${i + 1}`} className="w-full aspect-square rounded bg-black/40 object-contain" />
-                              <span className="absolute top-0.5 left-1 text-[10px] font-bold text-white drop-shadow">{i + 1 + (lentSet.useArt && artUrl ? 1 : 0)}</span>
-                              <div className="absolute inset-x-0 bottom-0 hidden group-hover:flex justify-between p-0.5 bg-black/50 rounded-b text-white">
-                                <button onClick={() => moveFrame(i, -1)} disabled={i === 0} aria-label="Move left" className="disabled:opacity-30"><ChevronLeft size={12} /></button>
-                                <button onClick={() => setLentSet(lentSetIndex, { frames: lentSet.frames.filter((_, j) => j !== i) })} aria-label="Remove"><X size={12} /></button>
-                                <button onClick={() => moveFrame(i, 1)} disabled={i === lentSet.frames.length - 1} aria-label="Move right" className="disabled:opacity-30"><ChevronRight size={12} /></button>
-                              </div>
-                            </div>
-                          ))}
-                          {lenticularPictures(settings, artUrl)[lentSetIndex].length < LENTICULAR_MAX_PER_SET && lentTotal < LENTICULAR_MAX_TOTAL && (
-                            <button onClick={() => frameInput.current?.click()} disabled={uploadingFrames} aria-label="Add pictures"
-                              className="aspect-square rounded border border-dashed border-slate-600 flex items-center justify-center text-slate-400 hover:text-ink">
-                              {uploadingFrames ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                            </button>
-                          )}
-                        </div>
-                        <input ref={frameInput} type="file" accept="image/png,image/webp,image/jpeg" multiple hidden onChange={(e) => addFrames(e.target.files)} />
-                        <span className="text-[11px] text-slate-500">Each picture is the whole pin, framed exactly like the pin art — this layer shows its own area of each. Any number of layers can use the same set.</span>
-                      </div>
-                    )}
                   </div>
-                ) : (
-                  <p className="text-[11px] text-slate-500 rounded-xl border border-slate-800 p-3">Pick a layer below, or click part of the pin, to give it a finish — Ctrl/⌘-click or Shift-click to pick several and change them together. The art’s colours always stay — a finish changes how it catches the light.</p>
-                )}
-              </section>
 
-              <section className="flex-1 min-h-0 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="field-label !mb-0">Layers</span>
-                  <span className="text-[11px] text-slate-500">{layers.length}</span>
-                  <div className="ml-auto flex gap-0.5 p-0.5 rounded-lg bg-slate-800 text-[11px]">
-                    {(['all', 'finished'] as const).map((f) => (
-                      <button key={f} onClick={() => setLayerFilter(f)} className={cn('px-2 py-0.5 rounded-md', layerFilter === f ? 'bg-slate-600 text-ink' : 'text-slate-400')}>{f === 'all' ? 'All' : 'With a finish'}</button>
-                    ))}
+                  {/* 2 · details: effects layered on top of the finish, any mix */}
+                  <div className={cn('flex flex-col gap-2 rounded-xl border border-slate-800 p-3', finish === FINISH_HOLE && 'opacity-40 pointer-events-none')}>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Details</span>
+                      <span className="text-[11px] text-slate-500">{finish === FINISH_HOLE ? 'a hole has none' : 'effects on top of the finish — mix any'}</span>
+                    </div>
+                    {[...DETAILS].reverse().map((d) => {
+                      const st = detailState(d.kind)
+                      return (
+                        <div key={d.kind} className={cn('rounded-lg border transition-colors', st !== 'off' ? 'border-amber-500/50 bg-amber-500/[0.06]' : 'border-slate-800')}>
+                          <button onClick={() => toggleDetail(d.kind, st !== 'on')} role="switch" aria-checked={st === 'on'} className="w-full flex items-center gap-2.5 p-2 text-left">
+                            <span className="w-8 h-8 shrink-0 rounded-md ring-1 ring-black/30" style={{ background: DETAIL_SWATCH[d.kind] }} />
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-xs font-semibold text-ink">{d.name}</span>
+                              <span className="block text-[11px] leading-snug text-slate-500">{d.hint}</span>
+                            </span>
+                            <span className={cn('relative w-8 h-[18px] shrink-0 rounded-full transition-colors', st === 'on' ? 'bg-amber-500' : 'bg-slate-700')}>
+                              <span className={cn('absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all', st === 'on' ? 'left-[16px]' : 'left-[2px]')} />
+                            </span>
+                          </button>
+                          {st !== 'off' && (
+                            <div className="flex flex-col gap-2 px-2 pb-2.5">
+                              {d.params.map((prm) => prm.options ? (
+                                <label key={prm.key} className="block">
+                                  <span className="text-xs font-semibold text-slate-300">{prm.label}</span>
+                                  <select value={Math.round(detailValue(d.kind, prm.key))} onChange={(e) => setDetailParam(d.kind, prm.key, Number(e.target.value))}
+                                    className="input-field !py-1.5 text-sm mt-1">
+                                    {prm.options.map((o, i) => <option key={o} value={i}>{o}</option>)}
+                                  </select>
+                                  {prm.hint && <span className="block text-[11px] text-slate-500 mt-0.5">{prm.hint}</span>}
+                                </label>
+                              ) : (
+                                <Slider key={prm.key} label={prm.label} value={detailValue(d.kind, prm.key)} min={0} max={1}
+                                  step={prm.steps ? 1 / (prm.steps - 1) : 0.01} hint={prm.hint}
+                                  fmt={(v) => (prm.steps ? `${Math.round(v * (prm.steps - 1)) + 1} of ${prm.steps}` : `${Math.round(v * 100)}%`)}
+                                  onChange={(v) => setDetailParam(d.kind, prm.key, v)} />
+                              ))}
+                              {d.kind === 'lenticular' && lentSet && (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-xs font-semibold text-slate-300">Picture set</span>
+                          <select value={lentSetIndex} aria-label="Picture set" className="input-field !py-1.5 text-sm"
+                            onChange={(e) => (e.target.value === 'new' ? newLentSet() : chooseLentSet(Number(e.target.value)))}>
+                            {settings.lenticularSets.map((s, i) => <option key={i} value={i}>{s.name || `Set ${i + 1}`}</option>)}
+                            {settings.lenticularSets.length < LENTICULAR_MAX_SETS && <option value="new">＋ New set</option>}
+                          </select>
+                          <div className="flex items-center gap-2">
+                            <input value={lentSet.name} onChange={(e) => setLentSet(lentSetIndex, { name: e.target.value })} placeholder={`Set ${lentSetIndex + 1}`}
+                              className="flex-1 min-w-0 bg-transparent text-xs text-ink outline-none border-b border-slate-700 focus:border-slate-500" aria-label="Set name" />
+                            {settings.lenticularSets.length > 1 && (
+                              <button onClick={() => deleteLentSet(lentSetIndex)} className="text-[11px] text-slate-400 hover:text-red-500 underline">Delete set</button>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-slate-500">{lenticularPictures(settings, artUrl)[lentSetIndex].length} of {LENTICULAR_MAX_PER_SET} pictures, left to right · {lentTotal} of {LENTICULAR_MAX_TOTAL} across all sets</span>
+                          <label className="flex items-center gap-2 text-xs text-slate-300">
+                            <input type="checkbox" checked={lentSet.useArt} onChange={(e) => setLentSet(lentSetIndex, { useArt: e.target.checked })} className="accent-amber-500" />
+                            Use pin art as picture 1
+                          </label>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {lentSet.useArt && artUrl && (
+                              <div className="relative">
+                                {/* eslint-disable-next-line @next/next/no-img-element -- a small preview */}
+                                <img src={badgeAsset(artUrl)} alt="Picture 1: the pin art" className="w-full aspect-square rounded bg-black/40 object-contain ring-1 ring-amber-500/60" />
+                                <span className="absolute top-0.5 left-1 text-[10px] font-bold text-white drop-shadow">1</span>
+                                <span className="absolute inset-x-0 bottom-0 text-center text-[9px] font-semibold text-white bg-black/50 rounded-b">Pin art</span>
+                              </div>
+                            )}
+                            {lentSet.frames.map((u, i) => (
+                              <div key={u} className="relative group">
+                                {/* eslint-disable-next-line @next/next/no-img-element -- a small preview */}
+                                <img src={badgeAsset(u)} alt={`Picture ${i + 1}`} className="w-full aspect-square rounded bg-black/40 object-contain" />
+                                <span className="absolute top-0.5 left-1 text-[10px] font-bold text-white drop-shadow">{i + 1 + (lentSet.useArt && artUrl ? 1 : 0)}</span>
+                                <div className="absolute inset-x-0 bottom-0 hidden group-hover:flex justify-between p-0.5 bg-black/50 rounded-b text-white">
+                                  <button onClick={() => moveFrame(i, -1)} disabled={i === 0} aria-label="Move left" className="disabled:opacity-30"><ChevronLeft size={12} /></button>
+                                  <button onClick={() => setLentSet(lentSetIndex, { frames: lentSet.frames.filter((_, j) => j !== i) })} aria-label="Remove"><X size={12} /></button>
+                                  <button onClick={() => moveFrame(i, 1)} disabled={i === lentSet.frames.length - 1} aria-label="Move right" className="disabled:opacity-30"><ChevronRight size={12} /></button>
+                                </div>
+                              </div>
+                            ))}
+                            {lenticularPictures(settings, artUrl)[lentSetIndex].length < LENTICULAR_MAX_PER_SET && lentTotal < LENTICULAR_MAX_TOTAL && (
+                              <button onClick={() => frameInput.current?.click()} disabled={uploadingFrames} aria-label="Add pictures"
+                                className="aspect-square rounded border border-dashed border-slate-600 flex items-center justify-center text-slate-400 hover:text-ink">
+                                {uploadingFrames ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                              </button>
+                            )}
+                          </div>
+                          <input ref={frameInput} type="file" accept="image/png,image/webp,image/jpeg" multiple hidden onChange={(e) => addFrames(e.target.files)} />
+                          <span className="text-[11px] text-slate-500">Each picture is the whole pin, framed exactly like the pin art — this layer shows its own area of each. Any number of layers can use the same set.</span>
+                        </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800" onMouseLeave={() => setHovered(0)}>
-                  {shownLayers.map((l) => {
-                    const f = settings.materials[l.id] ?? 0
-                    const hidden = settings.finishOff.includes(l.id)
-                    return (
-                      <div key={l.id} ref={(el) => { layerRows.current[l.id] = el }} onClick={(e) => pick(l.id, e, shownLayers.map((x) => x.id))} onMouseEnter={() => setHovered(l.id)}
-                        className={cn('flex items-center gap-2 px-2 py-1.5 cursor-pointer select-none', l.id === selected ? 'bg-amber-500/25' : selection.includes(l.id) ? 'bg-amber-500/12' : 'hover:bg-slate-800')}>
-                        <button onClick={(e) => { e.stopPropagation(); toggleFinishOff(l.id) }} disabled={!f} aria-label={hidden ? 'Show finish' : 'Hide finish'}
-                          className={cn('w-5 shrink-0 flex justify-center', f ? 'text-slate-300 hover:text-ink' : 'text-slate-700')}>
-                          {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
-                        </button>
-                        {/* eslint-disable-next-line @next/next/no-img-element -- a tiny in-memory render */}
-                        <img src={l.thumb} alt="" className="w-8 h-8 shrink-0 rounded bg-black/40 object-contain" />
-                        <span className={cn('flex-1 min-w-0 truncate text-xs', hidden && 'opacity-50')}>{settings.names[l.id] || defaultName(l.id)}</span>
-                        <span className={cn('text-[11px] shrink-0', f ? 'text-amber-500' : 'text-slate-600', hidden && 'line-through opacity-60')}>{FINISHES.find((x) => x.id === f)?.name}</span>
-                      </div>
-                    )
-                  })}
-                  {!shownLayers.length && <p className="p-3 text-[11px] text-slate-500">{layers.length ? 'No layer has a finish yet.' : 'Loading layers…'}</p>}
-                </div>
-                {usedFinishes.length > 0 && (
-                  <button onClick={() => set({ materials: {}, finishOpts: {}, finishOff: [] })} className="text-[11px] text-slate-400 underline self-start"><RotateCcw size={11} className="inline mr-1" />Every layer back to Auto</button>
-                )}
-              </section>
+
+                  {finish !== FINISH_HOLE && (
+                    <Slider label="Feather edges" value={cur.opts.feather ?? 0} min={0} max={1} step={0.01}
+                      fmt={(v) => `${Math.round(v * 100)}%`} hint="Fades the layer's look out across its edges instead of stopping sharp"
+                      onChange={(v) => setOpt('feather', v)} />
+                  )}
+                </section>
+              ) : finishLayers.length > 0 && (
+                <p className="text-[11px] text-slate-500">Click a layer to edit its look.</p>
+              )}
             </fieldset>
           )}
         </div>
@@ -747,6 +931,27 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     </div>,
     document.body,
   )
+}
+
+// The Global tab's metal presets
+const METALS = [
+  { name: 'Gold', color: '#d2a44a' }, { name: 'Silver', color: '#c9ccd1' }, { name: 'Rose gold', color: '#d89b84' },
+  { name: 'Copper', color: '#c27a4a' }, { name: 'Black nickel', color: '#3a3a3e' }, { name: 'Antique bronze', color: '#8a6a3c' },
+]
+
+// Little previews for the Material tab's finish tiles and detail switches
+const FINISH_SWATCH: Record<number, string> = {
+  0: 'linear-gradient(135deg, #6d5d4b, #b9a385 55%, #8a7660)',
+  1: 'radial-gradient(circle at 28% 30%, rgba(255,255,255,0.75) 0 10%, transparent 24%), linear-gradient(135deg, #c0394f, #7e1f33)',
+  2: 'linear-gradient(135deg, #7a5618 0%, #f6d97c 38%, #a8792a 55%, #ffe9a8 75%, #8f6620 100%)',
+  3: 'radial-gradient(circle at 32% 28%, rgba(255,255,255,0.9) 0 6%, transparent 18%), radial-gradient(circle at 50% 60%, #5fe3b4, #0d6a50 70%)',
+  4: 'linear-gradient(120deg, #ff9ad5, #9af7ff 30%, #fff79a 55%, #b79aff 80%, #ff9ad5)',
+  6: 'repeating-conic-gradient(#2a2622 0 25%, #4a443d 0 50%) 50% / 10px 10px',
+}
+const DETAIL_SWATCH: Record<DetailKind, string> = {
+  lenticular: 'repeating-linear-gradient(90deg, #c2416f 0 4px, #3f6fd1 4px 8px)',
+  fresnel: 'conic-gradient(#ff5a5a, #ffd23f, #5aff8a, #3fd2ff, #8a5aff, #ff5ad2, #ff5a5a)',
+  foil: 'repeating-linear-gradient(62deg, #f2efe8 0 1.5px, #8c8a86 1.5px 3.5px), linear-gradient(135deg, #ccc, #777)',
 }
 
 function Slider({ label, value, min, max, step, fmt, onChange, hint }: {
@@ -767,9 +972,12 @@ interface Stage {
   load(kit: ReliefKit, artUrl: string): Promise<void>
   update(kit: ReliefKit, s: ReliefSettings): Composed | null
   relook(s: ReliefSettings): void
+  normalStrength(s: number): void
+  metal(color: string, rough: number): void
   highlight(kit: ReliefKit, pieces: number[]): void
   paint(kit: ReliefKit, view: View, c: Composed, stepped: boolean): void
-  finishes(kit: ReliefKit, materials: Record<string, number>, opts: Record<string, Record<string, number>>): void
+  finishes(kit: ReliefKit, materials: Record<string, number>, opts: Record<string, Record<string, number>>, holeSmooth: number, artHoles: boolean,
+    details: { map: Uint8Array; slots: number[][] } | null): void
   lenticular(sets: string[][]): void
   /** Every piece under a circle of `radiusPx` screen pixels around (clientX, clientY). */
   brushPick(kit: ReliefKit, clientX: number, clientY: number, radiusPx: number): number[]
@@ -786,6 +994,15 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
   renderer.outputColorSpace = THREE.SRGBColorSpace
   renderer.setClearColor(0x15120f)
   mount.appendChild(renderer.domElement)
+  // If the graphics card drops the 3D view (out of memory, a driver reset), say so rather than
+  // leaving an empty stage — the work itself is kept in the draft
+  renderer.domElement.addEventListener('webglcontextlost', () => {
+    console.error('Relief Studio: the WebGL context was lost')
+    const note = document.createElement('div')
+    note.className = 'absolute inset-0 flex items-center justify-center p-8 text-center text-sm text-amber-300'
+    note.textContent = 'The 3D view lost its graphics context. Close and reopen the Relief Studio — your unsaved changes are kept.'
+    mount.appendChild(note)
+  })
 
   const scene = new THREE.Scene()
   const pmrem = new THREE.PMREMGenerator(renderer)
@@ -828,13 +1045,27 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
   let lastHighlight: Uint8Array | null = null
   let lastOverlay: HTMLCanvasElement | null = null
   let lastFinish: Uint8Array | null = null
+  let lastDetails: { map: Uint8Array; slots: number[][] } | null = null
+  let lastMetal: [string, number] | null = null
   let lastFrames: string[][] = []
   let holeKey = ''
+  let holeSmooth = HOLE_SMOOTH
+  let artHoles = false
+
+  // The Normals view: the analysis's normal map itself, as colours (red = tilted right, green = up)
+  function normalsPicture(): HTMLCanvasElement | null {
+    const img = normalTex?.image as CanvasImageSource | undefined
+    if (!img) return null
+    const c = document.createElement('canvas')
+    c.width = c.height = 1024
+    c.getContext('2d')!.drawImage(img, 0, 0, 1024, 1024)
+    return c
+  }
 
   function build(kit: ReliefKit, holes?: Uint8Array) {
     if (relief) { scene.remove(relief.group); dispose(relief.group, normalTex) }
     const k = kit.preview
-    relief = cleanRelief(art!, renderer.capabilities.getMaxAnisotropy(), k.alpha, k.size, PREVIEW_GRID, holes ? { mask: holes, size: k.size } : undefined)
+    relief = cleanRelief(art!, renderer.capabilities.getMaxAnisotropy(), k.alpha, k.size, PREVIEW_GRID, holes ? { mask: holes, size: k.size } : undefined, holeSmooth, artHoles)
     relief.faceMaterial.normalMap = normalTex
     relief.faceMaterial.normalMapType = THREE.ObjectSpaceNormalMap
     relief.faceMaterial.needsUpdate = true
@@ -845,6 +1076,8 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
     relief.setHighlight(lastHighlight, k.size)
     relief.setOverlay(lastOverlay)
     relief.setFinish(lastFinish, k.size)
+    relief.setDetails(lastDetails?.map ?? null, k.size, lastDetails?.slots ?? [])
+    if (lastMetal) relief.setMetal(...lastMetal)
     if (lastFrames.some((f) => f.length)) relief.setLenticular(lastFrames)
   }
 
@@ -861,7 +1094,8 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
   let down: { x: number; y: number } | null = null
   const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY } }
   const onUp = (e: PointerEvent) => {
-    if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || !faceMesh || !kitRef) return
+    // (not while the brush is out — Tab pauses turning, and its clicks paint instead)
+    if (!down || !controls.enabled || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4 || !faceMesh || !kitRef) return
     const r = renderer.domElement.getBoundingClientRect()
     ray.setFromCamera(new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera)
     const hit = ray.intersectObject(faceMesh)[0]
@@ -931,22 +1165,31 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
       lastHighlight = pieces.length ? Uint8Array.from(k.pieces, (p) => (on.has(p) ? 1 : 0)) : null
       relief.setHighlight(lastHighlight, k.size)
     },
+    normalStrength(s) { relief?.setNormalStrength(s) },
+    metal(color, rough) { lastMetal = [color, rough]; relief?.setMetal(color, rough) },
     paint(kit, view, c, stepped) {
       if (!relief || kitRef !== kit) return
-      lastOverlay = view === 'art' || (view === 'levels' && !stepped) ? null : view === 'pieces' ? piecesPicture(kit) : levelsPicture(kit, c)
+      lastOverlay = view === 'art' || (view === 'levels' && !stepped) ? null
+        : view === 'pieces' ? piecesPicture(kit) : view === 'normals' ? normalsPicture() : levelsPicture(kit, c)
       relief.setOverlay(lastOverlay)
     },
-    finishes(kit, materials, opts) {
+    finishes(kit, materials, opts, smooth, cutArt, details) {
       if (!relief || kitRef !== kit) return
       const k = kit.preview
       const f = finishMap(k, materials, opts)
       lastFinish = f?.map ?? null
+      lastDetails = details
       // the pin is rebuilt only when the holes change (which, or how smoothed) — the body's shape does
-      const holes = JSON.stringify(Object.entries(materials).filter(([, x]) => x === FINISH_HOLE).map(([id]) => [id, opts[id]?.smooth]).sort())
+      const holes = JSON.stringify([smooth, cutArt, Object.entries(materials).filter(([, x]) => x === FINISH_HOLE).map(([id]) => [id, opts[id]?.smooth]).sort()])
       if (holes !== holeKey) {
         holeKey = holes
+        holeSmooth = smooth
+        artHoles = cutArt
         build(kit, f?.holes ?? undefined)
-      } else relief.setFinish(lastFinish, k.size)
+      } else {
+        relief.setFinish(lastFinish, k.size)
+        relief.setDetails(details?.map ?? null, k.size, details?.slots ?? [])
+      }
     },
     lenticular(sets) {
       if (JSON.stringify(sets) === JSON.stringify(lastFrames)) return
@@ -1022,6 +1265,7 @@ function hsl(h: number, s: number, l: number): [number, number, number] {
 }
 
 function dispose(obj: THREE.Object3D, keep?: THREE.Texture | null) {
+  disposeRelief(obj)
   obj.traverse((o) => {
     const m = o as THREE.Mesh
     if (!m.isMesh) return
@@ -1034,10 +1278,17 @@ function dispose(obj: THREE.Object3D, keep?: THREE.Texture | null) {
 }
 
 // Unsaved Studio work per badge, kept in this browser until the badge is saved with it
-interface Draft { kit: Record<string, string>; settings: Partial<ReliefSettings> }
+// base: the badge's picture and saved kit when the work began — a draft is only offered back while
+// the badge still has them (drafts from before `base` existed: while it has the draft's own kit)
+interface Draft { kit: Record<string, string>; settings: Partial<ReliefSettings>; base?: string }
 const draftKey = (badgeId: string) => `tcghaven-relief-draft:${badgeId || 'new'}`
-function readDraft(badgeId: string): Draft | null {
-  try { const d = JSON.parse(localStorage.getItem(draftKey(badgeId)) || 'null'); return d?.kit?.['art.webp'] ? d : null } catch { return null }
+const draftBase = (badge: BadgeDef) => `${badge.imageUrl ?? ''}|${badge.reliefKit?.['art.webp'] ?? ''}`
+function readDraft(badgeId: string, base: string, savedArt: string | undefined): Draft | null {
+  try {
+    const d: Draft | null = JSON.parse(localStorage.getItem(draftKey(badgeId)) || 'null')
+    if (!d?.kit?.['art.webp']) return null
+    return (d.base !== undefined ? d.base === base : d.kit['art.webp'] === savedArt) ? d : null
+  } catch { return null }
 }
 function writeDraft(badgeId: string, d: Draft) {
   try { localStorage.setItem(draftKey(badgeId), JSON.stringify(d)) } catch { /* storage full or blocked: nothing to do */ }

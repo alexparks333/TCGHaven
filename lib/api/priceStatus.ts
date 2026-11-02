@@ -7,11 +7,14 @@ import type { SyncStatus } from './syncStatus'
 // (.github/workflows/sync-prices.yml → app/api/cron/sync-prices/route.ts). This reads whether
 // that's actually happening, for the "Prices updated …" / "update failed" line on Portfolio:
 //
-//  - catalog_meta/{game}.lastBulkSyncAt — when the last SUCCESSFUL sync finished (written only
-//    on success, by syncToFirestore() in scripts/lib/catalog-sync.mjs)
+//  - sync_status/{game}.lastGoodAt — when the last SUCCESSFUL sync finished (written only on
+//    success, by syncToFirestore() in scripts/lib/catalog-sync.mjs)
 //  - sync_status/{game} — the most recent ATTEMPT, success or failure (lib/api/syncStatus.ts)
 //
-// Both are public-read in firestore.rules, so any signed-in user can show the same status.
+// One small doc per game, read by every open app every 15 minutes. Until a game's first sync
+// since lastGoodAt existed, the same time is read from catalog_meta/{game}.lastBulkSyncAt instead
+// — avoided otherwise, since that doc also carries the set list and broken-image ids (~180KB for
+// Pokémon). Both are public-read in firestore.rules, so any signed-in user can show the same status.
 
 // Four runs a day = one every 6h; flag it once roughly two runs in a row have gone missing.
 const STALE_AFTER_MS = 9 * 60 * 60 * 1000
@@ -37,11 +40,11 @@ export async function loadPriceStatus(games: Game[]): Promise<PriceStatus> {
   const now = Date.now()
   const perGame = await Promise.all(
     games.map(async (game) => {
-      const [metaSnap, statusSnap] = await Promise.all([
-        getDoc(doc(db, 'catalog_meta', game)),
-        getDoc(doc(db, 'sync_status', game)),
-      ])
-      const lastGood = (metaSnap.data()?.lastBulkSyncAt as Timestamp | undefined)?.toDate() ?? null
+      const statusSnap = await getDoc(doc(db, 'sync_status', game))
+      const lastGoodAt = statusSnap.data()?.lastGoodAt as Timestamp | undefined
+      const lastGood = lastGoodAt
+        ? lastGoodAt.toDate()
+        : ((await getDoc(doc(db, 'catalog_meta', game))).data()?.lastBulkSyncAt as Timestamp | undefined)?.toDate() ?? null
       const attempt = statusSnap.exists() ? (statusSnap.data() as SyncStatus) : null
       const attemptAt = attempt?.at ? new Date(attempt.at) : null
       const lastAttemptFailed = !!attempt && attempt.ok === false && !!attemptAt && (!lastGood || attemptAt > lastGood)

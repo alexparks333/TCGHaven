@@ -1,7 +1,7 @@
 'use client'
 
 import { useId } from 'react'
-import { badgeAsset } from '@/lib/badgeAssets'
+import { useTrimmedArt } from './trimmedArt'
 
 // Enamel-pin art for each Haven Badge (lib/badges.ts `art`). Temporary designs until real art is
 // made: a gold-rimmed hexagon pin with enamel fill, an emblem and a ribbon. `silhouette` is the
@@ -26,14 +26,16 @@ export const BUILT_IN_PIN_ART = Object.keys(THEMES).concat('crest')
 
 const FALLBACK: PinTheme = { enamel: ['#8a5d36', '#3b2614'], emblem: 'crown', top: 'TCG HAVEN', ribbon: 'BADGE' }
 
-// `imageUrl`: the badge's uploaded art (from the staff portal) — drawn instead of the built-in art.
+// `imageUrl`: the badge's uploaded art (from the staff portal) — drawn instead of the built-in art,
+// cropped to the pin itself (trimmedArt.ts) so it fills the box whatever margin the picture has.
 export function BadgePin({ art, imageUrl, size = 72, ghost = false }: { art: string; imageUrl?: string; size?: number; ghost?: boolean }) {
   const uid = useId().replace(/:/g, '')
-  if (imageUrl) {
+  const trimmed = useTrimmedArt(imageUrl)
+  if (trimmed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={badgeAsset(imageUrl)}
+        src={trimmed.src}
         alt=""
         aria-hidden
         draggable={false}

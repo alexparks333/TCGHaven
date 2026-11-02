@@ -9,7 +9,7 @@ import { SortableContext, rectSortingStrategy, useSortable, arrayMove, sortableK
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowUp, ArrowDown, Trash2, Plus, Cuboid, Pencil, GripVertical, BookMarked } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, chaptersOf, pinSize, type BadgeCatalog, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 
 // The staff portal's chapter editor for one pin book: each chapter is a card showing its pages as
@@ -262,7 +262,8 @@ function TileFace({ b, lifted }: { b: BadgeDef; lifted?: boolean }) {
       lifted ? 'border-violet-600 shadow-2xl scale-[1.04] bg-slate-900' : 'border-slate-800 hover:border-slate-600',
     )}>
       <GripVertical size={12} className="absolute left-0.5 top-1 text-slate-600" />
-      <BadgePin art={b.art} imageUrl={b.imageUrl} size={46} />
+      {/* a 100%-pin box: Display size grows the pin about its middle, the name stays put */}
+      <span className="flex items-center justify-center" style={{ width: 46, height: 46 * 1.12 }}><BadgePin art={b.art} imageUrl={b.imageUrl} size={pinSize(b, 46)} /></span>
       <span className="max-w-[112px] truncate text-[11px] font-semibold text-ink">{b.name}</span>
       {!b.slots.length && <span className="absolute left-1.5 bottom-1.5 w-2 h-2 rounded-full bg-amber-500" title="No requirements yet" />}
       {b.growing && <span className="absolute right-1.5 bottom-1.5 text-[9px] font-bold text-amber-700" title="Growing badge — can be Mastered">✦</span>}

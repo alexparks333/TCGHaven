@@ -23,10 +23,13 @@ import { Readable } from 'node:stream'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp, Bytes,
 } from 'firebase/firestore'
 import { normSetName } from './text-norm.mjs'
-import { PRICE_HISTORY_COLLECTION, buildDailyEntries } from './price-history.mjs'
+import {
+  PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, buildDailyEntries, buildDayPrices,
+  dayDocId, encodePriceMap, decodePriceChunks, mergeFirsts,
+} from './price-history.mjs'
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { fallbackPokemonSetId } from './pokemon-groups.mjs'
 import { EDITION_GROUPS, newPriceEntry, addPriceRow, legacyFields } from './pokemon-variants.mjs'
@@ -290,6 +293,10 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
   // above is committed, and anything changed after this the app pulls as a delta.
   await writeCompressedSnapshot(db, game, finalCards, new Date())
   await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp(), brokenImageIds }, { merge: true })
+  // The same moment on the small sync_status doc: what every open app checks every 15 minutes
+  // (lib/api/priceStatus.ts) and what the server's history cache keys off (lib/api/priceHistory.ts)
+  // — catalog_meta also carries the set list and broken-image ids (~180KB for Pokémon).
+  await setDoc(doc(db, 'sync_status', game), { lastGoodAt: serverTimestamp() }, { merge: true })
   // Today's prices into the shared price history (see price-history.mjs). Non-fatal: a failure
   // here (e.g. firestore.rules not yet deployed for price_history) must never fail the sync
   // itself — the catalog is already fully updated by this point.
@@ -298,6 +305,12 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
     console.log(`   Price history (${game}): ${written} set-month doc(s) updated`)
   } catch (err) {
     console.warn(`   ⚠️  Price history (${game}) not written: ${err.message}`)
+  }
+  try {
+    const { chunks, newFirsts } = await writeDailyPriceSnapshot(game, finalCards)
+    console.log(`   Daily prices (${game}): ${chunks} chunk(s)${newFirsts ? ', first prices updated' : ''}`)
+  } catch (err) {
+    console.warn(`   ⚠️  Daily prices (${game}) not written: ${err.message}`)
   }
 
   return {
@@ -327,6 +340,38 @@ async function writeDailyPriceHistory(game, cards) {
     await batch.commit()
   }
   return docs.length
+}
+
+// Today's whole-game price file and the first-price map (see price-history.mjs "Daily closes").
+// Exported for scripts/backfill-daily-prices.mjs.
+export async function writeDailyPriceSnapshot(game, cards, when = new Date()) {
+  const { day, t, prices } = buildDayPrices(cards, when)
+  const chunks = await writePriceChunks(game, DAYS_COLLECTION, (n) => dayDocId(day, n), { day, t }, prices)
+  const existing = await readPriceChunks(game, FIRSTS_COLLECTION)
+  const firsts = existing?.prices ?? {}
+  const newFirsts = mergeFirsts(firsts, prices)
+  if (newFirsts) await writePriceChunks(game, FIRSTS_COLLECTION, String, { t }, firsts)
+  return { chunks, newFirsts }
+}
+
+/** Writes a price map as chunk docs in one atomic batch, clearing up to 2 leftover chunks. */
+export async function writePriceChunks(game, collectionName, idOf, fields, prices) {
+  const chunks = await encodePriceMap(prices)
+  const batch = writeBatch(db)
+  chunks.forEach((gz, n) => {
+    batch.set(doc(db, PRICE_HISTORY_COLLECTION, game, collectionName, idOf(n)), {
+      ...fields, chunk: n, of: chunks.length, gz: Bytes.fromUint8Array(gz),
+    })
+  })
+  for (let n = chunks.length; n < chunks.length + 2; n++) batch.delete(doc(db, PRICE_HISTORY_COLLECTION, game, collectionName, idOf(n)))
+  await batch.commit()
+  return chunks.length
+}
+
+/** Reads a whole chunked price map collection (firsts), or null if there's no complete one. */
+export async function readPriceChunks(game, collectionName) {
+  const snap = await getDocs(collection(db, PRICE_HISTORY_COLLECTION, game, collectionName))
+  return decodePriceChunks(snap.docs.map((d) => d.data()))
 }
 
 // The set registry (formerly data/set-registry.json, now Firestore's registry/main doc — see

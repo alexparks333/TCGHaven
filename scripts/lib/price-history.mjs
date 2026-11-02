@@ -46,6 +46,13 @@ export function tupleToFields(t) {
   return fields
 }
 
+// The tuple a card's history records, or null if it records nothing. Cardmarket estimates (EUR →
+// USD backup prices, price-fallback.mjs) stay out of history: exchange-rate moves would show up
+// as fake price changes.
+function historyTuple(card) {
+  return card.priceSource === 'cardmarket' ? null : priceTuple(card)
+}
+
 // Groups a game's catalog cards into this sync's month-doc writes:
 // Map<docId, { setKey, month, day, value }>.
 export function buildDailyEntries(cards, when = new Date()) {
@@ -54,10 +61,7 @@ export function buildDailyEntries(cards, when = new Date()) {
   const day = iso.slice(8, 10)
   const bySet = new Map()
   for (const card of cards) {
-    // Cardmarket estimates (EUR → USD backup prices, price-fallback.mjs) stay out of history:
-    // exchange-rate moves would show up as fake price changes.
-    if (card.priceSource === 'cardmarket') continue
-    const tuple = priceTuple(card)
+    const tuple = historyTuple(card)
     if (!tuple) continue
     const key = setKeyOf(card)
     if (!bySet.has(key)) bySet.set(key, {})
@@ -68,4 +72,100 @@ export function buildDailyEntries(cards, when = new Date()) {
     out.set(monthDocId(setKey, month), { setKey, month, day, value: JSON.stringify({ t: iso, p: prices }) })
   }
   return out
+}
+
+// ── Daily closes ────────────────────────────────────────────────────────────────────────────────
+// The month docs above hold a set's whole month — right for one card's chart, but Portfolio only
+// needs every card's price on four days (24h / 7d / 30d / 1y ago), and reading those from month
+// docs meant 13 months of every owned set. So each sync also writes the whole game's prices for
+// the day as one compressed file:
+//
+//   price_history/{game}/days/{YYYY-MM-DD}__{n} = { day, t, chunk: n, of, gz: Bytes }
+//
+// gz = gzipped JSON { [catalogId]: tuple } (the same tuple as the month docs), split into chunks
+// under Firestore's 1MiB doc limit (MTG needs 2; every other game 1). Each sync overwrites today's;
+// once the UTC day is over a day's file never changes, so a server keeps it in memory for good.
+//
+//   price_history/{game}/firsts/{n} = { t, chunk: n, of, gz: Bytes }
+//
+// Each card's first recorded price (per field: the first non-zero one) — the Analytics fallback
+// cost basis for cards added without a price. Rewritten only when a new card or price shows up.
+
+export const DAYS_COLLECTION = 'days'
+export const FIRSTS_COLLECTION = 'firsts'
+const MAX_CHUNK_BYTES = 800_000 // compressed; Firestore's limit is 1MiB per doc
+
+export function dayDocId(day, n) {
+  return `${day}__${n}`
+}
+
+/** This sync's day file contents: { day: 'YYYY-MM-DD', t: ISO time, prices: { [id]: tuple } }. */
+export function buildDayPrices(cards, when = new Date()) {
+  const t = when.toISOString()
+  const prices = {}
+  for (const card of cards) {
+    const tuple = historyTuple(card)
+    if (tuple) prices[card.id] = tuple
+  }
+  return { day: t.slice(0, 10), t, prices }
+}
+
+async function gzip(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))
+  return new Uint8Array(await new Response(stream).arrayBuffer())
+}
+
+async function gunzip(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+  return new Response(stream).text()
+}
+
+/** { [id]: tuple } → gzipped chunks, each under MAX_CHUNK_BYTES. */
+export async function encodePriceMap(prices) {
+  const out = []
+  async function add(entries) {
+    const gz = await gzip(JSON.stringify(Object.fromEntries(entries)))
+    if (gz.length > MAX_CHUNK_BYTES && entries.length > 1) {
+      const mid = Math.ceil(entries.length / 2)
+      await add(entries.slice(0, mid))
+      await add(entries.slice(mid))
+    } else {
+      out.push(gz)
+    }
+  }
+  await add(Object.entries(prices))
+  return out
+}
+
+/**
+ * The chunk docs' data → { t, prices }, or null if they aren't one complete write (same `of`,
+ * same `t`, every chunk present). Leftover chunks from an older, larger write are ignored.
+ * `bytesOf` turns a doc's `gz` field into a Uint8Array (Firestore `Bytes` → `.toUint8Array()`).
+ */
+export async function decodePriceChunks(datas, bytesOf = (gz) => gz.toUint8Array()) {
+  if (!datas.length) return null
+  const sorted = [...datas].sort((a, b) => a.chunk - b.chunk)
+  const { of, t } = sorted[0]
+  const set = sorted.filter((d) => d.of === of && d.t === t && d.chunk < of)
+  if (set.length !== of || set.some((d, i) => d.chunk !== i)) return null
+  const parts = await Promise.all(set.map(async (d) => JSON.parse(await gunzip(bytesOf(d.gz)))))
+  return { t, prices: Object.assign({}, ...parts) }
+}
+
+/**
+ * Folds a day's prices into the firsts map (mutates `firsts`): a new card gets its tuple, and a
+ * field still 0 (say, no foil price yet) takes the first non-zero value seen. Variant prices are
+ * kept from the first time they appear. Returns whether anything changed.
+ */
+export function mergeFirsts(firsts, prices) {
+  let changed = false
+  for (const [id, tuple] of Object.entries(prices)) {
+    const cur = firsts[id]
+    if (!cur) { firsts[id] = [...tuple]; changed = true; continue }
+    for (let i = 0; i < 4; i++) {
+      if (!(cur[i] > 0) && tuple[i] > 0) { cur[i] = tuple[i]; changed = true }
+    }
+    if (!cur[4] && tuple[4]) { cur[4] = tuple[4]; changed = true }
+  }
+  return changed
 }

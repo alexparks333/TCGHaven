@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, pinSize, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { BadgeBook } from './BadgeBook'
@@ -495,7 +495,7 @@ export function BookCover({ set, badges }: { set: BadgeSet; badges: SharedBadges
         <div className="mt-1 font-black leading-none text-[clamp(18px,9cqw,40px)]" style={{ color: '#fbe9c4', textShadow: '0 2px 0 rgba(0,0,0,0.45)' }}>{set.name}</div>
         <div className="mt-[10%] drop-shadow-[0_6px_6px_rgba(0,0,0,0.5)]">
           {first ? (
-            <BadgePin art={first.art} imageUrl={first.imageUrl} size={70} ghost={badgeTier(first, badges?.progress[first.id]) === 0} />
+            <span className="flex items-center justify-center" style={{ width: 70, height: 70 * 1.12 }}><BadgePin art={first.art} imageUrl={first.imageUrl} size={pinSize(first, 70)} ghost={badgeTier(first, badges?.progress[first.id]) === 0} /></span>
           ) : (
             // No pins in this book yet: an embossed medallion with the game's monogram
             <span

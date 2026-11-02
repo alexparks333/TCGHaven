@@ -46,7 +46,16 @@ export interface ReliefLook {
   wall?: number
   lenticular?: string[][] // the Lenticular finish's picture sets, as URLs the browser may load (via badgeAsset)
   tier?: 1 | 2 | 3        // which look (setTier); unset = Full
+  holeSmooth?: number     // 0–1: how much the art's own holes (its enclosed transparency) are rounded off
+  artHoles?: boolean      // cut the art's enclosed transparency out as holes (ReliefSettings.artHoles); unset = no
+  metalColor?: string     // the metal of the sides, back and gold walls (hex); unset = the original gold
+  metalRough?: number     // its roughness (0–1); unset = as made
+  normalStrength?: number // how strongly the normal map tilts the surface (1 = as made, more = deeper detail); unset = 1
+  detailSlots?: number[][] // the detail map's slots (lib/reliefStudio.ts detailSlots), when it has one
 }
+
+/** The art's own holes are rounded off this much unless the Studio says otherwise (ReliefSettings.holeSmooth) */
+export const HOLE_SMOOTH = 0.3
 
 /** A real relief whose surface can be re-shaped in place — the Relief Studio's live preview. */
 export interface LiveRelief extends Relief {
@@ -64,12 +73,19 @@ export interface LiveRelief extends Relief {
   /** Each pixel's finish, RGBA (R = FINISHES id in lib/reliefStudio.ts, G/B = its settings), size²;
    *  null = all Auto. Holes are cut when the pin is built (cleanRelief's `holes`), not here. */
   setFinish(finish: Uint8Array | null, size: number): void
+  /** The details over the finishes: a map like the finish map (R = slot + 16 × coverage, size²) and
+   *  each slot's settings (lib/reliefStudio.ts detailSlots); null = none. */
+  setDetails(map: Uint8Array | null, size: number, slots: number[][]): void
+  /** How strongly the normal map tilts the surface (ReliefLook.normalStrength) — no re-mesh. */
+  setNormalStrength(s: number): void
+  /** The metal of the sides, back and gold walls (ReliefLook.metalColor / metalRough); no colour = the original gold. */
+  setMetal(color?: string, rough?: number): void
 }
 
 // Finishes, by id — keep in step with FINISHES in lib/reliefStudio.ts (that's where they're named)
 export const FINISH_HOLE = 6
 
-export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?: string, look?: ReliefLook, finishUrl?: string): Promise<Relief> {
+export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?: string, look?: ReliefLook, finishUrl?: string, detailUrl?: string): Promise<Relief> {
   const img = await loadImage(url)
   if (!depthUrl) return guessedRelief(img, maxAnisotropy)
   // A real relief height map (HavenRelief / the Relief Studio) is used exactly as made
@@ -77,10 +93,12 @@ export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?:
   // The Studio's finish map (R = finish id per pixel), when the badge has one
   const finish = finishUrl ? readFinish(await loadImage(finishUrl), HN) : null
   const holes = finish ? Uint8Array.from({ length: HN * HN }, (_, i) => (finish[i * 4] % 16 === FINISH_HOLE ? 1 : 0)) : null
-  const r = cleanRelief(img, maxAnisotropy, fineHeight.a, HN, CLEAN_GRID, holes?.some((v) => v) ? { mask: holes, size: HN } : undefined)
+  const r = cleanRelief(img, maxAnisotropy, fineHeight.a, HN, CLEAN_GRID, holes?.some((v) => v) ? { mask: holes, size: HN } : undefined, look?.holeSmooth, !!look?.artHoles)
   r.setHeight(fineHeight.h, HN, look)
   if (finish) r.setFinish(finish, HN)
+  if (detailUrl && look?.detailSlots?.length) r.setDetails(readFinish(await loadImage(detailUrl), HN), HN, look.detailSlots)
   if (look?.lenticular?.some((s) => s.length)) await r.setLenticular(look.lenticular)
+  if (look?.metalColor) r.setMetal(look.metalColor, look.metalRough)
   if (look?.tier && look.tier < 3) r.setTier(look.tier)
   return r
 }
@@ -96,15 +114,20 @@ function readFinish(img: HTMLImageElement, size: number): Uint8Array {
 
 /** A real relief's pin: body, back, and a relief surface over the art's cutout (`alpha`, size²)
  *  that setHeight() shapes — as often as it likes, e.g. on every slider move. `holes` (1 = cut
- *  out) goes right through: relief, body and back plate, with the gold skirt lining its edge. */
+ *  out) goes right through: relief, body and back plate, with the gold skirt lining its edge.
+ *  With `artHoles`, transparent areas inside the art (enclosed by the pin, not open to its edge)
+ *  are holes too, their edges rounded off by `holeSmooth` (0–1). */
 export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha: Float32Array, size: number, grid: number,
-  holes?: { mask: Uint8Array; size: number }): LiveRelief {
-  if (holes) {
-    const k = holes.size / size
-    alpha = alpha.map((a, i) => (holes.mask[Math.floor(Math.floor(i / size) * k) * holes.size + Math.floor((i % size) * k)] ? 0 : a))
-  }
+  holes?: { mask: Uint8Array; size: number }, holeSmooth = HOLE_SMOOTH, artHoles = false): LiveRelief {
   const { rgba } = readPixels(img, N)
   const artAlpha = alphaOf(rgba)
+  const art = artHoles ? withArtHoles(holes, alpha, size, holeSmooth) : { holes, fill: null, raw: null }
+  holes = art.holes
+  if (holes) {
+    // The face runs on across the holes (they're cut from it per pixel, by holeTexture): solid there
+    const k = holes.size / size
+    alpha = alpha.map((a, i) => (holes.mask[Math.floor(Math.floor(i / size) * k) * holes.size + Math.floor((i % size) * k)] || art.raw?.[i] ? 1 : a))
+  }
   const classes = classify(rgba, artAlpha)
   solidifyGold(classes) // metal only in solid gold areas, never flecks
 
@@ -115,6 +138,13 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   fctx.drawImage(img, 0, 0, 2048, 2048)
   if (!hasTransparency(rgba)) whiteToAlpha(fctx) // a picture on white: cut the background out
   bleedEdgeColour(full)
+  if (art.raw) {
+    // The art's holes made opaque (in their edge colour): the geometry cuts them along a smooth
+    // outline, and the texture's own alpha test chopped that edge pixel by pixel into spikes
+    const px = fctx.getImageData(0, 0, 2048, 2048), k = size / 2048
+    for (let i = 0; i < 2048 * 2048; i++) if (art.raw[Math.floor(Math.floor(i / 2048) * k) * size + Math.floor((i % 2048) * k)]) px.data[i * 4 + 3] = 255
+    fctx.putImageData(px, 0, 0)
+  }
   const colorTex = new THREE.CanvasTexture(full)
   colorTex.colorSpace = THREE.SRGBColorSpace
   colorTex.anisotropy = maxAnisotropy
@@ -139,13 +169,63 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
 
   const group = new THREE.Group()
   const outline = traceOutline(artAlpha)
-  // A hole has one wall: the relief's cut edge, snapped onto the hole's outline (holeEdges) and
-  // carried right down to the back plate. The body's own opening is cut a little wider, so it sits
-  // hidden behind that wall — traced separately, the two never quite lined up and the relief's
-  // short edge hung in the hole as loose gold strips.
-  const holeEdges = holes ? holePaths(holes.mask, holes.size, 0) : []
-  if (holes) outline.holes.push(...holePaths(holes.mask, holes.size, Math.max(1, Math.round(2 * holes.size / 1024))))
+  // A hole has one wall, standing on its smooth edge (holeLoops) from the face right down to the
+  // back plate. Everything else is cut along the same edge per pixel by the hole map: the face (in
+  // its shader) and the body and back plate (holeDiscard) — openings triangulated into the body
+  // folded over on intricate holes and filled them back in with gold.
+  const holeField0 = holes ? holeField(holes.mask, holes.size) : null
+  const holeEdges = holeField0 ? holeLoops(holeField0, holes!.size) : []
+  const holeTex = holeField0 ? holeTexture(holeField0, holes!.size) : null
+  if (holeTex) {
+    finishUniforms.holeMap.value = holeTex
+    finishUniforms.hasHoles.value = 1
+  }
+  const solid = group.children.length
   const { front, backZ, gold } = addBodyAndBack(group, outline)
+  const bodyParts = group.children.slice(solid) as THREE.Mesh[] // cut by the hole map once the skirt has copied gold
+
+  // The height carried a few pixels into the holes before the hole's top edge samples it: a height
+  // map is 0 where the art is transparent, and the edge (on the border) caught that 0 at every
+  // other point — a saw-toothed wall
+  let band: { size: number; idx: number[]; hole: Uint8Array } | null = null
+  function intoHoles(h: Float32Array, hsize: number): Float32Array {
+    const hm = holes!
+    if (band?.size !== hsize) {
+      const k = hm.size / hsize
+      let holeAt: Uint8Array = new Uint8Array(hsize * hsize)
+      for (let i = 0; i < holeAt.length; i++) holeAt[i] = hm.mask[Math.floor(Math.floor(i / hsize) * k) * hm.size + Math.floor((i % hsize) * k)]
+      // a little past the edge too: the height map falls away just inside a cutout's edge, and that
+      // drop showed as a fringe of gold wall teeth along it
+      holeAt = dilate(holeAt, hsize, Math.max(1, Math.round(3 * hsize / 2048)))
+      const hole = (x: number, y: number) => holeAt[y * hsize + x] === 1
+      const r = Math.max(3, Math.round(10 * hsize / 2048)), idx: number[] = []
+      for (let y = 0; y < hsize; y++) for (let x = 0; x < hsize; x++) {
+        if (!hole(x, y)) continue
+        near: for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const nx = x + dx, ny = y + dy
+          if (nx >= 0 && ny >= 0 && nx < hsize && ny < hsize && !hole(nx, ny)) { idx.push(y * hsize + x); break near }
+        }
+      }
+      band = { size: hsize, idx, hole: holeAt }
+    }
+    const out = h.slice(), known = Uint8Array.from(band.hole, (v) => 1 - v) // solid, or filled already
+    for (const i of band.idx) out[i] = 0
+    // grown outward from the solid side, a pixel ring per pass
+    for (let pass = 0; pass < Math.max(3, Math.round(10 * hsize / 2048)) + 1; pass++) {
+      const prev = out.slice(), was = known.slice()
+      for (const i of band.idx) {
+        if (was[i]) continue
+        const x = i % hsize
+        let best = 0, n = 0
+        for (const q of [x > 0 ? i - 1 : -1, x < hsize - 1 ? i + 1 : -1, i - hsize, i + hsize]) {
+          if (q < 0 || q >= h.length || !was[q]) continue
+          best += prev[q]; n++
+        }
+        if (n) { out[i] = best / n; known[i] = 1 }
+      }
+    }
+    return out
+  }
 
   // The relief surface, cut cleanly at the pin's outline: triangles outside it are dropped, rather
   // than sloping down to zero (that slope got stretched edge colour — a ragged silver fringe)
@@ -156,6 +236,15 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   const inside = (vi: number) => sample(alpha, pos.getX(vi) + 0.5, 0.5 - pos.getY(vi), size) > 0.5
   for (let t = 0; t < idx.length; t += 3) if (inside(idx[t]) && inside(idx[t + 1]) && inside(idx[t + 2])) keep.push(idx[t], idx[t + 1], idx[t + 2])
   face.setIndex(keep)
+  // Its bounds are the pin's, not the whole square: the grid's unused corners stay in the geometry,
+  // and measured with them every pin framed as the full picture, margin and all (PinInspector's fit)
+  const used = Array.from(new Set(keep))
+  const faceBounds = () => {
+    const b = new THREE.Box3(), v = new THREE.Vector3()
+    for (const i of used) b.expandByPoint(v.fromBufferAttribute(pos, i))
+    face.boundingBox = b
+  }
+  faceBounds()
   const wallAttr = new THREE.BufferAttribute(new Float32Array(pos.count), 1)
   face.setAttribute('wall', wallAttr)
   group.add(new THREE.Mesh(face, faceMaterial))
@@ -174,35 +263,54 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     if (edgeUse.get(edgeKey(a, b)) === 1) rim.push(a, b, -1 - b, a, -1 - b, -1 - a)
   }
   // The cut edge follows the mesh grid in little steps; pull every edge vertex onto the smooth
-  // outline the body is built from (its outer edge and any holes' openings), so the skirt is one
-  // clean wall meeting the body's bevel — not a staircase
-  const contour: number[] = [] // x, y, 1 if it's a hole's edge
-  for (const v of outline.getPoints()) contour.push(v.x, v.y, 0)
-  for (const c of holeEdges) for (const v of c.getPoints()) contour.push(v.x, v.y, 1)
-  const uv = face.attributes.uv
-  const onHole = new Set<number>()
-  const snapped = new Set<number>()
+  // outline the body is built from, so the skirt is one clean wall meeting the body's bevel — not a
+  // staircase. Onto the nearest point along the outline's segments, not its nearest corner: corners
+  // can be a few grid cells apart, and a vertex pulled that far sideways made a spike at the edge.
+  // (Holes don't cut the face's mesh — see holeWalls below.)
+  const segs: number[] = [] // x1, y1, x2, y2, 0
+  const addLoop = (pts: THREE.Vector2[]) => {
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; segs.push(a.x, a.y, b.x, b.y, 0) }
+  }
+  addLoop(outline.getPoints())
   const reach = 4 / grid
+  const bins = new Map<number, number[]>() // segments by the reach-sized cells they touch
+  const binOf = (cx: number, cy: number) => (cx + 4096) * 8192 + (cy + 4096)
+  for (let s = 0; s < segs.length; s += 5) {
+    const x0 = Math.floor(Math.min(segs[s], segs[s + 2]) / reach), x1 = Math.floor(Math.max(segs[s], segs[s + 2]) / reach)
+    const y0 = Math.floor(Math.min(segs[s + 1], segs[s + 3]) / reach), y1 = Math.floor(Math.max(segs[s + 1], segs[s + 3]) / reach)
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
+      const k = binOf(cx, cy)
+      const list = bins.get(k)
+      if (list) list.push(s); else bins.set(k, [s])
+    }
+  }
+  const uv = face.attributes.uv
+  const snapped = new Set<number>()
   for (const v of rim) {
     if (v < 0 || snapped.has(v)) continue
     snapped.add(v)
     const x = pos.getX(v), y = pos.getY(v)
-    let best = -1, bd = reach * reach
-    for (let i = 0; i < contour.length; i += 3) {
-      const dx = contour[i] - x, dy = contour[i + 1] - y, d = dx * dx + dy * dy
-      if (d < bd) { bd = d; best = i }
+    let bd = reach * reach, bx = 0, by = 0, found = false
+    const cx = Math.floor(x / reach), cy = Math.floor(y / reach)
+    for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+      for (const s of bins.get(binOf(cx + ox, cy + oy)) ?? []) {
+        const ax = segs[s], ay = segs[s + 1], dx = segs[s + 2] - ax, dy = segs[s + 3] - ay
+        const l2 = dx * dx + dy * dy
+        const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0
+        const px = ax + t * dx, py = ay + t * dy, d = (px - x) ** 2 + (py - y) ** 2
+        if (d < bd) { bd = d; bx = px; by = py; found = true }
+      }
     }
-    if (best < 0) continue
-    pos.setXY(v, contour[best], contour[best + 1])
-    uv.setXY(v, contour[best] + 0.5, contour[best + 1] + 0.5)
-    if (contour[best + 2]) onHole.add(v)
+    if (!found) continue
+    pos.setXY(v, bx, by)
+    uv.setXY(v, bx + 0.5, by + 0.5)
   }
   uv.needsUpdate = true
   const skirtPos = new Float32Array(rim.length * 3)
   rim.forEach((v, i) => {
     const src = v >= 0 ? v : -1 - v
     skirtPos[i * 3] = pos.getX(src); skirtPos[i * 3 + 1] = pos.getY(src)
-    skirtPos[i * 3 + 2] = onHole.has(src) ? -BEVEL - 0.0004 : front - 0.004
+    skirtPos[i * 3 + 2] = front - 0.004
   })
   const skirt = new THREE.BufferGeometry()
   skirt.setAttribute('position', new THREE.BufferAttribute(skirtPos, 3))
@@ -210,16 +318,55 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   skirtMat.side = THREE.DoubleSide
   group.add(new THREE.Mesh(skirt, skirtMat))
 
+  // Each hole's wall: a band down its smooth edge, from the face (its top follows the face's
+  // height, set in setHeight) through the body to the back plate
+  const wallTops: number[] = [] // x, y per loop point, in wall-vertex order (top, bottom pairs)
+  const wallIdx: number[] = []
+  for (const loop of holeEdges) {
+    const first = wallTops.length / 2
+    for (let i = 0; i < loop.length; i++) {
+      wallTops.push(loop[i].x, loop[i].y)
+      const a = (first + i) * 2, b = (first + (i + 1) % loop.length) * 2
+      wallIdx.push(a, b, a + 1, b, b + 1, a + 1)
+    }
+  }
+  const wallPos = new Float32Array(wallTops.length * 3)
+  for (let p = 0; p < wallTops.length / 2; p++) {
+    wallPos.set([wallTops[p * 2], wallTops[p * 2 + 1], front, wallTops[p * 2], wallTops[p * 2 + 1], -BEVEL - 0.0004], p * 6)
+  }
+  const holeWalls = new THREE.BufferGeometry()
+  holeWalls.setAttribute('position', new THREE.BufferAttribute(wallPos, 3))
+  holeWalls.setIndex(wallIdx)
+  if (wallIdx.length) group.add(new THREE.Mesh(holeWalls, skirtMat))
+  if (holeTex) for (const m of bodyParts) for (const mat of ([] as THREE.Material[]).concat(m.material)) holeDiscard(mat, holeTex)
+  // The face's height at a point, as its mesh has it (the grid's four corners blended), so a wall's
+  // top meets the face exactly — not the height map, which the coarser mesh only approximates
+  const faceZ = (x: number, y: number) => {
+    const gx = Math.min(grid - 1e-6, Math.max(0, (x + 0.5) * grid)), gy = Math.min(grid - 1e-6, Math.max(0, (0.5 - y) * grid))
+    const x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0, row = grid + 1
+    const z = (cx: number, cy: number) => pos.getZ(cy * row + cx)
+    return (z(x0, y0) * (1 - fx) + z(x0 + 1, y0) * fx) * (1 - fy) + (z(x0, y0 + 1) * (1 - fx) + z(x0 + 1, y0 + 1) * fx) * fy
+  }
+
   function setHeight(h: Float32Array, hsize: number, look?: ReliefLook) {
     const depth = look?.depth ?? RELIEF_DEPTH
+    finishUniforms.normalStrength.value = look?.normalStrength ?? 1
+    if (holes) h = intoHoles(h, hsize)
     for (let i = 0; i < pos.count; i++) pos.setZ(i, front + 0.0008 + sample(h, pos.getX(i) + 0.5, 0.5 - pos.getY(i), hsize) * depth)
     pos.needsUpdate = true
     face.computeVertexNormals()
     face.computeBoundingSphere()
+    faceBounds()
     rim.forEach((v, i) => { if (v >= 0) skirtPos[i * 3 + 2] = pos.getZ(v) })
     skirt.attributes.position.needsUpdate = true
     skirt.computeVertexNormals()
     skirt.computeBoundingSphere()
+    if (wallIdx.length) {
+      for (let p = 0; p < wallTops.length / 2; p++) wallPos[p * 6 + 2] = faceZ(wallTops[p * 2], wallTops[p * 2 + 1]) + 0.0002
+      holeWalls.attributes.position.needsUpdate = true
+      holeWalls.computeVertexNormals()
+      holeWalls.computeBoundingSphere()
+    }
     setWalls(face, wallAttr, look?.wall ?? 0.35)
   }
   function setHighlight(mask: Uint8Array | null, msize: number) {
@@ -266,6 +413,20 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
       faceMaterial.needsUpdate = true
     }
   }
+  function setDetails(map: Uint8Array | null, msize: number, slots: number[][]) {
+    finishUniforms.detailMap.value.dispose()
+    if (map && slots.length) {
+      const row = msize * 4
+      const rows = new Uint8Array(msize * row)
+      for (let y = 0; y < msize; y++) rows.set(map.subarray(y * row, (y + 1) * row), (msize - 1 - y) * row) // as setFinish
+      const t = new THREE.DataTexture(rows, msize, msize, THREE.RGBAFormat, THREE.UnsignedByteType)
+      t.magFilter = t.minFilter = THREE.NearestFilter
+      t.needsUpdate = true
+      finishUniforms.detailMap.value = t
+      slots.slice(0, DETAIL_SLOTS).forEach((s, i) => { finishUniforms.detA.value[i].set(s[0], s[1], s[2], s[3]); finishUniforms.detB.value[i].set(s[4], s[5], s[6], s[7]) })
+    } else finishUniforms.detailMap.value = blankFinish()
+    finishUniforms.hasDetails.value = map && slots.length ? 1 : 0
+  }
   async function setLenticular(sets: string[][]) {
     finishUniforms.lentAtlas.value.dispose()
     // every set's pictures in one texture; each set remembered as (first picture, how many)
@@ -294,12 +455,31 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     finishUniforms.lentGrid.value.set(cols, rows, frames.length)
   }
   // The metal (body, skirt, back) follows the tier too: grey for Grayscale, satin below Full
-  const metals: { m: THREE.MeshPhysicalMaterial; color: THREE.Color; roughness: number; clearcoat: number }[] = []
+  const metals: { m: THREE.MeshPhysicalMaterial; color: THREE.Color; roughness: number; clearcoat: number; made: [THREE.Color, number] }[] = []
   group.traverse((o) => {
     const m = (o as THREE.Mesh).material as THREE.MeshPhysicalMaterial | undefined
-    if (m && m !== faceMaterial && 'clearcoat' in m) metals.push({ m, color: m.color.clone(), roughness: m.roughness, clearcoat: m.clearcoat })
+    if (m && m !== faceMaterial && 'clearcoat' in m && !metals.some((x) => x.m === m)) metals.push({ m, color: m.color.clone(), roughness: m.roughness, clearcoat: m.clearcoat, made: [m.color.clone(), m.roughness] })
   })
+  let tierNow: 1 | 2 | 3 = 3
+  // The metal's colour and roughness (the Studio's Global tab): the sides, skirt and hole walls
+  // take it as is, the brushed back a touch lighter and rougher (as the gold always was), the
+  // relief's gold walls the same colour. No colour = the metal as made.
+  function setMetal(color?: string, rough?: number) {
+    // the gold as it always was (lib/reliefStudio.ts DEFAULT_METAL) is the metal as made, exactly
+    if (color?.toLowerCase() === '#d2a44a' && (rough ?? 0.3) === 0.3) { color = undefined; rough = undefined }
+    const c = color ? new THREE.Color(color) : null
+    const r = rough ?? 0.3
+    for (const e of metals) {
+      const back = !!e.m.map
+      if (c) { e.color.copy(c); if (back) e.color.offsetHSL(0, 0, 0.03) } else e.color.copy(e.made[0])
+      e.roughness = c || rough !== undefined ? Math.min(1, back ? r + 0.12 : r) : e.made[1]
+    }
+    finishUniforms.wallColor.value.copy(c ?? WALL_GOLD)
+    finishUniforms.wallRough.value = c || rough !== undefined ? Math.min(1, r + 0.02) : 0.32
+    setTier(tierNow)
+  }
   function setTier(tier: 1 | 2 | 3) {
+    tierNow = tier
     finishUniforms.tierLook.value = tier
     if (tier < 3 && faceMaterial.transmission > 0) { faceMaterial.transmission = 0; faceMaterial.needsUpdate = true }
     for (const { m, color, roughness, clearcoat } of metals) {
@@ -309,37 +489,161 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
       m.clearcoat = tier < 3 ? 0 : clearcoat
     }
   }
-  return { group, faceMaterial, backZ, outline, setHeight, setHighlight, setOverlay, setFinish, setLenticular, setTier }
+  // The textures only the shaders hold (not in any material slot, so disposing the materials
+  // missed them — every rebuilt pin left its maps on the GPU until the context ran out): freed by
+  // whoever disposes the group (disposeRelief)
+  group.userData.disposeTextures = () => {
+    for (const u of [finishUniforms.finishMap, finishUniforms.detailMap, finishUniforms.lentAtlas]) if (u.value !== blankFinish()) u.value.dispose()
+    holeTex?.dispose()
+    overlayTex?.dispose()
+  }
+  const setNormalStrength = (s: number) => { finishUniforms.normalStrength.value = s }
+  return { group, faceMaterial, backZ, outline, setHeight, setHighlight, setOverlay, setFinish, setDetails, setNormalStrength, setMetal, setLenticular, setTier }
 }
 
-// A hole mask's openings as paths (each enclosed area large enough to matter), grown by `grow` px.
-// Lightly smoothed only — the mask is already smoothed (finishMap), and heavy smoothing pulled the
-// outline inside the real hole.
-function holePaths(mask: Uint8Array, size: number, grow: number): THREE.Path[] {
+// The art's own holes (transparent areas the pin encloses: everything transparent that a flood
+// from the border can't reach), from the cutout at full size (`alpha`, an²) — rounded off by
+// `smooth` (a blurred mask cut at half, as the Studio's Hole finish does: the raw pixel edge traced
+// as a ragged, stair-stepped wall) — merged into `holes` at the larger of the two sizes. `fill`
+// (an²): transparent pixels the smoothing gave back to the face; `raw` (an²): the art's holes as they
+// are. Unchanged/null without holes.
+function withArtHoles(holes: { mask: Uint8Array; size: number } | undefined, alpha: Float32Array, an: number, smooth: number): { holes?: { mask: Uint8Array; size: number }; fill: Uint8Array | null; raw: Uint8Array | null } {
+  const n = an * an
+  const open = new Uint8Array(n) // transparent and reachable from the border
+  const stack: number[] = []
+  for (let i = 0; i < an; i++) for (const q of [i, n - an + i, i * an, i * an + an - 1]) if (alpha[q] <= 0.5 && !open[q]) { open[q] = 1; stack.push(q) }
+  while (stack.length) {
+    const q = stack.pop()!
+    const x = q % an
+    for (const r of [x > 0 ? q - 1 : -1, x < an - 1 ? q + 1 : -1, q >= an ? q - an : -1, q < n - an ? q + an : -1]) {
+      if (r >= 0 && alpha[r] <= 0.5 && !open[r]) { open[r] = 1; stack.push(r) }
+    }
+  }
+  let any = false
+  const raw = new Float32Array(n)
+  for (let i = 0; i < n; i++) if (alpha[i] <= 0.5 && !open[i]) { raw[i] = 1; any = true }
+  if (!any) return { holes, fill: null, raw: null }
+  const soft = blur(raw, Math.max(1, smooth * 24 * an / 2048), an)
+  const size = Math.max(an, holes?.size ?? 0)
+  const mask = new Uint8Array(size * size)
+  const ka = an / size, kh = holes ? holes.size / size : 0
+  for (let i = 0; i < mask.length; i++) {
+    const y = Math.floor(i / size), x = i % size
+    mask[i] = (soft[Math.floor(y * ka) * an + Math.floor(x * ka)] >= 0.5 ? 1 : 0) || (holes ? holes.mask[Math.floor(y * kh) * holes.size + Math.floor(x * kh)] : 0)
+  }
+  const fill = Uint8Array.from(raw, (v, i) => (v && soft[i] < 0.5 ? 1 : 0))
+  return { holes: { mask, size }, fill, raw: Uint8Array.from(raw) }
+}
+
+// A hole mask as a smooth field (the mask lightly blurred) — its 0.5 line is the hole's edge, both
+// for the face (holeTexture: cut per screen pixel) and the wall (holeLoops: traced between pixels),
+// so the two always meet. Pixel-traced outlines and a face cut by whole mesh triangles never quite
+// lined up: saw teeth and spikes all along the edge.
+function holeField(mask: Uint8Array, size: number, grow = 0): Float32Array {
   if (grow > 0) mask = dilate(mask, size, grow)
-  const n = size * size
-  const lab = new Int32Array(n)
-  const paths: THREE.Path[] = []
-  let next = 0
-  for (let i = 0; i < n; i++) {
-    if (!mask[i] || lab[i]) continue
-    const pix: number[] = []
-    const stack = [i]
-    lab[i] = ++next
-    while (stack.length) {
-      const q = stack.pop()!
-      pix.push(q)
-      const x = q % size
-      for (const r of [x > 0 ? q - 1 : -1, x < size - 1 ? q + 1 : -1, q >= size ? q - size : -1, q < n - size ? q + size : -1]) {
-        if (r >= 0 && mask[r] && !lab[r]) { lab[r] = next; stack.push(r) }
+  return blur(Float32Array.from(mask), Math.max(1, 1.5 * size / 2048), size)
+}
+
+// The body and back plate cut along the hole map (holeTexture) per pixel, as the face is: their
+// x, y is the face's, so the map's coordinate is the position + 0.5
+function holeDiscard(mat: THREE.Material, map: THREE.Texture) {
+  mat.onBeforeCompile = (s) => {
+    s.uniforms.holeMap = { value: map }
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vHoleUv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHoleUv = position.xy + 0.5;')
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D holeMap;\nvarying vec2 vHoleUv;')
+      .replace('void main() {', 'void main() {\nif (texture2D(holeMap, vHoleUv).r > 0.5) discard;')
+  }
+  mat.customProgramCacheKey = () => 'hole-discard'
+  mat.needsUpdate = true
+}
+
+function holeTexture(field: Float32Array, size: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = c.height = size
+  const ctx = c.getContext('2d')!
+  const img = ctx.createImageData(size, size)
+  for (let i = 0; i < field.length; i++) { const v = Math.round(field[i] * 255); img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255 }
+  ctx.putImageData(img, 0, 0)
+  const t = new THREE.CanvasTexture(c)
+  t.minFilter = THREE.LinearFilter // no mipmaps: a far-off pin's holes mustn't swell or close
+  t.generateMipmaps = false
+  return t
+}
+
+// The field's 0.5 line as closed loops in the pin's coordinates (marching squares, interpolated
+// between pixels, one point per `step` px, then `smooth` passes of neighbour averaging), loops
+// smaller than `minArea` px² left out. Pixel p sits at the face's texture coordinate (p + 0.5) / size,
+// as the art's pixels do.
+function holeLoops(field: Float32Array, size: number, minArea = 12, step = 1.5, smooth = 0): THREE.Vector2[][] {
+  const iso = 0.5
+  const at = (x: number, y: number) => field[y * size + x]
+  // edge ids: horizontal (x,y)–(x+1,y) = 2·i, vertical (x,y)–(x,y+1) = 2·i + 1
+  const H = (x: number, y: number) => (y * size + x) * 2, V = (x: number, y: number) => (y * size + x) * 2 + 1
+  const point = (e: number): [number, number] => {
+    const i = e >> 1, x = i % size, y = (i - x) / size
+    const a = at(x, y), b = e & 1 ? at(x, y + 1) : at(x + 1, y)
+    const t = Math.min(1, Math.max(0, (iso - a) / (b - a || 1e-6)))
+    return e & 1 ? [x, y + t] : [x + t, y]
+  }
+  const link = new Map<number, number[]>()
+  const join = (a: number, b: number) => {
+    const la = link.get(a); if (la) la.push(b); else link.set(a, [b])
+    const lb = link.get(b); if (lb) lb.push(a); else link.set(b, [a])
+  }
+  for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+    const tl = at(x, y) > iso, tr = at(x + 1, y) > iso, br = at(x + 1, y + 1) > iso, bl = at(x, y + 1) > iso
+    const c = (tl ? 8 : 0) | (tr ? 4 : 0) | (br ? 2 : 0) | (bl ? 1 : 0)
+    if (c === 0 || c === 15) continue
+    const T = H(x, y), R = V(x + 1, y), B = H(x, y + 1), L = V(x, y)
+    switch (c) {
+      case 1: case 14: join(L, B); break
+      case 2: case 13: join(B, R); break
+      case 3: case 12: join(L, R); break
+      case 4: case 11: join(T, R); break
+      case 6: case 9: join(T, B); break
+      case 7: case 8: join(L, T); break
+      case 5: case 10: { // a saddle: settled by the cell's middle
+        const mid = (at(x, y) + at(x + 1, y) + at(x + 1, y + 1) + at(x, y + 1)) / 4 > iso
+        if ((c === 5) === mid) { join(L, T); join(B, R) } else { join(L, B); join(T, R) }
       }
     }
-    if (pix.length < n * 0.0005) continue
-    const solo = new Float32Array(n)
-    for (const q of pix) solo[q] = 1
-    paths.push(new THREE.Path(traceOutline(solo, size, 2).getPoints()))
   }
-  return paths
+  const loops: THREE.Vector2[][] = []
+  const used = new Set<number>()
+  for (const start of Array.from(link.keys())) {
+    if (used.has(start)) continue
+    const pts: [number, number][] = []
+    let prev = -1, cur = start
+    while (cur !== undefined && !used.has(cur)) {
+      used.add(cur)
+      pts.push(point(cur))
+      const next = link.get(cur)!.find((e) => e !== prev && !used.has(e))
+      prev = cur
+      cur = next!
+    }
+    if (pts.length < 3) continue
+    let area = 0
+    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; area += a[0] * b[1] - b[0] * a[1] }
+    if (Math.abs(area) / 2 < minArea) continue
+    let kept: [number, number][] = []
+    let lx = Infinity, ly = Infinity
+    for (const [px, py] of pts) {
+      if ((px - lx) ** 2 + (py - ly) ** 2 < step * step) continue
+      lx = px; ly = py
+      kept.push([px, py])
+    }
+    for (let pass = 0; pass < smooth; pass++) {
+      kept = kept.map((p, i) => {
+        const a = kept[(i + kept.length - 1) % kept.length], b = kept[(i + 1) % kept.length]
+        return [(a[0] + 2 * p[0] + b[0]) / 4, (a[1] + 2 * p[1] + b[1]) / 4]
+      })
+    }
+    if (kept.length >= 3) loops.push(kept.map(([px, py]) => new THREE.Vector2((px + 0.5) / size - 0.5, 0.5 - (py + 0.5) / size)))
+  }
+  return loops
 }
 
 function dilate(mask: Uint8Array, size: number, r: number): Uint8Array {
@@ -356,6 +660,11 @@ function dilate(mask: Uint8Array, size: number, r: number): Uint8Array {
     out[y * size + x] = on
   }
   return out
+}
+
+/** Frees what a relief pin's shaders hold beyond its materials (call before disposing its meshes). */
+export function disposeRelief(group: THREE.Object3D) {
+  group.traverse((o) => { (o.userData.disposeTextures as (() => void) | undefined)?.() })
 }
 
 let blank: THREE.DataTexture | null = null
@@ -455,6 +764,13 @@ uniform sampler2D lentAtlas;
 uniform vec3 lentGrid; // the lenticular pictures' grid: columns, rows, how many
 uniform vec2 lentSets[8]; // each lenticular set: its first picture in the grid, how many
 uniform float tierLook;   // 1 Grayscale, 2 Painted, 3 Full (the badge's tier)
+uniform float normalStrength; // the normal map's tilt, scaled (1 = as made)
+uniform vec3 wallColor;       // the metal of the relief's steep walls (the pin's metal)
+uniform float wallRough;
+uniform sampler2D detailMap; // details over the finishes: R = slot + 16 × coverage
+uniform float hasDetails;
+uniform vec4 detA[15];    // per slot: lenticular turn (−1 off), its picture set, colour shift (−1 off), foil shine (−1 off)
+uniform vec4 detB[15];    // per slot: foil noise, pattern, seed
 varying float vWall;
 varying vec3 vFoilT;
 varying vec3 vFoilB;
@@ -496,9 +812,28 @@ float finV = floor(finTex.r * 255.0 + 0.5);
 float fin = tierLook < 2.5 ? 0.0 : mod(finV, 16.0); // which finish (none below the Full tier)
 float finCov = floor(finV / 16.0) / 15.0; // how much of it shows (feathered edges fade it out)
 float finA = finTex.g, finB = finTex.b;
-// (no discard for holes: the geometry cuts them along a smooth outline; discarding by this pixel
-// map as well punched a stair-step of see-through pixels along the hole's edge)
-diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.40, 0.12), vWall);
+// The details on this pixel. An old finish map's Color Fresnel / Lenticular / Pattern Foil (5, 7,
+// 8: finishes before details existed) is read as Auto with that detail — the same look.
+float dLent = -1.0, dSet = 0.0, dFres = -1.0, dShine = -1.0, dNoise = 0.0, dPat = 0.0, dSeed = 0.0, dCov = 0.0;
+if (fin > 4.5 && fin < 5.5) { dFres = finA; dCov = finCov; fin = 0.0; }
+else if (fin > 6.5 && fin < 7.5) { dLent = finA; dSet = floor(finB * 255.0 + 0.5); dCov = finCov; fin = 0.0; }
+else if (fin > 7.5 && fin < 8.5) {
+  float fg = floor(finA * 255.0 + 0.5), fb = floor(finB * 255.0 + 0.5);
+  dShine = mod(fg, 16.0) / 15.0; dSeed = floor(fg / 16.0); dNoise = mod(fb, 16.0) / 15.0; dPat = floor(fb / 16.0);
+  dCov = finCov; fin = 0.0;
+}
+if (hasDetails > 0.5 && tierLook > 2.5) {
+  float dv = floor(texture2D(detailMap, vMapUv).r * 255.0 + 0.5);
+  int slot = int(mod(dv, 16.0)) - 1;
+  if (slot >= 0) {
+    vec4 a = detA[slot], b = detB[slot];
+    dLent = a.x; dSet = a.y; dFres = a.z; dShine = a.w; dNoise = b.x; dPat = b.y; dSeed = b.z;
+    dCov = floor(dv / 16.0) / 15.0;
+  }
+}
+// (holes aren't cut by this map: its nearest-pixel ids would cut a stair-step — the smooth
+// holeMap does it, before this)
+diffuseColor.rgb = mix(diffuseColor.rgb, wallColor, vWall);
 if (tierLook < 1.5) diffuseColor.rgb = vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)));`,
   surface: `
 if (fin > 0.5) {
@@ -512,8 +847,14 @@ if (fin > 0.5) {
   metalnessFactor = mix(m0, metalnessFactor, finCov);
   roughnessFactor = mix(r0, roughnessFactor, finCov);
 }
+if (fin < 0.5 && dCov > 0.0) {
+  // details over Auto: the surface the old finishes had — part-metal and glossy (foil more metal,
+  // so the art's colours stay bright under its glints)
+  metalnessFactor = mix(metalnessFactor, dShine >= 0.0 ? 0.6 : 0.25, dCov);
+  roughnessFactor = mix(roughnessFactor, dShine >= 0.0 ? 0.1 : 0.12, dCov);
+}
 metalnessFactor = mix(metalnessFactor, 1.0, vWall);
-roughnessFactor = mix(roughnessFactor, 0.32, vWall);
+roughnessFactor = mix(roughnessFactor, wallRough, vWall);
 if (tierLook < 2.5) { roughnessFactor = max(roughnessFactor, 0.6); metalnessFactor *= 0.6; }`,
   look: `
 if (fin > 2.5 && vWall < 0.99) {
@@ -537,27 +878,26 @@ if (fin > 2.5 && vWall < 0.99) {
     float amt = finB * face * (0.35 + 0.65 * smoothstep(0.15, 0.8, lum));
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * rb * 1.7, amt);
     totalEmissiveRadiance += rb * 0.08 * amt;
-  } else if (fin < 5.5) {
-    // color fresnel: straight on, the art exactly as it is; tilted, its colours turn round the
-    // colour wheel — further the more it's tilted, and which way it's tilted picks the direction.
-    // From the whole pin's tilt (not its sculpted surface), so the piece changes colour as one.
-    vec3 nG = normalize(vPinN);
-    float tilt = 1.0 - clamp(dot(nG, normalize(vViewPosition)), 0.0, 1.0);
-    float amt = smoothstep(0.02, 0.4, tilt) * finA * face;
-    float side = atan(nG.y, nG.x);
-    diffuseColor.rgb = hueRotate(diffuseColor.rgb, amt * 3.14159 * (1.0 + 0.6 * sin(side)));
-  } else if (fin > 6.5 && fin < 7.5 && lentGrid.z > 0.5) {
+  }
+  diffuseColor.rgb = mix(dBase, diffuseColor.rgb, finCov);
+  totalEmissiveRadiance = mix(eBase, totalEmissiveRadiance, finCov);
+}
+// Details over whatever finish is below (any mix at once): the lenticular pictures, then their
+// colours shifted, then the foil's ridges over everything — each blended by its own coverage
+if (dCov > 0.0 && vWall < 0.99) {
+  vec3 dBase = diffuseColor.rgb, eBase = totalEmissiveRadiance;
+  float face = 1.0 - vWall;
+  if (dLent >= 0.0 && lentGrid.z > 0.5) {
     // lenticular: turning the pin left/right fades through the pictures — fully turned one way =
-    // the first, the other way = the last (A: how far a turn that is). Seamless and gradual: each
+    // the first, the other way = the last (dLent: how far a turn that is). Seamless and gradual: each
     // neighbouring pair blends evenly across its whole share of the turn, eased at the ends, with
     // no lens lines (any ridge pattern showed as lines, and a hold-then-switch felt like a snap),
     // driven by the whole pin's tilt — the sculpted surface's own tilt varies pixel to pixel, and
-    // mid-fade that showed as a pattern.
-    // B: which picture set this layer uses
-    vec2 lset = lentSets[int(clamp(floor(finB * 255.0 + 0.5), 0.0, 7.0))];
+    // mid-fade that showed as a pattern. dSet: which picture set this layer uses.
+    vec2 lset = lentSets[int(clamp(dSet, 0.0, 7.0))];
     float n = max(lset.y, 1.0);
     vec3 nG = normalize(vPinN);
-    float pos = clamp(nG.x / mix(0.25, 1.0, finA) * 0.5 + 0.5, 0.0, 1.0) * (n - 1.0);
+    float pos = clamp(nG.x / mix(0.25, 1.0, dLent) * 0.5 + 0.5, 0.0, 1.0) * (n - 1.0);
     float l0 = min(floor(pos), n - 1.0);
     float t = smoothstep(0.0, 1.0, pos - l0);
     float i0 = lset.x + l0, i1 = lset.x + min(l0 + 1.0, n - 1.0);
@@ -566,18 +906,26 @@ if (fin > 2.5 && vWall < 0.99) {
     vec3 pic1 = texture2D(lentAtlas, vec2((cell1.x + vMapUv.x) / lentGrid.x, (lentGrid.y - 1.0 - cell1.y + vMapUv.y) / lentGrid.y)).rgb;
     if (lset.y > 0.5) diffuseColor.rgb = mix(diffuseColor.rgb, mix(pic0, pic1, t), face);
   }
-  else if (fin > 7.5 && fin < 8.5) {
+  if (dFres >= 0.0) {
+    // color fresnel: straight on, the art exactly as it is; tilted, its colours turn round the
+    // colour wheel — further the more it's tilted, and which way it's tilted picks the direction.
+    // From the whole pin's tilt (not its sculpted surface), so the piece changes colour as one.
+    vec3 nG = normalize(vPinN);
+    float tilt = 1.0 - clamp(dot(nG, normalize(vViewPosition)), 0.0, 1.0);
+    float amt = smoothstep(0.02, 0.4, tilt) * dFres * face;
+    float side = atan(nG.y, nG.x);
+    diffuseColor.rgb = hueRotate(diffuseColor.rgb, amt * 3.14159 * (1.0 + 0.6 * sin(side)));
+  }
+  if (dShine >= 0.0) {
     // pattern foil: microscopic parallel ridges whose slopes tilt the surface back and forth, so
-    // thin lines of light run across it as it turns. Noise (B) swirls their direction across the
+    // thin lines of light run across it as it turns. Noise swirls their direction across the
     // piece (0 = all one way, like brushed metal). Ridges far finer than a screen pixel would only
     // shimmer, so they fade with distance (fwidth) and sharpen up close.
-    // G: shine (low 4 bits) + seed (high 4); B: noise (low 4) + pattern (high 4) — the noise that
-    // steers the ridges: 0 swirl (value noise), 1 perlin, 2 turbulence (folded perlin: creases),
+    // dShine, dSeed (0–15), dNoise and dPat — the pattern that steers the ridges: 0 swirl (value noise), 1 perlin, 2 turbulence (folded perlin: creases),
     // 3 cracked ice (Worley cells, straight ridges per shard), 4 gem facets (rings round each
     // Worley cell's centre), 5 sunburst (radiating from the pin's middle). Noise 0 = straight lines.
-    float fg = floor(finA * 255.0 + 0.5), fb = floor(finB * 255.0 + 0.5);
-    float fShine = mod(fg, 16.0) / 15.0, fNoise = mod(fb, 16.0) / 15.0, fType = floor(fb / 16.0);
-    vec2 seed = floor(fg / 16.0) * vec2(17.31, 9.73);
+    float fShine = dShine, fNoise = dNoise, fType = dPat;
+    vec2 seed = dSeed * vec2(17.31, 9.73);
     vec2 q = vMapUv * 5.0 + seed;
     vec2 straight = vec2(cos(0.6), sin(0.6));
     float ph;
@@ -602,16 +950,20 @@ if (fin > 2.5 && vWall < 0.99) {
     float aa = clamp(2.2 - fwidth(ph) * 0.5, 0.0, 1.0);
     vec2 g = dir * cos(ph) * mix(0.1, 0.55, fShine) * aa * face;
     vec3 nFoil = normalize(normal + vFoilT * g.x + vFoilB * g.y);
-    normal = normalize(mix(normal, nFoil, finCov));
+    normal = normalize(mix(normal, nFoil, dCov));
     // part-metal so the art's colours stay bright, plus thin glints along the ridge crests that
     // run across the foil as the ridges' tilt toward the viewer changes
     float glint = pow(clamp(dot(nFoil, normalize(vec3(-0.35, 0.45, 0.82))), 0.0, 1.0), 22.0) * mix(0.35, 1.4, fShine) * aa;
-    totalEmissiveRadiance += (dBase * 0.18 + mix(dBase, vec3(1.0, 0.95, 0.85), 0.6) * glint) * face;
+    vec3 fBase = diffuseColor.rgb;
+    totalEmissiveRadiance += (fBase * 0.18 + mix(fBase, vec3(1.0, 0.95, 0.85), 0.6) * glint) * face;
   }
-  diffuseColor.rgb = mix(dBase, diffuseColor.rgb, finCov);
-  totalEmissiveRadiance = mix(eBase, totalEmissiveRadiance, finCov);
+  diffuseColor.rgb = mix(dBase, diffuseColor.rgb, dCov);
+  totalEmissiveRadiance = mix(eBase, totalEmissiveRadiance, dCov);
 }`,
 }
+
+const DETAIL_SLOTS = 15 // = DETAIL_MAX_SLOTS in lib/reliefStudio.ts
+const WALL_GOLD = new THREE.Color(0.62, 0.40, 0.12) // the relief's steep walls, as struck gold (linear)
 
 function installWallShader(mat: THREE.MeshPhysicalMaterial) {
   const uniforms = {
@@ -619,6 +971,12 @@ function installWallShader(mat: THREE.MeshPhysicalMaterial) {
     lentAtlas: { value: blankFinish() as THREE.Texture }, lentGrid: { value: new THREE.Vector3(1, 1, 0) },
     lentSets: { value: Array.from({ length: 8 }, () => new THREE.Vector2(0, 0)) },
     tierLook: { value: 3 },
+    holeMap: { value: blankFinish() as THREE.Texture }, hasHoles: { value: 0 },
+    normalStrength: { value: 1 },
+    wallColor: { value: WALL_GOLD.clone() }, wallRough: { value: 0.32 },
+    detailMap: { value: blankFinish() as THREE.Texture }, hasDetails: { value: 0 },
+    detA: { value: Array.from({ length: DETAIL_SLOTS }, () => new THREE.Vector4(-1, 0, -1, -1)) },
+    detB: { value: Array.from({ length: DETAIL_SLOTS }, () => new THREE.Vector4()) },
   }
   mat.onBeforeCompile = (s) => {
     Object.assign(s.uniforms, uniforms)
@@ -626,10 +984,14 @@ function installWallShader(mat: THREE.MeshPhysicalMaterial) {
       .replace('#include <common>', '#include <common>\nattribute float wall;\nvarying float vWall;\nvarying vec3 vFoilT;\nvarying vec3 vFoilB;\nvarying vec3 vPinN;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWall = wall;\nvFoilT = normalize(normalMatrix * vec3(1.0, 0.0, 0.0));\nvFoilB = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));\nvPinN = normalize(normalMatrix * vec3(0.0, 0.0, 1.0));')
     s.fragmentShader = s.fragmentShader
-      .replace('#include <common>', '#include <common>' + FINISH_GLSL.head)
-      .replace('#include <map_fragment>', '#include <map_fragment>' + FINISH_GLSL.read)
+      .replace('#include <common>', '#include <common>' + FINISH_GLSL.head + '\nuniform sampler2D holeMap;\nuniform float hasHoles;')
+      // holes: cut along the hole field's smooth 0.5 line (holeField), per pixel
+      .replace('#include <map_fragment>', '#include <map_fragment>\nif (hasHoles > 0.5 && texture2D(holeMap, vMapUv).r > 0.5) discard;' + FINISH_GLSL.read)
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>' + FINISH_GLSL.surface)
-      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalize(mix(normal, nonPerturbedNormal, vWall));')
+      // the normal map's strength: up to 1, blended in over the mesh's own normals (0 = the mesh
+      // alone); past 1, the map's own tilt (away from the pin's facing) is exaggerated — not its
+      // difference from the mesh, which amplified the mesh's detail backwards
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nnormal = normalStrength <= 1.0 ? normalize(mix(nonPerturbedNormal, normal, normalStrength)) : normalize(normalize(vPinN) + (normal - normalize(vPinN)) * normalStrength);\nnormal = normalize(mix(normal, nonPerturbedNormal, vWall));')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + FINISH_GLSL.look)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nif (tierLook < 1.5) totalEmissiveRadiance = vec3(dot(totalEmissiveRadiance, vec3(0.299, 0.587, 0.114)));')
       .replace('#include <transmission_fragment>', THREE.ShaderChunk.transmission_fragment.replace(
@@ -820,30 +1182,30 @@ function classify(rgba: Uint8ClampedArray, alpha: Float32Array): Uint8Array {
 
 // ── Height, normals, materials ──────────────────────────────────────────────────────────────
 
-function blur(src: Float32Array, radius: number): Float32Array {
+function blur(src: Float32Array, radius: number, size = N): Float32Array {
   // Separable box blur, applied twice (≈ gaussian)
   const r = Math.max(1, Math.round(radius))
-  let a = src, b = new Float32Array(N * N)
+  let a = src, b = new Float32Array(size * size)
   for (let pass = 0; pass < 2; pass++) {
-    for (let y = 0; y < N; y++) {
+    for (let y = 0; y < size; y++) {
       let acc = 0
-      for (let x = -r; x <= r; x++) acc += a[y * N + Math.min(N - 1, Math.max(0, x))]
-      for (let x = 0; x < N; x++) {
-        b[y * N + x] = acc / (2 * r + 1)
-        acc += a[y * N + Math.min(N - 1, x + r + 1)] - a[y * N + Math.max(0, x - r)]
+      for (let x = -r; x <= r; x++) acc += a[y * size + Math.min(size - 1, Math.max(0, x))]
+      for (let x = 0; x < size; x++) {
+        b[y * size + x] = acc / (2 * r + 1)
+        acc += a[y * size + Math.min(size - 1, x + r + 1)] - a[y * size + Math.max(0, x - r)]
       }
     }
-    const c = new Float32Array(N * N)
-    for (let x = 0; x < N; x++) {
+    const c = new Float32Array(size * size)
+    for (let x = 0; x < size; x++) {
       let acc = 0
-      for (let y = -r; y <= r; y++) acc += b[Math.min(N - 1, Math.max(0, y)) * N + x]
-      for (let y = 0; y < N; y++) {
-        c[y * N + x] = acc / (2 * r + 1)
-        acc += b[Math.min(N - 1, y + r + 1) * N + x] - b[Math.max(0, y - r) * N + x]
+      for (let y = -r; y <= r; y++) acc += b[Math.min(size - 1, Math.max(0, y)) * size + x]
+      for (let y = 0; y < size; y++) {
+        c[y * size + x] = acc / (2 * r + 1)
+        acc += b[Math.min(size - 1, y + r + 1) * size + x] - b[Math.max(0, y - r) * size + x]
       }
     }
     a = c
-    b = new Float32Array(N * N)
+    b = new Float32Array(size * size)
   }
   return a
 }
@@ -923,7 +1285,10 @@ function ormMap(k: Uint8Array, rgba: Uint8ClampedArray, clean = false): HTMLCanv
   for (let i = 0; i < N * N; i++) {
     const lum = (rgba[i * 4] + rgba[i * 4 + 1] + rgba[i * 4 + 2]) / 765
     let rough = 0.4, metal = 0
-    if (k[i] === Kind.Gold) { metal = 1; rough = clean ? 0.3 : 0.38 - lum * 0.22 }  // brighter gold = more polished (clean: even polish, no mottling)
+    // clean (a real relief, Auto finish): one shiny painted surface — no guessed metal (detected
+    // gold came out patchy, dark gold art turning murky olive as metal)
+    if (clean) rough = 0.22
+    else if (k[i] === Kind.Gold) { metal = 1; rough = clean ? 0.3 : 0.38 - lum * 0.22 }  // brighter gold = more polished (clean: even polish, no mottling)
     else if (k[i] === Kind.Gem) { rough = 0.04 }
     else if (k[i] === Kind.Glow) { rough = 0.18 }
     else if (k[i] === Kind.Scene) { rough = 0.5 }

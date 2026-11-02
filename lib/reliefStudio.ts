@@ -14,6 +14,10 @@ export interface ReliefSettings {
   detail: number        // 0–1: how much fine sculpted detail rides on top
   depth: number         // relief height as a fraction of the pin's width (die-struck ≈ 0.02–0.03)
   wall: number          // 0–1: how steep a slope must be to be drawn as plain gold wall
+  normalStrength: number // how strongly the normal map's fine detail tilts the light (1 = as analyzed; 0–4)
+  artHoles: boolean     // "Use transparency channel": the art's transparency inside the pin is cut out as holes
+                        // (off: only the outside is cut out — the analysis fills the rest in)
+  holeSmooth: number    // 0–1: how much the art's own holes (transparent areas inside the pin) are rounded off (default = HOLE_SMOOTH in pinRelief.ts)
   // Per piece (id → value). pieces: stepped = whole levels up/down, smooth = tenths of the full
   // height. soft: 0–1, how much that piece's edges are smoothed into their surroundings. flat:
   // 0–1, how far the piece is pressed to one even height (its average) — 1 = perfectly flat.
@@ -25,11 +29,36 @@ export interface ReliefSettings {
   // (piece id → param key → 0–1; unset = the param's default)
   materials: Record<string, number>
   finishOpts: Record<string, Record<string, number>>
+  // Details layered over a piece's finish (DETAILS: foil, colour shift, lenticular), each with its own
+  // settings (piece id → detail → param key → value; a detail present = on). A piece's Feather
+  // (finishOpts.feather) fades its details out at the edge too.
+  details: Record<string, LayerDetails>
+  // The Material tab's layers: named groups of pieces that share one look (finish, its settings,
+  // details). The per-piece materials / finishOpts / details / finishOff above are made from these
+  // (withFinishLayers) — the layers are what's edited, the per-piece maps what's drawn and saved.
+  finishLayers: FinishLayer[]
+  // Global: the metal of the pin's sides, back and gold walls (hex colour, roughness 0–1)
+  metalColor: string
+  metalRough: number
   finishOff: number[]               // layers whose finish is hidden (the eye) — left out when saving too
   names: Record<string, string>     // layer names given in the Studio (unset = "Object 12" / "Area 180")
   // The Lenticular finish's picture sets; each Lenticular layer picks one (finishOpts[id].set)
   lenticularSets: LenticularSet[]
 }
+
+export type DetailKind = 'lenticular' | 'fresnel' | 'foil'
+export interface FinishLayer {
+  id: string
+  name: string
+  material: number                 // a BASE_FINISH_IDS finish (0 = Auto)
+  opts: Record<string, number>     // its settings, plus feather
+  details: LayerDetails
+  pieces: number[]                 // a piece is in one layer at most
+  hidden?: boolean                 // the eye: drawn as Auto while hidden (and left out when saving)
+}
+/** The pin's metal as made before it could be changed (pinRelief.ts draws it from these). */
+export const DEFAULT_METAL = { color: '#d2a44a', rough: 0.3 }
+export type LayerDetails = Partial<Record<DetailKind, Record<string, number>>>
 
 export interface LenticularSet {
   name: string
@@ -51,8 +80,28 @@ export const lenticularPictures = (s: ReliefSettings, artUrl: string | undefined
 // (a dropdown), stored as its index
 export interface FinishParam { key: string; label: string; def: number; hint?: string; steps?: number; options?: string[] }
 export const FOIL_PATTERNS = ['Swirl', 'Perlin', 'Turbulence', 'Cracked Ice', 'Gem Facets', 'Sunburst']
+/** The finishes offered for a piece (5, 7 and 8 live on only in old finish maps: they're DETAILS now). */
+export const BASE_FINISH_IDS = [0, 1, 2, 4, 3, 6]
+
+// Details: effects layered over a piece's finish, any number at once — drawn in this order (the
+// pictures first, then their colours shifted, then the foil's ridges over everything)
+export const DETAILS: { kind: DetailKind; name: string; short: string; hint: string; params: FinishParam[] }[] = [
+  { kind: 'lenticular', name: 'Lenticular', short: 'Lenticular', hint: 'Fades through your pictures as the pin turns left and right', params: [
+    { key: 'turn', label: 'Turn range', def: 0.5, hint: 'A small turn ← → a big turn to fade through every picture' },
+  ] },
+  { kind: 'fresnel', name: 'Color Shift', short: 'Shift', hint: 'Straight on, the colours as they are — tilt the pin and they turn round the colour wheel', params: [
+    { key: 'strength', label: 'Colour shift', def: 0.7, hint: 'How far the colours turn when tilted' },
+  ] },
+  { kind: 'foil', name: 'Pattern Foil', short: 'Foil', hint: 'Microscopic ridges that each catch the light as the pin turns, like a foil card', params: [
+    { key: 'shine', label: 'Shine', def: 0.6, hint: 'How strongly the ridges catch the light' },
+    { key: 'pattern', label: 'Pattern', def: 0, options: FOIL_PATTERNS, hint: 'The shape the ridges follow' },
+    { key: 'noise', label: 'Noise', def: 0.5, hint: 'Straight lines all one way ← → the pattern at full strength' },
+    { key: 'seed', label: 'Seed', def: 0, steps: 16, hint: 'A different random layout of the same pattern' },
+  ] },
+]
+export const DETAIL_MAX_SLOTS = 15 // distinct detail combinations per badge (the detail map's 4-bit slot)
 export const FINISHES: { id: number; name: string; hint: string; params: FinishParam[]; soon?: boolean }[] = [
-  { id: 0, name: 'Auto', hint: 'Solid gold areas polished metal, the rest enamel — as read from the art', params: [] },
+  { id: 0, name: 'Auto', hint: 'The art as painted, with a glossy shine — no metal', params: [] },
   { id: 1, name: 'Regular', hint: 'Enamel', params: [{ key: 'rough', label: 'Roughness', def: 0.4, hint: 'Glossy ← → satin' }] },
   { id: 2, name: 'Gold', hint: 'Polished metal, tinted by the art', params: [{ key: 'rough', label: 'Roughness', def: 0.25, hint: 'Mirror ← → brushed' }] },
   { id: 3, name: 'Gemstone', hint: 'Coloured glass over the gold — glossy, glowing from within', params: [
@@ -78,7 +127,7 @@ export const FINISHES: { id: number; name: string; hint: string; params: FinishP
 export const FINISH_HOLE = 6
 
 export const DEFAULT_RELIEF: ReliefSettings = {
-  mode: 'stepped', levels: 4, off: [], soften: 0.06, detail: 0.8, depth: 0.026, wall: 0.35, pieces: {}, soft: {}, flat: {}, flatDefault: 1, materials: {}, finishOpts: {}, finishOff: [], names: {}, lenticularSets: [{ name: 'Set 1', frames: [], useArt: true }],
+  mode: 'stepped', levels: 4, off: [], soften: 0.06, detail: 0.8, depth: 0.026, wall: 0.35, normalStrength: 1, artHoles: true, holeSmooth: 0.3, pieces: {}, soft: {}, flat: {}, flatDefault: 1, materials: {}, finishOpts: {}, details: {}, finishLayers: [], metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough, finishOff: [], names: {}, lenticularSets: [{ name: 'Set 1', frames: [], useArt: true }],
 }
 
 /** Saved settings from an older Studio filled out with today's defaults (one picture list became
@@ -88,11 +137,74 @@ export const reliefSettings = (s?: Partial<ReliefSettings> & { lenticularFrames?
   const out = { ...DEFAULT_RELIEF, ...rest }
   // a relief saved before "Flatten all pieces" existed wasn't flattened — keep it that way
   if (s && rest.flatDefault === undefined) out.flatDefault = 0
+  // nor did one from before "Use transparency channel" get holes from its art
+  if (s && rest.artHoles === undefined) out.artHoles = false
   if (!rest.lenticularSets?.length && (lenticularFrames?.length || lenticularArt === false)) {
     out.lenticularSets = [{ name: 'Set 1', frames: lenticularFrames ?? [], useArt: lenticularArt ?? true }]
   }
+  // Color Fresnel, Lenticular and Pattern Foil were finishes of their own before details: they
+  // become details over Auto (which the shader draws exactly as those finishes looked)
+  if (Object.values(out.materials).some((f) => LEGACY_DETAIL[f])) {
+    const materials = { ...out.materials }, details = { ...out.details }
+    for (const [id, f] of Object.entries(out.materials)) {
+      const kind = LEGACY_DETAIL[f]
+      if (!kind) continue
+      const o = out.finishOpts[id] ?? {}
+      const params: Record<string, number> = {}
+      for (const p of DETAILS.find((d) => d.kind === kind)!.params) params[p.key] = o[p.key] ?? p.def
+      if (kind === 'lenticular') params.set = o.set ?? 0
+      details[id] = { ...details[id], [kind]: params }
+      delete materials[id]
+    }
+    out.materials = materials
+    out.details = details
+  }
+  // Before layers, each piece had its own look: pieces that look exactly alike become one layer
+  if (!rest.finishLayers) out.finishLayers = layersFromPieces(out)
   return out
 }
+
+function layersFromPieces(s: ReliefSettings): FinishLayer[] {
+  const byLook = new Map<string, FinishLayer>()
+  const ids = new Set([...Object.keys(s.materials), ...Object.keys(s.details)])
+  for (const id of Array.from(ids).sort((a, b) => Number(a) - Number(b))) {
+    const material = s.materials[id] ?? 0, opts = s.finishOpts[id] ?? {}, details = s.details[id] ?? {}
+    if (!material && !Object.keys(details).length) continue
+    const hidden = s.finishOff.includes(Number(id))
+    const key = JSON.stringify([material, opts, details, hidden])
+    const layer = byLook.get(key)
+    if (layer) { layer.pieces.push(Number(id)); continue }
+    byLook.set(key, { id: `l${byLook.size + 1}`, name: '', material, opts: { ...opts }, details: JSON.parse(JSON.stringify(details)), pieces: [Number(id)], ...(hidden && { hidden }) })
+  }
+  // named after their look ("Holographic + Foil"), numbered when two share a name
+  const seen: Record<string, number> = {}
+  return Array.from(byLook.values()).map((l) => {
+    const base = layerLook(l)
+    seen[base] = (seen[base] ?? 0) + 1
+    return { ...l, name: seen[base] > 1 ? `${base} ${seen[base]}` : base }
+  })
+}
+
+/** A layer's look in a few words: "Holographic + Foil", "Shift", "Auto". */
+export function layerLook(l: Pick<FinishLayer, 'material' | 'details'>): string {
+  const parts = [...(l.material > 0 || !Object.keys(l.details).length ? [FINISHES.find((f) => f.id === l.material)?.name ?? ''] : []),
+    ...DETAILS.filter((d) => l.details[d.kind]).map((d) => d.short)]
+  return parts.join(' + ')
+}
+
+/** The settings with these layers, and the per-piece looks made from them. */
+export function withFinishLayers(s: ReliefSettings, finishLayers: FinishLayer[]): ReliefSettings {
+  const materials: ReliefSettings['materials'] = {}, finishOpts: ReliefSettings['finishOpts'] = {}, details: ReliefSettings['details'] = {}
+  const finishOff: number[] = []
+  for (const l of finishLayers) for (const p of l.pieces) {
+    if (l.material) materials[p] = l.material
+    if (Object.keys(l.opts).length) finishOpts[p] = { ...l.opts }
+    if (Object.keys(l.details).length) details[p] = JSON.parse(JSON.stringify(l.details))
+    if (l.hidden) finishOff.push(p)
+  }
+  return { ...s, finishLayers, materials, finishOpts, details, finishOff }
+}
+const LEGACY_DETAIL: Record<number, DetailKind> = { 5: 'fresnel', 7: 'lenticular', 8: 'foil' }
 
 export interface KitArrays {
   size: number
@@ -510,6 +622,66 @@ function closeSlivers(k: KitArrays, map: Uint8Array, cover: Float32Array) {
   }
 }
 
+/** The badge's distinct detail combinations — each a slot of 8 numbers for the shader (lenticular
+ *  turn or −1, its picture set, colour shift or −1, foil shine or −1; foil noise, pattern, seed, 0)
+ *  — and which slot (1-based) each piece uses. Worked out from the settings alone, the same way
+ *  in the Studio and the collector's viewer, so the saved detail map's slot numbers always match. */
+export function detailSlots(s: ReliefSettings): { slots: number[][]; byPiece: Record<string, number> } {
+  const slots: number[][] = [], keys: string[] = [], byPiece: Record<string, number> = {}
+  const q = (v: number) => Math.round(v * 15) / 15 // the foil's settings go in 16 steps, as they always did
+  for (const id of Object.keys(s.details).sort((a, b) => Number(a) - Number(b))) {
+    const d = s.details[id]
+    if (s.finishOff.includes(Number(id)) || s.materials[id] === FINISH_HOLE || !d || !(d.lenticular || d.fresnel || d.foil)) continue
+    const val = (kind: DetailKind, key: string) => d[kind]?.[key] ?? DETAILS.find((x) => x.kind === kind)!.params.find((p) => p.key === key)!.def
+    const slot = [
+      d.lenticular ? val('lenticular', 'turn') : -1, d.lenticular ? Math.min(LENTICULAR_MAX_SETS - 1, Math.max(0, Math.round(d.lenticular.set ?? 0))) : 0,
+      d.fresnel ? Math.round(val('fresnel', 'strength') * 255) / 255 : -1, d.foil ? q(val('foil', 'shine')) : -1,
+      d.foil ? q(val('foil', 'noise')) : 0, d.foil ? Math.min(15, Math.round(val('foil', 'pattern'))) : 0, d.foil ? Math.round(val('foil', 'seed') * 15) : 0, 0,
+    ]
+    const key = slot.join(',')
+    let n = keys.indexOf(key)
+    if (n < 0) {
+      if (slots.length >= DETAIL_MAX_SLOTS) continue
+      keys.push(key); slots.push(slot); n = slots.length - 1
+    }
+    byPiece[id] = n + 1
+  }
+  return { slots, byPiece }
+}
+
+/** Each pixel's details as a map like the finish map: R = slot (detailSlots) + 16 × coverage, G/B
+ *  unused — or null when no piece has any. Feathered and sliver-closed just as finishes are. */
+export function detailMap(k: KitArrays, s: ReliefSettings): { map: Uint8Array; slots: number[][] } | null {
+  const { slots, byPiece } = detailSlots(s)
+  if (!slots.length) return null
+  const P = k.pieceCount + 1
+  const code = new Uint8Array(P), feather = new Float32Array(P)
+  for (const [id, n] of Object.entries(byPiece)) {
+    const p = Number(id)
+    if (p > k.pieceCount) continue
+    code[p] = n
+    feather[p] = s.finishOpts[id]?.feather ?? 0
+  }
+  const n = k.size * k.size, sc = k.size / 2048
+  const map = new Uint8Array(n * 4)
+  const cover = new Float32Array(n)
+  const put = (i: number, p: number, c: number) => {
+    if (c <= cover[i]) return
+    cover[i] = c
+    map[i * 4] = code[p] + 16 * Math.round(c * 15)
+  }
+  for (let i = 0; i < n; i++) { const p = k.pieces[i]; if (code[p] && !(feather[p] > 0)) put(i, p, 1) }
+  for (let p = 1; p < P; p++) {
+    if (!code[p] || !(feather[p] > 0)) continue
+    const ind = new Float32Array(n)
+    for (let i = 0; i < n; i++) if (k.pieces[i] === p) ind[i] = 1
+    const w = blur(ind, k.size, Math.max(1, feather[p] * 28 * sc))
+    for (let i = 0; i < n; i++) if (w[i] > 0.02 && k.alpha[i] >= 0.5) put(i, p, Math.min(1, w[i]))
+  }
+  closeSlivers(k, map, cover)
+  return { map, slots }
+}
+
 /** A finish map as the PNG the badge's finishMapUrl holds (R = finish id, G/B = its settings). */
 export async function finishPng(f: Uint8Array, size: number): Promise<Blob> {
   const c = new OffscreenCanvas(size, size)
@@ -549,9 +721,20 @@ export async function reliefServerUp(): Promise<boolean> {
   } catch { return false }
 }
 
-/** Sends the art to the analysis server; resolves to the kit's files. */
-export async function analyzeArt(art: Blob, quality: 'fast' | 'normal' | 'high' = 'high'): Promise<Record<string, Blob>> {
-  const r = await fetch(`${RELIEF_SERVER}/analyze?quality=${quality}`, { method: 'POST', body: art })
+/** Sends the art to the analysis server; resolves to the kit's files. useAlpha: false = ignore the
+ *  art's transparency (cut out only the white around the pin). */
+export async function analyzeArt(art: Blob, quality: 'fast' | 'normal' | 'high' = 'high', useAlpha = true): Promise<Record<string, Blob>> {
+  return serverFiles(`analyze?quality=${quality}&alpha=${useAlpha ? 1 : 0}`, art)
+}
+
+/** Just the normals again (and the fine detail made from them) for a kit's art.webp — the kit's
+ *  new normal.png and detail.png; its pieces and layers stay as they are. */
+export async function recalculateNormals(kitArt: Blob, quality: 'fast' | 'normal' | 'high' = 'high'): Promise<Record<string, Blob>> {
+  return serverFiles(`normals?quality=${quality}`, kitArt)
+}
+
+async function serverFiles(path: string, art: Blob): Promise<Record<string, Blob>> {
+  const r = await fetch(`${RELIEF_SERVER}/${path}`, { method: 'POST', body: art })
   const body = await r.json().catch(() => ({ error: `server replied ${r.status}` }))
   if (!r.ok) throw new Error(body.error || `server replied ${r.status}`)
   const files: Record<string, Blob> = {}

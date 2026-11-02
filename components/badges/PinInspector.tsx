@@ -10,11 +10,11 @@ import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js'
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
 import { X, Lock, Check, Move3d } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgeTier, isMastered, toNextTier, TIER_NAMES, type BadgeDef } from '@/lib/badges'
+import { badgeTier, isMastered, nextTier, toNextTier, TIER_NAMES, type BadgeDef } from '@/lib/badges'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_STAR, PIN_RIBBON } from './BadgePin'
-import { buildRelief, type ReliefLook } from './pinRelief'
-import { lenticularPictures, reliefSettings } from '@/lib/reliefStudio'
+import { buildRelief, disposeRelief, type ReliefLook } from './pinRelief'
+import { detailSlots, lenticularPictures, reliefSettings } from '@/lib/reliefStudio'
 import { assemblePin, addBackHardware, type PinBackId } from './pinBacks'
 
 // Inspect a Haven Badge in 3D — drag to turn it over, scroll/pinch to zoom, like the pin inspect
@@ -69,7 +69,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
     let stage: StageApi | null = null
     svgToCanvas(svg).then((faceCanvas) => {
       if (disposed) return
-      stage = createStage(mount, faceCanvas)
+      stage = createStage(mount, faceCanvas, def.displayScale ?? 1)
       api.current = stage
       const done = async () => {
         if (disposed || !stage) return
@@ -88,7 +88,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       } else if (def.imageUrl) {
         // No model: a relief built from the uploaded art
         setProg(0.3)
-        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier > 0 ? tier as 1 | 2 | 3 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined }, badgeAsset(def.finishMapUrl))
+        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier > 0 ? tier as 1 | 2 | 3 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined, detailSlots: def.relief && def.detailMapUrl ? detailSlots(reliefSettings(def.relief)).slots : undefined }, badgeAsset(def.finishMapUrl), badgeAsset(def.detailMapUrl))
           .then(() => (def.normalMapUrl ? stage?.setNormalMap(badgeAsset(def.normalMapUrl)!) : undefined))
           .then(done)
           .catch((e) => { setError(`Couldn't build the pin from the art: ${e.message}`); setLoading(false) })
@@ -97,7 +97,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       }
     }).catch((e) => { setError(String(e)); setLoading(false) })
     return () => { disposed = true; stage?.dispose(); api.current = null }
-  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.pinBack, def.modelFrontPositiveZ, mystery, tier])
+  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.detailMapUrl, def.pinBack, def.modelFrontPositiveZ, def.displayScale, mystery, tier])
 
   const [have, total] = progress ?? [0, def.slots.length]
   const mastered = isMastered(def, progress, !!earnedAt)
@@ -139,7 +139,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
             : <><Lock size={13} />Not earned yet · {have} / {total} {def.slotNoun}</>}
         </div>
         {progress && tier > 0 && tier < 3 && (
-          <div className="mt-1 text-xs font-semibold text-white/55">{toNextTier(def, progress)} more {def.slotNoun} for the {TIER_NAMES[tier + 1]} pin</div>
+          <div className="mt-1 text-xs font-semibold text-white/55">{toNextTier(def, progress)} more {def.slotNoun} for the {TIER_NAMES[nextTier(def, progress)]} pin</div>
         )}
         {mastered && <div className="mt-1 text-xs font-bold uppercase tracking-wider text-amber-300">✦ Mastered</div>}
         {!!earnedAt && def.growing && !mastered && (
@@ -178,7 +178,7 @@ interface StageApi {
   loadModel: (url: string, back?: PinBackId, frontPositiveZ?: boolean, onProgress?: (fraction: number) => void) => Promise<void>
   warm: () => Promise<void>
   blackout: () => void
-  useRelief: (url: string, depthUrl?: string, look?: ReliefLook, finishUrl?: string) => Promise<void>
+  useRelief: (url: string, depthUrl?: string, look?: ReliefLook, finishUrl?: string, detailUrl?: string) => Promise<void>
   setFaceImage: (url: string) => Promise<void>
   setNormalMap: (url: string) => Promise<void>
   reset: () => void
@@ -189,7 +189,7 @@ interface StageApi {
 // staircase blocks (three.js's default 256 did); phones get a lighter one
 const ENV_SIZE = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches ? 512 : 1024
 
-function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): StageApi {
+function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement, displayScale = 1): StageApi {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(mount.clientWidth, mount.clientHeight)
@@ -242,8 +242,9 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): Stag
   let reliefMat: THREE.MeshPhysicalMaterial | null = null
 
   // Frame the pin so it fills most of the view (FILL of the shorter side) on any screen, keeping
-  // whatever angle it's being viewed from; zoom limits follow
-  const FILL = 0.84
+  // whatever angle it's being viewed from; zoom limits follow. The badge's Display size scales
+  // that, as it does the flat pins — never past the edges of the view.
+  const FILL = Math.min(0.97, 0.84 * displayScale)
   const fit = () => {
     const size = new THREE.Box3().setFromObject(current).getSize(new THREE.Vector3())
     const extent = Math.max(size.x, size.y, 0.01)
@@ -320,8 +321,8 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement): Stag
       renderer.render(scene, camera)
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
     },
-    async useRelief(url, depthUrl, look, finishUrl) {
-      const r = await buildRelief(url, renderer.capabilities.getMaxAnisotropy(), depthUrl, look, finishUrl)
+    async useRelief(url, depthUrl, look, finishUrl, detailUrl) {
+      const r = await buildRelief(url, renderer.capabilities.getMaxAnisotropy(), depthUrl, look, finishUrl, detailUrl)
       addBackHardware(r.group, r.backZ)
       reliefMat = r.faceMaterial
       show(r.group)
@@ -521,6 +522,7 @@ async function svgToCanvas(svg: SVGSVGElement): Promise<HTMLCanvasElement> {
 }
 
 function disposeObject(obj: THREE.Object3D) {
+  disposeRelief(obj)
   obj.traverse((o) => {
     const mesh = o as THREE.Mesh
     if (!mesh.isMesh) return

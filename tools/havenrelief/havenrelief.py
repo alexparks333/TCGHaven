@@ -41,6 +41,7 @@ from scipy import ndimage
 
 MAX_SIDE = 2048
 KIT_VERSION = 1
+ANALYSIS_REV = 2  # in the server's cache key: bumped when the analysis itself changes (2: Marigold in 768 tiles)
 QUALITY = {"fast": (1, 2), "normal": (3, 4), "high": (6, 6)}  # Marigold (ensemble, steps)
 
 
@@ -59,11 +60,14 @@ def pick_device():
 
 # ── Input ───────────────────────────────────────────────────────────────────────────────────
 
-def prepare(src):
+def prepare(src, use_alpha=True):
     """The art fitted onto a 2048 square: (the art over white as the models see it, its RGB as
-    floats, the pin's mask)."""
-    has_alpha = src.mode in ("RGBA", "LA") or (src.mode == "P" and "transparency" in src.info)
+    floats, the pin's mask). use_alpha=False ignores the art's transparency: it's laid on white and
+    only the backdrop around the pin is cut out, as for any picture on white."""
     rgba = src.convert("RGBA")
+    # An alpha channel only counts when it's used: a fully opaque RGBA picture on white is cut out
+    # like any other picture on white
+    has_alpha = use_alpha and np.asarray(rgba)[..., 3].min() < 128
     if max(rgba.size) != MAX_SIDE or rgba.size[0] != rgba.size[1]:
         canvas = Image.new("RGBA", (MAX_SIDE, MAX_SIDE), (255, 255, 255, 0 if has_alpha else 255))
         rgba.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
@@ -81,7 +85,8 @@ def prepare(src):
 def cutout(a):
     """Mask of the pin: everything except the backdrop connected to the border. The backdrop is
     near-white or its grey drop shadow (low saturation, fairly light). Art that already has
-    transparency uses its alpha instead."""
+    transparency uses its alpha instead — its holes included: anything transparent inside the pin
+    is cut right through it."""
     mx, mn = a.max(-1), a.min(-1)
     lab, _ = ndimage.label(((mx - mn) < 0.10) & (mx > 0.45))
     border = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
@@ -126,11 +131,13 @@ class Models:
             self._normals.set_progress_bar_config(disable=True)
         pipe = self._normals
         ensemble, steps = QUALITY[quality] if self.device != "cpu" else (1, 2)
-        tile = tile or (MAX_SIDE if self.big_gpu else 768)
+        # Marigold sees 768 px at a time, the size it was trained at: run on the whole 2048 picture
+        # in one pass it came out nearly flat, and partly back to front (left/right swapped)
+        tile = tile or 768
         W, H = img.size
 
-        def run(im):
-            out = pipe(im, num_inference_steps=steps, ensemble_size=ensemble, processing_resolution=im.size[0],
+        def run(im, res=None):
+            out = pipe(im, num_inference_steps=steps, ensemble_size=ensemble, processing_resolution=res or im.size[0],
                        match_input_resolution=True, batch_size=1)
             return np.asarray(out.prediction[0], dtype=np.float32)
 
@@ -152,6 +159,12 @@ class Models:
                     k += 1
                     log(f"  normals tile {k}/{total} ({time.time() - t0:.0f}s)")
             n = acc / np.maximum(wsum, 1e-6)
+            # Each tile guesses its own overall tilt, which showed as seams: the broad shape comes
+            # from one pass over the whole picture (at 768), the fine detail from the tiles
+            whole = run(img, tile)
+            s = W / 24
+            for c in range(3):
+                n[..., c] = ndimage.gaussian_filter(whole[..., c], s) + n[..., c] - ndimage.gaussian_filter(n[..., c], s)
         return n / np.linalg.norm(n, axis=-1, keepdims=True)
 
     def pieces(self, img, mask):
@@ -231,17 +244,7 @@ def analyze(models, img, mask, quality="normal"):
     log(f"detail (Marigold Normals) [{time.time() - t0:.0f}s]")
     normals = models.normals(img, quality)
     free_gpu()
-    # Fine detail: the normals' slopes integrated into height. Integrating predicted normals always
-    # leaves a broad drift (a false tilt across the pin), so it's removed — the layers give the big
-    # shape instead.
-    inside = mask.astype(np.float32)
-    nz = np.clip(normals[..., 2], 0.3, 1)
-    z = integrate(-normals[..., 0] / nz * inside, normals[..., 1] / nz * inside)
-    s = MAX_SIDE / 40
-    drift = ndimage.gaussian_filter(z * inside, s) / np.maximum(ndimage.gaussian_filter(inside, s), 1e-3)
-    detail = z - drift
-    detail /= max(np.abs(detail[mask]).max(), 1e-6)
-    detail[~mask] = 0
+    detail = fine_detail(normals, mask)
 
     log(f"pieces (Segment Anything) [{time.time() - t0:.0f}s]")
     pieces = models.pieces(img, mask)
@@ -250,6 +253,35 @@ def analyze(models, img, mask, quality="normal"):
     normals = normals.copy()
     normals[~mask] = (0, 0, 1)
     return layers, detail, normals, pieces
+
+
+def fine_detail(normals, mask):
+    """Fine detail (-1..1): the normals' slopes integrated into height. Integrating predicted normals
+    always leaves a broad drift (a false tilt across the pin), so it's removed — the layers give the
+    big shape instead."""
+    inside = mask.astype(np.float32)
+    nz = np.clip(normals[..., 2], 0.3, 1)
+    z = integrate(-normals[..., 0] / nz * inside, normals[..., 1] / nz * inside)
+    s = MAX_SIDE / 40
+    drift = ndimage.gaussian_filter(z * inside, s) / np.maximum(ndimage.gaussian_filter(inside, s), 1e-3)
+    detail = z - drift
+    detail /= max(np.abs(detail[mask]).max(), 1e-6)
+    detail[~mask] = 0
+    return detail
+
+
+def renormal(models, img, mask, quality="high"):
+    """Just the normals again, and the fine detail made from them (the Studio's "Recalculate
+    Normals"): the kit's normal.png and detail.png, as images — its pieces and layers stay."""
+    normals = models.normals(img, quality)
+    free_gpu()
+    detail = fine_detail(normals, mask)
+    normals = normals.copy()
+    normals[~mask] = (0, 0, 1)
+    return {
+        "normal.png": Image.fromarray(((normals * 0.5 + 0.5) * 255).round().astype(np.uint8), "RGB"),
+        "detail.png": pack16((detail + 1) / 2),
+    }
 
 
 def pack16(v):
@@ -333,6 +365,7 @@ def main():
     ap = argparse.ArgumentParser(description="HavenRelief: pin art -> relief kit (+ a default pin) for TCG Haven")
     ap.add_argument("art", help="pin art (PNG/JPEG/WebP), straight-on, on a plain white or transparent background")
     ap.add_argument("--out", default="out", help="output folder (a subfolder per art file)")
+    ap.add_argument("--no-alpha", action="store_true", help="ignore the art's transparency: cut out only the white around it")
     ap.add_argument("--quality", choices=list(QUALITY), default="normal",
                     help="fast = 1 AI pass; normal = 3 averaged; high = 6 averaged, more steps")
     ap.add_argument("--levels", type=int, default=0,
@@ -344,7 +377,7 @@ def main():
     out = os.path.join(args.out, name)
     os.makedirs(out, exist_ok=True)
     t0 = time.time()
-    img, on_white, mask = prepare(Image.open(args.art))
+    img, on_white, mask = prepare(Image.open(args.art), not args.no_alpha)
     raw = os.path.join(out, "raw.npz")
     if args.reuse and os.path.exists(raw):
         log("reusing the saved analysis")

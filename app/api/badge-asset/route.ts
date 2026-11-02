@@ -24,8 +24,11 @@ export async function GET(request: Request) {
       'Content-Type': res.headers.get('content-type') ?? 'application/octet-stream',
       // Lets the 3D viewer show real download progress
       ...(res.headers.get('content-length') ? { 'Content-Length': res.headers.get('content-length')! } : {}),
-      // Each upload gets a new file name (and token), so a URL's content never changes.
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      // Each upload gets a new file name (and token), so a URL's content never changes. s-maxage
+      // lets Vercel's CDN keep it too (max-age alone is browser-only): after the first request in
+      // a region, a file is served from the CDN without running this function or downloading it
+      // from Storage again.
+      'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable',
     },
   })
 }

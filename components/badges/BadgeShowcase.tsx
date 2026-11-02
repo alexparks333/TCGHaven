@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { Plus, X, Box, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgeTier, type BadgeDef } from '@/lib/badges'
+import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { BadgeSpot, FrameOrnament, PinholeFilter } from './BadgeBook'
@@ -194,7 +194,7 @@ function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove, onVie
                 onClick={() => (here ? onClose() : onPick(d.id))}
                 className={cn('relative flex flex-col items-center gap-1.5 rounded-xl p-2 border transition-colors text-center', here ? 'border-violet-600 bg-violet-600/10' : 'border-slate-800 hover:border-slate-600 hover:bg-slate-900')}
               >
-                <span className={cn(tierOf(d) === 1 && 'grayscale')}><BadgePin art={d.art} imageUrl={d.imageUrl} size={64} /></span>
+                <span className={cn('flex items-center justify-center', tierOf(d) === 1 && 'grayscale')} style={{ width: 64, height: 64 * 1.12 }}><BadgePin art={d.art} imageUrl={d.imageUrl} size={pinSize(d, 64)} /></span>
                 <span className="text-[11px] font-semibold text-ink leading-tight line-clamp-2">{d.name}</span>
                 {(here || elsewhere) && (
                   <span className="absolute top-1 right-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400">

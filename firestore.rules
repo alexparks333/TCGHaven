@@ -91,6 +91,15 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    // Each day's whole-game prices and each card's first price (price-history.mjs "Daily closes").
+    match /price_history/{game}/days/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /price_history/{game}/firsts/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
 
     // ── Friends (lib/firebase/friends.ts) ──────────────────────────────────────────────────
     // A collector's public card: name, @username, photo (never their email). Any signed-in

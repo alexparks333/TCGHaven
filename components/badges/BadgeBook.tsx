@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, chaptersOf, isMastered, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, chaptersOf, isMastered, nextTier, pinSize, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import dynamic from 'next/dynamic'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_VIEWBOX } from './BadgePin'
+import { useTrimmedArt } from './trimmedArt'
 
 // The 3D inspect view — three.js only loads when a pin is opened.
 const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
@@ -389,12 +390,13 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
+  const art = useTrimmedArt(def.imageUrl) // the art cropped to the pin, as BadgePin draws it — the masks follow it
   // The pin shows once its first tier is reached, in that tier's look (Grayscale / Painted / Full)
   const tier = badgeTier(def, badges?.progress[def.id])
   const earnedAt = tier > 0 ? badges?.earned[def.id] ?? 1 : undefined
   const [have, total] = badges?.progress[def.id] ?? [0, def.slots.length]
   const mastered = isMastered(def, badges?.progress[def.id], !!badges?.earned[def.id]) && tier === 3
-  const nextTier = toNextTier(def, badges?.progress[def.id])
+  const toNext = toNextTier(def, badges?.progress[def.id])
   // An earned growing badge that has new cards since: how many to master it again
   const toMaster = def.growing && earnedAt && tier === 3 && !mastered ? Math.max(0, def.slots.length - have) : 0
 
@@ -413,42 +415,46 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       className="relative flex flex-col items-center justify-center outline-none cursor-pointer"
       style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}
     >
-      {earnedAt ? (
-        // The shadow sits on a wrapper that doesn't tilt, and the pin isn't scaled up: a drop-shadow
-        // filter on the tilting element (and a 6% scale-up) made the browser stretch a flat bitmap
-        // of the pin — blurry on hover
-        <span className={cn('pinbook-pin-shadow block', `pinbook-tier-${tier}`)}>
-        <span
-          className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
-          style={{
-            transform: tilt
-              ? `perspective(700px) rotateY(${(tilt.x - 0.5) * 16}deg) rotateX(${(0.5 - tilt.y) * 16}deg) translateY(-3px)`
-              : undefined,
-          }}
-        >
-          {/* Mastered: a polished platinum rim around the pin's own silhouette, with a highlight
-              slowly travelling around it (the silhouette drawn a little larger behind the pin) */}
-          {mastered && (
-            <>
-              <span className="pinbook-platinum absolute inset-[-3.6%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(def.imageUrl), mask: pinMask(def.imageUrl) }} />
-              <span className="pinbook-platinum-gap absolute inset-[-0.8%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(def.imageUrl), mask: pinMask(def.imageUrl) }} />
-            </>
-          )}
-          <BadgePin art={def.art} imageUrl={def.imageUrl} size={pin} />
-          {tilt && (
-            <span
-              className="pinbook-glint absolute inset-0"
-              style={{
-                background: `radial-gradient(circle at ${tilt.x * 100}% ${tilt.y * 100}%, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 35%, transparent 60%)`,
-                ...(def.imageUrl && { WebkitMask: `url("${badgeAsset(def.imageUrl)}") center / contain no-repeat`, mask: `url("${badgeAsset(def.imageUrl)}") center / contain no-repeat` }),
-              }}
-            />
-          )}
-        </span>
-        </span>
-      ) : (
-        <PinHole size={pin} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={total ? have / total : 0} />
-      )}
+      {/* A box the size of a 100% pin: a pin drawn bigger or smaller (its Display size) grows or
+          shrinks about its middle, so the nameplate below never moves */}
+      <span className="relative flex items-center justify-center" style={{ width: pin, height: pin * 1.12 }}>
+        {earnedAt ? (
+          // The shadow sits on a wrapper that doesn't tilt, and the pin isn't scaled up: a drop-shadow
+          // filter on the tilting element (and a 6% scale-up) made the browser stretch a flat bitmap
+          // of the pin — blurry on hover
+          <span className={cn('pinbook-pin-shadow block', `pinbook-tier-${tier}`)}>
+          <span
+            className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
+            style={{
+              transform: tilt
+                ? `perspective(700px) rotateY(${(tilt.x - 0.5) * 16}deg) rotateX(${(0.5 - tilt.y) * 16}deg) translateY(-3px)`
+                : undefined,
+            }}
+          >
+            {/* Mastered: a polished platinum rim around the pin's own silhouette, with a highlight
+                slowly travelling around it (the silhouette drawn a little larger behind the pin) */}
+            {mastered && (
+              <>
+                <span className="pinbook-platinum absolute inset-[-3.6%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(art?.src), mask: pinMask(art?.src) }} />
+                <span className="pinbook-platinum-gap absolute inset-[-0.8%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(art?.src), mask: pinMask(art?.src) }} />
+              </>
+            )}
+            <BadgePin art={def.art} imageUrl={def.imageUrl} size={pinSize(def, pin)} />
+            {tilt && (
+              <span
+                className="pinbook-glint absolute inset-0"
+                style={{
+                  background: `radial-gradient(circle at ${tilt.x * 100}% ${tilt.y * 100}%, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 35%, transparent 60%)`,
+                  ...(art && { WebkitMask: `url("${art.src}") center / contain no-repeat`, mask: `url("${art.src}") center / contain no-repeat` }),
+                }}
+              />
+            )}
+          </span>
+          </span>
+        ) : (
+          <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={total ? have / total : 0} />
+        )}
+      </span>
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
       <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} mastered={mastered} gap={-pin * 0.02} />
 
@@ -456,7 +462,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
         <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
           <span className="block text-sm font-bold text-ink leading-tight">{def.name}</span>
           <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
-            {tier ? <><Check size={10} />{TIER_NAMES[tier]}{tier < 3 ? ` · ${nextTier} more ${def.slotNoun} for ${TIER_NAMES[tier + 1]}` : ''}</> : <><Lock size={10} />Not earned yet{nextTier ? ` · ${nextTier} more ${def.slotNoun} to unlock` : ''}</>}
+            {tier ? <><Check size={10} />{TIER_NAMES[tier]}{toNext ? ` · ${toNext} more ${def.slotNoun} for ${TIER_NAMES[nextTier(def, badges?.progress[def.id])]}` : ''}</> : <><Lock size={10} />Not earned yet{toNext ? ` · ${toNext} more ${def.slotNoun} to unlock` : ''}</>}
           </span>
           {mastered && <span className="block mt-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">✦ Mastered — every {def.slotNoun.replace(/s$/, '')} so far</span>}
           {toMaster > 0 && <span className="block mt-1 text-[10px] font-semibold text-slate-500">{toMaster} more {def.slotNoun} to master it{have > 0 ? ' again' : ''}</span>}
@@ -482,14 +488,15 @@ function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hov
   // The pin's own shape pressed into the velvet: the
   // SVG filter #pinhole-inset (PinholeFilter) turns the art's outline into a tinted floor with an
   // inner shadow all round its edge (heavier at the top) and a faint lit lower edge.
-  const src = imageUrl
-    ? `url("${badgeAsset(imageUrl)}")`
+  const trimmed = useTrimmedArt(imageUrl)
+  const src = trimmed
+    ? `url("${trimmed.src}")`
     : `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='${PIN_VIEWBOX}'><path d='${PIN_SILHOUETTE}'/></svg>`)}")`
   // Progress: the pin fills in from the bottom as a ghost (half opacity) — 2 of 12 cards shows its
-  // bottom sixth. The fill is measured over the art itself: uploaded art is square, centred in the
-  // 100 × 112 box; the built-in pins fill the box.
+  // bottom sixth. The fill is measured over the art itself: uploaded art (cropped to the pin) is
+  // fitted and centred in the 100 × 112 box; the built-in pins fill the box.
   const p = Math.max(0, Math.min(1, progress))
-  const artTop = imageUrl ? (1.12 - 1) / 2 / 1.12 : 0 // fraction of the box above/below the art
+  const artTop = trimmed ? (1.12 - Math.min(1.12, trimmed.aspect)) / 2 / 1.12 : 0 // fraction of the box above/below the art
   const fill = p > 0 ? (artTop + p * (1 - 2 * artTop)) * 100 : 0
   return (
     <span className="relative block transition-transform duration-200" style={{ width: size, height: size * 1.12, transform: hovered ? 'scale(1.03)' : undefined }}>
@@ -552,9 +559,10 @@ function EmptySpot({ size }: { size: number }) {
 
 // A small engraved brass plate under each spot: the badge's name once earned
 // A CSS mask in the pin's shape: its uploaded art, or the built-in pins' silhouette
-function pinMask(imageUrl?: string) {
-  const src = imageUrl
-    ? `url("${badgeAsset(imageUrl)}")`
+// (src: the pin art as drawn — useTrimmedArt's, already a loadable URL)
+function pinMask(src0?: string) {
+  const src = src0
+    ? `url("${src0}")`
     : `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='${PIN_VIEWBOX}'><path d='${PIN_SILHOUETTE}'/></svg>`)}")`
   return `${src} center / contain no-repeat`
 }

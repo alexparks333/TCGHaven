@@ -84,7 +84,10 @@ export interface BadgeDef {
   // Tiers: how far through the badge a collector is (have / total, %) decides which look their pin
   // has — [Grayscale, Painted, Full], each the % that unlocks it. Unset = DEFAULT_TIERS.
   tiers?: [number, number, number]
+  displayScale?: number // how big its pin is drawn wherever pins show flat (book pages, shelf, lists), 1 = as is (0.1–5) — evens out art framed bigger or smaller than the rest; unset = 1
+  tiersOff?: (1 | 2 | 3)[] // looks switched off for this badge (skipped: the pin keeps the look below until the next one on); unset = all on
   finishMapUrl?: string // the Relief Studio's per-pixel finishes (R = FINISHES id in lib/reliefStudio.ts); unset = all Auto
+  detailMapUrl?: string // its details over them (R = slot, lib/reliefStudio.ts detailMap; the slots come from relief.details); unset = none
 }
 
 // The standard pin backs every 3D pin gets (built in components/badges/pinBacks.ts)
@@ -127,23 +130,32 @@ export const DEFAULT_BADGES: BadgeDef[] = [
 // The three looks a pin can have, unlocked by progress (each badge's tiers, set in the staff
 // portal): 1 Grayscale — no colour, matte, no finishes; 2 Painted — full colour, satin (little
 // shine), no finishes; 3 Full — the pin as designed. 0 = not unlocked yet (a hole in the book).
-// Follows current progress: selling cards below a tier drops the pin back down.
+// Follows current progress: selling cards below a tier drops the pin back down. A badge can switch
+// looks off (tiersOff): they're skipped, the pin keeping the look below until the next one on.
 export type BadgeTier = 0 | 1 | 2 | 3
 export const DEFAULT_TIERS: [number, number, number] = [50, 75, 90]
+/** The size to draw a badge's pin at, for a slot made for `size` (its Display size applied). */
+export const pinSize = (def: Pick<BadgeDef, 'displayScale'>, size: number) => size * (def.displayScale ?? 1)
 export const TIER_NAMES = ['Locked', 'Grayscale', 'Painted', 'Full'] as const
 export function badgeTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
   const [have, total] = progress ?? [0, def.slots.length]
   if (!total) return 0
   const pct = (have / total) * 100
-  const [t1, t2, t3] = def.tiers ?? DEFAULT_TIERS
-  return pct >= t3 ? 3 : pct >= t2 ? 2 : pct >= t1 ? 1 : 0
+  const t = def.tiers ?? DEFAULT_TIERS
+  for (const k of [3, 2, 1] as const) if (!def.tiersOff?.includes(k) && pct >= t[k - 1]) return k
+  return 0
 }
-/** How many more of the badge's slots unlock the next tier (0 at the top). */
+/** The next look up that's switched on, or 0 at the top. */
+export function nextTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
+  const tier = badgeTier(def, progress)
+  return ([1, 2, 3] as const).find((k) => k > tier && !def.tiersOff?.includes(k)) ?? 0
+}
+/** How many more of the badge's slots unlock the next look (0 at the top). */
 export function toNextTier(def: BadgeDef, progress: [number, number] | undefined): number {
   const [have, total] = progress ?? [0, def.slots.length]
-  const tier = badgeTier(def, progress)
-  if (tier === 3 || !total) return 0
-  return Math.max(0, Math.ceil(((def.tiers ?? DEFAULT_TIERS)[tier] / 100) * total) - have)
+  const next = nextTier(def, progress)
+  if (!next || !total) return 0
+  return Math.max(0, Math.ceil(((def.tiers ?? DEFAULT_TIERS)[next - 1] / 100) * total) - have)
 }
 
 export function isMastered(def: BadgeDef, progress: [number, number] | undefined, earned: boolean): boolean {

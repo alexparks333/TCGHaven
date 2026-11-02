@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
-import { DEFAULT_TIERS, TIER_NAMES, PIN_BACKS, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
+import { DEFAULT_TIERS, TIER_NAMES, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
@@ -195,6 +195,29 @@ function Modal({ title, onClose, children, footer }: { title: string; onClose: (
   )
 }
 
+// The editor preview's pin size at 100%: fixed for good, so one badge's Display size can be measured
+// against another's on the same grid (a pin bigger than the grid is cropped there, not shrunk)
+const PREVIEW_PIN = 80
+
+// A tier percentage: typed freely and only applied (clamped to 1–100, the others kept in order)
+// on Enter or leaving the box — applied per keystroke, clearing the box on the way to "100" made
+// it 1 for a moment and dragged the tiers below it down to 1
+function TierPercent({ value, disabled, onCommit }: { value: number; disabled?: boolean; onCommit: (v: number) => void }) {
+  const [text, setText] = useState(String(value))
+  useEffect(() => setText(String(value)), [value])
+  const commit = () => {
+    const v = Math.min(100, Math.max(1, Math.round(Number(text))))
+    if (!Number.isFinite(v) || text.trim() === '') return setText(String(value))
+    setText(String(v))
+    if (v !== value) onCommit(v)
+  }
+  return (
+    <input type="number" min={1} max={100} value={text} disabled={disabled} className="input-field !py-1.5 text-sm"
+      onChange={(e) => setText(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }} />
+  )
+}
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -227,16 +250,16 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
   const [studio, setStudio] = useState(false)
   // New pin art is analyzed for the Relief Studio straight away, so the Studio opens ready
   const [reliefJob, setReliefJob] = useState<{ state: 'running' | 'done' | 'offline' | 'error'; msg?: string } | null>(null)
-  async function autoAnalyze(artUrl: string) {
+  async function autoAnalyze(artUrl: string, useAlpha = reliefSettings(b.relief).artHoles) {
     if (!(await reliefServerUp())) return setReliefJob({ state: 'offline' })
     setReliefJob({ state: 'running' })
     try {
       const r = await fetch(badgeAsset(artUrl)!)
       if (!r.ok) throw new Error('couldn’t read the art back')
-      const kit = await loadKit(await analyzeArt(await r.blob(), 'high'))
+      const kit = await loadKit(await analyzeArt(await r.blob(), 'high', useAlpha))
       const reliefKit = await saveKit(staffStorage, id || 'new', kit)
       // piece edits belong to one analysis — keep the rest of the settings
-      setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), pieces: {}, soft: {}, off: [] } }))
+      setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, pieces: {}, soft: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
       setReliefJob({ state: 'done' })
     } catch (e) {
       setReliefJob({ state: 'error', msg: e instanceof Error ? e.message : String(e) })
@@ -312,18 +335,28 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             <input className="input-field" value={b.slotNoun} onChange={(e) => patch({ slotNoun: e.target.value })} placeholder="Legends" />
           </Field>
 
-          <Field label="Tier percentages" hint="How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed.">
+          <Field label="Tier percentages" hint="How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick a look to skip it: the pin keeps the look below until the next one that's on.">
             <div className="grid grid-cols-3 gap-2">
               {([1, 2, 3] as const).map((t) => {
                 const tiers = b.tiers ?? DEFAULT_TIERS
+                const off = b.tiersOff ?? []
+                const on = !off.includes(t)
                 return (
-                  <label key={t} className="block">
-                    <span className="block text-[11px] text-slate-500 mb-0.5">{TIER_NAMES[t]}</span>
-                    <div className="flex items-center gap-1">
-                      <input type="number" min={1} max={100} value={tiers[t - 1]} className="input-field !py-1.5 text-sm"
+                  <div key={t} className="block">
+                    <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-0.5"
+                      title={on && off.length === 2 ? 'At least one look has to stay on' : on ? `Skip the ${TIER_NAMES[t]} look` : `Use the ${TIER_NAMES[t]} look`}>
+                      <input type="checkbox" checked={on} disabled={on && off.length === 2}
                         onChange={(e) => {
+                          const next = e.target.checked ? off.filter((x) => x !== t) : [...off, t].sort()
+                          patch({ tiersOff: next.length ? next : undefined })
+                        }} />
+                      {TIER_NAMES[t]}
+                    </label>
+                    <div className={cn('flex items-center gap-1', !on && 'opacity-40')}>
+                      <TierPercent value={tiers[t - 1]} disabled={!on}
+                        onCommit={(v) => {
                           const next = [...tiers] as [number, number, number]
-                          next[t - 1] = Math.min(100, Math.max(1, Math.round(Number(e.target.value) || 0)))
+                          next[t - 1] = v
                           // keep them in order: Grayscale ≤ Painted ≤ Full
                           for (let i: number = t; i < 3; i++) next[i] = Math.max(next[i], next[i - 1])
                           for (let i: number = t - 2; i >= 0; i--) next[i] = Math.min(next[i], next[i + 1])
@@ -331,7 +364,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                         }} />
                       <span className="text-xs text-slate-500">%</span>
                     </div>
-                  </label>
+                  </div>
                 )
               })}
             </div>
@@ -342,13 +375,34 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
 
         {/* Look */}
         <div className="flex flex-col gap-3">
-          <div className="rounded-2xl bg-[#181513] p-4 flex items-center justify-center">
-            <BadgePin art={b.art} imageUrl={b.imageUrl} size={120} />
+          {/* A fixed square with a rule-of-thirds grid: the pin grows and shrinks on it with Display
+              size, so its size can be measured against other badges' */}
+          <div className="relative w-full max-w-[240px] mx-auto aspect-square rounded-2xl bg-[#181513] overflow-hidden flex items-center justify-center">
+            <span className="absolute inset-y-0 left-1/3 w-px bg-white/15 pointer-events-none" aria-hidden />
+            <span className="absolute inset-y-0 left-2/3 w-px bg-white/15 pointer-events-none" aria-hidden />
+            <span className="absolute inset-x-0 top-1/3 h-px bg-white/15 pointer-events-none" aria-hidden />
+            <span className="absolute inset-x-0 top-2/3 h-px bg-white/15 pointer-events-none" aria-hidden />
+            <span className="relative"><BadgePin art={b.art} imageUrl={b.imageUrl} size={pinSize(b, PREVIEW_PIN)} /></span>
           </div>
+          <label className="block">
+            <span className="flex items-center text-xs font-semibold text-slate-600">Display size<span className="ml-auto tabular-nums text-slate-500">{Math.round((b.displayScale ?? 1) * 100)}%</span></span>
+            <input type="range" min={0.1} max={5} step={0.01} value={b.displayScale ?? 1} className="w-full accent-amber-600"
+              onChange={(e) => { const v = Number(e.target.value); patch({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
+            <span className="block text-[11px] text-slate-500 leading-snug">How big the pin shows in the book, on the shelf and in lists — evens out art that&rsquo;s framed bigger or smaller than the rest.</span>
+          </label>
           <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { patch({ imageUrl }); if (imageUrl) autoAnalyze(imageUrl) }}
             note={reliefJob?.state === 'running'
               ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300"><Loader2 size={12} className="animate-spin" />Analyzing…</span>
               : b.reliefKit && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"><CheckCircle2 size={12} />Relief ready</span>} />
+          <label className="-mt-1 flex items-start gap-2 text-xs text-slate-600" title="On: transparent areas inside the art become holes in the pin. Off: only the outside is cut out.">
+            <input type="checkbox" className="mt-0.5" checked={reliefSettings(b.relief).artHoles}
+              onChange={(e) => {
+                const artHoles = e.target.checked
+                setB((x) => ({ ...x, relief: { ...reliefSettings(x.relief), artHoles } }))
+                if (b.imageUrl) autoAnalyze(b.imageUrl, artHoles)
+              }} />
+            <span>Use transparency channel<span className="block text-[11px] text-slate-500">Transparent areas inside the art become holes. Off: only the outside is cut out.</span></span>
+          </label>
           {!b.imageUrl && (
             <Field label="Built-in art">
               <select className="input-field" value={b.art} onChange={(e) => patch({ art: e.target.value })}>
@@ -379,10 +433,9 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
           {studio && <ReliefStudio badge={{ ...b, id: id || 'new' }} onClose={() => setStudio(false)}
             // the Studio's result is saved with the badge straight away — a separate "Save badge" was easy to miss
             onApply={async (p) => { const next = { ...b, ...p }; setB(next); await save(next) }} />}
-          <FileField label="Normal map" accept="image/*" badgeId={id || 'new'} kind="normal" value={b.normalMapUrl} onChange={(normalMapUrl) => patch({ normalMapUrl })} />
-          <FileField label="Depth map" accept="image/*" badgeId={id || 'new'} kind="depth" value={b.depthMapUrl} onChange={(depthMapUrl) => patch({ depthMapUrl })} />
+          {/* the pin's normal and depth maps come from the Relief Studio ("Save relief to badge") */}
           <p className="text-[11px] text-slate-500 leading-snug">
-            With a 3D model, that&rsquo;s what the 3D view shows. Without one, it builds the pin from the art — a depth map of the art (white = near) gives it its real sculpted shape.
+            With a 3D model, that&rsquo;s what the 3D view shows. Without one, the pin is built from the art — shape it in the Relief Studio.
           </p>
         </div>
       </div>
