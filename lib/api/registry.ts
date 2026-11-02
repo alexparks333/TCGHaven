@@ -85,6 +85,9 @@ export interface RiftboundPlacement {
   // Staff chose "Ignore" (not sure yet): hidden for now, and the next sync offers it again in its
   // own batch (addedAt = that sync), maybe with a photo by then. Unlike `denied`, not final.
   ignored?: boolean
+  // The picture staff chose for it: TCGplayer's photo, Riot's art for the same card, or none.
+  // Unset = TCGplayer's photo when there is one, else Riot's art.
+  image?: 'tcgplayer' | 'riot' | 'none'
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching

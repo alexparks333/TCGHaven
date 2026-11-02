@@ -446,6 +446,11 @@ whole group list and skips the main sets' groups and any group a `tcgplayerOnly`
   (`ignored`: hidden; the next sync's discovery offers it again with a new `addedAt`, i.e. in that
   sync's node, and `syncToFirestore({ unhideIds })` shows it again despite the staff-edit
   protection), or **Deny**.
+- **Picture choice:** a placement's `image` ('tcgplayer' | 'riot' | 'none'; unset = TCGplayer's
+  photo, else the same card's gallery art) — `placementCard()` sets `keepImage` so no fallback
+  overrides it. The placements route applies edits to the catalog card directly and only drops
+  its server's catalog cache (no snapshot rebuild — every other server picks the change up via
+  the `updatedAt` delta pull); the board applies each change locally first (`applyLocal`).
 - **Deny / recover / rename:** a placement can be `denied` (hidden; it stays in `placements`, so
   discovery never offers it again) and recovered into `previousSetName` or any set. `displayName`
   is the name the website shows (`placementCard()` applies it every sync; default =

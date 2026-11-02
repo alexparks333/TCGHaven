@@ -1030,6 +1030,7 @@ function tcgplayerOnlyCard(set, row) {
 // Edition copy), so borrow that sibling's photo rather than showing a blank tile.
 async function borrowMissingPhotos(setCards) {
   const ok = await Promise.all(setCards.map(async (c) => {
+    if (c.keepImage) return true // staff chose this card's picture — no borrowing
     if (!c.imageUrl) return false
     try {
       const res = await fetch(c.imageUrl, { method: 'HEAD', headers: { 'User-Agent': 'TCGHaven/1.0' } })
@@ -1059,6 +1060,7 @@ function useGalleryArtForPhotoless(tcgplayerOnlyCards, galleryCards) {
   for (const card of tcgplayerOnlyCards) {
     const fallbackName = card.artFallbackName
     delete card.artFallbackName
+    delete card.keepImage
     if (!card.needsGalleryArt) continue
     delete card.needsGalleryArt
     const code = card.publicCode.split('-').slice(1).join('-')
@@ -1150,11 +1152,16 @@ export function placementDefaultName(tcgplayerName) {
   return `${base} (${parens.join(', ') || 'Promo'})`
 }
 
-function placementCard(set, row, displayName) {
+// `image` is staff's pick on Needs Review: 'tcgplayer' (TCGplayer's photo, or none until it has
+// one), 'riot' (the same card's gallery art) or 'none'. Unset = TCGplayer's photo, else Riot's art.
+function placementCard(set, row, displayName, image) {
   const card = set.tcgplayerOnly
     ? { ...tcgplayerOnlyCard(set, row), id: `tcg-${row.productId}` }
     : { ...placedExtraCard(set, row, ''), id: `tcg-${row.productId}`, name: placementDefaultName(row.name) }
   if (displayName) card.name = displayName
+  if (image === 'none') { card.imageUrl = ''; card.keepImage = true }
+  else if (image === 'tcgplayer') card.keepImage = true
+  else if (image === 'riot') { card.imageUrl = ''; card.needsGalleryArt = true; card.keepImage = true }
   return card
 }
 
@@ -1216,7 +1223,7 @@ async function fetchTcgplayerOnlyRiftboundSets({ sets, placements = [], allSets 
       const rows = new Map(oneRowPerProduct(await rowsOf(groupId)).map((r) => [r.productId, r]))
       const placedCards = list
         .filter((p) => rows.has(String(p.productId)))
-        .map((p) => placementCard(setByName.get(p.setName), rows.get(String(p.productId)), p.displayName))
+        .map((p) => placementCard(setByName.get(p.setName), rows.get(String(p.productId)), p.displayName, p.image))
       await borrowMissingPhotos(placedCards)
       cards.push(...placedCards)
       console.log(`   TCGCSV group ${groupId}: ${placedCards.length} placed cards`)

@@ -36,7 +36,10 @@ interface Placement {
   ignored?: boolean
   previousSetName?: string | null
   displayName?: string
+  image?: ImageChoice
 }
+
+type ImageChoice = 'tcgplayer' | 'riot' | 'none'
 
 interface RegistrySet {
   setName: string
@@ -50,11 +53,12 @@ interface RegistryResponse {
 interface CatalogCard {
   id: string
   name?: string
+  publicCode?: string
   imageUrl?: string
   marketPrice?: number
 }
 
-type Change = { productId: number; setName?: string | null; reviewed?: boolean; denied?: boolean; ignored?: boolean; displayName?: string }
+type Change = { productId: number; setName?: string | null; reviewed?: boolean; denied?: boolean; ignored?: boolean; displayName?: string; image?: ImageChoice | 'auto' }
 
 const ALL = '__all__'
 const LEFT_OUT = '__left_out__'
@@ -83,7 +87,27 @@ function restoreChange(prev: Placement, now: Placement): Change {
   else if (!isDenied(prev) && isDenied(now)) { c.denied = false; c.setName = prev.setName }
   else if (prev.setName !== now.setName) c.setName = prev.setName
   if ((prev.displayName ?? '') !== (now.displayName ?? '')) c.displayName = prev.displayName ?? ''
+  if ((prev.image ?? 'auto') !== (now.image ?? 'auto')) c.image = prev.image ?? 'auto'
   return c
+}
+
+// The same change the server makes (app/api/set-registry/placements/route.ts), applied locally
+// so the board updates the moment you click; the server's answer then replaces it.
+function applyLocal(p: Placement, c: Change): Placement {
+  const n = { ...p }
+  if (c.ignored === true && !n.ignored) { n.ignored = true; n.reviewed = false }
+  else if (n.ignored && (c.ignored === false || c.reviewed === true || c.setName !== undefined || c.denied !== undefined)) n.ignored = false
+  if (c.denied === true && !n.denied) { n.previousSetName = n.setName; n.setName = null; n.denied = true; n.reviewed = true; n.auto = false }
+  else if (c.denied === false && (n.denied || n.setName === null)) {
+    n.denied = false; n.setName = c.setName !== undefined ? c.setName : n.previousSetName ?? null; delete n.previousSetName; n.reviewed = false; n.auto = false
+  } else if (c.setName !== undefined && c.setName !== n.setName) { n.setName = c.setName; n.denied = false; n.auto = false }
+  if (c.displayName !== undefined) {
+    if (c.displayName.trim() && c.displayName.trim() !== defaultCardName(n.name)) n.displayName = c.displayName.trim()
+    else delete n.displayName
+  }
+  if (c.image !== undefined) { if (c.image === 'auto') delete n.image; else n.image = c.image }
+  if (c.reviewed !== undefined) n.reviewed = c.reviewed
+  return n
 }
 
 // What an action did, for the Undo toast.
@@ -96,6 +120,7 @@ function describe(changes: Change[]): string {
   if (c.denied === true) return `Denied ${cards}`
   if (c.denied === false) return `Recovered ${cards}`
   if (c.displayName !== undefined) return c.displayName ? `Renamed to “${c.displayName}”` : 'Name reset'
+  if (c.image !== undefined) return c.image === 'none' ? 'Picture removed' : c.image === 'tcgplayer' ? 'Using the TCGplayer photo' : c.image === 'riot' ? 'Using Riot’s art' : 'Picture back to automatic'
   if (c.setName !== undefined) return c.reviewed ? `Accepted ${cards} into ${c.setName}` : `Moved ${cards} to ${c.setName ?? 'nowhere'}`
   if (c.reviewed === false) return `Marked ${cards} not reviewed`
   return `Accepted ${cards}`
@@ -111,6 +136,8 @@ export function defaultCardName(tcgplayerName: string): string {
 export function PlacementsReview() {
   const [registry, setRegistry] = useState<RegistryResponse['riftbound'] | null>(null)
   const [cards, setCards] = useState<Map<string, CatalogCard>>(new Map())
+  // Riot's gallery art by collector code ("013/298") — the "Riot art" picture option
+  const [riotByCode, setRiotByCode] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [openBatch, setOpenBatch] = useState<string | null>(null) // a sync's addedAt
   const [busy, setBusy] = useState(false)
@@ -118,6 +145,10 @@ export function PlacementsReview() {
   // The last action, undoable from the toast (or ⌘Z) for a few seconds
   const [undo, setUndo] = useState<{ label: string; changes: Change[]; id: number } | null>(null)
   const placementsRef = useRef<Placement[]>([])
+  const cardsRef = useRef(cards)
+  cardsRef.current = cards
+  const riotByCodeRef = useRef(riotByCode)
+  riotByCodeRef.current = riotByCode
 
   useEffect(() => {
     // no-store: the public GET is CDN-cached for a minute, and a review needs the current list
@@ -129,7 +160,14 @@ export function PlacementsReview() {
     ])
       .then(([reg, catalog]: [RegistryResponse | null, CatalogCard[]]) => {
         setRegistry(reg?.riftbound ?? null)
-        setCards(new Map((Array.isArray(catalog) ? catalog : []).filter((c) => c.id.startsWith('tcg-')).map((c) => [c.id, c])))
+        const list = Array.isArray(catalog) ? catalog : []
+        setCards(new Map(list.filter((c) => c.id.startsWith('tcg-')).map((c) => [c.id, c])))
+        const riot = new Map<string, string>()
+        for (const c of list) {
+          const code = (c.publicCode ?? '').split('-').slice(1).join('-')
+          if (!c.id.startsWith('tcg-') && code && c.imageUrl?.includes('rgpub') && !riot.has(code)) riot.set(code, c.imageUrl)
+        }
+        setRiotByCode(riot)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -147,6 +185,26 @@ export function PlacementsReview() {
   const save = useCallback(async (changes: Change[], { isUndo = false } = {}) => {
     if (changes.length === 0) return true
     const before = new Map(placementsRef.current.map((p) => [p.productId, { ...p }]))
+    const cardsBefore = cardsRef.current
+    // Show it now — the server's answer replaces this, or the old state comes back on failure.
+    const byId = new Map(changes.map((c) => [c.productId, c]))
+    setRegistry((r) => (r ? { ...r, placements: (r.placements ?? []).map((p) => (byId.has(p.productId) ? applyLocal(p, byId.get(p.productId)!) : p)) } : r))
+    setCards((m) => {
+      const next = new Map(m)
+      for (const c of changes) {
+        const id = `tcg-${c.productId}`
+        const card = next.get(id)
+        const p = before.get(c.productId)
+        if (!card || !p) continue
+        const upd = { ...card }
+        if (c.displayName !== undefined) upd.name = c.displayName.trim() || defaultCardName(p.name)
+        if (c.image === 'none') upd.imageUrl = ''
+        else if (c.image === 'tcgplayer') upd.imageUrl = tcgPhotoUrl(c.productId)
+        else if (c.image === 'riot') upd.imageUrl = riotByCodeRef.current.get((card.publicCode ?? '').split('-').slice(1).join('-')) ?? upd.imageUrl
+        next.set(id, upd)
+      }
+      return next
+    })
     setBusy(true)
     setError(null)
     try {
@@ -166,6 +224,17 @@ export function PlacementsReview() {
           .filter((c): c is Change => !!c)
         setUndo({ label: describe(changes), changes: restore, id: Date.now() })
       }
+      const images = (data.images ?? {}) as Record<string, string>
+      if (Object.keys(images).length) {
+        setCards((m) => {
+          const next = new Map(m)
+          for (const [pid, url] of Object.entries(images)) {
+            const card = next.get(`tcg-${pid}`)
+            if (card) next.set(card.id, { ...card, imageUrl: url })
+          }
+          return next
+        })
+      }
       const renamed = changes.filter((c) => c.displayName !== undefined)
       if (renamed.length) {
         setCards((m) => {
@@ -180,7 +249,9 @@ export function PlacementsReview() {
       }
       return true
     } catch (err) {
-      setError((err as Error).message)
+      setError(`Couldn't save — put back how it was. (${(err as Error).message})`)
+      setRegistry((r) => (r ? { ...r, placements: (r.placements ?? []).map((p) => before.get(p.productId) ?? p) } : r))
+      setCards(cardsBefore)
       return false
     } finally {
       setBusy(false)
@@ -262,6 +333,7 @@ export function PlacementsReview() {
           placements={open.list}
           registry={registry}
           cards={cards}
+          riotByCode={riotByCode}
           busy={busy}
           error={error}
           save={save}
@@ -345,12 +417,13 @@ function BatchNode({ at, list, cards, onOpen }: { at: string; list: Placement[];
 
 // The review board for one sync's cards — a full-screen layer over the staff portal.
 function ReviewBoard({
-  at, placements, registry, cards, busy, error, save, createSet, onClose,
+  at, placements, registry, cards, riotByCode, busy, error, save, createSet, onClose,
 }: {
   at: string
   placements: Placement[]
   registry: RegistryResponse['riftbound']
   cards: Map<string, CatalogCard>
+  riotByCode: Map<string, string>
   busy: boolean
   error: string | null
   save: (changes: Change[]) => Promise<boolean>
@@ -444,7 +517,13 @@ function ReviewBoard({
     ...categories.flatMap((cat) => registry.sets.filter((s) => s.cardexGroup === cat && counts.has(s.setName)).map((s) => ({ key: s.setName, label: s.setName, category: cat as string | null }))),
   ]
   const nameOf = (p: Placement) => cards.get(`tcg-${p.productId}`)?.name ?? p.displayName ?? defaultCardName(p.name)
-  const imageOf = (p: Placement) => cards.get(`tcg-${p.productId}`)?.imageUrl || tcgPhotoUrl(p.productId)
+  // The card's picture as the site has it — "" means it shows No Image
+  const imageOf = (p: Placement) => {
+    const card = cards.get(`tcg-${p.productId}`)
+    if (card && card.imageUrl === '') return NO_CARD_IMAGE
+    return card?.imageUrl || tcgPhotoUrl(p.productId)
+  }
+  const riotArtOf = (p: Placement) => riotByCode.get((cards.get(`tcg-${p.productId}`)?.publicCode ?? '').split('-').slice(1).join('-')) ?? null
   const title = filter === ALL ? (showReviewed ? 'All cards' : 'Everything to review')
     : filter === LEFT_OUT ? 'Couldn’t place' : filter === DENIED ? 'Denied' : filter === IGNORED ? 'Ignored' : filter
 
@@ -640,6 +719,8 @@ function ReviewBoard({
           onIgnore={() => actOnFocus({ ignored: true })}
           onDeny={() => actOnFocus({ denied: true })}
           onRename={(displayName) => save([{ productId: focus.productId, displayName }])}
+          riotArt={riotArtOf(focus)}
+          onImage={(image) => save([{ productId: focus.productId, image }])}
           onUnreview={() => save([{ productId: focus.productId, reviewed: false }])}
           onNewSet={(onCreated) => setNewSetFor({ ids: [focus.productId], onCreated })}
         />
@@ -833,7 +914,7 @@ function SetMenu({
 }
 
 function FocusViewer({
-  placement: p, name, denied, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onAccept, onNewSet, onIgnore, onDeny, onRename, onUnreview,
+  placement: p, name, denied, index, total, image, riotArt, price, categories, sets, busy, onClose, onPrev, onNext, onAccept, onNewSet, onIgnore, onDeny, onRename, onImage, onUnreview,
 }: {
   placement: Placement
   name: string
@@ -853,6 +934,8 @@ function FocusViewer({
   onIgnore: () => void
   onDeny: () => void
   onRename: (displayName: string) => void
+  riotArt: string | null
+  onImage: (image: ImageChoice | 'auto') => void
   onUnreview: () => void
 }) {
   const [tcgOk, setTcgOk] = useState(true)
@@ -879,7 +962,9 @@ function FocusViewer({
   }, [])
   // The catalog art is TCGplayer's own photo unless TCGplayer had none (then it's Riot's art) —
   // show TCGplayer's photo beside it only when they differ.
-  const artIsTcgPhoto = image.includes('tcgplayer-cdn')
+  // Which picture the site uses: staff's pick, or (automatic) whichever the card has now
+  const using: ImageChoice = p.image ?? (image === NO_CARD_IMAGE ? 'none' : image.includes('tcgplayer-cdn') ? 'tcgplayer' : 'riot')
+  const pictureLabel = { tcgplayer: 'TCGplayer photo', riot: 'Riot’s card art', none: 'No image' }[using]
 
   return createPortal(
     <div className="fixed inset-0 z-50 bg-[#1b140e]/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
@@ -892,24 +977,46 @@ function FocusViewer({
 
         <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-6 p-5 md:px-12 md:py-7">
           {/* Art */}
-          <div className="flex items-start justify-center gap-3">
-            <div className="flex-1 max-w-[280px]">
+          <div className="flex flex-col items-center">
+            <div className="w-full max-w-[280px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={cardImage(image, 'full') ?? image} alt={name} className={cn('w-full aspect-[5/7] object-cover rounded-2xl shadow-[0_18px_40px_-14px_rgba(60,40,20,0.6)]', denied && 'grayscale opacity-60')} />
-              <div className="text-[11px] text-slate-500 text-center mt-2">{artIsTcgPhoto ? 'TCGplayer photo' : 'Card art (from Riot)'}</div>
+              <div className="text-[11px] text-slate-500 text-center mt-2">On the site: {pictureLabel}{p.image ? '' : ' (automatic)'}</div>
             </div>
-            {!artIsTcgPhoto && (
-              <div className="w-28 shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={tcgOk ? tcgPhotoUrl(p.productId) : NO_CARD_IMAGE}
-                  onError={() => setTcgOk(false)}
-                  alt=""
-                  className="w-full aspect-[5/7] object-cover rounded-xl shadow-md"
-                />
-                <div className="text-[11px] text-slate-500 text-center mt-2">{tcgOk ? 'TCGplayer photo' : 'No TCGplayer photo yet'}</div>
+            {/* Picture: which one the site shows */}
+            <div className="mt-4 w-full max-w-[280px]">
+              <div className="text-xs text-slate-500 mb-2 text-center">Picture</div>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: 'tcgplayer', label: tcgOk ? 'TCGplayer' : 'TCGplayer (none yet)', src: tcgOk ? tcgPhotoUrl(p.productId) : NO_CARD_IMAGE, disabled: false },
+                  { key: 'riot', label: 'Riot art', src: riotArt ?? NO_CARD_IMAGE, disabled: !riotArt },
+                  { key: 'none', label: 'No image', src: NO_CARD_IMAGE, disabled: false },
+                ] as const).map((o) => (
+                  <button
+                    key={o.key}
+                    disabled={busy || o.disabled}
+                    onClick={() => onImage(o.key)}
+                    title={o.disabled ? 'No Riot art for this card' : `Use ${o.label}`}
+                    className={cn('rounded-xl p-1 transition-all disabled:opacity-40', using === o.key ? 'bg-white/70 shadow' : 'hover:bg-white/40')}
+                    style={using === o.key ? { boxShadow: `0 0 0 2px ${ACCENT}` } : undefined}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={o.key === 'riot' && o.src !== NO_CARD_IMAGE ? cardImage(o.src, 'thumb') ?? o.src : o.src}
+                      onError={o.key === 'tcgplayer' ? () => setTcgOk(false) : undefined}
+                      alt=""
+                      className="w-full aspect-[5/7] object-cover rounded-lg"
+                    />
+                    <div className={cn('text-[10px] mt-1 leading-tight', using === o.key ? 'font-semibold text-ink' : 'text-slate-500')}>{o.label}</div>
+                  </button>
+                ))}
               </div>
-            )}
+              {p.image && (
+                <button disabled={busy} onClick={() => onImage('auto')} className="mt-2 w-full text-[11px] text-slate-500 underline hover:text-ink">
+                  Back to automatic (TCGplayer’s photo when there is one, else Riot’s art)
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Details + decision */}

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { loadSetRegistry, saveSetRegistry, type RiftboundPlacement } from '@/lib/api/registry'
-import { regenerateSnapshot } from '@/lib/api/catalog'
+import { loadCatalog, invalidateCatalogCache } from '@/lib/api/catalog'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 
@@ -18,6 +18,7 @@ export const dynamic = 'force-dynamic'
 //   ignored      — true: not sure yet — hidden for now, offered again by the next sync (in that
 //                  sync's batch); false: undo that. Accepting / moving / denying clears it.
 //   displayName  — the name the website shows ('' = back to the name built from TCGplayer's)
+//   image        — 'tcgplayer' | 'riot' | 'none' | 'auto' (TCGplayer's photo if any, else Riot's)
 //   reviewed     — mark checked
 // Every change applies to the catalog card (`tcg-{productId}`) right away, so it doesn't wait for
 // the next sync, which then keeps it.
@@ -37,6 +38,27 @@ interface Change {
   denied?: boolean
   ignored?: boolean
   displayName?: string
+  image?: 'tcgplayer' | 'riot' | 'none' | 'auto'
+}
+
+const tcgPhotoUrl = (productId: number) => `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`
+
+// TCGplayer's photo for a product, or '' if it hasn't photographed it (the URL 403s).
+async function tcgPhotoIfAny(productId: number): Promise<string> {
+  try {
+    const res = await fetch(tcgPhotoUrl(productId), { method: 'HEAD', headers: { 'User-Agent': 'TCGHaven/1.0' } })
+    return res.ok ? tcgPhotoUrl(productId) : ''
+  } catch {
+    return ''
+  }
+}
+
+// Riot's gallery art for the card a placement is a printing of: same collector code ("013/298").
+async function riotArt(publicCode: string | undefined): Promise<string> {
+  const code = (publicCode ?? '').split('-').slice(1).join('-')
+  if (!code) return ''
+  const all = await loadCatalog<{ id: string; publicCode?: string; imageUrl?: string }>('riftbound')
+  return all.find((c) => !c.id.startsWith('tcg-') && (c.publicCode ?? '').split('-').slice(1).join('-') === code)?.imageUrl ?? ''
 }
 
 export async function POST(request: Request) {
@@ -52,9 +74,9 @@ export async function POST(request: Request) {
   const registry = await loadSetRegistry()
   const placements = registry.riftbound.placements ?? []
   const setByName = new Map(registry.riftbound.sets.map((s) => [s.setName, s]))
-  const touched = new Map<number, { placement: RiftboundPlacement; moved: boolean; renamed: boolean }>()
+  const touched = new Map<number, { placement: RiftboundPlacement; moved: boolean; renamed: boolean; image: Change['image'] }>()
   const mark = (p: RiftboundPlacement, what: 'moved' | 'renamed') => {
-    const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false }
+    const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
     t[what] = true
     touched.set(p.productId, t)
   }
@@ -103,6 +125,13 @@ export async function POST(request: Request) {
       else delete p.displayName
       mark(p, 'renamed')
     }
+    if (change.image !== undefined) {
+      if (change.image === 'auto') delete p.image
+      else p.image = change.image
+      const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
+      t.image = change.image
+      touched.set(p.productId, t)
+    }
     if (change.reviewed !== undefined) p.reviewed = change.reviewed
   }
   registry.riftbound.placements = placements
@@ -112,9 +141,11 @@ export async function POST(request: Request) {
 
   // Apply to the catalog cards now. One the sync hasn't built yet is created by the next sync.
   let changedCards = 0
-  for (const { placement: p, moved, renamed } of Array.from(touched.values())) {
+  const images: Record<number, string> = {}
+  for (const { placement: p, moved, renamed, image } of Array.from(touched.values())) {
     const ref = doc(db, 'catalog', 'riftbound', 'cards', `tcg-${p.productId}`)
-    if (!(await getDoc(ref)).exists()) continue
+    const snap = await getDoc(ref)
+    if (!snap.exists()) continue
     const set = p.setName ? setByName.get(p.setName) : null
     const patch: Record<string, unknown> = { updatedAt: serverTimestamp() }
     if (moved) {
@@ -122,10 +153,21 @@ export async function POST(request: Request) {
       else patch.hidden = true
     }
     if (renamed) patch.name = p.displayName ?? defaultName(p.name)
+    if (image !== undefined) {
+      const publicCode = snap.data().publicCode as string | undefined
+      patch.imageUrl = image === 'none' ? ''
+        : image === 'tcgplayer' ? await tcgPhotoIfAny(p.productId)
+        : image === 'riot' ? await riotArt(publicCode)
+        : (await tcgPhotoIfAny(p.productId)) || (await riotArt(publicCode))
+      images[p.productId] = patch.imageUrl as string
+    }
     await updateDoc(ref, patch)
     changedCards++
   }
-  if (changedCards > 0) await regenerateSnapshot('riftbound', db)
+  // No snapshot rebuild here (it reads every card — that's what made each click take seconds):
+  // the edits carry updatedAt, so every server's catalog cache picks them up through its normal
+  // delta pull; this server's is just dropped so it reloads now. The next sync rewrites the snapshot.
+  if (changedCards > 0) invalidateCatalogCache('riftbound')
 
-  return NextResponse.json({ ok: true, placements, changedCards })
+  return NextResponse.json({ ok: true, placements, changedCards, images })
 }
