@@ -117,7 +117,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 md:py-8 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+        {/* Needs Review is a card board — it uses the whole width instead of the usual cap */}
+        <div className={cn(pathname === '/admin/review' ? 'max-w-none' : 'max-w-7xl', 'mx-auto w-full px-4 sm:px-6 lg:px-8 py-5 md:py-8 pb-[calc(env(safe-area-inset-bottom)+24px)]')}>
           {children}
         </div>
       </main>
