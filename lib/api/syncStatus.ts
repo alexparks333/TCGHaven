@@ -28,6 +28,10 @@ export interface SyncStatus {
   totalBrokenImages?: number
   newlyBrokenImages?: number
   newlyFixedImages?: number
+  // Riftbound: TCGplayer products this run placed into sets on its own (and how many of them it
+  // couldn't place) — listed on Needs Review. See discoverRiftboundProducts() in catalog-sync.mjs.
+  newPlacements?: number
+  unplaced?: number
   error?: string
 }
 

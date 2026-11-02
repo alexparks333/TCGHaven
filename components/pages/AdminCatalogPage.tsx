@@ -79,6 +79,8 @@ interface GameSyncResult {
   totalBrokenImages?: number
   newlyBrokenImages?: number
   newlyFixedImages?: number
+  newPlacements?: number
+  unplaced?: number
   groupMatches?: Array<{ setName: string; matched: boolean; confidence: number | null }>
 }
 
@@ -228,6 +230,13 @@ export function SyncPanel() {
                     <div>
                       New set{s.result.newSets.length > 1 ? 's' : ''} found: {s.result.newSets.join(', ')}
                       {game === 'pokemon' || game === 'pokemon-jp' || game === 'mtg' ? ' — already visible in the set picker automatically.' : ' — flagged for review below.'}
+                    </div>
+                  )}
+                  {!!s.result.newPlacements && (
+                    <div>
+                      {s.result.newPlacements} new TCGplayer card{s.result.newPlacements > 1 ? 's' : ''} added to sets
+                      {s.result.unplaced ? ` (${s.result.unplaced} couldn't be placed)` : ''} — check them on{' '}
+                      <a href="/admin/review" className="underline">Needs Review</a>.
                     </div>
                   )}
                   {!!s.result.newRarities?.length && (

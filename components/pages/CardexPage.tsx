@@ -14,7 +14,7 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import { catalogPrice } from '@/lib/pricing'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import type { CardSearchResult } from '@/lib/api/search'
-import { cardImage } from '@/lib/cardImage'
+import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1503,9 +1503,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: rarityColor + '18', color: rarityColor }}>
-            #{card.number}
-          </div>
+          <img src={NO_CARD_IMAGE} alt={card.name} ref={(el) => { if (el) onArtDone?.(card.id) }} className="w-full h-full object-cover" />
         )}
         {card.owned && card.slab && <SlabTileOverlay slab={card.slab} />}
         {pick?.on && (
@@ -1608,9 +1606,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         {card.imageUrl ? (
           <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} loading="lazy" className="w-full h-full object-cover" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-400 bg-slate-800">
-            {card.number ? `#${card.number}` : '?'}
-          </div>
+          <img src={NO_CARD_IMAGE} alt={card.name} className="w-full h-full object-cover" />
         )}
         {slab && <SlabTileOverlay slab={slab} />}
 
@@ -2046,12 +2042,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               {d.imageUrl ? (
                 <ZoomImage url={d.imageUrl} alt={d.name} filter={d.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
               ) : (
-                <div
-                  className="w-full h-full flex items-center justify-center text-lg font-bold"
-                  style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor, filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }}
-                >
-                  #{d.number}
-                </div>
+                <img src={NO_CARD_IMAGE} alt={d.name} className="w-full h-full object-cover" style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }} />
               )}
               <div className="card-zoom-glint absolute inset-0 pointer-events-none" />
             </div>

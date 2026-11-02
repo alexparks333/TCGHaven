@@ -54,3 +54,26 @@ export function originalImage(src: string): string | null {
   const inner = new URL(src).searchParams.get('url')
   return inner ? `https://${inner}` : null
 }
+
+// Shown in place of a card image that's missing or won't load (TCGplayer hasn't photographed a
+// new product yet, say) instead of the browser's broken-image icon. Card-shaped, so a grid keeps
+// its layout. ClientWrapper's image error handler swaps it in for any card-CDN image that fails.
+export const NO_CARD_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350">' +
+  '<rect x="3" y="3" width="244" height="344" rx="14" fill="#efe4cc" stroke="#d6c49f" stroke-width="4"/>' +
+  '<g fill="none" stroke="#b3a27c" stroke-width="7" stroke-linejoin="round">' +
+  '<rect x="85" y="125" width="80" height="62" rx="8"/><path d="M93 179l22-24 16 16 10-10 16 18"/></g>' +
+  '<circle cx="146" cy="143" r="7" fill="#b3a27c"/>' +
+  '<text x="125" y="226" text-anchor="middle" font-family="system-ui,sans-serif" font-size="24" font-weight="600" fill="#9a8a66">No Image</text>' +
+  '</svg>',
+)}`
+
+const CARD_IMAGE_HOSTS = new Set([
+  'cmsassets.rgpub.io', 'images.pokemontcg.io', 'cards.lorcast.io', 'cards.scryfall.io',
+  'tcgplayer-cdn.tcgplayer.com', 'static.dotgg.gg', 'en.onepiece-cardgame.com',
+])
+
+/** Whether a failed image is a card picture from one of the card sources (not an avatar etc.). */
+export function isCardImageUrl(src: string): boolean {
+  try { return CARD_IMAGE_HOSTS.has(new URL(src).hostname) } catch { return false }
+}

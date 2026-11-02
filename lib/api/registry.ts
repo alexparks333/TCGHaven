@@ -59,6 +59,23 @@ export interface RiftboundRegistrySet {
   // See catalog-sync.mjs's placedExtraCard().
   extraTcgplayerProducts?: Array<{ groupId: number; productIds: number[]; nameSuffix?: string }>
   tcgplayerRarity?: string
+  addedAt?: string
+}
+
+// A TCGplayer product the sync found outside any set (a promo from the Organized Play group, say)
+// and placed into the set it guessed — or left out (setName null) when it couldn't tell. Staff
+// review these on Needs Review and can move any of them. The card's id is `tcg-{productId}`
+// wherever it's placed. See catalog-sync.mjs's discoverRiftboundProducts().
+export interface RiftboundPlacement {
+  productId: number
+  groupId: number
+  groupName?: string
+  name: string     // TCGplayer's product name and number, for the review list
+  number: string
+  setName: string | null
+  auto: boolean    // still the sync's guess (false once staff chose)
+  reviewed: boolean
+  addedAt: string
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching
@@ -99,7 +116,7 @@ export interface SetRegistry {
   schemaVersion: number
   pokemon: { sets: PokemonRegistrySet[] }
   lorcana: { groupOrder: string[]; sets: LorcanaRegistrySet[] }
-  riftbound: { groupOrder: string[]; sets: RiftboundRegistrySet[] }
+  riftbound: { groupOrder: string[]; sets: RiftboundRegistrySet[]; placements?: RiftboundPlacement[] }
   onepiece: { sets: OnePieceRegistrySet[] }
   mtg: { sets: MtgRegistrySet[] }
 }

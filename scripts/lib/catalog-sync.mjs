@@ -23,7 +23,7 @@ import { Readable } from 'node:stream'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, writeBatch, serverTimestamp, Bytes,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes,
 } from 'firebase/firestore'
 import { normSetName } from './text-norm.mjs'
 import {
@@ -378,7 +378,7 @@ export async function readPriceChunks(game, collectionName) {
 // lib/api/registry.ts for the cached TS-side reader/writer real routes should prefer). This
 // module only reads it for Riftbound's tcgcsvGroupId bootstrap-merge below, always live
 // (uncached) since a route may have just updated it earlier in the same request.
-async function loadRegistry() {
+export async function loadRegistry() {
   try {
     const snap = await getDoc(doc(db, 'registry', 'main'))
     return snap.exists() ? snap.data() : null
@@ -1004,8 +1004,7 @@ function tcgplayerOnlyCard(set, row) {
     rarity: set.tcgplayerRarity || TCGPLAYER_ONLY_RARITY,
     cardType: row.extCardType || '',
     tags: [baseName.split(',')[0].trim()].filter(Boolean),
-    // TCGplayer's CSV links a 200px thumbnail; the same CDN serves a large version.
-    imageUrl: row.imageUrl.replace(/_200w\.jpg$/, '_in_1000x1000.jpg'),
+    imageUrl: tcgPhoto(row),
     // One TCGplayer product = one price: its market price (what copies actually sold for). No
     // fallback to the lowest listing — for a one-off like a serial-numbered card that's just
     // someone's asking price (thousands over any real sale), so no sales means no price yet.
@@ -1021,6 +1020,7 @@ function tcgplayerOnlyCard(set, row) {
 // Edition copy), so borrow that sibling's photo rather than showing a blank tile.
 async function borrowMissingPhotos(setCards) {
   const ok = await Promise.all(setCards.map(async (c) => {
+    if (!c.imageUrl) return false
     try {
       const res = await fetch(c.imageUrl, { method: 'HEAD', headers: { 'User-Agent': 'TCGHaven/1.0' } })
       return res.ok
@@ -1063,6 +1063,25 @@ function useGalleryArtForPhotoless(tcgplayerOnlyCards, galleryCards) {
   }
 }
 
+// A TCGplayer row's product photo, full size — or '' when TCGplayer hasn't photographed the
+// product yet. The CSV still links a thumbnail URL for those (imageCount 0), but it 403s forever,
+// so saving it put a broken image on the card; '' lets a fallback (or the app's "No Image") show.
+function tcgPhoto(row) {
+  if (!row.imageUrl || !(parseInt(row.imageCount, 10) > 0)) return ''
+  return row.imageUrl.replace(/_200w\.jpg$/, '_in_1000x1000.jpg')
+}
+
+// The CSV has a row per printing (Normal / Foil) of each product — one card per product, priced
+// from whichever printing actually sells.
+function oneRowPerProduct(rows) {
+  const best = new Map()
+  for (const row of rows) {
+    const prev = best.get(row.productId)
+    if (!prev || row.marketPrice > prev.marketPrice) best.set(row.productId, row)
+  }
+  return [...best.values()]
+}
+
 // One TCGplayer group's CSV as row objects, fields read by header name. Parsed as a whole, not line
 // by line — some rows' descriptions contain line breaks inside quotes (the Metal cards' "only
 // available as foil" disclaimers) — and column order differs between groups (some add
@@ -1075,7 +1094,7 @@ async function fetchTcgplayerGroupRows(groupId) {
   const at = (f, name) => (col(name) >= 0 ? f[col(name)] ?? '' : '')
   return records
     .map((f) => ({
-      productId: at(f, 'productId'), name: at(f, 'name'), imageUrl: at(f, 'imageUrl'),
+      productId: at(f, 'productId'), name: at(f, 'name'), imageUrl: at(f, 'imageUrl'), imageCount: at(f, 'imageCount'),
       extNumber: at(f, 'extNumber').trim(), extCardType: at(f, 'extCardType'),
       marketPrice: parseFloat(at(f, 'marketPrice')) || 0, lowPrice: parseFloat(at(f, 'lowPrice')) || 0,
     }))
@@ -1102,7 +1121,7 @@ function placedExtraCard(set, row, nameSuffix) {
     rarity: 'Promo',
     cardType: isRune ? 'Rune' : (row.extCardType || ''),
     tags: isRune ? [baseName.split(/\s+/)[0]] : [baseName.split(',')[0].trim()],
-    imageUrl: row.imageUrl.replace(/_200w\.jpg$/, '_in_1000x1000.jpg'),
+    imageUrl: tcgPhoto(row),
     marketPrice: row.marketPrice,
     marketPriceFoil: 0,
     lowPriceNM: row.lowPrice,
@@ -1111,17 +1130,31 @@ function placedExtraCard(set, row, nameSuffix) {
   }
 }
 
-async function fetchTcgplayerOnlyRiftboundSets() {
-  const registry = await loadRegistry()
-  const allSets = registry?.riftbound?.sets ?? []
-  const groupCache = new Map()
-  const rowsOf = (groupId) => {
-    if (!groupCache.has(groupId)) groupCache.set(groupId, fetchTcgplayerGroupRows(groupId))
-    return groupCache.get(groupId)
+// A product the sync placed (or staff moved) via `riftbound.placements` — see
+// discoverRiftboundProducts(). Its id is `tcg-{productId}` whatever set it's in, so moving it
+// between sets in the staff portal keeps the same card (and every collector's link to it).
+function placementCard(set, row) {
+  if (set.tcgplayerOnly) return { ...tcgplayerOnlyCard(set, row), id: `tcg-${row.productId}` }
+  const base = row.name.replace(/\s*\([^)]*\)/g, '').trim()
+  const parens = [...row.name.matchAll(/\(([^)]*)\)/g)].map((m) => m[1].trim()).filter(Boolean)
+  return { ...placedExtraCard(set, row, parens.join(', ') || 'Promo'), id: `tcg-${row.productId}`, name: `${base} (${parens.join(', ') || 'Promo'})` }
+}
+
+function tcgplayerRowCache() {
+  const cache = new Map()
+  return (groupId) => {
+    if (!cache.has(groupId)) cache.set(groupId, fetchTcgplayerGroupRows(groupId))
+    return cache.get(groupId)
   }
+}
+
+// Cards built straight from TCGplayer rather than Riot's gallery: tcgplayerOnly sets, the
+// extraTcgplayerProducts placed into main sets, and `placements` (set → its cards). `allSets` is
+// the whole registry list, for finding a placement's set.
+async function fetchTcgplayerOnlyRiftboundSets({ sets, placements = [], allSets = sets, rowsOf }) {
   const cards = []
 
-  for (const set of allSets.filter((s) => s.tcgplayerOnly && typeof s.tcgcsvGroupId === 'number' && s.setCode)) {
+  for (const set of sets.filter((s) => s.tcgplayerOnly && typeof s.tcgcsvGroupId === 'number' && s.setCode)) {
     try {
       // Optional: only the products whose name contains this (e.g. "(Metal)" out of the much
       // bigger Organized Play promo group), and/or exactly these products (a hand-picked set).
@@ -1138,7 +1171,7 @@ async function fetchTcgplayerOnlyRiftboundSets() {
     }
   }
 
-  for (const set of allSets.filter((s) => Array.isArray(s.extraTcgplayerProducts) && s.setCode)) {
+  for (const set of sets.filter((s) => Array.isArray(s.extraTcgplayerProducts) && s.setCode)) {
     for (const extra of set.extraTcgplayerProducts) {
       try {
         const pick = new Set((extra.productIds ?? []).map(String))
@@ -1153,7 +1186,148 @@ async function fetchTcgplayerOnlyRiftboundSets() {
       }
     }
   }
+
+  const setByName = new Map(allSets.filter((s) => s.setCode).map((s) => [s.setName, s]))
+  const byGroup = new Map()
+  for (const p of placements) {
+    if (!p.setName || !setByName.has(p.setName)) continue
+    byGroup.set(p.groupId, [...(byGroup.get(p.groupId) ?? []), p])
+  }
+  for (const [groupId, list] of byGroup) {
+    try {
+      const rows = new Map(oneRowPerProduct(await rowsOf(groupId)).map((r) => [r.productId, r]))
+      const placedCards = list
+        .filter((p) => rows.has(String(p.productId)))
+        .map((p) => placementCard(setByName.get(p.setName), rows.get(String(p.productId))))
+      await borrowMissingPhotos(placedCards)
+      cards.push(...placedCards)
+      console.log(`   TCGCSV group ${groupId}: ${placedCards.length} placed cards`)
+    } catch (err) {
+      console.warn(`   ⚠️  TCGCSV group ${groupId} placements error: ${err.message}`)
+    }
+  }
   return cards
+}
+
+// ── Finding new TCGplayer products ───────────────────────────────────────────
+// Riot's gallery only lists the main sets, so promos, bundles and event cards exist only on
+// TCGplayer — and a sync used to see only the groups and products someone had already typed into
+// the registry. Each sync now reads TCGplayer's whole Riftbound group list and, for anything the
+// registry doesn't cover yet:
+//
+//  - a promo "pool" group (Organized Play, Promotional Cards, Judge…): each new numbered product
+//    is placed into the main set its collector number belongs to ("052/298" → Origins), as a
+//    "Promo" card. Anything it can't place (tokens, unnumbered runes) is recorded but left out.
+//  - any other new group with numbered cards (a bundle like Worlds Bundle 2025): it becomes a new
+//    TCGplayer-only set in the Promos group, flagged needsReview.
+//
+// Everything lands in `riftbound.placements` / `riftbound.sets` for staff to check on the Needs
+// Review page, where a placement can be moved to any set or left out.
+const POOL_GROUP_NAME = /promo|organized play|judge|prize/i
+// A group this big is a main set TCGplayer lists before Riot's gallery does — the gallery creates it.
+const MAIN_SET_MIN_CARDS = 60
+
+function guessPlacementSet(extNumber, setByDenominator) {
+  const m = extNumber.match(/^\d+[a-z*]?\s*\/\s*(\d+)$/i)
+  return m ? setByDenominator.get(String(parseInt(m[1], 10))) ?? null : null
+}
+
+function newBundleSet(group, sets, groupOrder, nowIso) {
+  const setName = group.name.replace(/^riftbound:?\s*/i, '').trim() || group.name
+  const taken = new Set(sets.map((s) => s.setCode))
+  let setCode = String(group.abbreviation ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase() || `G${group.groupId}`
+  if (taken.has(setCode)) setCode = `${setCode}${group.groupId}`
+  return {
+    setName, setCode, releaseDate: group.publishedOn ? String(group.publishedOn).slice(0, 10) : null, cardCount: 0,
+    cardexGroup: groupOrder.includes('Promos') ? 'Promos' : groupOrder[0] ?? null,
+    tcgcsvGroupId: group.groupId, groupMatchConfidence: null, needsReview: true,
+    source: 'auto-detected', tcgplayerOnly: true, addedAt: nowIso,
+  }
+}
+
+// `save: false` = dry run (scripts that preview what a sync would place).
+export async function discoverRiftboundProducts(registry, galleryCards, rowsOf = tcgplayerRowCache(), { save = true } = {}) {
+  const rb = registry?.riftbound
+  if (!rb?.sets) return { newSets: [], newPlacements: [] }
+  const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS })
+  if (!res.ok) throw new Error(`groups: ${res.status}`)
+  const groups = (await res.json()).results ?? []
+  const mainGroupIds = new Set((await getTcgcsvGroups()).map((g) => g.groupId))
+  const placements = rb.placements ?? []
+
+  // "298" → Origins: each main set's most common collector-number denominator in the gallery.
+  const counts = new Map()
+  for (const c of galleryCards) {
+    const m = (c.publicCode ?? '').match(/^([A-Z]+)-\d+[a-z*]?\/(\d+)$/)
+    if (!m) continue
+    const key = `${String(parseInt(m[2], 10))}|${m[1]}`
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const mainSetByCode = new Map(rb.sets.filter((s) => !s.tcgplayerOnly && s.setCode).map((s) => [s.setCode, s]))
+  const setByDenominator = new Map()
+  const best = new Map()
+  for (const [key, n] of counts) {
+    const [denom, code] = key.split('|')
+    if (!mainSetByCode.has(code) || n <= (best.get(denom) ?? 0)) continue
+    best.set(denom, n)
+    setByDenominator.set(denom, mainSetByCode.get(code).setName)
+  }
+
+  const nowIso = new Date().toISOString()
+  const newSets = []
+  const newPlacements = []
+  const placed = new Set(placements.map((p) => String(p.productId)))
+  for (const group of groups) {
+    if (mainGroupIds.has(group.groupId)) continue
+    const setsHere = rb.sets.filter((s) => s.tcgplayerOnly && s.tcgcsvGroupId === group.groupId)
+    if (setsHere.some((s) => !s.tcgplayerNameFilter && !Array.isArray(s.tcgplayerProductIds))) continue // whole group is one set
+    const extras = rb.sets.flatMap((s) => (s.extraTcgplayerProducts ?? []).filter((e) => e.groupId === group.groupId))
+    const isPool = setsHere.length > 0 || extras.length > 0 || placements.some((p) => p.groupId === group.groupId) || POOL_GROUP_NAME.test(group.name)
+
+    let rows
+    try { rows = oneRowPerProduct(await rowsOf(group.groupId)) } catch (err) {
+      console.warn(`   ⚠️  TCGCSV group ${group.groupId} (${group.name}): ${err.message}`)
+      continue
+    }
+    if (rows.length === 0) continue // only sealed product so far — checked again next sync
+
+    if (!isPool) {
+      if (rows.length >= MAIN_SET_MIN_CARDS) continue
+      if (rb.sets.some((s) => s.tcgcsvGroupId === group.groupId)) continue
+      const set = newBundleSet(group, rb.sets, rb.groupOrder ?? [], nowIso)
+      rb.sets.push(set)
+      newSets.push(set)
+      console.log(`   🆕 New TCGplayer set: ${set.setName} (${rows.length} cards, group ${group.groupId})`)
+      continue
+    }
+
+    const covered = new Set(extras.flatMap((e) => (e.productIds ?? []).map(String)))
+    for (const s of setsHere) {
+      const only = s.tcgplayerNameFilter ? String(s.tcgplayerNameFilter).toLowerCase() : null
+      const pick = new Set((s.tcgplayerProductIds ?? []).map(String))
+      for (const r of rows) if ((only && r.name.toLowerCase().includes(only)) || pick.has(r.productId)) covered.add(r.productId)
+    }
+    for (const r of rows) {
+      if (covered.has(r.productId) || placed.has(r.productId)) continue
+      placed.add(r.productId)
+      newPlacements.push({
+        productId: Number(r.productId), groupId: group.groupId, groupName: group.name,
+        name: r.name, number: r.extNumber, setName: guessPlacementSet(r.extNumber, setByDenominator),
+        auto: true, reviewed: false, addedAt: nowIso,
+      })
+    }
+  }
+  if (newPlacements.length) console.log(`   🆕 ${newPlacements.length} new TCGplayer products placed (${newPlacements.filter((p) => !p.setName).length} left out)`)
+
+  if (save && (newSets.length || newPlacements.length)) {
+    rb.placements = [...placements, ...newPlacements]
+    try {
+      await updateDoc(doc(db, 'registry', 'main'), { 'riftbound.sets': rb.sets, 'riftbound.placements': rb.placements })
+    } catch (err) {
+      console.warn(`   ⚠️  Couldn't save new placements to the registry: ${err.message}`)
+    }
+  }
+  return { newSets, newPlacements }
 }
 
 // Build lookup key for a TCGPlayer product
@@ -1220,7 +1394,7 @@ async function fetchRiftboundPrices() {
       // Read by column name, not position — TCGplayer's column order isn't fixed across groups.
       for (const row of parseCsv(text)) {
         const name       = row.name ?? ''
-        const tcgImg     = row.imageUrl ?? ''
+        const tcgImg     = tcgPhoto(row)
         const lowPrice    = parseFloat(row.lowPrice) || 0
         const marketPrice = parseFloat(row.marketPrice) || 0
         const subType    = row.subTypeName ?? ''   // 'Normal' or 'Foil'
@@ -1322,6 +1496,9 @@ const REGULAR_RARITIES = new Set(['Common', 'Uncommon', 'Rare', 'Epic'])
 export async function downloadRiftbound() {
   console.log('\n⚡ Riftbound...')
 
+  const registry = await loadRegistry()
+  const registrySets = registry?.riftbound?.sets ?? []
+  const rowsOf = tcgplayerRowCache()
   const [galleryRes, { prices, extraCards }, tcgplayerOnlyCards] = await Promise.all([
     fetch('https://playriftbound.com/en-us/card-gallery/', {
       headers: {
@@ -1330,7 +1507,7 @@ export async function downloadRiftbound() {
       },
     }),
     fetchRiftboundPrices(),
-    fetchTcgplayerOnlyRiftboundSets(),
+    fetchTcgplayerOnlyRiftboundSets({ sets: registrySets, placements: registry?.riftbound?.placements ?? [], rowsOf }),
   ])
 
   if (!galleryRes.ok) throw new Error(`Gallery fetch failed: ${galleryRes.status} ${galleryRes.statusText}`)
@@ -1436,8 +1613,10 @@ export async function downloadRiftbound() {
   const galleryIndexById = new Map(all.map((c, i) => [c.id, i]))
   for (const extra of extraCards) {
     const existingIndex = galleryIndexById.get(extra.id)
-    if (existingIndex === undefined) all.push(extra)
-    else all[existingIndex] = extra
+    if (existingIndex === undefined) { all.push(extra); continue }
+    // Riot's own art beats TCGplayer's product photo (often still missing for new runes).
+    if (all[existingIndex].imageUrl) extra.imageUrl = all[existingIndex].imageUrl
+    all[existingIndex] = extra
   }
 
   // Create Signature (Star) stubs from TCGCSV price entries.
@@ -1502,6 +1681,19 @@ export async function downloadRiftbound() {
   }
   if (starCount > 0) console.log(`   Created ${starCount} Signature (Star) stubs from TCGCSV`)
 
+  // New TCGplayer groups/products since the last sync — placed, built and saved for review.
+  let discovered = { newSets: [], newPlacements: [] }
+  try {
+    discovered = await discoverRiftboundProducts(registry, all, rowsOf)
+    tcgplayerOnlyCards.push(...await fetchTcgplayerOnlyRiftboundSets({
+      sets: discovered.newSets, placements: discovered.newPlacements, allSets: registrySets, rowsOf,
+    }))
+  } catch (err) {
+    console.warn(`   ⚠️  Looking for new TCGplayer products failed: ${err.message}`)
+  }
+  // A product staff left out (or the sync couldn't place) is hidden if it was ever a card.
+  const leftOutIds = (registry?.riftbound?.placements ?? []).filter((p) => !p.setName).map((p) => `tcg-${p.productId}`)
+
   useGalleryArtForPhotoless(tcgplayerOnlyCards, all)
   all.push(...tcgplayerOnlyCards)
 
@@ -1519,7 +1711,8 @@ export async function downloadRiftbound() {
 
   const priced = all.filter(c => c.marketPrice > 0).length
   console.log(`   Priced ${priced}/${all.length} cards from TCGCSV`)
-  return syncToFirestore('riftbound', all, { hideIds: supersededStubIds })
+  const result = await syncToFirestore('riftbound', all, { hideIds: [...supersededStubIds, ...leftOutIds] })
+  return { ...result, discovered }
 }
 
 // ── One Piece ─────────────────────────────────────────────────────────────────

@@ -53,9 +53,13 @@ export async function loadPriceStatus(games: Game[]): Promise<PriceStatus> {
     }),
   )
   const goods = perGame.map((g) => g.lastGood).filter((d): d is Date => !!d)
+  // An unscheduled game (MTG) only syncs when staff click it, so its old date would otherwise
+  // drag the "prices as of" time back by days — leave it out unless it's all that's tracked.
+  const scheduled = perGame.filter((g) => !NOT_ON_SCHEDULE.includes(g.game)).map((g) => g.lastGood).filter((d): d is Date => !!d)
+  const asOf = scheduled.length > 0 ? scheduled : goods
   const failedGames = perGame.filter((g) => g.failed).map((g) => g.game)
   return {
-    updatedAt: goods.length > 0 ? new Date(Math.min(...goods.map((d) => d.getTime()))) : null,
+    updatedAt: asOf.length > 0 ? new Date(Math.min(...asOf.map((d) => d.getTime()))) : null,
     latestSyncAt: goods.length > 0 ? new Date(Math.max(...goods.map((d) => d.getTime()))) : null,
     failed: failedGames.length > 0,
     failedGames,

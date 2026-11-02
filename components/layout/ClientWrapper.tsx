@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { originalImage } from '@/lib/cardImage'
+import { originalImage, isCardImageUrl, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
@@ -15,13 +15,16 @@ import { DevPanel } from '@/components/dev/DevPanel'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   // A resized card image from the image proxy (lib/cardImage.ts) that fails to load falls back to
-  // the original — one listener for every <img> in the app (error events don't bubble; capture does)
+  // the original, and a card image that can't load at all shows "No Image" instead of a broken
+  // icon — one listener for every <img> in the app (error events don't bubble; capture does)
   useEffect(() => {
     const onError = (e: Event) => {
       const img = e.target as HTMLImageElement
       if (img?.tagName !== 'IMG') return
-      const original = originalImage(img.currentSrc || img.src)
+      const src = img.currentSrc || img.src
+      const original = originalImage(src)
       if (original) img.src = original
+      else if (isCardImageUrl(src)) { img.removeAttribute('srcset'); img.src = NO_CARD_IMAGE }
     }
     window.addEventListener('error', onError, true)
     return () => window.removeEventListener('error', onError, true)

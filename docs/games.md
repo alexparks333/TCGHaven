@@ -422,6 +422,34 @@ group 24528 picked by productId — the Nexus Night chase cards: GG EZ Teemo 197
 Centered 151b/298, Mel, Newly Awakened 069b/166) and **Regional Promos** (`RGP`, picked by
 productId — Boneshiver 118a/221 Regional Qualifier, Poppy alt art 178a/219 Unleashed Regionals).
 
+**New TCGplayer products are found and placed automatically (2026-11-02)** —
+`discoverRiftboundProducts()` (`catalog-sync.mjs`) runs every Riftbound sync. It reads TCGplayer's
+whole group list and skips the main sets' groups and any group a `tcgplayerOnly` set takes whole.
+- **Promo "pool" groups** (already referenced by a set, or named promo / organized play / judge /
+  prize): every numbered product nothing covers yet is placed into the main set its collector-number
+  denominator belongs to (`052/298` → Origins, learned from the gallery's publicCodes), as
+  rarity "Promo", named `Base (parentheticals)` or `Base (Promo)`. Tokens / unparseable numbers are
+  recorded but left out.
+- **Any other new group** with fewer than 60 numbered cards (a bundle) becomes a new
+  `tcgplayerOnly` set in "Promos", `needsReview`, `source: 'auto-detected'`. Bigger groups are main
+  sets the gallery will create; sealed-only groups are rechecked next sync.
+- Saved to `registry/main` as `riftbound.placements` (`RiftboundPlacement`: productId, groupId,
+  setName|null, auto, reviewed) and new `riftbound.sets` — written by the sync module itself, so
+  `sync.ts` reads the registry *after* `downloadRiftbound()`. Placed cards' id is
+  `tcg-{productId}` whatever set they're in; left-out ones are passed to `hideIds`.
+- **Staff review:** Needs Review → "New Riftbound cards from TCGplayer"
+  (`components/admin/PlacementsReview.tsx`): move a card to any set, leave it out, start a new set,
+  or approve. `POST /api/set-registry/placements` saves it and moves the catalog card at once
+  (+ `regenerateSnapshot`). Dry run: `discoverRiftboundProducts(registry, gallery, undefined, { save: false })`.
+- First run placed 172 backlog products (Organized Play, Promotional Cards, Judge groups).
+
+**Images:** `tcgPhoto(row)` — TCGplayer's CSV links a thumbnail even for products with
+`imageCount` 0 (403 forever); those now get `''`, and every TCGplayer photo is saved full size.
+Riot's gallery art beats TCGplayer's photo for runes the gallery lists; Signature stubs without a
+photo use the base card's art; photoless placed promos use the same card's gallery art. Anything
+still without art shows the app-wide "No Image" card (`NO_CARD_IMAGE` in `lib/cardImage.ts`,
+swapped in by ClientWrapper's image error listener for card-CDN images, and used by Cardex tiles).
+
 **Extra products placed in a main set:** a main set's registry entry can list
 `extraTcgplayerProducts: [{ groupId, productIds, nameSuffix }]` — TCGplayer products filed under
 another group that really belong to that set (`placedExtraCard()`: id `{set}-{extNumber}`, rarity

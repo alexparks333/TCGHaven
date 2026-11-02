@@ -30,11 +30,12 @@ export async function runRiftboundSync(): Promise<Response> {
   try {
     await ensureSignedIn()
 
+    const first = await downloadRiftbound()
+    // Read after the download: it registers new TCGplayer bundle sets and product placements itself
+    // (discoverRiftboundProducts in catalog-sync.mjs), which this must not overwrite or re-add.
     invalidateRegistryCache()
     const registry = await loadSetRegistry()
     const knownNames = new Set(registry.riftbound.sets.map((s) => s.setName))
-
-    const first = await downloadRiftbound()
     const newNames: string[] = first.setNames.filter((n: string) => !knownNames.has(n))
     const nowIso = new Date().toISOString()
 
@@ -86,7 +87,7 @@ export async function runRiftboundSync(): Promise<Response> {
     // is fully written to Firestore but stays invisible in the set picker (AddCardDialog, Admin
     // Catalog) until the server process restarts. Same bug class that briefly made every Pokemon
     // set except a custom one disappear — see CLAUDE.md quirk #15.
-    if (newNames.length > 0) invalidateSetsCache('riftbound')
+    if (newNames.length > 0 || first.discovered.newSets.length > 0) invalidateSetsCache('riftbound')
 
     // A newly-matched tcgcsvGroupId can only be priced by re-running the sync now that the
     // registry override is in place.
@@ -111,7 +112,9 @@ export async function runRiftboundSync(): Promise<Response> {
     const newRarities = findNewRarities(first.cards)
     const status = {
       ok: true, at: new Date().toISOString(), setCount: first.setNames.length,
-      newSets: newNames, newRarities, groupMatches,
+      newSets: [...newNames, ...first.discovered.newSets.map((s: { setName: string }) => s.setName)], newRarities, groupMatches,
+      newPlacements: first.discovered.newPlacements.length,
+      unplaced: first.discovered.newPlacements.filter((p: { setName: string | null }) => !p.setName).length,
       totalBrokenImages: first.totalBrokenImages, newlyBrokenImages: first.newlyBrokenImages, newlyFixedImages: first.newlyFixedImages,
     }
     await recordSyncStatus('riftbound', status)
