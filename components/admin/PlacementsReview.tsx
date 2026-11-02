@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2, Check, Plus } from 'lucide-react'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cn } from '@/lib/utils'
@@ -253,13 +254,23 @@ function NewSetDialog({
 }: { groupOrder: string[]; busy: boolean; onCancel: () => void; onCreate: (name: string, group: string) => void }) {
   const [name, setName] = useState('')
   const [group, setGroup] = useState(groupOrder.includes('Promos') ? 'Promos' : groupOrder[0] ?? '')
-  return (
+  const nameRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { nameRef.current?.focus({ preventScroll: true }) }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+  // Portalled to <body>: inside the review card (whose backdrop-filter makes it the containing
+  // block for `fixed`) the dialog centred on the whole long list and focusing it scrolled the page.
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
       <div className="card-glass p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-ink font-semibold mb-3">New Riftbound set</h3>
         <input
-          autoFocus
+          ref={nameRef}
           value={name}
+          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim() && !busy) onCreate(name.trim(), group) }}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. K/DA Couture Collection"
           className="input-field mb-3"
@@ -281,6 +292,7 @@ function NewSetDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
