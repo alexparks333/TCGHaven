@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Check, Plus, X, ChevronLeft, ChevronRight, ExternalLink, Ban, FolderInput, Sparkles, RotateCcw, Pencil } from 'lucide-react'
+import { Loader2, Check, Plus, X, ChevronLeft, ChevronRight, ExternalLink, Ban, FolderInput, Sparkles, RotateCcw, Pencil, Undo2 } from 'lucide-react'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { cn, formatCurrency } from '@/lib/utils'
@@ -61,6 +61,29 @@ const numberSortKey = (n: string) => parseInt(n.replace(/^\D+/, ''), 10) || 0
 // sync couldn't place.
 const isDenied = (p: Placement) => !!p.denied || (p.setName === null && p.reviewed)
 // Same as placementDefaultName() in catalog-sync.mjs
+// The change that puts a placement back how it was (for Undo).
+function restoreChange(prev: Placement, now: Placement): Change {
+  const c: Change = { productId: prev.productId, reviewed: prev.reviewed }
+  if (isDenied(prev) && !isDenied(now)) c.denied = true
+  else if (!isDenied(prev) && isDenied(now)) { c.denied = false; c.setName = prev.setName }
+  else if (prev.setName !== now.setName) c.setName = prev.setName
+  if ((prev.displayName ?? '') !== (now.displayName ?? '')) c.displayName = prev.displayName ?? ''
+  return c
+}
+
+// What an action did, for the Undo toast.
+function describe(changes: Change[]): string {
+  const n = changes.length
+  const cards = n === 1 ? 'card' : `${n} cards`
+  const c = changes[0]
+  if (c.denied === true) return `Denied ${cards}`
+  if (c.denied === false) return `Recovered ${cards}`
+  if (c.displayName !== undefined) return c.displayName ? `Renamed to “${c.displayName}”` : 'Name reset'
+  if (c.setName !== undefined) return `Moved ${cards} to ${c.setName ?? 'nowhere'}`
+  if (c.reviewed === false) return `Marked ${cards} not reviewed`
+  return `Marked ${cards} as right`
+}
+
 export function defaultCardName(tcgplayerName: string): string {
   const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
   const parens = Array.from(tcgplayerName.matchAll(/\(([^)]*)\)/g)).map((m) => m[1].trim()).filter(Boolean)
@@ -79,6 +102,9 @@ export function PlacementsReview() {
   const [error, setError] = useState<string | null>(null)
   const [newSetFor, setNewSetFor] = useState<number[] | null>(null)
   const [moveMenu, setMoveMenu] = useState(false)
+  // The last action, undoable from the toast (or ⌘Z) for a few seconds
+  const [undo, setUndo] = useState<{ label: string; changes: Change[]; id: number } | null>(null)
+  const placementsRef = useRef<Placement[]>([])
 
   useEffect(() => {
     // no-store: the public GET is CDN-cached for a minute, and a review needs the current list
@@ -97,6 +123,7 @@ export function PlacementsReview() {
   }, [])
 
   const placements = useMemo(() => registry?.placements ?? [], [registry])
+  placementsRef.current = placements
   // Cardex categories: the registry's order, then any a set uses that it doesn't list ("Special").
   const categories = useMemo(() => {
     const list = [...(registry?.groupOrder ?? [])]
@@ -128,8 +155,9 @@ export function PlacementsReview() {
     return m
   }, [pool])
 
-  const save = useCallback(async (changes: Change[]) => {
+  const save = useCallback(async (changes: Change[], { isUndo = false } = {}) => {
     if (changes.length === 0) return true
+    const before = new Map(placementsRef.current.map((p) => [p.productId, { ...p }]))
     setBusy(true)
     setError(null)
     try {
@@ -141,6 +169,14 @@ export function PlacementsReview() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       setRegistry((r) => (r ? { ...r, placements: data.placements } : r))
+      if (isUndo) setUndo(null)
+      else {
+        const after = new Map((data.placements as Placement[]).map((p) => [p.productId, p]))
+        const restore = changes
+          .map((c) => before.get(c.productId) && after.get(c.productId) ? restoreChange(before.get(c.productId)!, after.get(c.productId)!) : null)
+          .filter((c): c is Change => !!c)
+        setUndo({ label: describe(changes), changes: restore, id: Date.now() })
+      }
       const renamed = changes.filter((c) => c.displayName !== undefined)
       if (renamed.length) {
         setCards((m) => {
@@ -161,6 +197,23 @@ export function PlacementsReview() {
       setBusy(false)
     }
   }, [])
+
+  useEffect(() => {
+    if (!undo) return
+    const t = setTimeout(() => setUndo((u) => (u?.id === undo.id ? null : u)), 10000)
+    return () => clearTimeout(t)
+  }, [undo])
+  const runUndo = useCallback(() => { if (undo && !busy) save(undo.changes, { isUndo: true }) }, [undo, busy, save])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !(e.target as HTMLElement)?.closest('input, textarea')) {
+        e.preventDefault()
+        runUndo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [runUndo])
 
   async function createSet(name: string, cardexGroup: string, isNewCategory: boolean, productIds: number[]) {
     setBusy(true)
@@ -362,6 +415,7 @@ export function PlacementsReview() {
                   onOpen={() => setFocusId(p.productId)}
                   onApprove={() => save([{ productId: p.productId, reviewed: true }])}
                   onRecover={() => save([{ productId: p.productId, denied: false }])}
+                  onUnreview={() => save([{ productId: p.productId, reviewed: false }])}
                 />
               ))}
             </div>
@@ -396,12 +450,38 @@ export function PlacementsReview() {
               />
             )}
           </div>
+          {filter !== DENIED && placements.some((p) => selected.has(p.productId) && p.reviewed) && (
+            <button disabled={busy} onClick={() => bulk(placements.filter((p) => selected.has(p.productId) && p.reviewed).map((p) => ({ productId: p.productId, reviewed: false })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
+              <Undo2 size={13} /> Unreview
+            </button>
+          )}
           {filter !== DENIED && (
             <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, denied: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-500/80 hover:bg-red-500 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
               <Ban size={13} /> Deny
             </button>
           )}
           <button onClick={() => setSelected(new Set())} title="Clear selection" className="p-2 rounded-xl hover:bg-white/10"><X size={14} /></button>
+        </div>,
+        document.body,
+      )}
+
+      {undo && createPortal(
+        <div
+          key={undo.id}
+          className="fixed left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 rounded-2xl bg-[#2a2018] text-[#f3e8d2] shadow-2xl pl-4 pr-2 py-2 border border-black/20"
+          style={{ bottom: selected.size > 0 ? '5.5rem' : '1.25rem' }}
+        >
+          <Check size={14} className="text-emerald-400 shrink-0" />
+          <span className="text-sm whitespace-nowrap">{undo.label}</span>
+          <button
+            disabled={busy}
+            onClick={runUndo}
+            className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 flex items-center gap-1.5 disabled:opacity-50"
+            title="Undo (⌘Z)"
+          >
+            <Undo2 size={13} /> Undo
+          </button>
+          <button onClick={() => setUndo(null)} className="p-1.5 rounded-lg hover:bg-white/10" title="Dismiss"><X size={13} /></button>
         </div>,
         document.body,
       )}
@@ -426,6 +506,7 @@ export function PlacementsReview() {
           onDeny={() => actOnFocus({ denied: true })}
           onRecover={() => actOnFocus({ denied: false })}
           onRename={(displayName) => save([{ productId: focus.productId, displayName }])}
+          onUnreview={() => save([{ productId: focus.productId, reviewed: false }])}
           onNewSet={() => setNewSetFor([focus.productId])}
         />
       )}
@@ -459,7 +540,7 @@ function DestinationButton({ active, onClick, label, count, warn, muted }: { act
 }
 
 function CardTile({
-  placement: p, name, denied, image, price, selected, selecting, busy, showSet, onToggle, onOpen, onApprove, onRecover,
+  placement: p, name, denied, image, price, selected, selecting, busy, showSet, onToggle, onOpen, onApprove, onRecover, onUnreview,
 }: {
   placement: Placement
   name: string
@@ -474,6 +555,7 @@ function CardTile({
   onOpen: () => void
   onApprove: () => void
   onRecover: () => void
+  onUnreview: () => void
 }) {
   return (
     <div className="group">
@@ -522,6 +604,17 @@ function CardTile({
             className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
           >
             <RotateCcw size={12} /> Recover
+          </button>
+        )}
+        {/* Undo a review */}
+        {p.reviewed && !denied && !selecting && (
+          <button
+            disabled={busy}
+            onClick={(e) => { e.stopPropagation(); onUnreview() }}
+            title="Mark as not reviewed"
+            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
+          >
+            <Undo2 size={12} /> Unreview
           </button>
         )}
         {/* Quick approve */}
@@ -605,7 +698,7 @@ function SetMenu({
 }
 
 function FocusViewer({
-  placement: p, name, denied, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onApprove, onMove, onNewSet, onDeny, onRecover, onRename,
+  placement: p, name, denied, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onApprove, onMove, onNewSet, onDeny, onRecover, onRename, onUnreview,
 }: {
   placement: Placement
   name: string
@@ -626,6 +719,7 @@ function FocusViewer({
   onDeny: () => void
   onRecover: () => void
   onRename: (displayName: string) => void
+  onUnreview: () => void
 }) {
   const [tcgOk, setTcgOk] = useState(true)
   useEffect(() => setTcgOk(true), [p.productId])
@@ -707,7 +801,14 @@ function FocusViewer({
               </div>
             ) : (
               <div className="mt-5 rounded-2xl bg-white/40 border border-[#d6c49f]/70 p-4">
-                <div className="text-xs text-slate-500 mb-1">{p.auto ? 'The sync put it in' : 'Placed in'}</div>
+                <div className="flex items-center justify-between gap-2 text-xs text-slate-500 mb-1">
+                  <span>{p.auto ? 'The sync put it in' : 'Placed in'}</span>
+                  {p.reviewed && (
+                    <button disabled={busy} onClick={onUnreview} className="inline-flex items-center gap-1 font-semibold hover:text-ink disabled:opacity-50" title="Put it back in the review queue">
+                      <Check size={11} style={{ color: ACCENT }} /> Reviewed · <Undo2 size={11} /> Mark as not reviewed
+                    </button>
+                  )}
+                </div>
                 <div className="text-lg font-semibold text-ink mb-4">{p.setName ?? 'Nowhere yet — the sync couldn’t place it'}</div>
                 <div className="flex gap-2">
                   {p.setName && (
