@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic'
 //   setName      — move the card to that set
 //   denied       — true: hide it and never add it back on a sync; false: recover it (into setName
 //                  if given, else where it was before it was denied), back in the review queue
+//   ignored      — true: not sure yet — hidden for now, offered again by the next sync (in that
+//                  sync's batch); false: undo that. Accepting / moving / denying clears it.
 //   displayName  — the name the website shows ('' = back to the name built from TCGplayer's)
 //   reviewed     — mark checked
 // Every change applies to the catalog card (`tcg-{productId}`) right away, so it doesn't wait for
@@ -33,6 +35,7 @@ interface Change {
   setName?: string | null
   reviewed?: boolean
   denied?: boolean
+  ignored?: boolean
   displayName?: string
 }
 
@@ -61,6 +64,15 @@ export async function POST(request: Request) {
     if (!p) return NextResponse.json({ error: `No placement for TCGplayer product ${change.productId}` }, { status: 404 })
     if (typeof change.setName === 'string' && !setByName.has(change.setName)) {
       return NextResponse.json({ error: `No Riftbound set named "${change.setName}"` }, { status: 404 })
+    }
+
+    if (change.ignored === true && !p.ignored) {
+      p.ignored = true
+      p.reviewed = false
+      mark(p, 'moved')
+    } else if (p.ignored && (change.ignored === false || change.reviewed === true || change.setName !== undefined || change.denied !== undefined)) {
+      p.ignored = false
+      mark(p, 'moved')
     }
 
     if (change.denied === true && !p.denied) {
@@ -106,7 +118,7 @@ export async function POST(request: Request) {
     const set = p.setName ? setByName.get(p.setName) : null
     const patch: Record<string, unknown> = { updatedAt: serverTimestamp() }
     if (moved) {
-      if (set) Object.assign(patch, { setName: set.setName, setCode: set.setCode, hidden: false, rarity: set.tcgplayerOnly ? set.tcgplayerRarity || 'Event Promo' : 'Promo' })
+      if (set && !p.ignored) Object.assign(patch, { setName: set.setName, setCode: set.setCode, hidden: false, rarity: set.tcgplayerOnly ? set.tcgplayerRarity || 'Event Promo' : 'Promo' })
       else patch.hidden = true
     }
     if (renamed) patch.name = p.displayName ?? defaultName(p.name)

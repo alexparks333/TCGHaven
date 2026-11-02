@@ -82,6 +82,9 @@ export interface RiftboundPlacement {
   previousSetName?: string | null
   // The name the website shows, set by staff; otherwise it's built from TCGplayer's name.
   displayName?: string
+  // Staff chose "Ignore" (not sure yet): hidden for now, and the next sync offers it again in its
+  // own batch (addedAt = that sync), maybe with a photo by then. Unlike `denied`, not final.
+  ignored?: boolean
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching

@@ -441,6 +441,11 @@ whole group list and skips the main sets' groups and any group a `tcgplayerOnly`
   (`components/admin/PlacementsReview.tsx`): move a card to any set, leave it out, start a new set,
   or approve. `POST /api/set-registry/placements` saves it and moves the catalog card at once
   (+ `regenerateSnapshot`). Dry run: `discoverRiftboundProducts(registry, gallery, undefined, { save: false })`.
+- **Review is per sync:** Needs Review lists one node per sync that found cards (placements
+  sharing `addedAt`); opening one shows its board. Each card: **Accept** (reviewed), **Ignore**
+  (`ignored`: hidden; the next sync's discovery offers it again with a new `addedAt`, i.e. in that
+  sync's node, and `syncToFirestore({ unhideIds })` shows it again despite the staff-edit
+  protection), or **Deny**.
 - **Deny / recover / rename:** a placement can be `denied` (hidden; it stays in `placements`, so
   discovery never offers it again) and recovered into `previousSetName` or any set. `displayName`
   is the name the website shows (`placementCard()` applies it every sync; default =

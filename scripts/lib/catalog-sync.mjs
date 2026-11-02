@@ -163,7 +163,7 @@ export function stableStringify(v) {
   return JSON.stringify(v)
 }
 
-async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults = {}, checkImages = true } = {}) {
+async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [], fieldDefaults = {}, checkImages = true } = {}) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
   const meta = metaSnap.exists() ? metaSnap.data() : {}
@@ -228,6 +228,16 @@ async function syncToFirestore(game, freshCards, { hideIds = [], fieldDefaults =
     if (editedSinceLastSync) continue
     finalMap.set(id, { ...existing, hidden: true })
     writes.push({ id, data: { hidden: true, updatedAt: serverTimestamp() } })
+  }
+
+  // Cards staff hid themselves by choosing "Ignore" on Needs Review — back now that a sync has
+  // offered them again (see discoverRiftboundProducts). Their hide was a staff edit, so the
+  // admin-edit-wins check above would otherwise keep them hidden one extra sync.
+  for (const id of unhideIds) {
+    const existing = existingMap.get(id)
+    if (!existing?.hidden) continue
+    finalMap.set(id, { ...finalMap.get(id), hidden: false })
+    writes.push({ id, data: { hidden: false, updatedAt: serverTimestamp() } })
   }
 
   if (writes.length > 0) {
@@ -1256,7 +1266,7 @@ function newBundleSet(group, sets, groupOrder, nowIso) {
 // `save: false` = dry run (scripts that preview what a sync would place).
 export async function discoverRiftboundProducts(registry, galleryCards, rowsOf = tcgplayerRowCache(), { save = true } = {}) {
   const rb = registry?.riftbound
-  if (!rb?.sets) return { newSets: [], newPlacements: [] }
+  if (!rb?.sets) return { newSets: [], newPlacements: [], returned: [] }
   const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS })
   if (!res.ok) throw new Error(`groups: ${res.status}`)
   const groups = (await res.json()).results ?? []
@@ -1284,7 +1294,11 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
   const nowIso = new Date().toISOString()
   const newSets = []
   const newPlacements = []
-  const placed = new Set(placements.map((p) => String(p.productId)))
+  const placed = new Set(placements.filter((p) => !p.ignored).map((p) => String(p.productId)))
+  // "Ignore" on Needs Review = ask again next sync (maybe it has a photo by then): offered again
+  // as part of this sync's batch, where staff last had it (or a fresh guess).
+  const ignored = new Map(placements.filter((p) => p.ignored).map((p) => [String(p.productId), p]))
+  const returned = []
   for (const group of groups) {
     if (mainGroupIds.has(group.groupId)) continue
     const setsHere = rb.sets.filter((s) => s.tcgplayerOnly && s.tcgcsvGroupId === group.groupId)
@@ -1318,6 +1332,15 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
     for (const r of rows) {
       if (covered.has(r.productId) || placed.has(r.productId)) continue
       placed.add(r.productId)
+      const prior = ignored.get(r.productId)
+      if (prior) {
+        Object.assign(prior, {
+          ignored: false, setName: prior.setName ?? guessPlacementSet(r.extNumber, setByDenominator),
+          name: r.name, number: r.extNumber, auto: true, reviewed: false, addedAt: nowIso,
+        })
+        returned.push(prior)
+        continue
+      }
       newPlacements.push({
         productId: Number(r.productId), groupId: group.groupId, groupName: group.name,
         name: r.name, number: r.extNumber, setName: guessPlacementSet(r.extNumber, setByDenominator),
@@ -1326,8 +1349,9 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
     }
   }
   if (newPlacements.length) console.log(`   🆕 ${newPlacements.length} new TCGplayer products placed (${newPlacements.filter((p) => !p.setName).length} left out)`)
+  if (returned.length) console.log(`   ↩️  ${returned.length} ignored TCGplayer product(s) offered again`)
 
-  if (save && (newSets.length || newPlacements.length)) {
+  if (save && (newSets.length || newPlacements.length || returned.length)) {
     rb.placements = [...placements, ...newPlacements]
     try {
       await updateDoc(doc(db, 'registry', 'main'), { 'riftbound.sets': rb.sets, 'riftbound.placements': rb.placements })
@@ -1335,7 +1359,7 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
       console.warn(`   ⚠️  Couldn't save new placements to the registry: ${err.message}`)
     }
   }
-  return { newSets, newPlacements }
+  return { newSets, newPlacements, returned }
 }
 
 // Build lookup key for a TCGPlayer product
@@ -1515,7 +1539,7 @@ export async function downloadRiftbound() {
       },
     }),
     fetchRiftboundPrices(),
-    fetchTcgplayerOnlyRiftboundSets({ sets: registrySets, placements: registry?.riftbound?.placements ?? [], rowsOf }),
+    fetchTcgplayerOnlyRiftboundSets({ sets: registrySets, placements: (registry?.riftbound?.placements ?? []).filter((p) => !p.ignored), rowsOf }),
   ])
 
   if (!galleryRes.ok) throw new Error(`Gallery fetch failed: ${galleryRes.status} ${galleryRes.statusText}`)
@@ -1690,18 +1714,20 @@ export async function downloadRiftbound() {
   if (starCount > 0) console.log(`   Created ${starCount} Signature (Star) stubs from TCGCSV`)
 
   // New TCGplayer groups/products since the last sync — placed, built and saved for review.
-  let discovered = { newSets: [], newPlacements: [] }
+  let discovered = { newSets: [], newPlacements: [], returned: [] }
   try {
     discovered = await discoverRiftboundProducts(registry, all, rowsOf)
     tcgplayerOnlyCards.push(...await fetchTcgplayerOnlyRiftboundSets({
-      sets: discovered.newSets, placements: discovered.newPlacements, allSets: registrySets, rowsOf,
+      sets: discovered.newSets, placements: [...discovered.newPlacements, ...discovered.returned], allSets: registrySets, rowsOf,
     }))
   } catch (err) {
     console.warn(`   ⚠️  Looking for new TCGplayer products failed: ${err.message}`)
   }
   // A product staff denied (or the sync couldn't place) is hidden if it was ever a card — and,
   // being in `placements`, never offered again.
-  const leftOutIds = (registry?.riftbound?.placements ?? []).filter((p) => !p.setName).map((p) => `tcg-${p.productId}`)
+  // (Read after discovery, which brings ignored ones back.) Ignored ones stay hidden until offered again.
+  const leftOutIds = (registry?.riftbound?.placements ?? []).filter((p) => !p.setName || p.ignored).map((p) => `tcg-${p.productId}`)
+  const returnedIds = discovered.returned.filter((p) => p.setName).map((p) => `tcg-${p.productId}`)
 
   useGalleryArtForPhotoless(tcgplayerOnlyCards, all)
   all.push(...tcgplayerOnlyCards)
@@ -1720,7 +1746,7 @@ export async function downloadRiftbound() {
 
   const priced = all.filter(c => c.marketPrice > 0).length
   console.log(`   Priced ${priced}/${all.length} cards from TCGCSV`)
-  const result = await syncToFirestore('riftbound', all, { hideIds: [...supersededStubIds, ...leftOutIds] })
+  const result = await syncToFirestore('riftbound', all, { hideIds: [...supersededStubIds, ...leftOutIds], unhideIds: returnedIds })
   return { ...result, discovered }
 }
 

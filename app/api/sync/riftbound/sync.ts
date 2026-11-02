@@ -113,7 +113,7 @@ export async function runRiftboundSync(): Promise<Response> {
     const status = {
       ok: true, at: new Date().toISOString(), setCount: first.setNames.length,
       newSets: [...newNames, ...first.discovered.newSets.map((s: { setName: string }) => s.setName)], newRarities, groupMatches,
-      newPlacements: first.discovered.newPlacements.length,
+      newPlacements: first.discovered.newPlacements.length + (first.discovered.returned?.length ?? 0),
       unplaced: first.discovered.newPlacements.filter((p: { setName: string | null }) => !p.setName).length,
       totalBrokenImages: first.totalBrokenImages, newlyBrokenImages: first.newlyBrokenImages, newlyFixedImages: first.newlyFixedImages,
     }
