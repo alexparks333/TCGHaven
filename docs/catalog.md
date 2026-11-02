@@ -218,6 +218,12 @@ anyone can browse the table read-only; only the admin sees the write controls.
     "Zed - Master of Shadows (Signature)" row that doesn't exist under any name in the local
     catalog at all — a genuinely missing card the normal sync silently skipped.
 
+- **Categories** (`components/admin/CatalogCategories.tsx`, `POST /api/set-registry/categories`
+  — add / rename / delete (empty only) / reorder / assign) — Lorcana & Riftbound's Cardex
+  categories = registry `groupOrder` + each set's `cardexGroup`. The set picker is grouped by them
+  (Pokémon's by `series`), the set info bar has a Category select, and the Categories panel
+  manages them. A rename updates every set in it. Riftbound's "Special" also holds the Cardex's
+  inventory-only bucket (`buildGroups()` joins a group of that label), so renaming it splits them.
 - **Whole-catalog Search** (`GET /api/admin/catalog/search?game=&q=`) — the search box at the top
   of `CatalogBrowser` that finds a card across every set for the active game at once (unlike the
   set-scoped table below it), capped at `MAX_RESULTS = 300` with a `truncated` flag the UI can

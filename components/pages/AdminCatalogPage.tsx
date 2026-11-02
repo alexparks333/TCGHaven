@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
+import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, FolderTree, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch,
 } from 'firebase/firestore'
@@ -15,6 +15,7 @@ import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/sy
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game } from '@/lib/types'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { CategoriesPanel, groupSets, hasCategories, useCategories } from '@/components/admin/CatalogCategories'
 
 interface SetOption {
   code: string
@@ -22,6 +23,7 @@ interface SetOption {
   releaseDate: string
   cardCount?: number
   isCustom?: boolean
+  series?: string // Pokémon's era — the set picker's sections for Pokémon
 }
 
 interface CatalogCard {
@@ -295,6 +297,9 @@ export function CatalogBrowser() {
   const [showNewSetForm, setShowNewSetForm] = useState(false)
   const [deletingSet, setDeletingSet] = useState(false)
   const [showRawSourceCheck, setShowRawSourceCheck] = useState(false)
+  const [showCategories, setShowCategories] = useState(false)
+  const { categories, reload: reloadCategories, act: categoryAction } = useCategories(activeGame)
+  const setSections = groupSets(activeGame, sets, categories)
   const [editingCard, setEditingCard] = useState<CatalogCard | null>(null)
   const [jumpName, setJumpName] = useState('')
   const [jumpNumber, setJumpNumber] = useState('')
@@ -658,8 +663,23 @@ export function CatalogBrowser() {
             onChange={(e) => setActiveSet(sets.find((s) => s.code === e.target.value) ?? null)}
             className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink"
           >
-            {sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+            {setSections
+              ? setSections.map(([label, list]) => (
+                  <optgroup key={label} label={label}>
+                    {list.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+                  </optgroup>
+                ))
+              : sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
           </select>
+        )}
+        {isAdmin && hasCategories(activeGame) && (
+          <button
+            onClick={() => setShowCategories((v) => !v)}
+            className={cn('flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium', showCategories ? 'bg-slate-700 text-ink' : 'bg-slate-800 text-slate-300 hover:bg-slate-700')}
+            title="Add, rename, reorder and delete the Cardex categories, and move sets between them"
+          >
+            <FolderTree size={14} /> Categories
+          </button>
         )}
         {isAdmin && (
           <button
@@ -714,10 +734,21 @@ export function CatalogBrowser() {
         </div>
       )}
 
+      {isAdmin && showCategories && hasCategories(activeGame) && categories && (
+        <CategoriesPanel
+          game={activeGame}
+          setNames={sets.map((s) => s.name)}
+          categories={categories}
+          act={categoryAction}
+          onClose={() => setShowCategories(false)}
+          onOpenSet={(name) => setActiveSet(sets.find((s) => s.name === name) ?? null)}
+        />
+      )}
+
       {isAdmin && showNewSetForm && (
         <NewSetForm
           game={activeGame}
-          onSaved={(setName) => { setShowNewSetForm(false); reloadSets(setName) }}
+          onSaved={(setName) => { setShowNewSetForm(false); reloadSets(setName); reloadCategories() }}
           onCancel={() => setShowNewSetForm(false)}
           onError={setActionError}
         />
@@ -797,6 +828,8 @@ export function CatalogBrowser() {
               // no registry entry to patch — only their own custom ("New Set") sets are
               // registry-backed and thus editable.
               editable={(activeGame !== 'pokemon' && activeGame !== 'mtg') || !!activeSet.isCustom}
+              category={hasCategories(activeGame) && categories ? { current: categories.setCategory.get(activeSet.name) ?? null, all: categories.order } : null}
+              onCategory={(category) => categoryAction({ action: 'assign', setName: activeSet.name, category }).catch((err) => setActionError((err as Error).message))}
               onSaved={handleSetInfoUpdated}
               onError={setActionError}
             />
@@ -831,12 +864,14 @@ export function CatalogBrowser() {
 // registry-driven source of truth for their entire set list) but only custom Pokemon sets do
 // (official Pokemon sets come live from api.pokemontcg.io with nothing local to patch).
 function SetInfoBar({
-  game, activeSet, isAdmin, editable, onSaved, onError,
+  game, activeSet, isAdmin, editable, category, onCategory, onSaved, onError,
 }: {
   game: Game
   activeSet: SetOption
   isAdmin: boolean
   editable: boolean
+  category: { current: string | null; all: string[] } | null
+  onCategory: (category: string) => void
   onSaved: (patch: { releaseDate?: string }) => void
   onError: (msg: string | null) => void
 }) {
@@ -905,6 +940,26 @@ function SetInfoBar({
       <span className="text-slate-500">{activeSet.cardCount ?? '?'} cards</span>
       <span className="text-slate-700">·</span>
       <span className="text-slate-500">Code: {activeSet.code}</span>
+      {category && (
+        <>
+          <span className="text-slate-700">·</span>
+          {isAdmin ? (
+            <label className="flex items-center gap-1 text-slate-500">
+              Category
+              <select
+                value={category.current ?? ''}
+                onChange={(e) => e.target.value && onCategory(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-slate-300"
+              >
+                {category.current === null && <option value="">None</option>}
+                {category.all.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+          ) : (
+            <span className="text-slate-500">Category: {category.current ?? 'none'}</span>
+          )}
+        </>
+      )}
       {activeSet.isCustom && (
         <span className="text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
       )}
