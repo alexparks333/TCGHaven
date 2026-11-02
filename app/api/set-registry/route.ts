@@ -91,7 +91,12 @@ export async function POST(request: Request) {
 
   if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && cardexGroup) {
     const groupOrder = registry[game].groupOrder
-    if (!groupOrder.includes(cardexGroup)) {
+    // `newCardexGroup: true` creates the category too (added after the existing ones). A group
+    // some set already uses counts as known even if groupOrder doesn't list it (Riftbound's
+    // "Special", which the Cardex always puts last).
+    const inUse = (registry[game].sets as Array<{ cardexGroup?: string | null }>).some((s) => s.cardexGroup === cardexGroup)
+    if (body?.newCardexGroup === true && !groupOrder.includes(cardexGroup) && !inUse) groupOrder.push(cardexGroup)
+    else if (!groupOrder.includes(cardexGroup) && !inUse) {
       return NextResponse.json({ error: `"${cardexGroup}" isn't a known Cardex group for ${game} (expected one of: ${groupOrder.join(', ')})` }, { status: 400 })
     }
   }

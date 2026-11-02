@@ -72,18 +72,22 @@ export function PlacementsReview() {
     }
   }
 
-  async function createSet(name: string, cardexGroup: string, productIds: number[]) {
+  async function createSet(name: string, cardexGroup: string, isNewCategory: boolean, productIds: number[]) {
     setBusy(true)
     setError(null)
     try {
       const res = await adminFetch('/api/set-registry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: 'riftbound', setName: name, cardexGroup }),
+        body: JSON.stringify({ game: 'riftbound', setName: name, cardexGroup, newCardexGroup: isNewCategory }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
-      setRegistry((r) => (r ? { ...r, sets: [...r.sets, { setName: name, cardexGroup }] } : r))
+      setRegistry((r) => (r ? {
+        ...r,
+        groupOrder: isNewCategory && !r.groupOrder.includes(cardexGroup) ? [...r.groupOrder, cardexGroup] : r.groupOrder,
+        sets: [...r.sets, { setName: name, cardexGroup }],
+      } : r))
       setNewSetFor(null)
     } catch (err) {
       setError((err as Error).message)
@@ -94,6 +98,12 @@ export function PlacementsReview() {
   }
 
   const placements = useMemo(() => registry?.placements ?? [], [registry])
+  // Cardex categories: the registry's order, then any a set uses that it doesn't list ("Special").
+  const categories = useMemo(() => {
+    const list = [...(registry?.groupOrder ?? [])]
+    for (const s of registry?.sets ?? []) if (s.cardexGroup && !list.includes(s.cardexGroup)) list.push(s.cardexGroup)
+    return list
+  }, [registry])
   const shown = showAll ? placements : placements.filter((p) => !p.reviewed)
   // Grouped by where they landed; the cards the sync couldn't place come first.
   const groups = useMemo(() => {
@@ -156,7 +166,7 @@ export function PlacementsReview() {
                   key={p.productId}
                   placement={p}
                   sets={registry.sets}
-                  groupOrder={registry.groupOrder}
+                  groupOrder={categories}
                   busy={busy}
                   onMove={(setName) => save([{ productId: p.productId, setName, reviewed: true }])}
                   onApprove={() => save([{ productId: p.productId, reviewed: true }])}
@@ -170,10 +180,10 @@ export function PlacementsReview() {
 
       {newSetFor && (
         <NewSetDialog
-          groupOrder={registry.groupOrder}
+          categories={categories}
           busy={busy}
           onCancel={() => setNewSetFor(null)}
-          onCreate={(name, group) => createSet(name, group, newSetFor)}
+          onCreate={(name, group, isNew) => createSet(name, group, isNew, newSetFor)}
         />
       )}
     </div>
@@ -249,43 +259,76 @@ function PlacementRow({
   )
 }
 
+const NEW_CATEGORY = '__new_category__'
+
 function NewSetDialog({
-  groupOrder, busy, onCancel, onCreate,
-}: { groupOrder: string[]; busy: boolean; onCancel: () => void; onCreate: (name: string, group: string) => void }) {
+  categories, busy, onCancel, onCreate,
+}: { categories: string[]; busy: boolean; onCancel: () => void; onCreate: (name: string, category: string, isNew: boolean) => void }) {
   const [name, setName] = useState('')
-  const [group, setGroup] = useState(groupOrder.includes('Promos') ? 'Promos' : groupOrder[0] ?? '')
+  const [group, setGroup] = useState(categories.includes('Promos') ? 'Promos' : categories[0] ?? NEW_CATEGORY)
+  const [newCategory, setNewCategory] = useState('')
   const nameRef = useRef<HTMLInputElement>(null)
+  const categoryRef = useRef<HTMLInputElement>(null)
   useEffect(() => { nameRef.current?.focus({ preventScroll: true }) }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onCancel])
+
+  const isNew = group === NEW_CATEGORY
+  const category = isNew ? newCategory.trim() : group
+  const taken = isNew && categories.some((c) => c.toLowerCase() === category.toLowerCase())
+  const ready = !busy && !!name.trim() && !!category && !taken
+  const submit = () => { if (ready) onCreate(name.trim(), category, isNew) }
+
   // Portalled to <body>: inside the review card (whose backdrop-filter makes it the containing
   // block for `fixed`) the dialog centred on the whole long list and focusing it scrolled the page.
   return createPortal(
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
       <div className="card-glass p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
         <h3 className="text-ink font-semibold mb-3">New Riftbound set</h3>
+        <label className="block text-xs text-slate-400 mb-1">Set name</label>
         <input
           ref={nameRef}
           value={name}
-          onKeyDown={(e) => { if (e.key === 'Enter' && name.trim() && !busy) onCreate(name.trim(), group) }}
           onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
           placeholder="e.g. K/DA Couture Collection"
           className="input-field mb-3"
         />
-        <label className="flex items-center gap-2 text-xs text-slate-400 mb-4">
-          Cardex group
-          <select value={group} onChange={(e) => setGroup(e.target.value)} className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-slate-300">
-            {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-        </label>
-        <div className="flex justify-end gap-2">
+        <label className="block text-xs text-slate-400 mb-1">Cardex category</label>
+        <select
+          value={group}
+          onChange={(e) => {
+            setGroup(e.target.value)
+            if (e.target.value === NEW_CATEGORY) setTimeout(() => categoryRef.current?.focus({ preventScroll: true }))
+          }}
+          className="input-field mb-3"
+        >
+          {categories.map((g) => <option key={g} value={g}>{g}</option>)}
+          <option value={NEW_CATEGORY}>New category…</option>
+        </select>
+        {isNew && (
+          <>
+            <input
+              ref={categoryRef}
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+              placeholder="e.g. Collector Bundles"
+              className="input-field mb-1"
+            />
+            <p className={cn('text-[11px] mb-3', taken ? 'text-red-600' : 'text-slate-500')}>
+              {taken ? 'That category already exists — pick it from the list.' : 'Shown in the Cardex after the existing categories.'}
+            </p>
+          </>
+        )}
+        <div className="flex justify-end gap-2 mt-1">
           <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-slate-400 hover:text-ink">Cancel</button>
           <button
-            disabled={busy || !name.trim()}
-            onClick={() => onCreate(name.trim(), group)}
+            disabled={!ready}
+            onClick={submit}
             className="text-xs font-medium px-3 py-1.5 rounded-lg bg-cyan-600/20 text-cyan-700 hover:bg-cyan-600/30 disabled:opacity-50 flex items-center gap-1"
           >
             <Plus size={12} /> Create &amp; move
