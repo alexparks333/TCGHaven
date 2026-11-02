@@ -100,7 +100,9 @@ export function PlacementsReview() {
   const [focusId, setFocusId] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [newSetFor, setNewSetFor] = useState<number[] | null>(null)
+  // Cards a New set is for — moved into it on create, or (from the card viewer) just handed the
+  // new set's name to select, so the move still waits for Accept.
+  const [newSetFor, setNewSetFor] = useState<{ ids: number[]; onCreated?: (setName: string) => void } | null>(null)
   const [moveMenu, setMoveMenu] = useState(false)
   // The last action, undoable from the toast (or ⌘Z) for a few seconds
   const [undo, setUndo] = useState<{ label: string; changes: Change[]; id: number } | null>(null)
@@ -215,7 +217,7 @@ export function PlacementsReview() {
     return () => window.removeEventListener('keydown', onKey)
   }, [runUndo])
 
-  async function createSet(name: string, cardexGroup: string, isNewCategory: boolean, productIds: number[]) {
+  async function createSet(name: string, cardexGroup: string, isNewCategory: boolean, target: { ids: number[]; onCreated?: (setName: string) => void }) {
     setBusy(true)
     setError(null)
     try {
@@ -237,7 +239,8 @@ export function PlacementsReview() {
       setBusy(false)
       return
     }
-    await save(productIds.map((productId) => ({ productId, setName: name, reviewed: true })))
+    if (target.onCreated) { setBusy(false); target.onCreated(name); return }
+    await save(target.ids.map((productId) => ({ productId, setName: name, reviewed: true })))
     setSelected(new Set())
   }
 
@@ -445,7 +448,7 @@ export function PlacementsReview() {
                 categories={categories}
                 sets={registry.sets}
                 onPick={(setName: string) => bulk(selectedIds.map((productId) => (filter === DENIED ? { productId, denied: false, setName } : { productId, setName, reviewed: true })))}
-                onNewSet={() => { setMoveMenu(false); setNewSetFor(selectedIds) }}
+                onNewSet={() => { setMoveMenu(false); setNewSetFor({ ids: selectedIds }) }}
                 onClose={() => setMoveMenu(false)}
               />
             )}
@@ -501,13 +504,11 @@ export function PlacementsReview() {
           onClose={() => setFocusId(null)}
           onPrev={() => focusIndex > 0 && setFocusId(visible[focusIndex - 1].productId)}
           onNext={() => focusIndex < visible.length - 1 && setFocusId(visible[focusIndex + 1].productId)}
-          onApprove={() => actOnFocus({})}
-          onMove={(setName) => actOnFocus(isDenied(focus) ? { denied: false, setName } : { setName })}
+          onAccept={(setName) => actOnFocus(isDenied(focus) ? { denied: false, setName, reviewed: true } : { setName })}
           onDeny={() => actOnFocus({ denied: true })}
-          onRecover={() => actOnFocus({ denied: false })}
           onRename={(displayName) => save([{ productId: focus.productId, displayName }])}
           onUnreview={() => save([{ productId: focus.productId, reviewed: false }])}
-          onNewSet={() => setNewSetFor([focus.productId])}
+          onNewSet={(onCreated) => setNewSetFor({ ids: [focus.productId], onCreated })}
         />
       )}
 
@@ -698,7 +699,7 @@ function SetMenu({
 }
 
 function FocusViewer({
-  placement: p, name, denied, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onApprove, onMove, onNewSet, onDeny, onRecover, onRename, onUnreview,
+  placement: p, name, denied, index, total, image, price, categories, sets, busy, onClose, onPrev, onNext, onAccept, onNewSet, onDeny, onRename, onUnreview,
 }: {
   placement: Placement
   name: string
@@ -713,19 +714,22 @@ function FocusViewer({
   onClose: () => void
   onPrev: () => void
   onNext: () => void
-  onApprove: () => void
-  onMove: (setName: string) => void
-  onNewSet: () => void
+  onAccept: (setName: string) => void
+  onNewSet: (onCreated: (setName: string) => void) => void
   onDeny: () => void
-  onRecover: () => void
   onRename: (displayName: string) => void
   onUnreview: () => void
 }) {
   const [tcgOk, setTcgOk] = useState(true)
-  useEffect(() => setTcgOk(true), [p.productId])
+  // The set picked for this card — only a selection; nothing saves until Accept (or Deny).
+  // Starts on where the card is (or, for a denied one, where it was).
+  const startChoice = denied ? p.previousSetName ?? null : p.setName
+  const [choice, setChoice] = useState<string | null>(startChoice)
+  useEffect(() => { setTcgOk(true); setChoice(startChoice) }, [p.productId, startChoice])
+  const accept = () => { if (choice) onAccept(choice) }
   // Latest handlers for the one window key listener
-  const keys = useRef({ onClose, onPrev, onNext, onApprove: denied ? onRecover : onApprove, busy })
-  keys.current = { onClose, onPrev, onNext, onApprove: denied ? onRecover : onApprove, busy }
+  const keys = useRef({ onClose, onPrev, onNext, onApprove: accept, busy })
+  keys.current = { onClose, onPrev, onNext, onApprove: accept, busy }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.closest('input, textarea, select')) return
@@ -747,7 +751,7 @@ function FocusViewer({
       <div className="relative w-full max-w-4xl max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl bg-[#f3e8d2] shadow-2xl border border-[#d6c49f]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-[#d6c49f]/70 text-xs text-slate-500">
           <span>Card {index + 1} of {total}</span>
-          <span className="hidden sm:inline">Enter = {denied ? 'recover' : 'looks right'} · ← → to browse · Esc to close</span>
+          <span className="hidden sm:inline">Pick a set, then Accept (Enter) or Deny · ← → to browse · Esc to close</span>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-black/5 text-slate-500"><X size={16} /></button>
         </div>
 
@@ -785,57 +789,46 @@ function FocusViewer({
               </a>
             </div>
 
-            {denied ? (
-              <div className="mt-5 rounded-2xl bg-red-50/60 border border-red-200 p-4">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 mb-1"><Ban size={12} /> Denied</div>
-                <div className="text-sm text-slate-600 mb-4">Hidden from the site, and syncs won’t add it back.</div>
-                <button
-                  disabled={busy}
-                  onClick={onRecover}
-                  className="w-full py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60"
-                  style={{ background: ACCENT }}
-                >
-                  {busy ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
-                  Recover{p.previousSetName ? ` into ${p.previousSetName}` : ''}
-                </button>
+            <div className="mt-5 rounded-2xl bg-white/40 border border-[#d6c49f]/70 p-4">
+              <div className="flex items-center justify-between gap-2 text-xs text-slate-500 mb-1">
+                <span>
+                  {denied
+                    ? <span className="inline-flex items-center gap-1 font-semibold text-red-700"><Ban size={11} /> Denied — hidden from the site</span>
+                    : p.setName ? (p.auto ? <>The sync suggested <b className="text-ink">{p.setName}</b></> : <>Placed in <b className="text-ink">{p.setName}</b></>)
+                    : 'The sync couldn’t tell where it goes'}
+                </span>
+                {p.reviewed && !denied && (
+                  <button disabled={busy} onClick={onUnreview} className="inline-flex items-center gap-1 font-semibold hover:text-ink disabled:opacity-50" title="Put it back in the review queue">
+                    <Check size={11} style={{ color: ACCENT }} /> Reviewed · <Undo2 size={11} /> Mark as not reviewed
+                  </button>
+                )}
               </div>
-            ) : (
-              <div className="mt-5 rounded-2xl bg-white/40 border border-[#d6c49f]/70 p-4">
-                <div className="flex items-center justify-between gap-2 text-xs text-slate-500 mb-1">
-                  <span>{p.auto ? 'The sync put it in' : 'Placed in'}</span>
-                  {p.reviewed && (
-                    <button disabled={busy} onClick={onUnreview} className="inline-flex items-center gap-1 font-semibold hover:text-ink disabled:opacity-50" title="Put it back in the review queue">
-                      <Check size={11} style={{ color: ACCENT }} /> Reviewed · <Undo2 size={11} /> Mark as not reviewed
-                    </button>
-                  )}
-                </div>
-                <div className="text-lg font-semibold text-ink mb-4">{p.setName ?? 'Nowhere yet — the sync couldn’t place it'}</div>
-                <div className="flex gap-2">
-                  {p.setName && (
-                    <button
-                      disabled={busy}
-                      onClick={onApprove}
-                      className="flex-1 py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60"
-                      style={{ background: ACCENT }}
-                    >
-                      {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Looks right
-                    </button>
-                  )}
+              <div className="text-sm font-semibold text-ink mt-3 mb-2">1. Where does it go?</div>
+              <SetChoices categories={categories} sets={sets} current={choice} busy={busy} onPick={setChoice} onNewSet={() => onNewSet(setChoice)} />
+
+              <div className="text-sm font-semibold text-ink mt-5 mb-2">2. {denied ? 'Bring it back?' : 'Use this card?'}</div>
+              <div className="flex gap-2">
+                <button
+                  disabled={busy || !choice}
+                  onClick={accept}
+                  className="flex-1 py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-40 min-w-0"
+                  style={{ background: ACCENT }}
+                  title={choice ? undefined : 'Pick a set first'}
+                >
+                  {busy ? <Loader2 size={16} className="animate-spin shrink-0" /> : <Check size={16} className="shrink-0" />}
+                  <span className="truncate">{choice ? `Accept into ${choice}` : 'Pick a set to accept'}</span>
+                </button>
+                {!denied && (
                   <button
                     disabled={busy}
                     onClick={onDeny}
                     title="Don't use this card — hidden, and syncs won't add it back"
-                    className={cn('py-3 px-4 rounded-xl font-semibold flex items-center justify-center gap-2 border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-60', !p.setName && 'flex-1')}
+                    className="py-3 px-5 rounded-xl font-semibold flex items-center justify-center gap-2 border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-60"
                   >
                     <Ban size={16} /> Deny
                   </button>
-                </div>
+                )}
               </div>
-            )}
-
-            <div className="mt-5">
-              <div className="text-xs text-slate-500 mb-2">{denied ? 'Or recover it into' : 'Or move it to'}</div>
-              <SetChoices categories={categories} sets={sets} current={denied ? undefined : p.setName} busy={busy} onPick={onMove} onNewSet={onNewSet} />
             </div>
           </div>
         </div>
