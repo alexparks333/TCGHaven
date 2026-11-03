@@ -478,6 +478,15 @@ export function CatalogBrowser() {
     setActionSuccess(null)
     try {
       await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
+      // A card from Needs Review (`tcg-…`) is rebuilt by every sync from its review record, so a
+      // rename has to be saved there too, or the next sync puts the old name back.
+      if (id.startsWith('tcg-') && (activeGame === 'riftbound' || activeGame === 'lorcana') && typeof patch.name === 'string') {
+        await adminFetch('/api/set-registry/placements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: activeGame, changes: [{ productId: Number(id.slice(4)), displayName: patch.name }] }),
+        }).catch(() => {}) // a promo the review doesn't track — the catalog edit above still applies
+      }
       await refreshCatalogCaches(activeGame)
     } catch (err) {
       setActionError(`Edit failed: ${(err as Error).message}`)
@@ -804,14 +813,18 @@ export function CatalogBrowser() {
 
 
       {isAdmin && editingCard && (
-        <EditCardForm
-          // Fresh form per card: without it, Edit on another card kept the first card's values
-          key={editingCard.id}
-          game={activeGame}
-          card={editingCard}
-          onSave={(patch) => saveCardEdit(editingCard.id, patch)}
-          onCancel={() => setEditingCard(null)}
-        />
+        // A popup over the page — it used to open at the top of the page, off-screen when editing
+        // a card further down the table, so Edit looked like it did nothing.
+        <EditCardModal onClose={() => setEditingCard(null)}>
+          <EditCardForm
+            // Fresh form per card: without it, Edit on another card kept the first card's values
+            key={editingCard.id}
+            game={activeGame}
+            card={editingCard}
+            onSave={(patch) => saveCardEdit(editingCard.id, patch)}
+            onCancel={() => setEditingCard(null)}
+          />
+        </EditCardModal>
       )}
 
       {isSearchMode ? (
@@ -1047,6 +1060,21 @@ function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {
       </span>
       {linked ? source : 'Static'}
     </div>
+  )
+}
+
+function EditCardModal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  useScrollLock()
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return createPortal(
+    <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto p-4 flex items-start justify-center" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full max-w-3xl my-8 rounded-2xl bg-[#efe4cc] shadow-2xl [&>.card-glass]:mb-0">{children}</div>
+    </div>,
+    document.body,
   )
 }
 
