@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase/config'
 export interface TextKey {
   id: string
   text: string // matched anywhere in a card's name, ignoring case
+  show?: string // what's shown in its place ('' / missing = the matched text itself)
   color: string // '#rrggbb', '' = the name's own colour
   bold: boolean
   italic: boolean // slightly — a small skew, not the font's full italic
@@ -61,7 +62,7 @@ export function useTextKeys(): TextKey[] {
 /** Staff portal: save the whole list (pass the staff session's Firestore). */
 export async function saveTextKeys(firestore: Firestore, keys: TextKey[]): Promise<void> {
   const clean = keys
-    .map((k) => ({ id: k.id, text: k.text.trim(), color: k.color || '', bold: !!k.bold, italic: !!k.italic }))
+    .map((k) => ({ id: k.id, text: k.text.trim(), show: k.show?.trim() ?? '', color: k.color || '', bold: !!k.bold, italic: !!k.italic }))
     .filter((k) => k.text)
   await setDoc(doc(firestore, 'registry', 'textKeys'), { keys: clean, updatedAt: serverTimestamp() })
 }

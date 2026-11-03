@@ -6,8 +6,10 @@ import { textKeyStyle, useTextKeys, type TextKey } from '@/lib/textKeys'
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // A card's name with its Text Keys styled (lib/textKeys.ts) — e.g. the "(Nexus Promo)" in
-// "Jinx, Rebel (Nexus Promo)". Drop-in for `{card.name}`: inherits everything else (size,
-// weight, truncate) from where it's placed. `keys` overrides the live list (the editor's preview).
+// "Jinx, Rebel (Nexus Promo)", which a key can also show as other text ("· Nexus"). Display only:
+// the name itself (search, sorting, the edit form) is unchanged. Drop-in for `{card.name}`:
+// inherits everything else (size, weight, truncate) from where it's placed. `keys` overrides the
+// live list (the editor's preview).
 export function CardName({ name, keys }: { name: string; keys?: TextKey[] }) {
   const live = useTextKeys()
   const list = keys ?? live
@@ -24,7 +26,8 @@ export function CardName({ name, keys }: { name: string; keys?: TextKey[] }) {
   let last = 0
   for (const m of Array.from(name.matchAll(pattern))) {
     if (m.index! > last) parts.push(<Fragment key={last}>{name.slice(last, m.index)}</Fragment>)
-    parts.push(<span key={`k${m.index}`} style={textKeyStyle(byText.get(m[0].toLowerCase())!)}>{m[0]}</span>)
+    const key = byText.get(m[0].toLowerCase())!
+    parts.push(<span key={`k${m.index}`} style={textKeyStyle(key)}>{key.show?.trim() || m[0]}</span>)
     last = m.index! + m[0].length
   }
   if (!parts.length) return <>{name}</>

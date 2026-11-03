@@ -1192,7 +1192,7 @@ function CardTable({
                     />
                   ) : <div className="w-8 h-11 bg-slate-800 rounded" />}
                 </td>
-                <td className="px-3 py-2 text-ink">
+                <td className="px-3 py-2 text-ink" title={c.name}>
                   <CardName name={c.name} />
                   {c.isCustom && <span className="ml-2 text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>}
                   {c.isHidden && <span className="ml-2 text-[10px] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}

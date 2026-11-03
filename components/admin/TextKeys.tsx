@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Bold, Italic, Loader2, Plus, Trash2, Type, X } from 'lucide-react'
+import { ArrowRight, Bold, Italic, Loader2, Plus, Trash2, Type, X } from 'lucide-react'
 import { staffDb } from '@/lib/firebase/staff'
 import { saveTextKeys, useTextKeys, type TextKey } from '@/lib/textKeys'
 import { cn } from '@/lib/utils'
@@ -58,14 +58,15 @@ function TextKeysEditor({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <StaffModal onClose={close} className="max-w-2xl">
+    <StaffModal onClose={close} className="max-w-4xl">
       <div className="p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-ink">Text Key</div>
             <div className="text-xs text-slate-500 mt-1">
-              Words in a card&apos;s name that show in their own style everywhere in the collector app.
-              Matches the text exactly as typed, ignoring capitals.
+              Words in a card&apos;s name that show in their own style everywhere in the collector app — and,
+              optionally, as different text (e.g. (Nexus Promo) → · Nexus). Matches the text exactly as
+              typed, ignoring capitals. Only the display changes: search still finds the real name.
             </div>
           </div>
           <button onClick={close} className="text-slate-500 hover:text-ink" title="Close"><X size={16} /></button>
@@ -77,8 +78,17 @@ function TextKeysEditor({ onClose }: { onClose: () => void }) {
               <input
                 value={k.text}
                 onChange={(e) => change(k.id, { text: e.target.value })}
-                placeholder='e.g. (1st Edition)'
-                className={cn(FIELD, 'w-44 min-w-0')}
+                placeholder='In the name, e.g. (Nexus Promo)'
+                title="The text to find in a card's name"
+                className={cn(FIELD, 'w-40 min-w-0')}
+              />
+              <ArrowRight size={14} className="text-slate-500 shrink-0" />
+              <input
+                value={k.show ?? ''}
+                onChange={(e) => change(k.id, { show: e.target.value })}
+                placeholder="Show as (optional)"
+                title="What the collector app shows instead — leave empty to show the text as it is"
+                className={cn(FIELD, 'w-36 min-w-0')}
               />
               <label className="relative shrink-0" title="Colour">
                 <input
@@ -122,7 +132,7 @@ function TextKeysEditor({ onClose }: { onClose: () => void }) {
           ))}
           {!draft.length && <div className="text-xs text-slate-500 py-2">No keys yet.</div>}
           <button
-            onClick={() => setDraft((d) => [...d, { id: newId(), text: '', color: '#7a3fc4', bold: false, italic: false }])}
+            onClick={() => setDraft((d) => [...d, { id: newId(), text: '', show: '', color: '#7a3fc4', bold: false, italic: false }])}
             className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
           >
             <Plus size={12} /> Add key
