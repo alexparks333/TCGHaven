@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Loader2, Check, Plus, X, ChevronLeft, ChevronRight, ExternalLink, Ban, FolderInput, Sparkles,
-  RotateCcw, Pencil, Undo2, Clock, ArrowLeft,
+  Pencil, Undo2, Clock, ArrowLeft,
 } from 'lucide-react'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
@@ -37,6 +37,7 @@ interface Placement {
   previousSetName?: string | null
   displayName?: string
   image?: ImageChoice
+  decidedAt?: string
 }
 
 type ImageChoice = 'tcgplayer' | 'riot' | 'none'
@@ -76,6 +77,19 @@ const numberSortKey = (n: string) => parseInt(n.replace(/^\D+/, ''), 10) || 0
 // sync couldn't place.
 const isDenied = (p: Placement) => !p.ignored && (!!p.denied || (p.setName === null && p.reviewed))
 const isDone = (p: Placement) => p.reviewed || isDenied(p) || !!p.ignored
+type Status = 'accepted' | 'ignored' | 'denied' | 'todo'
+const statusOf = (p: Placement): Status => (isDenied(p) ? 'denied' : p.ignored ? 'ignored' : p.reviewed ? 'accepted' : 'todo')
+const STATUS_LABEL: Record<Status, string> = { accepted: 'Accepted', ignored: 'Ignored', denied: 'Denied', todo: 'To review' }
+// The change that sends a decided card back to "To review", undecided
+const bringBack = (p: Placement): Omit<Change, 'productId'> =>
+  isDenied(p) ? { denied: false } : p.ignored ? { ignored: false } : { reviewed: false }
+function timeAgo(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
 const syncTime = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
@@ -445,14 +459,18 @@ function ReviewBoard({
   createSet: (name: string, cardexGroup: string, isNewCategory: boolean) => Promise<boolean>
   onClose: () => void
 }) {
-  const [showReviewed, setShowReviewed] = useState(false)
+  // Two tabs: "To review" (by where the sync put each card) and "Reviewed" (everything decided —
+  // accepted, ignored, denied — newest decision first, to check or undo).
+  const [tab, setTab] = useState<'todo' | 'reviewed'>('todo')
   const [filter, setFilter] = useState<string>(ALL)
+  const [statusFilter, setStatusFilter] = useState<'all' | Status>('all')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [focusId, setFocusId] = useState<number | null>(null)
   // Cards a New set is for — moved into it on create, or (from the card viewer) just handed the
   // new set's name to select, so the move still waits for Accept.
   const [newSetFor, setNewSetFor] = useState<{ ids: number[]; onCreated?: (setName: string) => void; category?: string } | null>(null)
   const [moveMenu, setMoveMenu] = useState(false)
+  useEffect(() => { setSelected(new Set()) }, [tab])
 
   // Esc closes the board when nothing on top of it is open
   useEffect(() => {
@@ -473,19 +491,30 @@ function ReviewBoard({
     return order
   }, [categories, registry])
 
+  // To review: not decided yet, ordered by where the sync put them
   const pool = useMemo(
     () => placements
-      .filter((p) => !isDenied(p) && !p.ignored && (showReviewed || !p.reviewed))
+      .filter((p) => !isDone(p))
       .sort((a, b) =>
         (a.setName ? setOrder.get(a.setName) ?? 9e5 : -1) - (b.setName ? setOrder.get(b.setName) ?? 9e5 : -1)
         || numberSortKey(a.number) - numberSortKey(b.number)),
-    [placements, showReviewed, setOrder],
+    [placements, setOrder],
   )
-  const deniedList = useMemo(() => placements.filter(isDenied).sort((a, b) => a.name.localeCompare(b.name)), [placements])
-  const ignoredList = useMemo(() => placements.filter((p) => p.ignored).sort((a, b) => a.name.localeCompare(b.name)), [placements])
+  // Reviewed: decided, most recent decision first
+  const reviewedList = useMemo(
+    () => placements.filter(isDone).sort((a, b) => (b.decidedAt ?? '').localeCompare(a.decidedAt ?? '') || a.name.localeCompare(b.name)),
+    [placements],
+  )
+  const statusCounts = useMemo(() => {
+    const m: Record<Status, number> = { accepted: 0, ignored: 0, denied: 0, todo: 0 }
+    for (const p of reviewedList) m[statusOf(p)]++
+    return m
+  }, [reviewedList])
   const visible = useMemo(
-    () => (filter === ALL ? pool : filter === DENIED ? deniedList : filter === IGNORED ? ignoredList : pool.filter((p) => (p.setName ?? LEFT_OUT) === filter)),
-    [pool, filter, deniedList, ignoredList],
+    () => tab === 'reviewed'
+      ? (statusFilter === 'all' ? reviewedList : reviewedList.filter((p) => statusOf(p) === statusFilter))
+      : (filter === ALL ? pool : pool.filter((p) => (p.setName ?? LEFT_OUT) === filter)),
+    [tab, statusFilter, reviewedList, filter, pool],
   )
   const counts = useMemo(() => {
     const m = new Map<string, number>()
@@ -506,14 +535,14 @@ function ReviewBoard({
     return n
   })
 
-  // One-at-a-time review: act, then move on to the next card in view.
+  // The card viewer: a decision (accept / ignore / deny / bring back) saves and closes it — back
+  // to the grid, not on to the next card (staff asked for that).
   const focusIndex = focusId == null ? -1 : visible.findIndex((p) => p.productId === focusId)
   const focus = focusIndex >= 0 ? visible[focusIndex] : null
   async function actOnFocus(change: Omit<Change, 'productId'>) {
     if (!focus) return
-    // With reviewed cards hidden, the card leaves the list (its neighbour slides in); otherwise step on.
-    const next = showReviewed ? visible[focusIndex + 1] ?? null : visible[focusIndex + 1] ?? visible[focusIndex - 1] ?? null
-    if (await save([{ productId: focus.productId, ...change }])) setFocusId(next?.productId ?? null)
+    setFocusId(null)
+    await save([{ productId: focus.productId, ...change }])
   }
 
   async function onCreateSet(name: string, group: string, isNew: boolean) {
@@ -525,7 +554,7 @@ function ReviewBoard({
     else if (await save(target.ids.map((productId) => ({ productId, setName: name, reviewed: true })))) setSelected(new Set())
   }
 
-  const doneCount = placements.filter(isDone).length
+  const doneCount = reviewedList.length
   const pct = Math.round((doneCount / placements.length) * 100)
   const destinations = [
     ...(counts.has(LEFT_OUT) ? [{ key: LEFT_OUT, label: 'Couldn’t place', category: null as string | null }] : []),
@@ -539,8 +568,10 @@ function ReviewBoard({
     return card?.imageUrl || tcgPhotoUrl(p.productId)
   }
   const riotArtOf = (p: Placement) => riotByCode.get((cards.get(`tcg-${p.productId}`)?.publicCode ?? '').split('-').slice(1).join('-')) ?? null
-  const title = filter === ALL ? (showReviewed ? 'All cards' : 'Everything to review')
-    : filter === LEFT_OUT ? 'Couldn’t place' : filter === DENIED ? 'Denied' : filter === IGNORED ? 'Ignored' : filter
+  const title = tab === 'reviewed'
+    ? (statusFilter === 'all' ? 'Reviewed cards' : STATUS_LABEL[statusFilter])
+    : filter === ALL ? 'Everything to review' : filter === LEFT_OUT ? 'Couldn’t place' : filter
+  const toAccept = visible.filter((p) => !p.reviewed && p.setName)
 
   return createPortal(
     <div className="fixed inset-0 z-30 bg-[#efe4cc] overflow-y-auto">
@@ -571,28 +602,40 @@ function ReviewBoard({
       </div>
 
       <div className="flex flex-col lg:flex-row">
-        {/* Destinations */}
+        {/* Tabs + destinations / statuses */}
         <aside className="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-[#d6c49f] p-3 lg:sticky lg:top-[73px] lg:self-start lg:max-h-[calc(100dvh-73px)] lg:overflow-y-auto">
-          <label className="flex items-center gap-2 text-xs text-slate-400 px-2 py-1.5 mb-1 cursor-pointer select-none">
-            <input type="checkbox" checked={showReviewed} onChange={(e) => setShowReviewed(e.target.checked)} />
-            Show accepted cards
-          </label>
-          <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            <DestinationButton active={filter === ALL} onClick={() => setFilter(ALL)} label={showReviewed ? 'All cards' : 'Everything to review'} count={pool.length} />
-            {destinations.map((d, i) => (
-              <div key={d.key} className="contents lg:block">
-                {d.category && d.category !== destinations[i - 1]?.category && (
-                  <div className="hidden lg:block text-[10px] uppercase tracking-wider text-slate-500 px-2 pt-3 pb-1">{d.category}</div>
-                )}
-                <DestinationButton active={filter === d.key} onClick={() => setFilter(d.key)} label={d.label} count={counts.get(d.key) ?? 0} warn={d.key === LEFT_OUT} />
-              </div>
+          <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-800/60 mb-3">
+            {([['todo', 'To review', pool.length], ['reviewed', 'Reviewed', reviewedList.length]] as const).map(([key, label, n]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={cn('rounded-lg px-2 py-1.5 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors', tab === key ? 'bg-[#f3e8d2] text-ink shadow-sm' : 'text-slate-400 hover:text-ink')}
+              >
+                {label} <span className="text-[11px] font-semibold text-slate-500">{n}</span>
+              </button>
             ))}
-            {(ignoredList.length > 0 || deniedList.length > 0) && (
-              <div className="contents lg:block">
-                <div className="hidden lg:block text-[10px] uppercase tracking-wider text-slate-500 px-2 pt-3 pb-1">Set aside</div>
-                {ignoredList.length > 0 && <DestinationButton active={filter === IGNORED} onClick={() => setFilter(IGNORED)} label="Ignored — next sync" count={ignoredList.length} muted />}
-                {deniedList.length > 0 && <DestinationButton active={filter === DENIED} onClick={() => setFilter(DENIED)} label="Denied" count={deniedList.length} muted />}
-              </div>
+          </div>
+          <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
+            {tab === 'todo' ? (
+              <>
+                <DestinationButton active={filter === ALL} onClick={() => setFilter(ALL)} label="Everything to review" count={pool.length} />
+                {destinations.map((d, i) => (
+                  <div key={d.key} className="contents lg:block">
+                    {d.category && d.category !== destinations[i - 1]?.category && (
+                      <div className="hidden lg:block text-[10px] uppercase tracking-wider text-slate-500 px-2 pt-3 pb-1">{d.category}</div>
+                    )}
+                    <DestinationButton active={filter === d.key} onClick={() => setFilter(d.key)} label={d.label} count={counts.get(d.key) ?? 0} warn={d.key === LEFT_OUT} />
+                  </div>
+                ))}
+              </>
+            ) : (
+              <>
+                <DestinationButton active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} label="All reviewed" count={reviewedList.length} />
+                {(['accepted', 'ignored', 'denied'] as const).map((st) => (
+                  <DestinationButton key={st} active={statusFilter === st} onClick={() => setStatusFilter(st)} label={STATUS_LABEL[st]} count={statusCounts[st]} muted={st !== 'accepted'} />
+                ))}
+                <div className="hidden lg:block text-[11px] text-slate-500 px-2 pt-3 leading-snug">Newest decision first. Open a card to change its decision, or bring it back to review.</div>
+              </>
             )}
           </div>
         </aside>
@@ -602,8 +645,8 @@ function ReviewBoard({
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <h3 className="text-ink font-semibold">{title}</h3>
             <span className="text-xs text-slate-500">{visible.length} card{visible.length === 1 ? '' : 's'}</span>
-            {filter === DENIED && <span className="text-xs text-slate-500">— hidden, and syncs won’t offer them again. Recover any you want after all.</span>}
-            {filter === IGNORED && <span className="text-xs text-slate-500">— hidden for now; the next sync offers them again.</span>}
+            {tab === 'reviewed' && statusFilter === 'denied' && <span className="text-xs text-slate-500">— hidden, and syncs won’t offer them again.</span>}
+            {tab === 'reviewed' && statusFilter === 'ignored' && <span className="text-xs text-slate-500">— hidden for now; the next sync offers them again.</span>}
             {visible.length > 0 && (
               <div className="ml-auto flex items-center gap-2">
                 <button
@@ -612,22 +655,14 @@ function ReviewBoard({
                 >
                   {selected.size === visible.length ? 'Clear selection' : 'Select all'}
                 </button>
-                {filter === DENIED ? (
-                  <button disabled={busy} onClick={() => bulk(visible.map((p) => ({ productId: p.productId, denied: false })))} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 text-ink hover:bg-slate-700 disabled:opacity-50 flex items-center gap-1.5">
-                    <RotateCcw size={13} /> Recover all ({visible.length})
-                  </button>
-                ) : filter === IGNORED ? (
-                  <button disabled={busy} onClick={() => bulk(visible.map((p) => ({ productId: p.productId, ignored: false })))} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 text-ink hover:bg-slate-700 disabled:opacity-50 flex items-center gap-1.5">
-                    <RotateCcw size={13} /> Review now instead ({visible.length})
-                  </button>
-                ) : visible.some((p) => !p.reviewed && p.setName) && (
+                {tab === 'todo' && toAccept.length > 0 && (
                   <button
                     disabled={busy}
-                    onClick={() => bulk(visible.filter((p) => !p.reviewed && p.setName).map((p) => ({ productId: p.productId, reviewed: true })))}
+                    onClick={() => bulk(toAccept.map((p) => ({ productId: p.productId, reviewed: true })))}
                     className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-50 flex items-center gap-1.5 shadow-sm"
                     style={{ background: ACCENT }}
                   >
-                    <Check size={13} /> Accept all ({visible.filter((p) => !p.reviewed && p.setName).length})
+                    <Check size={13} /> Accept all ({toAccept.length})
                   </button>
                 )}
               </div>
@@ -637,9 +672,11 @@ function ReviewBoard({
           {visible.length === 0 ? (
             <div className="py-24 text-center">
               <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: `${ACCENT}22`, color: ACCENT }}><Check size={22} /></div>
-              <div className="text-ink font-semibold">{filter === DENIED ? 'No denied cards' : filter === IGNORED ? 'Nothing ignored' : 'All caught up'}</div>
-              <div className="text-sm text-slate-400 mt-1">{doneCount === placements.length ? 'Every card from this sync is handled.' : 'Nothing left to review here.'}</div>
-              {doneCount === placements.length && (
+              <div className="text-ink font-semibold">{tab === 'reviewed' ? 'Nothing here yet' : 'All caught up'}</div>
+              <div className="text-sm text-slate-400 mt-1">
+                {tab === 'reviewed' ? 'Cards you accept, ignore or deny show up here, newest first.' : doneCount === placements.length ? 'Every card from this sync is handled.' : 'Nothing left to review here.'}
+              </div>
+              {tab === 'todo' && doneCount === placements.length && (
                 <button onClick={onClose} className="mt-4 text-sm font-semibold px-4 py-2 rounded-xl text-white" style={{ background: ACCENT }}>Back to Needs Review</button>
               )}
             </div>
@@ -656,12 +693,12 @@ function ReviewBoard({
                   selected={selected.has(p.productId)}
                   selecting={selected.size > 0}
                   busy={busy}
-                  showSet={filter === ALL || filter === IGNORED}
+                  showSet={tab === 'reviewed' || filter === ALL}
+                  decided={tab === 'reviewed' ? `${STATUS_LABEL[statusOf(p)]}${p.decidedAt ? ` · ${timeAgo(p.decidedAt)}` : ''}` : undefined}
                   onToggle={() => toggle(p.productId)}
                   onOpen={() => setFocusId(p.productId)}
                   onApprove={() => save([{ productId: p.productId, reviewed: true }])}
-                  onRecover={() => save([{ productId: p.productId, denied: false }])}
-                  onUnreview={() => save([{ productId: p.productId, reviewed: false }])}
+                  onBringBack={() => save([{ productId: p.productId, ...bringBack(p) }])}
                 />
               ))}
             </div>
@@ -673,15 +710,19 @@ function ReviewBoard({
       {selected.size > 0 && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 rounded-2xl bg-[#2a2018] text-[#f3e8d2] shadow-2xl px-3 py-2 border border-black/20">
           <span className="text-sm font-semibold px-2 whitespace-nowrap">{selected.size} selected</span>
-          {filter === DENIED ? (
-            <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, denied: false })))} className="text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" style={{ background: ACCENT }}>
-              <RotateCcw size={13} /> Recover
-            </button>
-          ) : (
-            <button disabled={busy || !selectedPlacements.some((p) => p.setName)} onClick={() => bulk(selectedPlacements.filter((p) => p.setName).map((p) => ({ productId: p.productId, reviewed: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" style={{ background: ACCENT }}>
-              <Check size={13} /> Accept
+          {tab === 'reviewed' && (
+            <button disabled={busy} onClick={() => bulk(selectedPlacements.map((p) => ({ productId: p.productId, ...bringBack(p) })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" title="Back to To review, undecided">
+              <Undo2 size={13} /> Bring back
             </button>
           )}
+          <button
+            disabled={busy || !selectedPlacements.some((p) => p.setName || p.previousSetName)}
+            onClick={() => bulk(selectedPlacements.filter((p) => p.setName || p.previousSetName).map((p) => (isDenied(p) ? { productId: p.productId, denied: false, setName: p.previousSetName ?? null, reviewed: true } : { productId: p.productId, reviewed: true })))}
+            className="text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap"
+            style={{ background: ACCENT }}
+          >
+            <Check size={13} /> Accept
+          </button>
           <div className="relative">
             <button disabled={busy} onClick={() => setMoveMenu((v) => !v)} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
               <FolderInput size={13} /> Accept into…
@@ -690,27 +731,18 @@ function ReviewBoard({
               <SetMenu
                 categories={categories}
                 sets={registry.sets}
-                onPick={(setName: string) => bulk(selectedIds.map((productId) => (filter === DENIED ? { productId, denied: false, setName, reviewed: true } : { productId, setName, reviewed: true })))}
+                onPick={(setName: string) => bulk(selectedPlacements.map((p) => (isDenied(p) ? { productId: p.productId, denied: false, setName, reviewed: true } : { productId: p.productId, setName, reviewed: true })))}
                 onNewSet={(category) => { setMoveMenu(false); setNewSetFor({ ids: selectedIds, category }) }}
                 onClose={() => setMoveMenu(false)}
               />
             )}
           </div>
-          {filter !== DENIED && filter !== IGNORED && (
-            <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, ignored: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" title="Not sure — hide for now, ask again next sync">
-              <Clock size={13} /> Ignore
-            </button>
-          )}
-          {filter !== DENIED && selectedPlacements.some((p) => p.reviewed && !isDenied(p)) && (
-            <button disabled={busy} onClick={() => bulk(selectedPlacements.filter((p) => p.reviewed && !isDenied(p)).map((p) => ({ productId: p.productId, reviewed: false })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
-              <Undo2 size={13} /> Unaccept
-            </button>
-          )}
-          {filter !== DENIED && (
-            <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, denied: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-500/80 hover:bg-red-500 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
-              <Ban size={13} /> Deny
-            </button>
-          )}
+          <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, ignored: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap" title="Not sure — hide for now, ask again next sync">
+            <Clock size={13} /> Ignore
+          </button>
+          <button disabled={busy} onClick={() => bulk(selectedIds.map((productId) => ({ productId, denied: true })))} className="text-xs font-semibold px-3 py-2 rounded-xl bg-red-500/80 hover:bg-red-500 flex items-center gap-1.5 disabled:opacity-50 whitespace-nowrap">
+            <Ban size={13} /> Deny
+          </button>
           <button onClick={() => setSelected(new Set())} title="Clear selection" className="p-2 rounded-xl hover:bg-white/10"><X size={14} /></button>
         </div>
       )}
@@ -736,7 +768,7 @@ function ReviewBoard({
           onRename={(displayName) => save([{ productId: focus.productId, displayName }])}
           riotArt={riotArtOf(focus)}
           onImage={(image) => save([{ productId: focus.productId, image }])}
-          onUnreview={() => save([{ productId: focus.productId, reviewed: false }])}
+          onUnreview={() => actOnFocus(bringBack(focus))}
           onNewSet={(onCreated, category) => setNewSetFor({ ids: [focus.productId], onCreated, category })}
         />
       )}
@@ -766,7 +798,7 @@ function DestinationButton({ active, onClick, label, count, warn, muted }: { act
 }
 
 function CardTile({
-  placement: p, name, denied, image, price, selected, selecting, busy, showSet, onToggle, onOpen, onApprove, onRecover, onUnreview,
+  placement: p, name, denied, image, price, selected, selecting, busy, showSet, decided, onToggle, onOpen, onApprove, onBringBack,
 }: {
   placement: Placement
   name: string
@@ -780,8 +812,8 @@ function CardTile({
   onToggle: () => void
   onOpen: () => void
   onApprove: () => void
-  onRecover: () => void
-  onUnreview: () => void
+  onBringBack: () => void
+  decided?: string // Reviewed tab: "Accepted · 2 min ago"
 }) {
   return (
     <div className="group">
@@ -826,26 +858,15 @@ function CardTile({
         >
           <Check size={14} />
         </button>
-        {/* Quick recover */}
-        {denied && !selecting && (
+        {/* Bring a decided card back to review */}
+        {(p.reviewed || p.ignored || denied) && !selecting && (
           <button
             disabled={busy}
-            onClick={(e) => { e.stopPropagation(); onRecover() }}
-            title="Recover — use this card after all"
+            onClick={(e) => { e.stopPropagation(); onBringBack() }}
+            title="Bring back — undecided, back in To review"
             className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
           >
-            <RotateCcw size={12} /> Recover
-          </button>
-        )}
-        {/* Undo a review */}
-        {p.reviewed && !denied && !selecting && (
-          <button
-            disabled={busy}
-            onClick={(e) => { e.stopPropagation(); onUnreview() }}
-            title="Unaccept — back to review"
-            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
-          >
-            <Undo2 size={12} /> Unaccept
+            <Undo2 size={12} /> Bring back
           </button>
         )}
         {/* Quick approve */}
@@ -869,6 +890,9 @@ function CardTile({
           <span className="truncate">{p.number}{denied && p.previousSetName ? ` · was ${p.previousSetName}` : showSet ? ` · ${p.setName ?? 'Couldn’t place'}` : ''}</span>
           {!!price && <span className="font-semibold text-slate-400 shrink-0">{formatCurrency(price)}</span>}
         </div>
+        {decided && (
+          <div className={cn('mt-1 text-[11px] font-semibold', denied ? 'text-red-700' : p.ignored ? 'text-slate-500' : 'text-emerald-700')}>{decided}</div>
+        )}
       </div>
     </div>
   )

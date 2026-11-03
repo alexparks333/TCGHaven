@@ -88,6 +88,8 @@ export interface RiftboundPlacement {
   // The picture staff chose for it: TCGplayer's photo, Riot's art for the same card, or none.
   // Unset = TCGplayer's photo when there is one, else Riot's art.
   image?: 'tcgplayer' | 'riot' | 'none'
+  // When staff last accepted / ignored / denied / moved it (unset while it's waiting for review)
+  decidedAt?: string
 }
 
 // One Piece has no live external "sets" API (unlike Pokemon) and no group-name-matching

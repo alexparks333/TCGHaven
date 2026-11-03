@@ -85,6 +85,7 @@ export async function POST(request: Request) {
   for (const change of changes) {
     const p = placements.find((x) => x.productId === change.productId)
     if (!p) return NextResponse.json({ error: `No placement for TCGplayer product ${change.productId}` }, { status: 404 })
+    const decisionBefore = `${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}`
     if (typeof change.setName === 'string' && !setByName.has(change.setName)) {
       return NextResponse.json({ error: `No Riftbound set named "${change.setName}"` }, { status: 404 })
     }
@@ -134,6 +135,10 @@ export async function POST(request: Request) {
       touched.set(p.productId, t)
     }
     if (change.reviewed !== undefined) p.reviewed = change.reviewed
+    // When staff last decided on it (accept / ignore / deny / move) — the Reviewed tab's order.
+    // Back in the review queue = no decision.
+    if (!p.reviewed && !p.denied && !p.ignored) delete p.decidedAt
+    else if (`${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}` !== decisionBefore) p.decidedAt = new Date().toISOString()
   }
   registry.riftbound.placements = placements
 
