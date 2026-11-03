@@ -5,14 +5,12 @@ import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgesInSet, badgeTier, chaptersOf, DEFAULT_TIERS, isMastered, nextTier, pinSize, tierFill, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
-import dynamic from 'next/dynamic'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_VIEWBOX } from './BadgePin'
 import { useTrimmedArt } from './trimmedArt'
+import { PinInspector, preloadPinInspector } from './pinInspectorLoader'
 
-// The 3D inspect view — three.js only loads when a pin is opened.
-const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 
 // The Haven Badges pin book (a profile's Badges tab) — modelled on the binders Disney pin traders
 // use: black felt pages full of pin holes, silver rings down the spine, page edges stacked on
@@ -391,6 +389,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
   const art = useTrimmedArt(def.imageUrl) // the art cropped to the pin, as BadgePin draws it — the masks follow it
+  useEffect(() => { preloadPinInspector() }, []) // the 3D view's code, so a click opens it at once
   // The pin shows once its first tier is reached, in that tier's look (Grayscale / Painted / Full)
   const tier = badgeTier(def, badges?.progress[def.id])
   const earnedAt = tier > 0 ? badges?.earned[def.id] ?? 1 : undefined

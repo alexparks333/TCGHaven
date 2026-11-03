@@ -7,6 +7,7 @@ import { badgesInSet, badgeTier, pinSize, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { preloadTrimmedArt } from './trimmedArt'
+import { preloadPinInspector } from './pinInspectorLoader'
 import { BadgeBook } from './BadgeBook'
 import { PhoneBook } from './PhoneBook'
 import { BadgePin } from './BadgePin'
@@ -359,7 +360,7 @@ function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBad
   // Every book's pin art starts loading while the shelf shows, so a book's holes and pins are
   // ready when it opens; pointing at a book moves its art to the front of the line.
   useEffect(() => { preloadTrimmedArt(catalog.badges.map((b) => b.imageUrl)) }, [catalog])
-  const preloadSet = (set: BadgeSet) => preloadTrimmedArt(badgesInSet(catalog, set.id).map((b) => b.imageUrl), true)
+  const preloadSet = (set: BadgeSet) => { preloadTrimmedArt(badgesInSet(catalog, set.id).map((b) => b.imageUrl), true); preloadPinInspector() }
   return (
     <div className={cn(intro && 'badge-shelf-in')}>
       <div className="text-sm text-slate-500 mb-4 flex items-center gap-1.5"><BookOpen size={15} />Pick a pin book to open it.</div>

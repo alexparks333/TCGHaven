@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import dynamic from 'next/dynamic'
+import { PinInspector } from './pinInspectorLoader'
 import { Plus, X, Box, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
@@ -11,7 +11,6 @@ import type { SharedBadges } from '@/lib/firebase/badges'
 import { BadgeSpot, FrameOrnament, PinholeFilter } from './BadgeBook'
 import { BadgePin } from './BadgePin'
 
-const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 
 // A profile's pin display: a velvet pad (the pin book's own velvet, gold-foil frame and brass
 // nameplates, in a leather border) with a few spots the owner fills with the earned pins they want

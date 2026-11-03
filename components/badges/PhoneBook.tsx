@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import dynamic from 'next/dynamic'
+import { PinInspector } from './pinInspectorLoader'
 import { ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgesInSet, badgeTier, chaptersOf, type BadgeDef, type BadgeSet } from '@/lib/badges'
@@ -12,7 +12,6 @@ import { badgeAsset } from '@/lib/badgeAssets'
 import { buildPages, PinPage, PinholeFilter, ROMAN, type Page } from './BadgeBook'
 import { BookCover, BookThickness } from './BadgeLibrary'
 
-const PinInspector = dynamic(() => import('./PinInspector'), { ssr: false })
 
 // The pin book on a phone held upright. A whole two-page spread on a narrow screen made every pin
 // tiny, so here the book fills the screen and you look at ONE page at a time:
