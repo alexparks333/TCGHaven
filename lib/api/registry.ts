@@ -129,7 +129,14 @@ export interface MtgRegistrySet {
 export interface SetRegistry {
   schemaVersion: number
   pokemon: { sets: PokemonRegistrySet[] }
-  lorcana: { groupOrder: string[]; sets: LorcanaRegistrySet[] }
+  lorcana: {
+    groupOrder: string[]
+    sets: LorcanaRegistrySet[]
+    // TCGplayer-only promo cards, reviewed on Needs Review exactly like Riftbound's (see
+    // catalog-sync.mjs's reviewTcgplayerPromos)
+    placements?: RiftboundPlacement[]
+    completedReviews?: Array<{ at: string; completedAt: string }>
+  }
   riftbound: {
     groupOrder: string[]
     sets: RiftboundRegistrySet[]

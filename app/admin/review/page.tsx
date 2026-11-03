@@ -11,7 +11,8 @@ export default function Page() {
         <p className="text-slate-400 text-sm mt-0.5">Sets and cards a sync found on its own, waiting for someone to confirm them.</p>
       </div>
       <div className="space-y-6">
-        <PlacementsReview />
+        <PlacementsReview game="riftbound" />
+        <PlacementsReview game="lorcana" />
         <div className="max-w-3xl">
           <NeedsReviewCard />
         </div>

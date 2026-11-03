@@ -17,11 +17,12 @@ export async function runLorcanaSync(): Promise<Response> {
   try {
     await ensureSignedIn()
 
-    invalidateRegistryCache() // we're about to append to it — always start from the live doc
+    const result = await downloadLorcana()
+    // Read after the download: it saves the promo review (lorcana.placements) itself, which this
+    // must not overwrite. Always the live doc — we're about to append to it.
+    invalidateRegistryCache()
     const registry = await loadSetRegistry()
     const knownNames = new Set(registry.lorcana.sets.map((s) => s.setName))
-
-    const result = await downloadLorcana()
     const newNames: string[] = result.setNames.filter((n: string) => !knownNames.has(n))
 
     if (newNames.length > 0) {
@@ -48,7 +49,7 @@ export async function runLorcanaSync(): Promise<Response> {
     const newRarities = findNewRarities(result.cards)
     const status = {
       ok: true, at: new Date().toISOString(), setCount: result.setNames.length,
-      newSets: newNames, newRarities,
+      newSets: newNames, newRarities, newPlacements: result.newPlacements ?? 0,
       totalBrokenImages: result.totalBrokenImages, newlyBrokenImages: result.newlyBrokenImages, newlyFixedImages: result.newlyFixedImages,
     }
     await recordSyncStatus('lorcana', status)

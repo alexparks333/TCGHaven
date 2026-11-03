@@ -251,6 +251,18 @@ Older browsers will not display these images. This is a lorcast limitation.
 Note: Set codes vary between lorcast (numeric like "5") and shorthand codes (like "SSK").
 The `setName` string is the canonical match key used everywhere in this app.
 
+### Lorcana promo review (2026-11-02)
+
+Only odd cards are reviewed — new regular sets and their cards arrive on their own. Lorcana's
+"odd" cards are Phase 3's TCGplayer-only promo products (`tcg-{productId}`, e.g. Disney Lorcana
+Promo Cards, D23, Illumineer's Quest). `reviewTcgplayerPromos('lorcana', …)` (catalog-sync.mjs)
+gives each a `registry.lorcana.placements` entry — same shape and Needs Review UI as Riftbound's
+(Accept / Ignore / Deny / move / rename / picture; per-sync nodes; Complete review), with no
+"Riot art" option and TCGplayer's name kept as-is. The first run recorded the 356 promos already
+in the catalog as an accepted, completed review. `sync/lorcana/sync.ts` reads the registry after
+the download (which saves the placements). Not reviewed yet: the few unmatched TCGplayer rows in
+real-set groups (Phase 3 skips a group that's mostly matched by lorcast).
+
 ### How New Lorcana Sets Are Added
 
 **Three ways to do this, in increasing order of manual effort:**

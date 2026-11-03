@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Loader2, Check, Plus, X, ChevronLeft, ChevronRight, ExternalLink, Ban, FolderInput, Sparkles,
@@ -9,7 +9,11 @@ import {
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { cn, formatCurrency } from '@/lib/utils'
+import { GAME_COLORS } from '@/lib/types'
 
+// One per game with promo review: Riftbound and Lorcana (see ReviewGame). Only odd cards come
+// here — promos and other TCGplayer-only products; new regular sets arrive on their own.
+//
 // New TCGplayer cards (staff portal → Needs Review): every Riftbound sync places promos and other
 // TCGplayer-only products into the set it thinks they belong to (catalog-sync.mjs's
 // discoverRiftboundProducts()). Each sync's finds are one review "node" (placements share that
@@ -48,8 +52,17 @@ interface RegistrySet {
 }
 
 interface RegistryResponse {
-  riftbound: { groupOrder: string[]; sets: RegistrySet[]; placements?: Placement[]; completedReviews?: Array<{ at: string; completedAt: string }> }
+  riftbound: ReviewSide
+  lorcana: ReviewSide
 }
+
+interface ReviewSide { groupOrder: string[]; sets: RegistrySet[]; placements?: Placement[]; completedReviews?: Array<{ at: string; completedAt: string }> }
+
+export type ReviewGame = 'riftbound' | 'lorcana'
+const GAME_LABEL: Record<ReviewGame, string> = { riftbound: 'Riftbound', lorcana: 'Lorcana' }
+// The game whose review this is, for the board, viewer and dialogs (portals keep context)
+const ReviewGameContext = createContext<ReviewGame>('riftbound')
+const useReviewGame = () => useContext(ReviewGameContext)
 
 interface CatalogCard {
   id: string
@@ -65,12 +78,12 @@ const ALL = '__all__'
 const LEFT_OUT = '__left_out__'
 const DENIED = '__denied__'
 const IGNORED = '__ignored__'
-const ACCENT = '#b5532f' // Riftbound
+const ACCENT = '#b5532f' // the review UI's accent (buttons, progress)
 
 const tcgPhotoUrl = (productId: number) => `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`
 // "Riftbound Organized Play Promotional Cards" → "Organized Play"
 const sourceLabel = (p: Placement) =>
-  (p.groupName ?? '').replace(/^riftbound:?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
+  (p.groupName ?? '').replace(/^(riftbound|disney lorcana):?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
 const numberSortKey = (n: string) => parseInt(n.replace(/^\D+/, ''), 10) || 0
 // Denied = staff don't want the card (hidden, never re-added by a sync). A card left out before
 // Deny existed (no set, already reviewed) counts too; an unreviewed one with no set is one the
@@ -107,7 +120,7 @@ function restoreChange(prev: Placement, now: Placement): Change {
 
 // The same change the server makes (app/api/set-registry/placements/route.ts), applied locally
 // so the board updates the moment you click; the server's answer then replaces it.
-function applyLocal(p: Placement, c: Change): Placement {
+function applyLocal(p: Placement, c: Change, game: ReviewGame): Placement {
   const n = { ...p }
   if (c.ignored === true && !n.ignored) { n.ignored = true; n.reviewed = false }
   else if (n.ignored && (c.ignored === false || c.reviewed === true || c.setName !== undefined || c.denied !== undefined)) n.ignored = false
@@ -116,7 +129,7 @@ function applyLocal(p: Placement, c: Change): Placement {
     n.denied = false; n.setName = c.setName !== undefined ? c.setName : n.previousSetName ?? null; delete n.previousSetName; n.reviewed = false; n.auto = false
   } else if (c.setName !== undefined && c.setName !== n.setName) { n.setName = c.setName; n.denied = false; n.auto = false }
   if (c.displayName !== undefined) {
-    if (c.displayName.trim() && c.displayName.trim() !== defaultCardName(n.name)) n.displayName = c.displayName.trim()
+    if (c.displayName.trim() && c.displayName.trim() !== defaultCardName(n.name, game)) n.displayName = c.displayName.trim()
     else delete n.displayName
   }
   if (c.image !== undefined) { if (c.image === 'auto') delete n.image; else n.image = c.image }
@@ -140,15 +153,16 @@ function describe(changes: Change[]): string {
   return `Accepted ${cards}`
 }
 
-// Same as placementDefaultName() in catalog-sync.mjs
-export function defaultCardName(tcgplayerName: string): string {
+// Same as placementDefaultName() in catalog-sync.mjs (Lorcana's promos keep TCGplayer's name)
+export function defaultCardName(tcgplayerName: string, game: ReviewGame = 'riftbound'): string {
+  if (game === 'lorcana') return tcgplayerName
   const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
   const parens = Array.from(tcgplayerName.matchAll(/\(([^)]*)\)/g)).map((m) => m[1].trim()).filter(Boolean)
   return `${base} (${parens.join(', ') || 'Promo'})`
 }
 
-export function PlacementsReview() {
-  const [registry, setRegistry] = useState<RegistryResponse['riftbound'] | null>(null)
+export function PlacementsReview({ game = 'riftbound' }: { game?: ReviewGame }) {
+  const [registry, setRegistry] = useState<ReviewSide | null>(null)
   const [cards, setCards] = useState<Map<string, CatalogCard>>(new Map())
   // Riot's gallery art by collector code ("013/298") — the "Riot art" picture option
   const [riotByCode, setRiotByCode] = useState<Map<string, string>>(new Map())
@@ -172,31 +186,31 @@ export function PlacementsReview() {
       fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       // The catalog copy of each placed card (`tcg-{productId}`) — its art is Riot's when
       // TCGplayer has no photo yet, plus its price.
-      fetch('/api/admin/catalog?game=riftbound').then((r) => (r.ok ? r.json() : [])),
+      fetch(`/api/admin/catalog?game=${game}`).then((r) => (r.ok ? r.json() : [])),
     ])
       .then(([reg, catalog]: [RegistryResponse | null, CatalogCard[]]) => {
-        setRegistry(reg?.riftbound ?? null)
+        setRegistry(reg?.[game] ?? null)
         const list = Array.isArray(catalog) ? catalog : []
         setCards(new Map(list.filter((c) => c.id.startsWith('tcg-')).map((c) => [c.id, c])))
         const riot = new Map<string, string>()
         for (const c of list) {
           const code = (c.publicCode ?? '').split('-').slice(1).join('-')
-          if (!c.id.startsWith('tcg-') && code && c.imageUrl?.includes('rgpub') && !riot.has(code)) riot.set(code, c.imageUrl)
+          if (game === 'riftbound' && !c.id.startsWith('tcg-') && code && c.imageUrl?.includes('rgpub') && !riot.has(code)) riot.set(code, c.imageUrl)
         }
         setRiotByCode(riot)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [game])
 
   // Sets and categories made elsewhere (the Catalog page, another tab) since this page loaded —
   // re-read when a sync's review opens and whenever you come back to the tab.
   const refreshRegistry = useCallback(() => {
     fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((reg: RegistryResponse | null) => { if (reg?.riftbound) setRegistry(reg.riftbound) })
+      .then((reg: RegistryResponse | null) => { if (reg?.[game]) setRegistry(reg[game]) })
       .catch(() => {})
-  }, [])
+  }, [game])
   useEffect(() => {
     window.addEventListener('focus', refreshRegistry)
     return () => window.removeEventListener('focus', refreshRegistry)
@@ -218,7 +232,7 @@ export function PlacementsReview() {
     const cardsBefore = cardsRef.current
     // Show it now — the server's answer replaces this, or the old state comes back on failure.
     const byId = new Map(changes.map((c) => [c.productId, c]))
-    setRegistry((r) => (r ? { ...r, placements: (r.placements ?? []).map((p) => (byId.has(p.productId) ? applyLocal(p, byId.get(p.productId)!) : p)) } : r))
+    setRegistry((r) => (r ? { ...r, placements: (r.placements ?? []).map((p) => (byId.has(p.productId) ? applyLocal(p, byId.get(p.productId)!, game) : p)) } : r))
     setCards((m) => {
       const next = new Map(m)
       for (const c of changes) {
@@ -227,7 +241,7 @@ export function PlacementsReview() {
         const p = before.get(c.productId)
         if (!card || !p) continue
         const upd = { ...card }
-        if (c.displayName !== undefined) upd.name = c.displayName.trim() || defaultCardName(p.name)
+        if (c.displayName !== undefined) upd.name = c.displayName.trim() || defaultCardName(p.name, game)
         if (c.image === 'none') upd.imageUrl = ''
         else if (c.image === 'tcgplayer') upd.imageUrl = tcgPhotoUrl(c.productId)
         else if (c.image === 'riot') upd.imageUrl = riotByCodeRef.current.get((card.publicCode ?? '').split('-').slice(1).join('-')) ?? upd.imageUrl
@@ -241,7 +255,7 @@ export function PlacementsReview() {
       const res = await adminFetch('/api/set-registry/placements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ changes }),
+        body: JSON.stringify({ game, changes }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
@@ -272,7 +286,7 @@ export function PlacementsReview() {
           for (const c of renamed) {
             const p = (data.placements as Placement[]).find((x) => x.productId === c.productId)
             const card = next.get(`tcg-${c.productId}`)
-            if (p && card) next.set(card.id, { ...card, name: p.displayName ?? defaultCardName(p.name) })
+            if (p && card) next.set(card.id, { ...card, name: p.displayName ?? defaultCardName(p.name, game) })
           }
           return next
         })
@@ -286,7 +300,7 @@ export function PlacementsReview() {
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [game])
 
   useEffect(() => {
     if (!undo) return
@@ -312,7 +326,7 @@ export function PlacementsReview() {
       const res = await adminFetch('/api/set-registry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ game: 'riftbound', setName: name, cardexGroup, newCardexGroup: isNewCategory }),
+        body: JSON.stringify({ game, setName: name, cardexGroup, newCardexGroup: isNewCategory }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
@@ -354,7 +368,7 @@ export function PlacementsReview() {
       const res = await adminFetch('/api/set-registry/placements', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(complete ? { completeReview: at } : { reopenReview: at }),
+        body: JSON.stringify(complete ? { game, completeReview: at } : { game, reopenReview: at }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
@@ -369,13 +383,13 @@ export function PlacementsReview() {
   }
 
   return (
-    <>
+    <ReviewGameContext.Provider value={game}>
       <section className="card-glass p-5">
         <div className="flex items-center gap-2 mb-1">
           <Sparkles size={18} style={{ color: ACCENT }} />
-          <h2 className="text-lg font-bold text-ink">New cards found by syncs</h2>
+          <h2 className="text-lg font-bold text-ink">New {GAME_LABEL[game]} promos found by syncs</h2>
         </div>
-        <p className="text-slate-400 text-sm mb-4">Each sync that found new TCGplayer cards waits here. Open one to accept, ignore or deny its cards, then complete it.</p>
+        <p className="text-slate-400 text-sm mb-4">Only odd cards come here — promos and other TCGplayer-only products (new regular sets arrive on their own). Open a sync to accept, ignore or deny its cards, then complete it.</p>
         {error && !openBatch && <div className="text-xs text-red-600 mb-3">{error}</div>}
         {activeBatches.length === 0 ? (
           <div className="text-sm text-slate-400 py-4">All caught up — every sync review is complete.</div>
@@ -398,7 +412,7 @@ export function PlacementsReview() {
                 {filedBatches.map((b) => (
                   <div key={b.at} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/30 px-3 py-2 text-sm">
                     <Check size={14} className="text-emerald-700 shrink-0" />
-                    <span className="text-ink font-medium">Riftbound · Sync · {syncTime(b.at)}</span>
+                    <span className="text-ink font-medium">{GAME_LABEL[game]} · Sync · {syncTime(b.at)}</span>
                     <span className="text-xs text-slate-500">{b.list.length} cards · completed {timeAgo(completedAt.get(b.at)!)}</span>
                     <div className="ml-auto flex items-center gap-1">
                       <button onClick={() => setOpenBatch(b.at)} className="text-xs px-2.5 py-1 rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800/60">Look again</button>
@@ -441,7 +455,7 @@ export function PlacementsReview() {
         </div>,
         document.body,
       )}
-    </>
+    </ReviewGameContext.Provider>
   )
 }
 
@@ -449,6 +463,7 @@ export function PlacementsReview() {
 function BatchNode({
   at, list, cards, busy, onOpen, onComplete,
 }: { at: string; list: Placement[]; cards: Map<string, CatalogCard>; busy: boolean; onOpen: () => void; onComplete: () => void }) {
+  const game = useReviewGame()
   const done = list.filter(isDone).length
   const accepted = list.filter((p) => p.reviewed && !isDenied(p) && !p.ignored).length
   const ignored = list.filter((p) => p.ignored).length
@@ -471,7 +486,7 @@ function BatchNode({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: ACCENT }}>Riftbound</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: GAME_COLORS[game] }}>{GAME_LABEL[game]}</span>
             {complete
               ? <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1"><Check size={12} /> Done</span>
               : <span className="text-[11px] font-semibold" style={{ color: ACCENT }}>{list.length - done} to review</span>}
@@ -528,7 +543,7 @@ function ReviewBoard({
 }: {
   at: string
   placements: Placement[]
-  registry: RegistryResponse['riftbound']
+  registry: ReviewSide
   cards: Map<string, CatalogCard>
   riotByCode: Map<string, string>
   busy: boolean
@@ -539,6 +554,7 @@ function ReviewBoard({
   onComplete: () => void
   onClose: () => void
 }) {
+  const game = useReviewGame()
   // Two tabs: "To review" (by where the sync put each card) and "Reviewed" (everything decided —
   // accepted, ignored, denied — newest decision first, to check or undo).
   const [tab, setTab] = useState<'todo' | 'reviewed'>('todo')
@@ -640,7 +656,7 @@ function ReviewBoard({
     ...(counts.has(LEFT_OUT) ? [{ key: LEFT_OUT, label: 'Couldn’t place', category: null as string | null }] : []),
     ...categories.flatMap((cat) => registry.sets.filter((s) => s.cardexGroup === cat && counts.has(s.setName)).map((s) => ({ key: s.setName, label: s.setName, category: cat as string | null }))),
   ]
-  const nameOf = (p: Placement) => cards.get(`tcg-${p.productId}`)?.name ?? p.displayName ?? defaultCardName(p.name)
+  const nameOf = (p: Placement) => cards.get(`tcg-${p.productId}`)?.name ?? p.displayName ?? defaultCardName(p.name, game)
   // The card's picture as the site has it — "" means it shows No Image
   const imageOf = (p: Placement) => {
     const card = cards.get(`tcg-${p.productId}`)
@@ -663,7 +679,7 @@ function ReviewBoard({
           </button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: ACCENT }}>Riftbound</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: GAME_COLORS[game] }}>{GAME_LABEL[game]}</span>
               <h2 className="text-lg font-bold text-ink">Sync · {syncTime(at)}</h2>
             </div>
             <div className="text-xs text-slate-500">Accept what’s right · Ignore to decide next sync · Deny to never see it again</div>
@@ -1080,6 +1096,7 @@ function FocusViewer({
   onImage: (image: ImageChoice | 'auto') => void
   onUnreview: () => void
 }) {
+  const game = useReviewGame()
   const [tcgOk, setTcgOk] = useState(true)
   // The set picked for this card — only a selection; nothing saves until Accept (or Deny).
   // Starts on where the card is (or, for a denied one, where it was).
@@ -1131,7 +1148,7 @@ function FocusViewer({
               <div className="grid grid-cols-3 gap-2">
                 {([
                   { key: 'tcgplayer', label: tcgOk ? 'TCGplayer' : 'TCGplayer (none yet)', src: tcgOk ? tcgPhotoUrl(p.productId) : NO_CARD_IMAGE, disabled: false },
-                  { key: 'riot', label: 'Riot art', src: riotArt ?? NO_CARD_IMAGE, disabled: !riotArt },
+                  ...(game === 'riftbound' ? [{ key: 'riot', label: 'Riot art', src: riotArt ?? NO_CARD_IMAGE, disabled: !riotArt }] as const : []),
                   { key: 'none', label: 'No image', src: NO_CARD_IMAGE, disabled: false },
                 ] as const).map((o) => (
                   <button
@@ -1155,7 +1172,7 @@ function FocusViewer({
               </div>
               {p.image && (
                 <button disabled={busy} onClick={() => onImage('auto')} className="mt-2 w-full text-[11px] text-slate-500 underline hover:text-ink">
-                  Back to automatic (TCGplayer’s photo when there is one, else Riot’s art)
+                  Back to automatic (TCGplayer’s photo{game === 'riftbound' ? ' when there is one, else Riot’s art' : ''})
                 </button>
               )}
             </div>
@@ -1294,6 +1311,7 @@ const NEW_CATEGORY = '__new_category__'
 function NewSetDialog({
   categories, initialCategory, busy, onCancel, onCreate,
 }: { categories: string[]; initialCategory?: string; busy: boolean; onCancel: () => void; onCreate: (name: string, category: string, isNew: boolean) => void }) {
+  const game = useReviewGame()
   const [name, setName] = useState('')
   const [group, setGroup] = useState(initialCategory && categories.includes(initialCategory) ? initialCategory : categories.includes('Promos') ? 'Promos' : categories[0] ?? NEW_CATEGORY)
   const [newCategory, setNewCategory] = useState('')
@@ -1318,7 +1336,7 @@ function NewSetDialog({
   return createPortal(
     <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4" onClick={onCancel}>
       <div className="w-full max-w-sm rounded-2xl bg-[#f3e8d2] border border-[#d6c49f] shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-ink font-semibold mb-3">New Riftbound set</h3>
+        <h3 className="text-ink font-semibold mb-3">New {GAME_LABEL[game]} set</h3>
         <label className="block text-xs text-slate-400 mb-1">Set name</label>
         <input
           ref={nameRef}

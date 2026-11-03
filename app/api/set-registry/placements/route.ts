@@ -27,7 +27,9 @@ export const dynamic = 'force-dynamic'
 
 // Same naming as placementDefaultName() in catalog-sync.mjs (duplicated across the runtime
 // boundary on purpose, like the other shared helpers there).
-function defaultName(tcgplayerName: string): string {
+// Lorcana's promo cards keep TCGplayer's name as-is (catalog-sync.mjs's Phase 3)
+function defaultName(tcgplayerName: string, game: ReviewGame = 'riftbound'): string {
+  if (game === 'lorcana') return tcgplayerName
   const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
   const parens = Array.from(tcgplayerName.matchAll(/\(([^)]*)\)/g)).map((m) => m[1].trim()).filter(Boolean)
   return `${base} (${parens.join(', ') || 'Promo'})`
@@ -63,11 +65,16 @@ async function riotArt(publicCode: string | undefined): Promise<string> {
   return all.find((c) => !c.id.startsWith('tcg-') && (c.publicCode ?? '').split('-').slice(1).join('-') === code)?.imageUrl ?? ''
 }
 
+// Games whose promo cards go through Needs Review: Riftbound (discoverRiftboundProducts) and
+// Lorcana (reviewTcgplayerPromos). `game` defaults to riftbound.
+type ReviewGame = 'riftbound' | 'lorcana'
+
 export async function POST(request: Request) {
   const unauthorized = await verifyAdminRequest(request)
   if (unauthorized) return unauthorized
 
   const body = await request.json().catch(() => null)
+  const game: ReviewGame = body?.game === 'lorcana' ? 'lorcana' : 'riftbound'
   const completeReview = typeof body?.completeReview === 'string' ? body.completeReview : null
   const reopenReview = typeof body?.reopenReview === 'string' ? body.reopenReview : null
   const changes = Array.isArray(body?.changes) ? (body.changes as Change[]) : completeReview || reopenReview ? [] : null
@@ -77,8 +84,9 @@ export async function POST(request: Request) {
 
   invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
   const registry = await loadSetRegistry()
-  const placements = registry.riftbound.placements ?? []
-  const setByName = new Map(registry.riftbound.sets.map((s) => [s.setName, s]))
+  const side = registry[game]
+  const placements = side.placements ?? []
+  const setByName = new Map((side.sets as Array<{ setName: string; setCode?: string; code?: string | null; tcgplayerOnly?: boolean; tcgplayerRarity?: string }>).map((s) => [s.setName, s]))
   const touched = new Map<number, { placement: RiftboundPlacement; moved: boolean; renamed: boolean; image: Change['image'] }>()
   const mark = (p: RiftboundPlacement, what: 'moved' | 'renamed') => {
     const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
@@ -127,7 +135,7 @@ export async function POST(request: Request) {
 
     if (change.displayName !== undefined) {
       const name = change.displayName.trim()
-      if (name && name !== defaultName(p.name)) p.displayName = name
+      if (name && name !== defaultName(p.name, game)) p.displayName = name
       else delete p.displayName
       mark(p, 'renamed')
     }
@@ -144,16 +152,16 @@ export async function POST(request: Request) {
     if (!p.reviewed && !p.denied && !p.ignored) delete p.decidedAt
     else if (`${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}` !== decisionBefore) p.decidedAt = new Date().toISOString()
   }
-  registry.riftbound.placements = placements
+  side.placements = placements
 
-  let completed = registry.riftbound.completedReviews ?? []
+  let completed = side.completedReviews ?? []
   if (completeReview) {
     const open = placements.filter((p) => p.addedAt === completeReview && !p.reviewed && !p.denied && !p.ignored)
     if (open.length) return NextResponse.json({ error: `${open.length} card${open.length === 1 ? ' is' : 's are'} still waiting for a decision` }, { status: 409 })
     completed = [...completed.filter((c) => c.at !== completeReview), { at: completeReview, completedAt: new Date().toISOString() }]
   }
   if (reopenReview) completed = completed.filter((c) => c.at !== reopenReview)
-  registry.riftbound.completedReviews = completed
+  side.completedReviews = completed
 
   await ensureAdminAuth()
   await saveSetRegistry(registry)
@@ -162,22 +170,26 @@ export async function POST(request: Request) {
   let changedCards = 0
   const images: Record<number, string> = {}
   for (const { placement: p, moved, renamed, image } of Array.from(touched.values())) {
-    const ref = doc(db, 'catalog', 'riftbound', 'cards', `tcg-${p.productId}`)
+    const ref = doc(db, 'catalog', game, 'cards', `tcg-${p.productId}`)
     const snap = await getDoc(ref)
     if (!snap.exists()) continue
     const set = p.setName ? setByName.get(p.setName) : null
     const patch: Record<string, unknown> = { updatedAt: serverTimestamp() }
     if (moved) {
-      if (set && !p.ignored) Object.assign(patch, { setName: set.setName, setCode: set.setCode, hidden: false, rarity: set.tcgplayerOnly ? set.tcgplayerRarity || 'Event Promo' : 'Promo' })
+      if (set && !p.ignored) {
+        Object.assign(patch, { setName: set.setName, hidden: false })
+        // Riftbound cards carry their set's code and a placement rarity; Lorcana promos keep theirs
+        if (game === 'riftbound') Object.assign(patch, { setCode: set.setCode, rarity: set.tcgplayerOnly ? set.tcgplayerRarity || 'Event Promo' : 'Promo' })
+      }
       else patch.hidden = true
     }
-    if (renamed) patch.name = p.displayName ?? defaultName(p.name)
+    if (renamed) patch.name = p.displayName ?? defaultName(p.name, game)
     if (image !== undefined) {
       const publicCode = snap.data().publicCode as string | undefined
       patch.imageUrl = image === 'none' ? ''
         : image === 'tcgplayer' ? await tcgPhotoIfAny(p.productId)
-        : image === 'riot' ? await riotArt(publicCode)
-        : (await tcgPhotoIfAny(p.productId)) || (await riotArt(publicCode))
+        : image === 'riot' ? (game === 'riftbound' ? await riotArt(publicCode) : '')
+        : (await tcgPhotoIfAny(p.productId)) || (game === 'riftbound' ? await riotArt(publicCode) : '')
       images[p.productId] = patch.imageUrl as string
     }
     await updateDoc(ref, patch)
@@ -186,7 +198,7 @@ export async function POST(request: Request) {
   // No snapshot rebuild here (it reads every card — that's what made each click take seconds):
   // the edits carry updatedAt, so every server's catalog cache picks them up through its normal
   // delta pull; this server's is just dropped so it reloads now. The next sync rewrites the snapshot.
-  if (changedCards > 0) invalidateCatalogCache('riftbound')
+  if (changedCards > 0) invalidateCatalogCache(game)
 
   return NextResponse.json({ ok: true, placements, completedReviews: completed, changedCards, images })
 }

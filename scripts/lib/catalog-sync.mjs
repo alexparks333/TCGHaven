@@ -877,7 +877,7 @@ export async function downloadLorcana() {
       const header = lines[0].map((h) => h.trim())
       const col = (name) => header.indexOf(name)
       const idx = {
-        productId: col('productId'), name: col('name'), imageUrl: col('imageUrl'),
+        productId: col('productId'), name: col('name'), imageUrl: col('imageUrl'), imageCount: col('imageCount'),
         extRarity: col('extRarity'), extNumber: col('extNumber'),
         marketPrice: col('marketPrice'), midPrice: col('midPrice'), subTypeName: col('subTypeName'),
       }
@@ -889,7 +889,8 @@ export async function downloadLorcana() {
         const get = (i) => (i >= 0 ? f[i]?.trim() ?? '' : '')
         const productId   = get(idx.productId)
         const name        = get(idx.name)
-        const imageUrl    = get(idx.imageUrl).replace('_200w.jpg', '_400w.jpg')
+        // Full-size photo, or '' when TCGplayer hasn't photographed it (that URL 403s forever)
+        const imageUrl    = tcgPhoto({ imageUrl: get(idx.imageUrl), imageCount: get(idx.imageCount) })
         const extRarity   = get(idx.extRarity) || 'Promo'
         const extNumber   = get(idx.extNumber)
         // marketPrice can be empty for low-volume promos; fall back to midPrice
@@ -920,6 +921,7 @@ export async function downloadLorcana() {
             imageUrl,
             marketPrice: 0,
             marketPriceFoil: 0,
+            _groupId: groupId, // for Needs Review (reviewTcgplayerPromos) — stripped before saving
           })
           added++
         }
@@ -935,16 +937,90 @@ export async function downloadLorcana() {
     }
   }))
 
-  // Merge promo cards into the main seen map
-  for (const [id, card] of promoByProductId) {
-    seen.set(id, card)
-  }
+  // Promo cards go through Needs Review (accept / ignore / deny / move / rename) before they're
+  // merged into the main seen map.
+  const review = await reviewTcgplayerPromos('lorcana', promoByProductId, tcgcsvGroups)
+  for (const card of review.cards) seen.set(card.id, card)
 
   const merged = [...seen.values()]
   merged.sort((a, b) =>
     a.setName.localeCompare(b.setName) || a.number.localeCompare(b.number, undefined, { numeric: true })
   )
-  return syncToFirestore('lorcana', merged)
+  const result = await syncToFirestore('lorcana', merged, { hideIds: review.hideIds, unhideIds: review.unhideIds })
+  return { ...result, newPlacements: review.newPlacements }
+}
+
+// ── Needs Review for a game's TCGplayer-only promo cards (Lorcana) ─────────────
+// Same review as Riftbound's placements (see discoverRiftboundProducts): every promo product a
+// sync builds straight from TCGplayer gets a `placements` entry in the registry for its game —
+// new ones land in that sync's review node on Needs Review (addedAt = this sync), placed in the
+// set the sync named (the TCGplayer group). Staff decide each one there:
+//   accepted → kept in its set (staff may have moved / renamed it, or chosen no picture)
+//   ignored  → hidden for now, and offered again (in the next sync's node) the next time it's seen
+//   denied   → hidden, and never offered again (stays in placements)
+// The first run records every promo already in the catalog as accepted, in one review that's
+// filed as completed, so switching this on doesn't drop hundreds of known cards on staff.
+async function reviewTcgplayerPromos(game, promoById, groups) {
+  const strip = (card) => { delete card._groupId; return card }
+  const registry = await loadRegistry()
+  const side = registry?.[game]
+  if (!side) return { cards: [...promoById.values()].map(strip), hideIds: [], unhideIds: [], newPlacements: 0 }
+
+  const firstRun = !Array.isArray(side.placements)
+  const placements = side.placements ?? []
+  const byProduct = new Map(placements.map((p) => [String(p.productId), p]))
+  const groupName = new Map(groups.map((g) => [g.groupId, g.setName]))
+  const nowIso = new Date().toISOString()
+  const cards = []
+  const hideIds = []
+  const unhideIds = []
+  let changed = false
+  let newPlacements = 0
+
+  for (const card of promoById.values()) {
+    const productId = card.id.replace(/^tcg-/, '')
+    let p = byProduct.get(productId)
+    if (!p) {
+      p = {
+        productId: Number(productId), groupId: card._groupId, groupName: groupName.get(card._groupId) ?? card.setName,
+        name: card.name, number: card.number, setName: card.setName,
+        auto: true, reviewed: firstRun, addedAt: nowIso,
+        ...(firstRun ? { decidedAt: nowIso } : {}),
+      }
+      placements.push(p)
+      byProduct.set(productId, p)
+      changed = true
+      if (!firstRun) newPlacements++
+    } else if (p.ignored) {
+      // "Ignore" = ask again next sync — this is it
+      Object.assign(p, { ignored: false, reviewed: false, auto: true, addedAt: nowIso })
+      delete p.decidedAt
+      unhideIds.push(card.id)
+      changed = true
+      newPlacements++
+    }
+    strip(card)
+    if (!p.setName || p.denied) { hideIds.push(card.id); continue }
+    card.setName = p.setName
+    if (p.displayName) card.name = p.displayName
+    if (p.image === 'none') card.imageUrl = ''
+    cards.push(card)
+  }
+  // Ignored ones not seen this run stay hidden until they are
+  for (const p of placements) if (p.ignored) hideIds.push(`tcg-${p.productId}`)
+
+  if (changed) {
+    const update = { [`${game}.placements`]: placements }
+    if (firstRun) update[`${game}.completedReviews`] = [...(side.completedReviews ?? []), { at: nowIso, completedAt: nowIso }]
+    try {
+      await updateDoc(doc(db, 'registry', 'main'), update)
+    } catch (err) {
+      console.warn(`   ⚠️  Couldn't save ${game} promo review to the registry: ${err.message}`)
+    }
+  }
+  if (firstRun) console.log(`   Promo review: recorded ${placements.length} existing promo cards as accepted (first run)`)
+  else if (newPlacements) console.log(`   🆕 ${newPlacements} promo card(s) waiting on Needs Review`)
+  return { cards, hideIds, unhideIds, newPlacements }
 }
 
 // ── Riftbound ─────────────────────────────────────────────────────────────────
