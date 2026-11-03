@@ -26,6 +26,7 @@ interface CatalogCard {
   source?: 'scraped' | 'manual'
   publicCode?: string
   notes?: string
+  priceSource?: string
 }
 
 // Whole-catalog name search across every set for a game, independent of whichever single set is
@@ -78,6 +79,7 @@ export async function GET(request: Request) {
       setCode: c.setCode,
       publicCode: c.publicCode,
       notes: c.notes,
+      priceSource: c.priceSource,
       rarity: c.rarity,
       imageUrl: c.imageUrl,
       marketPrice: c.marketPrice,

@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, FolderTree, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
+import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Check, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, FolderTree, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
 import {
   doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch,
 } from 'firebase/firestore'
@@ -40,6 +40,7 @@ interface CatalogCard {
   marketPriceFoil?: number
   isCustom?: boolean
   isHidden?: boolean
+  priceSource?: string // Pokémon backup prices: 'tcgplayer-backup' | 'cardmarket'
   // Set-level fact, not stored per card — populated client-side from the active set (browse
   // mode) or passed through by the whole-catalog search route (search mode, where rows span
   // multiple sets so it can't just be read off one shared "active set").
@@ -1001,6 +1002,31 @@ function SetInfoBar({
   )
 }
 
+// Whether a card's price updates itself. Every card a sync writes gets a fresh price each sync
+// (4×/day); a card added by hand (Add card → source: 'manual') is never touched by a sync, so its
+// price is whatever was typed in.
+const PRICE_SOURCE: Record<Game, string> = {
+  pokemon: 'TCGplayer', lorcana: 'lorcast', riftbound: 'TCGplayer', onepiece: 'TCGplayer', mtg: 'Scryfall',
+}
+
+function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {
+  const linked = !card.isCustom
+  const source = card.priceSource === 'cardmarket' ? 'Cardmarket (estimate)'
+    : card.priceSource === 'tcgplayer-backup' ? 'TCGplayer (backup lookup)'
+    : PRICE_SOURCE[game]
+  const title = linked
+    ? `Live price — updated from ${source} on every sync${card.marketPrice ? '' : ' (no price there yet)'}`
+    : 'Static price — added by hand, so no sync ever updates it'
+  return (
+    <div className={cn('mt-0.5 flex items-center gap-1 text-[10px] leading-none', linked ? 'text-emerald-700' : 'text-red-600')} title={title}>
+      <span className={cn('w-3 h-3 rounded-full flex items-center justify-center text-white', linked ? 'bg-emerald-600' : 'bg-red-500')}>
+        {linked ? <Check size={8} strokeWidth={3.5} /> : <X size={8} strokeWidth={3.5} />}
+      </span>
+      {linked ? source : 'Static'}
+    </div>
+  )
+}
+
 function DetailField({ label, value, mono, truncate }: { label: string; value: string; mono?: boolean; truncate?: boolean }) {
   return (
     <div className="min-w-0">
@@ -1129,6 +1155,7 @@ function CardTable({
                 <td className="px-3 py-2 text-slate-300">
                   {c.marketPrice ? `$${c.marketPrice.toFixed(2)}` : '—'}
                   {c.marketPriceFoil ? <span className="text-slate-500"> / ${c.marketPriceFoil.toFixed(2)} foil</span> : null}
+                  <PriceLink game={game} card={c} />
                 </td>
                 <td className="px-3 py-2 text-right">
                   {isAdmin ? (
