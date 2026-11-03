@@ -17,6 +17,8 @@ export const dynamic = 'force-dynamic'
 //   delete   { name }              — only when no set is in it
 //   reorder  { order: string[] }   — the categories, in Cardex order
 //   assign   { setName, category } — put a set in a category
+//   move     { setName, dir: -1|1 } — move a set up/down among its category's sets (the registry's
+//                                     set order is the order the Cardex lists them in)
 type CategoryGame = 'lorcana' | 'riftbound'
 
 export async function POST(request: Request) {
@@ -81,8 +83,19 @@ export async function POST(request: Request) {
       set.cardexGroup = category
       break
     }
+    case 'move': {
+      const i = sets.findIndex((s) => s.setName === clean(body.setName))
+      if (i === -1) return fail(`No ${game} set named "${clean(body.setName)}"`, 404)
+      const dir = body.dir === -1 ? -1 : 1
+      // The neighbour in the same category, in that direction
+      let j = i + dir
+      while (j >= 0 && j < sets.length && sets[j].cardexGroup !== sets[i].cardexGroup) j += dir
+      if (j < 0 || j >= sets.length) return fail('Already at the end of its category')
+      ;[sets[i], sets[j]] = [sets[j], sets[i]]
+      break
+    }
     default:
-      return fail('Unknown action — expected add, rename, delete, reorder or assign')
+      return fail('Unknown action — expected add, rename, delete, reorder, assign or move')
   }
 
   side.groupOrder = order

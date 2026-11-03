@@ -17,8 +17,11 @@ export const hasCategories = (game: Game): game is CategoryGame => game === 'lor
 
 interface CategoryState {
   order: string[]                       // categories in Cardex order (incl. ones only sets use)
-  setCategory: Map<string, string | null> // setName → category
+  setCategory: Map<string, string | null> // setName → category, in the registry's set order
 }
+
+// A set's place in the registry (= its place in the Cardex within its category)
+const rankOf = (state: CategoryState) => new Map(Array.from(state.setCategory.keys()).map((name, i) => [name, i]))
 
 export function useCategories(game: Game) {
   const [state, setState] = useState<CategoryState | null>(null)
@@ -68,6 +71,9 @@ export function groupSets<T extends { name: string; series?: string }>(
       if (cat && groups.has(cat)) groups.get(cat)!.push(s)
       else other.push(s)
     }
+    // Within a category: the order set in the Categories panel (the Cardex's order)
+    const rank = rankOf(categories)
+    for (const list of Array.from(groups.values())) list.sort((a, b) => (rank.get(a.name) ?? 1e9) - (rank.get(b.name) ?? 1e9))
     const out = Array.from(groups.entries()).filter(([, list]) => list.length > 0)
     if (other.length) out.push(['No category', other])
     return out
@@ -115,7 +121,9 @@ export function CategoriesPanel({
   const setsIn = useMemo(() => {
     const m = new Map<string, string[]>(categories.order.map((c) => [c, []]))
     const none: string[] = []
-    for (const name of setNames) {
+    const rank = rankOf(categories)
+    const ordered = [...setNames].sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9))
+    for (const name of ordered) {
       const cat = categories.setCategory.get(name)
       if (cat && m.has(cat)) m.get(cat)!.push(name)
       else none.push(name)
@@ -180,8 +188,14 @@ export function CategoriesPanel({
               </div>
               <div className="space-y-1">
                 {list.length === 0 && <div className="text-xs text-slate-600 italic px-1 py-2">Empty — move a set here, or delete it.</div>}
-                {list.map((name) => (
-                  <SetRow key={name} name={name} category={cat} categories={categories.order} busy={busy} onOpen={() => onOpenSet(name)} onMove={(to) => run({ action: 'assign', setName: name, category: to })} />
+                {list.map((name, k) => (
+                  <SetRow
+                    key={name} name={name} category={cat} categories={categories.order} busy={busy}
+                    onOpen={() => onOpenSet(name)}
+                    onMove={(to) => run({ action: 'assign', setName: name, category: to })}
+                    onUp={k > 0 ? () => run({ action: 'move', setName: name, dir: -1 }) : undefined}
+                    onDown={k < list.length - 1 ? () => run({ action: 'move', setName: name, dir: 1 }) : undefined}
+                  />
                 ))}
               </div>
             </div>
@@ -226,10 +240,19 @@ export function CategoriesPanel({
 }
 
 function SetRow({
-  name, category, categories, busy, onOpen, onMove,
-}: { name: string; category: string | null; categories: string[]; busy: boolean; onOpen: () => void; onMove: (to: string) => void }) {
+  name, category, categories, busy, onOpen, onMove, onUp, onDown,
+}: {
+  name: string; category: string | null; categories: string[]; busy: boolean
+  onOpen: () => void; onMove: (to: string) => void; onUp?: () => void; onDown?: () => void
+}) {
   return (
-    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-800/50 group">
+    <div className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 hover:bg-slate-800/50 group">
+      {category !== null && (
+        <div className="flex flex-col -my-1 opacity-50 group-hover:opacity-100">
+          <button disabled={busy || !onUp} onClick={onUp} className="p-0.5 rounded text-slate-500 hover:text-ink disabled:opacity-25" title="Move up"><ArrowUp size={11} /></button>
+          <button disabled={busy || !onDown} onClick={onDown} className="p-0.5 rounded text-slate-500 hover:text-ink disabled:opacity-25" title="Move down"><ArrowDown size={11} /></button>
+        </div>
+      )}
       <button onClick={onOpen} className="flex-1 min-w-0 text-left text-sm text-slate-300 hover:text-ink truncate" title="Open this set">{name}</button>
       <select
         disabled={busy}
