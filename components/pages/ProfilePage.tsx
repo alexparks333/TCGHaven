@@ -24,6 +24,7 @@ import {
   BIO_MAX, type Profile, type ProfilePrivacy, type Friendship,
 } from '@/lib/firebase/friends'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 // /profile — your profile, the page your friends see. You curate it: a short bio and what friends
 // may look at (Cardex, Badges). The Portfolio is never shown to anyone else.
@@ -589,7 +590,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cardImage(c.imageUrl, 'grid')} alt={c.name} loading="lazy" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center p-2 text-center text-[11px] font-semibold text-slate-400">{c.name}</div>
+              <div className="w-full h-full flex items-center justify-center p-2 text-center text-[11px] font-semibold text-slate-400"><CardName name={c.name} /></div>
             )}
             {c.slab && <SlabTileOverlay slab={c.slab} />}
             {c.copies > 1 && (

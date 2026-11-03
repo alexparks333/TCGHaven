@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 const RENDER_STEP = 50
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
@@ -674,7 +675,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-ink text-[15px] md:text-sm">{rep.name}</span>
+                          <span className="font-semibold text-ink text-[15px] md:text-sm"><CardName name={rep.name} /></span>
                           {rep.nexus && (
                             <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                               Nexus
@@ -856,7 +857,7 @@ export default function InventoryPage() {
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-ink text-[15px] md:text-sm">{card.name}</span>
+                        <span className="font-semibold text-ink text-[15px] md:text-sm"><CardName name={card.name} /></span>
                         {card.gradingCompany && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                             {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
@@ -961,7 +962,7 @@ export default function InventoryPage() {
                     <div className="w-12 h-[67px] bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500 flex-shrink-0">#{sellCard.number}</div>
                   )}
                   <div className="min-w-0">
-                    <div className="font-semibold text-ink text-sm truncate">{sellCard.name}</div>
+                    <div className="font-semibold text-ink text-sm truncate"><CardName name={sellCard.name} /></div>
                     <div className="text-xs text-slate-400 mt-0.5">{sellCard.set} · #{sellCard.number}</div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       {sellCard.isFoil ? '✨ Foil · ' : ''}{conditionLabel(sellCard)}

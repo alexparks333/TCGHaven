@@ -13,6 +13,7 @@ import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
@@ -499,7 +500,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm text-ink font-medium truncate">{result.name}</div>
+                      <div className="text-sm text-ink font-medium truncate"><CardName name={result.name} /></div>
                       <div className="text-xs text-slate-500 truncate">{result.setName} · #{result.number}</div>
                     </div>
                     {(() => {
@@ -825,7 +826,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
               <img src={cardImage(form.imageUrl, 'thumb')} alt={form.name} className="w-12 h-16 object-contain rounded" />
               <div>
-                <div className="text-sm font-medium text-ink">{form.name}</div>
+                <div className="text-sm font-medium text-ink"><CardName name={form.name} /></div>
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>
                 {form.game === 'riftbound' && form.nexus && (
                   <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-600 border border-blue-300 rounded px-1 py-0.5">Nexus</span>

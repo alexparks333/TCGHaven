@@ -11,6 +11,7 @@ import { conditionLabel, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 import { authFetch } from '@/lib/firebase/authFetch'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 type Range = '30d' | '90d' | '1y' | 'all'
 
@@ -103,7 +104,7 @@ export default function CardDetailPage() {
               <span className="text-xs font-bold px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>
                 {GAME_LABELS[card.game]}
               </span>
-              <h1 className="text-xl font-bold text-ink">{card.name}</h1>
+              <h1 className="text-xl font-bold text-ink"><CardName name={card.name} /></h1>
               {card.nexus && (
                 <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30 w-fit">
                   Nexus

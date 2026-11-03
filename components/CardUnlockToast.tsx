@@ -7,6 +7,7 @@ import { useStore } from '@/lib/store'
 import { GAME_COLORS, type Card } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 // Auto-dismiss timing — long enough to actually notice the reveal animation (which alone takes
 // ~1.4s, see globals.css's card-unlock-* keyframes) before it starts fading.
@@ -99,7 +100,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
             <PartyPopper size={12} />
             Card Unlocked!
           </div>
-          <div className="text-sm font-semibold text-ink leading-tight truncate">{card.name}</div>
+          <div className="text-sm font-semibold text-ink leading-tight truncate"><CardName name={card.name} /></div>
           <div className="text-xs text-slate-500 truncate">
             {card.set}{card.number && card.number !== 'N/A' ? ` · #${card.number}` : ''}
           </div>

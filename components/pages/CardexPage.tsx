@@ -15,6 +15,7 @@ import { catalogPrice } from '@/lib/pricing'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1537,7 +1538,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
             {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
             {card.marketPrice > 0 && (
@@ -1634,7 +1635,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
             {card.gradingCompany && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}</div>}
             {card.isFoil && <div className="text-[10px] text-amber-600 mt-0.5">✨ Foil</div>}
             <div className="text-[10px] text-emerald-600 mt-0.5">
@@ -2082,7 +2083,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             here instead (not `.card-glass`) blocks that regardless of how large the glow grows. */}
         {visible && (
           <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
-            <div className="text-base font-bold text-ink leading-tight">{d.name}</div>
+            <div className="text-base font-bold text-ink leading-tight"><CardName name={d.name} /></div>
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-xs text-slate-500">#{d.number}</span>
               {d.rarityLabel && (

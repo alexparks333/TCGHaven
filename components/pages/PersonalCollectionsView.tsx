@@ -27,6 +27,7 @@ import type { ZoomCardData } from './CardexPage'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 const RARITY_COLORS: Record<string, string> = {
   Common: '#7a6a55', Uncommon: '#5f7a32', Rare: '#5d6a55',
@@ -775,7 +776,7 @@ function AddCardToCollectionModal({
                   <div className="w-12 h-16 bg-slate-800 rounded-lg flex-shrink-0 flex items-center justify-center text-slate-600 text-xs">?</div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm text-ink font-medium truncate">{result.name}</div>
+                  <div className="text-sm text-ink font-medium truncate"><CardName name={result.name} /></div>
                   <div className="text-xs text-slate-500 truncate">{result.setName} · #{result.number}</div>
                 </div>
                 {added ? (
@@ -1017,7 +1018,7 @@ function PersonalCardTile({
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate">{card.name}</div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
             <div className="text-[10px] mt-0.5 text-slate-400">{card.setName}</div>
             {(card.marketPrice ?? 0) > 0 && <div className="text-[10px] text-slate-400 mt-0.5">${card.marketPrice!.toFixed(2)}</div>}
             {card.owned

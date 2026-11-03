@@ -10,6 +10,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { saveSoldCard, deleteSoldCard, saveCard } from '@/lib/firebase/db'
 import { cn } from '@/lib/utils'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
 
@@ -203,7 +204,7 @@ export default function SoldPage() {
                       {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-ink text-[15px] md:text-sm truncate">{card.name}</div>
+                      <div className="font-semibold text-ink text-[15px] md:text-sm truncate"><CardName name={card.name} /></div>
                       <div className="md:hidden text-xs text-slate-500 truncate">
                         {card.set} {card.isFoil && '✨'} · {conditionLabel(card)}
                       </div>

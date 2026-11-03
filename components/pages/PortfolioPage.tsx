@@ -12,6 +12,7 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
+import { CardName } from '@/components/CardName'
 
 type SortKey = 'pnl' | 'pnlAsc' | 'pnlPct' | 'pnlPctAsc' | 'value' | 'valueAsc' | 'name' | 'nameDesc'
 
@@ -389,7 +390,7 @@ export default function PortfolioPage() {
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-ink text-sm truncate">{c.name}</span>
+                      <span className="font-medium text-ink text-sm truncate"><CardName name={c.name} /></span>
                       {c.quantity > 1 && (
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 shrink-0">
                           ×{c.quantity}
@@ -515,7 +516,7 @@ export default function PortfolioPage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-semibold text-ink text-sm">{card.name}</span>
+                    <span className="font-semibold text-ink text-sm"><CardName name={card.name} /></span>
                     {card.quantity > 1 && (
                       <span className="hidden md:inline text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">
                         ×{card.quantity}
