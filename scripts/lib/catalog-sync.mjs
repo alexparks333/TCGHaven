@@ -36,6 +36,11 @@ import { EDITION_GROUPS, newPriceEntry, addPriceRow, legacyFields } from './poke
 import { writeCompressedSnapshot } from './snapshot-codec.mjs'
 import { JP_CATEGORY, JP_CATALOG, isSingleRow, jpCard, jpSetMeta, placeholderDates } from './pokemon-jp.mjs'
 
+// Every upstream read here must be live. Run inside a Next.js route (the Sync buttons, the cron),
+// a plain fetch() can be answered from Next's data cache — kept for a year — so a sync could see
+// last year's set lists and prices. Plain Node (npm run download-cards) ignores the option.
+const fetch = (url, options = {}) => globalThis.fetch(url, { cache: 'no-store', ...options })
+
 const firebaseApp = getApps().length === 0
   ? initializeApp({
       apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,

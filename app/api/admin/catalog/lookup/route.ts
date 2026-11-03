@@ -3,6 +3,9 @@ import { getRiftboundRegistrySets } from '@/lib/api/registry'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 import { parseCsvRecords } from '@/lib/csv'
 
+// Live lookups — never Next's data cache (it keeps a fetch for a year by default)
+export const fetchCache = 'force-no-store'
+
 export const dynamic = 'force-dynamic'
 
 // Best-effort external lookup for a card the catalog is missing, using the same sources

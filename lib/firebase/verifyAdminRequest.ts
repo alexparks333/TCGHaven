@@ -48,7 +48,7 @@ let certs: { keys: Record<string, string>; until: number } | null = null
 async function signingCerts(): Promise<Record<string, string> | null> {
   if (certs && Date.now() < certs.until) return certs.keys
   try {
-    const res = await fetch(CERTS_URL)
+    const res = await fetch(CERTS_URL, { cache: 'no-store' }) // cached above by its own max-age; Next's data cache would keep rotated-out certs for a year
     if (!res.ok) return null
     const maxAge = Number(/max-age=(\d+)/.exec(res.headers.get('cache-control') ?? '')?.[1] ?? 3600)
     certs = { keys: await res.json(), until: Date.now() + maxAge * 1000 }
@@ -87,6 +87,7 @@ async function lookupUid(idToken: string, apiKey: string): Promise<string | null
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
+      cache: 'no-store',
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -113,7 +114,7 @@ async function isStaff(uid: string, idToken: string): Promise<boolean> {
   try {
     const res = await fetch(
       `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/staff/${encodeURIComponent(uid)}`,
-      { headers: { Authorization: `Bearer ${idToken}` } },
+      { headers: { Authorization: `Bearer ${idToken}` }, cache: 'no-store' }, // a removed staff member must lose access at once
     )
     staff = res.ok
   } catch {

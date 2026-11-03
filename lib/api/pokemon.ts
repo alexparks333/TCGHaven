@@ -89,7 +89,7 @@ export async function searchPokemonCards(query: string, onlyId?: string, languag
   try {
     const res = await fetch(
       `${BASE_URL}/cards?q=name:"${encodeURIComponent(query)}*"&pageSize=20&orderBy=name`,
-      { headers: HEADERS }
+      { headers: HEADERS, cache: 'no-store' }
     )
     if (!res.ok) return []
     const data = await res.json()

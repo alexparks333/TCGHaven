@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
   let upstream: Response
   try {
-    upstream = await fetch(target.toString())
+    upstream = await fetch(target.toString(), { cache: 'no-store' })
   } catch (err) {
     return NextResponse.json({ error: `Fetch failed: ${(err as Error).message}` }, { status: 502 })
   }

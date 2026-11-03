@@ -61,7 +61,7 @@ export async function runRiftboundSync(): Promise<Response> {
     let anyNewGroupMatched = false
 
     if (needsGroupMatch.size > 0) {
-      const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS })
+      const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS, cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
         const groups = (data.results ?? []).map((g: { groupId: number; name: string }) => ({ groupId: g.groupId, name: g.name }))

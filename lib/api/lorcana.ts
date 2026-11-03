@@ -63,7 +63,7 @@ export async function searchLorcanaCards(query: string, onlyId?: string): Promis
   }
   // Fallback: live API
   try {
-    const res = await fetch(`${BASE}/cards/search?q=${encodeURIComponent(query)}&page_size=20`)
+    const res = await fetch(`${BASE}/cards/search?q=${encodeURIComponent(query)}&page_size=20`, { cache: 'no-store' })
     if (!res.ok) return []
     const data = await res.json()
     return data.results ?? data ?? []
@@ -75,7 +75,9 @@ export async function searchLorcanaCards(query: string, onlyId?: string): Promis
 export async function getLorcanaSets(): Promise<LorcanaSet[]> {
   let sets: LorcanaSet[]
   try {
-    const res = await fetch(`${BASE}/sets`)
+    // no-store: Next's data cache otherwise keeps this for a YEAR — new sets (Hyperia City) never
+    // appeared. getSetsForGame() already caches the result in memory.
+    const res = await fetch(`${BASE}/sets`, { cache: 'no-store' })
     if (!res.ok) sets = await getRegistryLorcanaSets()
     else {
       const data = await res.json()
