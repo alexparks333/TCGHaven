@@ -112,7 +112,8 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   to the next one switched on, not the whole badge. A hole ghosts in toward Grayscale (Grayscale at
   50% of 10 cards: 3 cards = 60% filled); an earned Grayscale/Painted pin has the next look rising
   over it from the bottom (`TierRise` in `BadgeBook.tsx`), starting again at 0 after each tier. The
-  hover bar reads "To Painted · 6 / 8". The phone book uses the same `BadgeSpot`.
+  hover card reads "To Painted · 6 / 8" over a bar of the whole badge split into one coloured
+  stretch per look (`TierBar`); the hole's ghost is drawn in the look it heads for (Grayscale). The phone book uses the same `BadgeSpot`.
 - **Badge Sets & the shelf** (`BADGE_SETS` in `lib/badges.ts`; each badge has a `set`): every set
   is its own pin book — one per game: Riftbound (holds Origins Overnumbered), Pokémon, Lorcana,
   One Piece, Magic. A book with no badges yet shows its `monogram` medallion and "Coming soon". `components/badges/BadgeLibrary.tsx` (Badges page + profile Badges tab)
