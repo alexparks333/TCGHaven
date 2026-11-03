@@ -456,7 +456,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           </span>
           </span>
         ) : (
-          <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={fill} />
+          <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
         )}
         {/* Grayscale or Painted: the next look rises over the pin from the bottom as it's collected */}
         {earnedAt && next > 0 && fill > 0 && (
@@ -483,9 +483,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
                 <span>{next ? `To ${TIER_NAMES[next]}` : isMe ? 'Your progress' : 'Progress'}</span>
                 <span>{have} / {next ? needNext : total} {def.slotNoun}</span>
               </span>
-              <span className="block h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                <span className="block h-full rounded-full bg-violet-600" style={{ width: `${(next ? fill : have / Math.max(1, total)) * 100}%` }} />
-              </span>
+              <TierBar def={def} have={have} total={total} />
             </span>
           )}
         </span>
@@ -494,7 +492,45 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   )
 }
 
-function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hovered: boolean; imageUrl?: string; art: string; progress: number }) {
+// The colour of each stretch of the hover bar: the look being collected toward in it
+const TIER_BAR = { 1: '#8d8a84', 2: '#7a3fc4', 3: '#c99a42' } as const
+
+// The hover card's bar: the whole badge, split into the stretch toward each look (Grayscale,
+// Painted, Full — looks switched off are skipped) in its own colour; the part collected is solid,
+// the rest faint. The last stretch, Full up to every card, is Full's colour.
+function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: number }) {
+  const t = def.tiers ?? DEFAULT_TIERS
+  const on = ([1, 2, 3] as const).filter((k) => !def.tiersOff?.includes(k))
+  const stops = on.map((k) => Math.ceil((t[k - 1] / 100) * total))
+  const top = on.length ? on[on.length - 1] : 3
+  const zones: { tier: 1 | 2 | 3; from: number; to: number }[] = on.map((k, i) => ({ tier: k, from: i ? stops[i - 1] : 0, to: stops[i] }))
+  if ((stops[stops.length - 1] ?? 0) < total) zones.push({ tier: top, from: stops[stops.length - 1] ?? 0, to: total })
+  const shown = zones.filter((z) => z.to > z.from)
+  return (
+    <>
+      <span className="flex h-1.5 gap-px rounded-full overflow-hidden">
+        {shown.map((z) => (
+          <span key={z.from} className="relative block h-full" style={{ flexGrow: z.to - z.from, flexBasis: 0, background: `${TIER_BAR[z.tier]}33` }}>
+            <span className="absolute inset-y-0 left-0 block" style={{ background: TIER_BAR[z.tier], width: `${Math.max(0, Math.min(1, (have - z.from) / (z.to - z.from))) * 100}%` }} />
+          </span>
+        ))}
+      </span>
+      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+        {on.map((k) => (
+          <span key={k} className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: TIER_BAR[k] }} />
+            {TIER_NAMES[k]} {stops[on.indexOf(k)]}
+          </span>
+        ))}
+      </span>
+    </>
+  )
+}
+
+// The ghost in the look it's heading for — Grayscale for most badges (the first look switched on)
+const GHOST_LOOK: Record<number, string> = { 1: 'grayscale(1) contrast(1.05)', 2: 'saturate(0.92) contrast(0.96)', 3: 'saturate(0.85)' }
+
+function PinHole({ size, hovered, imageUrl, art, tier, progress }: { size: number; hovered: boolean; imageUrl?: string; art: string; tier: BadgeTier; progress: number }) {
   // The pin's own shape pressed into the velvet: the
   // SVG filter #pinhole-inset (PinholeFilter) turns the art's outline into a tinted floor with an
   // inner shadow all round its edge (heavier at the top) and a faint lit lower edge.
@@ -515,7 +551,7 @@ function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hov
       {p > 0 && (
         <span
           className="pinhole-fill absolute inset-x-0 bottom-0 overflow-hidden pointer-events-none"
-          style={{ height: `${fill}%`, opacity: hovered ? 0.62 : 0.5 }}
+          style={{ height: `${fill}%`, opacity: hovered ? 0.62 : 0.5, filter: GHOST_LOOK[tier] }}
         >
           {/* the pin, anchored to the bottom so it doesn't move as the fill rises */}
           <span className="absolute inset-x-0 bottom-0 flex justify-center" style={{ height: size * 1.12 }}>

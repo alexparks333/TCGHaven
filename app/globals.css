@@ -652,13 +652,12 @@
 /* Picking the chapter that's already open: its title glints */
 @keyframes pinbook-title-flash { 0% { filter: brightness(1); } 30% { filter: brightness(1.8) drop-shadow(0 0 10px rgba(246, 220, 152, 0.8)); } 100% { filter: brightness(1); } }
 .pinbook-title-flash { animation: pinbook-title-flash 0.9s ease-out; }
-/* A badge partly collected: its pin ghosts in from the bottom (BadgeBook PinHole). The top edge of
+/* A badge partly collected: its pin ghosts in from the bottom, in the look it's heading for (BadgeBook PinHole). The top edge of
    the fill is softened, and it rises smoothly when progress changes. */
 .pinhole-fill {
   transition: height 0.9s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
   -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 6px), transparent);
   mask-image: linear-gradient(to top, #000 calc(100% - 6px), transparent);
-  filter: saturate(0.85);
 }
 .pinbook-leaf { transform-style: preserve-3d; z-index: 15; will-change: transform; }
 .pinbook-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
