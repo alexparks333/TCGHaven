@@ -323,6 +323,16 @@ would previously have silently succeeded regardless.
 
 ---
 
+### Text Key (styled keywords in card names)
+
+The Catalog page's **Text Key** button (top right, `components/admin/TextKeys.tsx`) edits a list of
+keywords — e.g. `(Nexus Promo)` → purple, slightly italic — stored in Firestore `registry/textKeys`
+(`{ keys: [{ id, text, color, bold, italic }] }`, public read / staff write via the registry rules).
+`lib/textKeys.ts` keeps one live listener per app session (cached in localStorage);
+`components/CardName.tsx` renders a name with its keys styled. Use `<CardName name={…} />` instead of
+`{card.name}` wherever a card's name is shown as text. Matching is case-insensitive and exact
+(longest key first); until the doc is first saved, `DEFAULT_TEXT_KEYS` applies.
+
 ## Personal Collections (vs. the Admin Catalog)
 
 `components/pages/PersonalCollectionsView.tsx` (a tab inside `/cardex`, backed by
