@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { loadSetRegistry, saveSetRegistry } from '@/lib/api/registry'
+import { loadSetRegistry, saveSetRegistry, invalidateRegistryCache } from '@/lib/api/registry'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 import { invalidateSetsCache } from '@/lib/api/search'
@@ -9,9 +9,14 @@ import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  // Public: cached by Vercel's CDN for a minute, refreshed in the background (staff edits show
-  // within a minute)
+export async function GET(request: Request) {
+  // `?fresh=<anything>` — the staff portal, right after an edit: straight from Firestore, never
+  // cached (a unique value also means Vercel's CDN can't answer from its copy). Everyone else:
+  // cached by Vercel's CDN for a minute, refreshed in the background (edits show within a minute).
+  if (new URL(request.url).searchParams.has('fresh')) {
+    invalidateRegistryCache()
+    return NextResponse.json(await loadSetRegistry(), { headers: { 'Cache-Control': 'no-store' } })
+  }
   return NextResponse.json(await loadSetRegistry(), { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=86400' } })
 }
 
@@ -33,6 +38,7 @@ export async function PUT(request: Request) {
   }
   const game: Game = gameRaw
 
+  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
   const registry = await loadSetRegistry()
   const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
   const idx = sets.findIndex((s) => s.setName === setName)
@@ -87,6 +93,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'cardexGroup is required for lorcana/riftbound sets' }, { status: 400 })
   }
 
+  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
   const registry = await loadSetRegistry()
 
   if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && cardexGroup) {
@@ -181,6 +188,7 @@ export async function DELETE(request: Request) {
   }
   const game: Game = gameRaw
 
+  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
   const registry = await loadSetRegistry()
   const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
   const idx = sets.findIndex((s) => s.setName === setName)

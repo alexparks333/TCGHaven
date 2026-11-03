@@ -26,7 +26,7 @@ export function useCategories(game: Game) {
   const load = useCallback(() => {
     if (!hasCategories(game)) { setState(null); return }
     // no-store: the public GET is CDN-cached for a minute
-    fetch('/api/set-registry', { cache: 'no-store' })
+    fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' }) // not the CDN-cached copy
       .then((r) => (r.ok ? r.json() : null))
       .then((reg) => {
         const side = reg?.[game]

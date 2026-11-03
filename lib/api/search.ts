@@ -293,12 +293,16 @@ async function searchCardsUncapped(game: Game, query: string, onlyId?: string, l
 // ── Sets ────────────────────────────────────────────────────────────────────
 
 const setsCache: Partial<Record<CatalogKey, SetOption[]>> = {}
+// invalidateSetsCache() only reaches the server that handled the write — on Vercel other warm
+// instances kept an old set list until they recycled, so the cache also expires on its own.
+const SETS_TTL_MS = 5 * 60 * 1000
+const setsCachedAt: Partial<Record<CatalogKey, number>> = {}
 const JP_SETS_TTL_MS = 10 * 60 * 1000
 let jpSetsFetchedAt = 0
 
 export async function getSetsForGame(game: Game, language?: Language): Promise<SetOption[]> {
   if (game === 'pokemon' && language === 'ja') return getJapanesePokemonSets()
-  if (setsCache[game]) return setsCache[game]!
+  if (setsCache[game] && Date.now() - (setsCachedAt[game] ?? 0) < SETS_TTL_MS) return setsCache[game]!
 
   let sets: SetOption[] = []
 
@@ -373,7 +377,7 @@ export async function getSetsForGame(game: Game, language?: Language): Promise<S
   }
 
   // Only cache non-empty results so a transient API failure doesn't stick
-  if (sets.length > 0) setsCache[game] = sets
+  if (sets.length > 0) { setsCache[game] = sets; setsCachedAt[game] = Date.now() }
   return sets
 }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getSetsForGame } from '@/lib/api/search'
+import { getSetsForGame, invalidateSetsCache } from '@/lib/api/search'
 import type { Game, Language } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -11,7 +11,12 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   const game = (req.nextUrl.searchParams.get('game') ?? 'pokemon') as Game
   const language = req.nextUrl.searchParams.get('lang') === 'ja' ? 'ja' as Language : undefined
+  // `?fresh=<anything>` — the staff portal right after adding/deleting a set: rebuilt now and never
+  // cached (a unique value also keeps Vercel's CDN from answering with its copy).
+  const fresh = req.nextUrl.searchParams.has('fresh')
+  if (fresh) invalidateSetsCache(game)
   const sets = await getSetsForGame(game, language)
+  if (fresh) return NextResponse.json(sets, { headers: { 'Cache-Control': 'no-store' } })
   // no-store: this route already owns its own freshness (getSetsForGame's in-memory cache,
   // invalidated correctly on writes) — the browser's own HTTP cache has no business adding a
   // second, un-invalidatable layer on top of that. Without this, an open tab can keep serving a

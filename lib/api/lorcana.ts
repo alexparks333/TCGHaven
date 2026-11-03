@@ -88,7 +88,12 @@ export async function getLorcanaSets(): Promise<LorcanaSet[]> {
   // Sets created via the Admin Catalog page ("source": "manual" in the registry) don't
   // exist on lorcast at all, so the live /sets call above will never include them — merge them
   // in here regardless of which branch above ran, or they'd never appear in the set picker.
-  const manualOnly = (await getLorcanaRegistrySets()).filter(
+  const registrySets = await getLorcanaRegistrySets()
+  // A release date staff set in the Admin Catalog wins over lorcast's — before this, the edit
+  // "saved" and then reverted on the next load because lorcast's date was always used.
+  const registryDate = new Map(registrySets.filter((s) => s.releaseDate).map((s) => [s.setName, s.releaseDate!]))
+  sets = sets.map((x) => (registryDate.has(x.name) ? { ...x, released_at: registryDate.get(x.name) } : x))
+  const manualOnly = registrySets.filter(
     (s) => s.source === 'manual' && !sets.some((x) => x.name === s.setName),
   )
   if (manualOnly.length > 0) {

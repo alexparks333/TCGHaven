@@ -24,6 +24,8 @@ interface CatalogCard {
   marketPriceFoil?: number
   hidden?: boolean
   source?: 'scraped' | 'manual'
+  publicCode?: string
+  notes?: string
 }
 
 // Whole-catalog name search across every set for a game, independent of whichever single set is
@@ -54,9 +56,12 @@ export async function GET(request: Request) {
   // real set code that lines up with SetOption.code.
   const releaseDateBySetKey = new Map<string, string>()
   for (const s of sets) releaseDateBySetKey.set(game === 'lorcana' ? s.name : s.code, s.releaseDate || '')
+  // Every game's cards carry their set's name, which (unlike One Piece's per-card print prefix in
+  // `set`) always matches the set list — tried first.
+  const releaseDateBySetName = new Map(sets.map((s) => [s.name, s.releaseDate || '']))
   function releaseDateFor(c: CatalogCard): string {
     const key = game === 'lorcana' ? c.setName : game === 'riftbound' ? (c.setCode ?? '') : (c.set ?? '')
-    return releaseDateBySetKey.get(key) || ''
+    return releaseDateBySetName.get(c.setName) || releaseDateBySetKey.get(key) || ''
   }
 
   // Same matching as the collector app's search (cardSearch.ts), minus its "fewer words" fallback —
@@ -70,6 +75,9 @@ export async function GET(request: Request) {
       name: c.name,
       number: c.number,
       setName: c.setName,
+      setCode: c.setCode,
+      publicCode: c.publicCode,
+      notes: c.notes,
       rarity: c.rarity,
       imageUrl: c.imageUrl,
       marketPrice: c.marketPrice,

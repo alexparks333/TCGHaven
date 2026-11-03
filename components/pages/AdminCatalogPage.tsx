@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, FolderTree, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
 import {
@@ -10,7 +10,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useStaff } from '@/components/admin/StaffAuthProvider'
 import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
 import { adminFetch } from '@/lib/firebase/authFetch'
-import { regenerateSnapshot, normNum } from '@/lib/api/catalog'
+import { regenerateSnapshot, refreshCatalogCaches, normNum } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game } from '@/lib/types'
@@ -331,7 +331,12 @@ export function CatalogBrowser() {
 
   // Whole-catalog search results are game-scoped and would otherwise show stale matches from
   // whatever game was active before switching tabs.
-  useEffect(() => { setGlobalQuery(''); setGlobalResults([]) }, [activeGame])
+  // Anything open belongs to the old game — an edit form left open would write into the new
+  // game's collection.
+  useEffect(() => {
+    setGlobalQuery(''); setGlobalResults([])
+    setEditingCard(null); setShowAddForm(false); setAddFormPrefill(null); setShowRawSourceCheck(false); setShowNewSetForm(false)
+  }, [activeGame])
 
   useEffect(() => {
     const q = globalQuery.trim()
@@ -353,7 +358,8 @@ export function CatalogBrowser() {
   // called by the set-registry POST route before this runs), so this refetch actually reflects it.
   function reloadSets(jumpToSetName?: string) {
     setLoadingSets(true)
-    fetch(`/api/sets?game=${activeGame}`)
+    // ?fresh: right after a write — not the CDN's (or the server's) cached list
+    fetch(`/api/sets?game=${activeGame}&fresh=${Date.now()}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : []))
       .then((data: SetOption[]) => {
         setSets(data)
@@ -367,15 +373,24 @@ export function CatalogBrowser() {
   // a plain function is a fresh reference every render, which would either need omitting from
   // the deps array (the exhaustive-deps lint warning this used to have) or, if added naively,
   // re-run the effect on every render since a new function reference never equals the last one.
+  // Only the latest request may fill the table — switching sets quickly used to let an earlier
+  // set's slower response land last and show its cards under the new set's name.
+  const loadSeq = useRef(0)
   const loadCards = useCallback(() => {
     if (!activeSet) return
+    const seq = ++loadSeq.current
     setLoadingCards(true)
+    setCards([])
     const setReleaseDate = activeSet.releaseDate
     fetch(`/api/admin/catalog?game=${activeGame}&set=${encodeURIComponent(activeSet.name)}`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: CatalogCard[]) => setCards(data.map((c) => ({ ...c, releaseDate: setReleaseDate }))))
-      .catch(() => {})
-      .finally(() => setLoadingCards(false))
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then((data: CatalogCard[]) => { if (seq === loadSeq.current) setCards(data.map((c) => ({ ...c, releaseDate: setReleaseDate }))) })
+      // A failed load used to leave the PREVIOUS set's cards on screen with no warning
+      .catch((err) => { if (seq === loadSeq.current) setActionError(`Couldn't load ${activeSet.name}'s cards (${(err as Error).message}) — is the server running?`) })
+      .finally(() => { if (seq === loadSeq.current) setLoadingCards(false) })
   }, [activeGame, activeSet])
 
   useEffect(() => {
@@ -403,7 +418,7 @@ export function CatalogBrowser() {
     setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: nextHidden } : c)))
     try {
       await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { hidden: nextHidden, updatedAt: serverTimestamp() })
-      await regenerateSnapshot(activeGame, db)
+      await refreshCatalogCaches(activeGame)
     } catch (err) {
       setCards((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: !nextHidden } : c)))
       setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, isHidden: !nextHidden } : c)))
@@ -439,7 +454,7 @@ export function CatalogBrowser() {
     setActionSuccess(null)
     try {
       await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
-      await regenerateSnapshot(activeGame, db)
+      await refreshCatalogCaches(activeGame)
     } catch (err) {
       setActionError(`Edit failed: ${(err as Error).message}`)
       return
@@ -489,6 +504,7 @@ export function CatalogBrowser() {
 
       setActionSuccess(`Deleted "${activeSet.name}" and ${snap.size} card${snap.size === 1 ? '' : 's'}.`)
       reloadSets()
+      reloadCategories()
     } catch (err) {
       setActionError(`Delete failed: ${(err as Error).message}`)
     } finally {
@@ -659,17 +675,19 @@ export function CatalogBrowser() {
           <span className="text-slate-500 text-sm flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading sets…</span>
         ) : (
           <select
-            value={activeSet?.code ?? ''}
-            onChange={(e) => setActiveSet(sets.find((s) => s.code === e.target.value) ?? null)}
+            // By name, not code: One Piece has dozens of sets with no code and some sharing one
+            // (ST22, ST29…), so picking by code opened the wrong set
+            value={activeSet?.name ?? ''}
+            onChange={(e) => setActiveSet(sets.find((s) => s.name === e.target.value) ?? null)}
             className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink"
           >
             {setSections
               ? setSections.map(([label, list]) => (
                   <optgroup key={label} label={label}>
-                    {list.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    {list.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
                   </optgroup>
                 ))
-              : sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+              : sets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
           </select>
         )}
         {isAdmin && hasCategories(activeGame) && (
@@ -679,14 +697,6 @@ export function CatalogBrowser() {
             title="Add, rename, reorder and delete the Cardex categories, and move sets between them"
           >
             <FolderTree size={14} /> Categories
-          </button>
-        )}
-        {isAdmin && (
-          <button
-            onClick={() => { setAddFormPrefill(null); setShowAddForm((v) => !v) }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-violet-600 text-white hover:bg-violet-500"
-          >
-            <Plus size={14} /> Add Missing Card
           </button>
         )}
         {isAdmin && (
@@ -747,7 +757,9 @@ export function CatalogBrowser() {
 
       {isAdmin && showNewSetForm && (
         <NewSetForm
+          key={activeGame}
           game={activeGame}
+          categories={hasCategories(activeGame) ? categories?.order ?? null : []}
           onSaved={(setName) => { setShowNewSetForm(false); reloadSets(setName); reloadCategories() }}
           onCancel={() => setShowNewSetForm(false)}
           onError={setActionError}
@@ -766,19 +778,11 @@ export function CatalogBrowser() {
         />
       )}
 
-      {isAdmin && showAddForm && activeSet && (
-        <AddCardForm
-          game={activeGame}
-          activeSet={activeSet}
-          prefill={addFormPrefill}
-          onSaved={() => { setShowAddForm(false); setAddFormPrefill(null); loadCards() }}
-          onError={setActionError}
-          onSetInfoUpdated={handleSetInfoUpdated}
-        />
-      )}
 
       {isAdmin && editingCard && (
         <EditCardForm
+          // Fresh form per card: without it, Edit on another card kept the first card's values
+          key={editingCard.id}
           game={activeGame}
           card={editingCard}
           onSave={(patch) => saveCardEdit(editingCard.id, patch)}
@@ -832,6 +836,21 @@ export function CatalogBrowser() {
               onCategory={(category) => categoryAction({ action: 'assign', setName: activeSet.name, category }).catch((err) => setActionError((err as Error).message))}
               onSaved={handleSetInfoUpdated}
               onError={setActionError}
+              addCardOpen={showAddForm}
+              onAddCard={isAdmin ? () => { setAddFormPrefill(null); setShowAddForm((v) => !v) } : undefined}
+            />
+          )}
+          {isAdmin && showAddForm && activeSet && (
+            <AddCardForm
+              // Fresh form per set: a form left open across a set switch carried the old set's release
+              // date (and fields) and saved them onto the new one
+              key={`${activeGame}:${activeSet.name}`}
+              game={activeGame}
+              activeSet={activeSet}
+              prefill={addFormPrefill}
+              onSaved={() => { setShowAddForm(false); setAddFormPrefill(null); loadCards() }}
+              onError={setActionError}
+              onSetInfoUpdated={handleSetInfoUpdated}
             />
           )}
           {loadingCards ? (
@@ -864,7 +883,7 @@ export function CatalogBrowser() {
 // registry-driven source of truth for their entire set list) but only custom Pokemon sets do
 // (official Pokemon sets come live from api.pokemontcg.io with nothing local to patch).
 function SetInfoBar({
-  game, activeSet, isAdmin, editable, category, onCategory, onSaved, onError,
+  game, activeSet, isAdmin, editable, category, onCategory, onSaved, onError, onAddCard, addCardOpen,
 }: {
   game: Game
   activeSet: SetOption
@@ -874,6 +893,9 @@ function SetInfoBar({
   onCategory: (category: string) => void
   onSaved: (patch: { releaseDate?: string }) => void
   onError: (msg: string | null) => void
+  // Adds a card to THIS set — the button lives here, on the set it adds to
+  onAddCard?: () => void
+  addCardOpen?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [releaseDate, setReleaseDate] = useState(activeSet.releaseDate || '')
@@ -931,7 +953,7 @@ function SetInfoBar({
             </button>
           )}
           {isAdmin && !editable && (
-            <span className="text-slate-600 text-[11px]">(sourced live from the official Pokémon TCG API, not editable here)</span>
+            <span className="text-slate-600 text-[11px]">(sourced live from {game === 'mtg' ? 'Scryfall' : 'the official Pokémon TCG API'}, not editable here)</span>
           )}
         </>
       )}
@@ -962,6 +984,18 @@ function SetInfoBar({
       )}
       {activeSet.isCustom && (
         <span className="text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
+      )}
+      {onAddCard && (
+        <button
+          onClick={onAddCard}
+          className={cn(
+            'ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold',
+            addCardOpen ? 'bg-slate-700 text-ink' : 'bg-violet-600 text-white hover:bg-violet-500',
+          )}
+          title={`Add a card the sync missed to ${activeSet.name}`}
+        >
+          {addCardOpen ? <X size={13} /> : <Plus size={13} />} {addCardOpen ? 'Close' : `Add card to ${activeSet.name}`}
+        </button>
       )}
     </div>
   )
@@ -1730,7 +1764,7 @@ function AddCardForm({
       if (existing.exists()) { onError(`A custom card with id "${id}" already exists`); return }
 
       await setDoc(cardRef, { ...card, id, hidden: false, source: 'manual', updatedAt: serverTimestamp() })
-      await regenerateSnapshot(game, db)
+      await refreshCatalogCaches(game)
 
       const trimmedDate = releaseDate.trim()
       if (setDateEditable && trimmedDate !== (activeSet.releaseDate || '')) {
@@ -1791,7 +1825,7 @@ function AddCardForm({
               title="This set's release date — saved to the set itself, not just this card"
               className={cn(FIELD_CLASS, 'w-full')} />
           ) : (
-            <div className="flex items-center px-2.5 py-2 text-slate-600" title="Sourced live from the official Pokémon TCG API, not editable here">
+            <div className="flex items-center px-2.5 py-2 text-slate-600" title={`Sourced live from ${game === 'mtg' ? 'Scryfall' : 'the official Pokémon TCG API'}, not editable here`}>
               Released {activeSet.releaseDate || 'unknown'}
             </div>
           )}
@@ -1854,7 +1888,7 @@ function AddCardForm({
 
 function EditCardForm({
   game, card, onSave, onCancel,
-}: { game: Game; card: CatalogCard; onSave: (patch: Record<string, unknown>) => void; onCancel: () => void }) {
+}: { game: Game; card: CatalogCard; onSave: (patch: Record<string, unknown>) => Promise<void>; onCancel: () => void }) {
   const [number, setNumber] = useState(card.number)
   const [name, setName] = useState(card.name)
   const [rarity, setRarity] = useState(card.rarity ?? '')
@@ -1868,7 +1902,7 @@ function EditCardForm({
   async function save() {
     if (!number || !name || imageBusy) return
     setSaving(true)
-    const patch: Record<string, unknown> = {
+    const next: Record<string, unknown> = {
       number,
       name,
       rarity: rarity || '',
@@ -1877,8 +1911,16 @@ function EditCardForm({
       marketPriceFoil: parseFloat(marketPriceFoil) || 0,
       notes: notes.trim() || '',
     }
+    // Only what was actually changed — a card opened from whole-catalog search arrives without
+    // some fields (notes), and writing every field back erased them.
+    const before: Record<string, unknown> = {
+      number: card.number, name: card.name, rarity: card.rarity ?? '', imageUrl: card.imageUrl ?? '',
+      marketPrice: card.marketPrice || 0, marketPriceFoil: card.marketPriceFoil || 0, notes: card.notes ?? '',
+    }
+    const patch = Object.fromEntries(Object.entries(next).filter(([k, v]) => v !== before[k]))
     try {
-      onSave(patch)
+      if (Object.keys(patch).length) await onSave(patch)
+      else onCancel()
     } finally {
       setSaving(false)
     }
@@ -1953,42 +1995,40 @@ function EditCardForm({
 // with tcgcsvGroupId/lorcastId left null, so a future sync never mistakes it for something it
 // should be overwriting — "Add Missing Card" is how it actually gets populated afterward.
 
+const NEW_CATEGORY = '__new_category__'
+
 function NewSetForm({
-  game, onSaved, onCancel, onError,
-}: { game: Game; onSaved: (setName: string) => void; onCancel: () => void; onError: (msg: string | null) => void }) {
+  game, categories, onSaved, onCancel, onError,
+}: {
+  game: Game
+  // The page's live category list (CatalogCategories' useCategories) — not a fresh read of
+  // /api/set-registry here, which is CDN-cached and only lists groupOrder (missing "Special" and
+  // anything just created).
+  categories: string[] | null
+  onSaved: (setName: string) => void
+  onCancel: () => void
+  onError: (msg: string | null) => void
+}) {
   // Pokemon, One Piece, and MTG all derive their Cardex groups automatically (Pokemon: live
   // `series` field; One Piece: set-code prefix; MTG: Scryfall's `set_type` — see CLAUDE.md quirk
   // #9), so a custom set in any of them has no cardexGroup to pick; it only needs a name (and
   // optionally a code/release date) to become addable/searchable in the catalog.
   const needsCardexGroup = game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg'
-  const [groupOrder, setGroupOrder] = useState<string[]>([])
-  const [loadingGroups, setLoadingGroups] = useState(needsCardexGroup)
+  const groupOrder = useMemo(() => categories ?? [], [categories])
+  const loadingGroups = needsCardexGroup && categories === null
   const [setName, setSetName] = useState('')
   const [code, setCode] = useState('')
   const [releaseDate, setReleaseDate] = useState('')
   const [cardexGroup, setCardexGroup] = useState('')
+  const [newCategory, setNewCategory] = useState('')
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (!needsCardexGroup) { setLoadingGroups(false); return }
-    let stale = false
-    setLoadingGroups(true)
-    fetch('/api/set-registry')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (stale || !data) return
-        const order: string[] = data[game]?.groupOrder ?? []
-        setGroupOrder(order)
-        setCardexGroup((prev) => prev || order[0] || '')
-      })
-      .catch(() => {})
-      .finally(() => { if (!stale) setLoadingGroups(false) })
-    return () => { stale = true }
-  }, [game, needsCardexGroup])
+  useEffect(() => { if (!cardexGroup && groupOrder.length) setCardexGroup(groupOrder[0]) }, [cardexGroup, groupOrder])
+  const isNewCategory = cardexGroup === NEW_CATEGORY
+  const category = isNewCategory ? newCategory.trim() : cardexGroup
 
   async function save() {
     if (!setName.trim()) { onError('Set name is required.'); return }
-    if (needsCardexGroup && !cardexGroup) { onError('Pick a Cardex group.'); return }
+    if (needsCardexGroup && !category) { onError(isNewCategory ? 'Name the new category.' : 'Pick a Cardex category.'); return }
     setSaving(true)
     onError(null)
     try {
@@ -1997,7 +2037,7 @@ function NewSetForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           game, setName: setName.trim(), code: code.trim(), releaseDate: releaseDate.trim(),
-          ...(needsCardexGroup ? { cardexGroup } : {}),
+          ...(needsCardexGroup ? { cardexGroup: category, newCardexGroup: isNewCategory } : {}),
         }),
       })
       const data = await res.json()
@@ -2026,15 +2066,25 @@ function NewSetForm({
           className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
         {needsCardexGroup && (
           loadingGroups ? (
-            <div className="flex items-center gap-1.5 text-slate-500"><Loader2 size={12} className="animate-spin" /> Loading groups…</div>
+            <div className="flex items-center gap-1.5 text-slate-500"><Loader2 size={12} className="animate-spin" /> Loading categories…</div>
           ) : (
-            <select
-              value={cardexGroup}
-              onChange={(e) => setCardexGroup(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200"
-            >
-              {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
+            <>
+              <label className="flex items-center gap-1.5 text-slate-500 col-span-2 sm:col-span-1">
+                Category
+                <select
+                  value={cardexGroup}
+                  onChange={(e) => setCardexGroup(e.target.value)}
+                  className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200"
+                >
+                  {groupOrder.map((g) => <option key={g} value={g}>{g}</option>)}
+                  <option value={NEW_CATEGORY}>New category…</option>
+                </select>
+              </label>
+              {isNewCategory && (
+                <input autoFocus placeholder="New category name" value={newCategory} onChange={(e) => setNewCategory(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-slate-200" />
+              )}
+            </>
           )
         )}
       </div>

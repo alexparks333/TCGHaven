@@ -153,7 +153,8 @@ export function PlacementsReview() {
   useEffect(() => {
     // no-store: the public GET is CDN-cached for a minute, and a review needs the current list
     Promise.all([
-      fetch('/api/set-registry', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
+      // ?fresh: not the CDN-cached copy
+      fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
       // The catalog copy of each placed card (`tcg-{productId}`) — its art is Riot's when
       // TCGplayer has no photo yet, plus its price.
       fetch('/api/admin/catalog?game=riftbound').then((r) => (r.ok ? r.json() : [])),

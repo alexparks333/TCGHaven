@@ -177,6 +177,26 @@ export async function regenerateSnapshot(game: CatalogKey, firestore: Firestore 
   }
 }
 
+/**
+ * After an Admin Catalog edit, hide or add — a write that stamps `updatedAt` — make every server
+ * see it, WITHOUT rebuilding the snapshot: regenerateSnapshot() reads the whole collection
+ * (~100k docs for MTG, ~20k Pokémon) on every click. Cold loads read the snapshot and then pull
+ * `updatedAt > asOf`, warm caches pull the same deltas within STALE_MS, and this server's cache
+ * is dropped now. The next sync rewrites the snapshot. Deletes still need regenerateSnapshot()
+ * (a deleted doc has no `updatedAt` to pull, so an old snapshot would bring it back).
+ */
+export async function refreshCatalogCaches(game: CatalogKey): Promise<void> {
+  invalidateCatalogCache(game)
+  if (typeof window !== 'undefined') {
+    const { adminFetch } = await import('@/lib/firebase/authFetch')
+    await adminFetch('/api/admin/catalog/invalidate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game }),
+    }).catch(() => {})
+  }
+}
+
 /** Reads catalog_meta/{game}.lastBulkSyncAt, or null if a bulk sync has never run. */
 export async function getLastBulkSyncAt(game: CatalogKey): Promise<Date | null> {
   const snap = await getDoc(doc(db, 'catalog_meta', game))

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { loadSetRegistry, saveSetRegistry } from '@/lib/api/registry'
+import { invalidateRegistryCache, loadSetRegistry, saveSetRegistry } from '@/lib/api/registry'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 import { invalidateSetsCache } from '@/lib/api/search'
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
   }
   const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
+  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
   const registry = await loadSetRegistry()
   const side = registry[game]
   const sets = side.sets as Array<{ setName: string; cardexGroup: string | null }>

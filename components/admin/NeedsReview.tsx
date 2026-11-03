@@ -44,7 +44,7 @@ export function NeedsReviewCard() {
 
   function load() {
     setLoading(true)
-    fetch('/api/set-registry')
+    fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' }) // not the CDN-cached copy
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setRegistry(data))
       .catch(() => {})

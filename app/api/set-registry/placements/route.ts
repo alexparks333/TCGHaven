@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { loadSetRegistry, saveSetRegistry, type RiftboundPlacement } from '@/lib/api/registry'
+import { invalidateRegistryCache, loadSetRegistry, saveSetRegistry, type RiftboundPlacement } from '@/lib/api/registry'
 import { loadCatalog, invalidateCatalogCache } from '@/lib/api/catalog'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
@@ -71,6 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Expected { changes: [{ productId: number, setName?, reviewed?, denied?, displayName? }] }' }, { status: 400 })
   }
 
+  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
   const registry = await loadSetRegistry()
   const placements = registry.riftbound.placements ?? []
   const setByName = new Map(registry.riftbound.sets.map((s) => [s.setName, s]))
