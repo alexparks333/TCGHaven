@@ -496,14 +496,13 @@ const TIER_BAR = { 1: '#8d8a84', 2: '#7a3fc4', 3: '#c99a42' } as const
 
 // The hover card's bar: the whole badge, split into the stretch toward each look (Grayscale,
 // Painted, Full — looks switched off are skipped) in its own colour; the part collected is solid,
-// the rest faint. The last stretch, Full up to every card, is Full's colour.
+// the rest faint. It ends at the top look (Full): nothing past it to collect toward.
 function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: number }) {
   const t = def.tiers ?? DEFAULT_TIERS
   const on = ([1, 2, 3] as const).filter((k) => !def.tiersOff?.includes(k))
   const stops = on.map((k) => Math.ceil((t[k - 1] / 100) * total))
-  const top = on.length ? on[on.length - 1] : 3
   const zones: { tier: 1 | 2 | 3; from: number; to: number }[] = on.map((k, i) => ({ tier: k, from: i ? stops[i - 1] : 0, to: stops[i] }))
-  if ((stops[stops.length - 1] ?? 0) < total) zones.push({ tier: top, from: stops[stops.length - 1] ?? 0, to: total })
+  if (!zones.length) zones.push({ tier: 3, from: 0, to: total }) // every look switched off: one bar to the whole badge
   const shown = zones.filter((z) => z.to > z.from)
   return (
     <>
