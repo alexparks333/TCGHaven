@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { badgesInSet, badgeTier, pinSize, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
+import { preloadTrimmedArt } from './trimmedArt'
 import { BadgeBook } from './BadgeBook'
 import { PhoneBook } from './PhoneBook'
 import { BadgePin } from './BadgePin'
@@ -355,6 +356,10 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
 // `away`: the book that's out (open, or flying) — its spot is left empty until it's put back
 function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBadges | null; full: boolean; onOpen: (set: BadgeSet, el: HTMLElement) => void; intro?: boolean; away?: string }) {
   const { catalog } = useBadgeCatalog()
+  // Every book's pin art starts loading while the shelf shows, so a book's holes and pins are
+  // ready when it opens; pointing at a book moves its art to the front of the line.
+  useEffect(() => { preloadTrimmedArt(catalog.badges.map((b) => b.imageUrl)) }, [catalog])
+  const preloadSet = (set: BadgeSet) => preloadTrimmedArt(badgesInSet(catalog, set.id).map((b) => b.imageUrl), true)
   return (
     <div className={cn(intro && 'badge-shelf-in')}>
       <div className="text-sm text-slate-500 mb-4 flex items-center gap-1.5"><BookOpen size={15} />Pick a pin book to open it.</div>
@@ -367,6 +372,9 @@ function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBad
               <button
                 data-book={set.id}
                 onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
+                onPointerEnter={() => preloadSet(set)}
+                onPointerDown={() => preloadSet(set)}
+                onFocus={() => preloadSet(set)}
                 style={away === set.id ? { visibility: 'hidden' } : undefined}
                 className="badge-book-tile group relative w-full max-w-[240px] aspect-[0.71] outline-none"
                 aria-label={`Open the ${set.name} pin book`}

@@ -109,12 +109,28 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   // Haven Badges (lib/badges.ts): recomputed whenever the collection changes; anything newly earned
   // is saved to shared_badges/{uid} (earned badges are kept for good). Skips writes when unchanged.
   const { catalog: badgeCatalog, loaded: badgeCatalogLoaded } = useBadgeCatalog()
-  const [myBadges, setMyBadges] = useState<SharedBadges | null>(null)
+  const [myBadges, setMyBadgesState] = useState<SharedBadges | null>(null)
   const savedBadges = useRef<SharedBadges | null>(null)
-  useEffect(() => { savedBadges.current = null; setMyBadges(null) }, [user])
+  const myBadgesRef = useRef(myBadges)
+  myBadgesRef.current = myBadges
+  // The last badges are kept on this device, so the pin books (and their progress) show at once
+  // on the next visit instead of waiting for the collection and a Firestore read.
+  const badgesKey = user ? `tcghaven-my-badges-${user.uid}` : null
+  const setMyBadges = useCallback((b: SharedBadges) => {
+    setMyBadgesState(b)
+    try { if (badgesKey) localStorage.setItem(badgesKey, JSON.stringify(b)) } catch { /* full or blocked — fine */ }
+  }, [badgesKey])
+  useEffect(() => {
+    savedBadges.current = null
+    let stored: SharedBadges | null = null
+    try { stored = badgesKey ? JSON.parse(localStorage.getItem(badgesKey) ?? 'null') : null } catch { /* corrupt — recomputed below */ }
+    setMyBadgesState(stored?.earned && stored?.progress ? stored : null)
+  }, [badgesKey])
   useEffect(() => {
     if (!user || dataLoading || !badgeCatalogLoaded) return
     let cancelled = false
+    // Progress straight from the collection, now (badges earned before join it once loaded)
+    setMyBadges(computeBadges(cards, savedBadges.current ?? { earned: myBadgesRef.current?.earned ?? {}, progress: {} }, badgeCatalog))
     const t = setTimeout(async () => {
       try {
         if (!savedBadges.current) {
@@ -133,7 +149,7 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       }
     }, 800)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [user, cards, dataLoading, badgeCatalog, badgeCatalogLoaded])
+  }, [user, cards, dataLoading, badgeCatalog, badgeCatalogLoaded, setMyBadges])
 
   const value = useMemo<FriendsContextValue>(() => {
     const uid = user?.uid ?? ''
