@@ -1977,6 +1977,7 @@ function EditCardForm({
   const [name, setName] = useState(card.name)
   const [rarity, setRarity] = useState(card.rarity ?? '')
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? '')
+  const priceLinked = !card.isCustom // live price from the sync (see PriceLink)
   const [marketPrice, setMarketPrice] = useState(card.marketPrice ? String(card.marketPrice) : '')
   const [marketPriceFoil, setMarketPriceFoil] = useState(card.marketPriceFoil ? String(card.marketPriceFoil) : '')
   const [notes, setNotes] = useState(card.notes ?? '')
@@ -2001,7 +2002,7 @@ function EditCardForm({
       number: card.number, name: card.name, rarity: card.rarity ?? '', imageUrl: card.imageUrl ?? '',
       marketPrice: card.marketPrice || 0, marketPriceFoil: card.marketPriceFoil || 0, notes: card.notes ?? '',
     }
-    const patch = Object.fromEntries(Object.entries(next).filter(([k, v]) => v !== before[k]))
+    const patch = Object.fromEntries(Object.entries(next).filter(([k, v]) => v !== before[k] && !(priceLinked && k.startsWith('marketPrice'))))
     try {
       if (Object.keys(patch).length) await onSave(patch)
       else onCancel()
@@ -2031,12 +2032,22 @@ function EditCardForm({
             className={cn(FIELD_CLASS, 'w-full')} />
           <input placeholder="Image URL (paste a link, or use the box →)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
             className={cn(FIELD_CLASS, 'w-full')} />
-          <div className="flex gap-2">
-            <input placeholder="Price" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)}
-              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
-            <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
-              className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
-          </div>
+          {/* A synced card's price comes from its source on every sync — not editable here (a typed
+              price would just be replaced). Only cards added by hand have a price to type. */}
+          {priceLinked ? (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
+              <span className="text-ink font-medium">{card.marketPrice ? `$${card.marketPrice.toFixed(2)}` : '—'}</span>
+              {!!card.marketPriceFoil && <span>/ ${card.marketPriceFoil.toFixed(2)} foil</span>}
+              <span className="ml-auto"><PriceLink game={game} card={card} /></span>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <input placeholder="Price" value={marketPrice} onChange={(e) => setMarketPrice(e.target.value)}
+                className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+              <input placeholder="Foil price" value={marketPriceFoil} onChange={(e) => setMarketPriceFoil(e.target.value)}
+                className={cn(FIELD_CLASS, 'flex-1 min-w-0')} />
+            </div>
+          )}
           <textarea
             placeholder="Keyword notes (optional) — e.g. &quot;error card&quot;, &quot;watch for reprint&quot;"
             value={notes}
