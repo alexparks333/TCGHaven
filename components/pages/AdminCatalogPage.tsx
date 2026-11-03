@@ -1070,9 +1070,15 @@ function EditCardModal({ onClose, children }: { onClose: () => void; children: R
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
+  // Centred over the page content, not the whole window — the staff sidebar takes the left side,
+  // so window-centred looked off to the left.
+  const [contentLeft] = useState(() => (typeof document === 'undefined' ? 0 : document.querySelector('main')?.getBoundingClientRect().left ?? 0))
+  const close = (e: React.MouseEvent) => { if (e.target === e.currentTarget) onClose() }
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto p-4 flex items-start justify-center" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="w-full max-w-3xl my-8 rounded-2xl bg-[#efe4cc] shadow-2xl [&>.card-glass]:mb-0">{children}</div>
+    <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto" onMouseDown={close}>
+      <div className="min-h-full flex items-center justify-center p-4" style={{ paddingLeft: contentLeft + 16 }} onMouseDown={close}>
+        <div className="w-full max-w-3xl rounded-2xl bg-[#efe4cc] shadow-2xl [&>.card-glass]:mb-0">{children}</div>
+      </div>
     </div>,
     document.body,
   )
