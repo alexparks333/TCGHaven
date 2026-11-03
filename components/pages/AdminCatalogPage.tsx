@@ -15,6 +15,8 @@ import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/sy
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game } from '@/lib/types'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { StaffModal } from '@/components/admin/StaffModal'
+import { CardName } from '@/components/CardName'
 import { CategoriesPanel, groupSets, hasCategories, useCategories } from '@/components/admin/CatalogCategories'
 
 interface SetOption {
@@ -834,7 +836,7 @@ export function CatalogBrowser() {
       {isAdmin && editingCard && (
         // A popup over the page — it used to open at the top of the page, off-screen when editing
         // a card further down the table, so Edit looked like it did nothing.
-        <EditCardModal onClose={() => setEditingCard(null)}>
+        <StaffModal onClose={() => setEditingCard(null)}>
           <EditCardForm
             // Fresh form per card: without it, Edit on another card kept the first card's values
             key={editingCard.id}
@@ -845,7 +847,7 @@ export function CatalogBrowser() {
             onSave={(patch) => saveCardEdit(editingCard.id, patch)}
             onCancel={() => setEditingCard(null)}
           />
-        </EditCardModal>
+        </StaffModal>
       )}
 
       {isSearchMode ? (
@@ -1084,27 +1086,6 @@ function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {
   )
 }
 
-function EditCardModal({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  useScrollLock()
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  // Centred over the page content, not the whole window — the staff sidebar takes the left side,
-  // so window-centred looked off to the left.
-  const [contentLeft] = useState(() => (typeof document === 'undefined' ? 0 : document.querySelector('main')?.getBoundingClientRect().left ?? 0))
-  const close = (e: React.MouseEvent) => { if (e.target === e.currentTarget) onClose() }
-  return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/40 overflow-y-auto" onMouseDown={close}>
-      <div className="min-h-full flex items-center justify-center p-4" style={{ paddingLeft: contentLeft + 16 }} onMouseDown={close}>
-        <div className="w-full max-w-3xl rounded-2xl bg-[#efe4cc] shadow-2xl [&>.card-glass]:mb-0">{children}</div>
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
 function DetailField({ label, value, mono, truncate }: { label: string; value: string; mono?: boolean; truncate?: boolean }) {
   return (
     <div className="min-w-0">
@@ -1212,7 +1193,7 @@ function CardTable({
                   ) : <div className="w-8 h-11 bg-slate-800 rounded" />}
                 </td>
                 <td className="px-3 py-2 text-ink">
-                  {c.name}
+                  <CardName name={c.name} />
                   {c.isCustom && <span className="ml-2 text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>}
                   {c.isHidden && <span className="ml-2 text-[10px] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}
                   {c.notes && <StickyNote size={11} className="inline ml-2 text-amber-500 align-text-top" aria-label="Has notes" />}

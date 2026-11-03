@@ -1,42 +1,33 @@
-import { Fragment } from 'react'
+'use client'
 
-// Keywords in a card's name that the collector app draws in their own colour / font — e.g. the
-// "(Nexus Promo)" in "Jinx, Rebel (Nexus Promo)". Add a rule here to style another keyword
-// everywhere a card name is shown. Matching ignores case; the parentheses are styled with it.
-const NAME_KEYWORDS: Array<{ match: RegExp; style: React.CSSProperties }> = [
-  {
-    match: /\(?nexus promo\)?/gi,
-    // A real purple on purpose — the Tailwind palette maps `purple` to plum (tailwind.config).
-    // Slightly italic: a small skew, since the fonts' own italic leans too far.
-    style: { color: '#7a3fc4', display: 'inline-block', transform: 'skewX(-7deg)' },
-  },
-]
+import { Fragment, useMemo } from 'react'
+import { textKeyStyle, useTextKeys, type TextKey } from '@/lib/textKeys'
 
-// A card's name with its keywords styled. Drop-in for `{card.name}` — inherits everything else
-// (size, weight, truncate) from where it's placed.
-export function CardName({ name }: { name: string }) {
-  const parts: Array<{ text: string; style?: React.CSSProperties }> = [{ text: name }]
-  for (const rule of NAME_KEYWORDS) {
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i]
-      if (part.style) continue
-      const pieces: typeof parts = []
-      let last = 0
-      for (const m of Array.from(part.text.matchAll(rule.match))) {
-        if (m.index! > last) pieces.push({ text: part.text.slice(last, m.index) })
-        pieces.push({ text: m[0], style: rule.style })
-        last = m.index! + m[0].length
-      }
-      if (!pieces.length) continue
-      if (last < part.text.length) pieces.push({ text: part.text.slice(last) })
-      parts.splice(i, 1, ...pieces)
-      i += pieces.length - 1
-    }
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// A card's name with its Text Keys styled (lib/textKeys.ts) — e.g. the "(Nexus Promo)" in
+// "Jinx, Rebel (Nexus Promo)". Drop-in for `{card.name}`: inherits everything else (size,
+// weight, truncate) from where it's placed. `keys` overrides the live list (the editor's preview).
+export function CardName({ name, keys }: { name: string; keys?: TextKey[] }) {
+  const live = useTextKeys()
+  const list = keys ?? live
+  // One pattern for every key, longest first so "(1st Edition Holo)" beats "(1st Edition)"
+  const { pattern, byText } = useMemo(() => {
+    const usable = list.filter((k) => k.text.trim())
+    const byText = new Map(usable.map((k) => [k.text.trim().toLowerCase(), k]))
+    const sorted = Array.from(byText.keys()).sort((a, b) => b.length - a.length)
+    return { pattern: sorted.length ? new RegExp(sorted.map(escape).join('|'), 'gi') : null, byText }
+  }, [list])
+
+  if (!pattern) return <>{name}</>
+  const parts: React.ReactNode[] = []
+  let last = 0
+  for (const m of Array.from(name.matchAll(pattern))) {
+    if (m.index! > last) parts.push(<Fragment key={last}>{name.slice(last, m.index)}</Fragment>)
+    parts.push(<span key={`k${m.index}`} style={textKeyStyle(byText.get(m[0].toLowerCase())!)}>{m[0]}</span>)
+    last = m.index! + m[0].length
   }
-  if (parts.length === 1 && !parts[0].style) return <>{name}</>
-  return (
-    <>
-      {parts.map((p, i) => (p.style ? <span key={i} style={p.style}>{p.text}</span> : <Fragment key={i}>{p.text}</Fragment>))}
-    </>
-  )
+  if (!parts.length) return <>{name}</>
+  if (last < name.length) parts.push(<Fragment key={last}>{name.slice(last)}</Fragment>)
+  return <>{parts}</>
 }
