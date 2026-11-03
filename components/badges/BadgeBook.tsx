@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, chaptersOf, isMastered, nextTier, pinSize, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, chaptersOf, DEFAULT_TIERS, isMastered, nextTier, pinSize, tierFill, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import dynamic from 'next/dynamic'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -397,6 +397,10 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   const [have, total] = badges?.progress[def.id] ?? [0, def.slots.length]
   const mastered = isMastered(def, badges?.progress[def.id], !!badges?.earned[def.id]) && tier === 3
   const toNext = toNextTier(def, badges?.progress[def.id])
+  const next = nextTier(def, badges?.progress[def.id])
+  // Tiered: how far from this look to the next (not the whole badge) — the ghost fill and the bar
+  const fill = tierFill(def, badges?.progress[def.id])
+  const needNext = next ? Math.ceil(((def.tiers ?? DEFAULT_TIERS)[next - 1] / 100) * total) : total
   // An earned growing badge that has new cards since: how many to master it again
   const toMaster = def.growing && earnedAt && tier === 3 && !mastered ? Math.max(0, def.slots.length - have) : 0
 
@@ -452,7 +456,13 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           </span>
           </span>
         ) : (
-          <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={total ? have / total : 0} />
+          <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} progress={fill} />
+        )}
+        {/* Grayscale or Painted: the next look rises over the pin from the bottom as it's collected */}
+        {earnedAt && next > 0 && fill > 0 && (
+          <span className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden>
+            <TierRise size={pinSize(def, pin)} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
+          </span>
         )}
       </span>
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
@@ -470,11 +480,11 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           {(tier < 3 || toMaster > 0) && (
             <span className="block mt-2">
               <span className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1">
-                <span>{isMe ? 'Your progress' : 'Progress'}</span>
-                <span>{have} / {total} {def.slotNoun}</span>
+                <span>{next ? `To ${TIER_NAMES[next]}` : isMe ? 'Your progress' : 'Progress'}</span>
+                <span>{have} / {next ? needNext : total} {def.slotNoun}</span>
               </span>
               <span className="block h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                <span className="block h-full rounded-full bg-violet-600" style={{ width: `${(have / Math.max(1, total)) * 100}%` }} />
+                <span className="block h-full rounded-full bg-violet-600" style={{ width: `${(next ? fill : have / Math.max(1, total)) * 100}%` }} />
               </span>
             </span>
           )}
@@ -492,12 +502,10 @@ function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hov
   const src = trimmed
     ? `url("${trimmed.src}")`
     : `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='${PIN_VIEWBOX}'><path d='${PIN_SILHOUETTE}'/></svg>`)}")`
-  // Progress: the pin fills in from the bottom as a ghost (half opacity) — 2 of 12 cards shows its
-  // bottom sixth. The fill is measured over the art itself: uploaded art (cropped to the pin) is
-  // fitted and centred in the 100 × 112 box; the built-in pins fill the box.
+  // Progress toward the first look (lib/badges.ts tierFill): the pin fills in from the bottom as a
+  // ghost (half opacity) — Grayscale at 50% of 10 cards, 3 cards shows 60% of it.
   const p = Math.max(0, Math.min(1, progress))
-  const artTop = trimmed ? (1.12 - Math.min(1.12, trimmed.aspect)) / 2 / 1.12 : 0 // fraction of the box above/below the art
-  const fill = p > 0 ? (artTop + p * (1 - 2 * artTop)) * 100 : 0
+  const fill = riseHeight(trimmed, p)
   return (
     <span className="relative block transition-transform duration-200" style={{ width: size, height: size * 1.12, transform: hovered ? 'scale(1.03)' : undefined }}>
       <span
@@ -515,6 +523,28 @@ function PinHole({ size, hovered, imageUrl, art, progress }: { size: number; hov
           </span>
         </span>
       )}
+    </span>
+  )
+}
+
+// The fill's height (% of the 100 × 112 box), measured over the art itself: uploaded art (cropped
+// to the pin) is fitted and centred in the box; the built-in pins fill it.
+function riseHeight(trimmed: { aspect: number } | null | undefined, p: number) {
+  const artTop = trimmed ? (1.12 - Math.min(1.12, trimmed.aspect)) / 2 / 1.12 : 0 // fraction of the box above/below the art
+  return p > 0 ? (artTop + p * (1 - 2 * artTop)) * 100 : 0
+}
+
+// An earned pin on its way to the next look: that look (Painted, or Full) rises over it from the
+// bottom, a little see-through, as far as the collector has got (tierFill).
+function TierRise({ size, imageUrl, art, tier, progress }: { size: number; imageUrl?: string; art: string; tier: BadgeTier; progress: number }) {
+  const trimmed = useTrimmedArt(imageUrl)
+  return (
+    <span className="relative block" style={{ width: size, height: size * 1.12 }}>
+      <span className="pin-tier-rise absolute inset-x-0 bottom-0 overflow-hidden" style={{ height: `${riseHeight(trimmed, progress)}%` }}>
+        <span className={cn('absolute inset-x-0 bottom-0 flex justify-center', tier === 2 && 'pin-tier-rise-painted')} style={{ height: size * 1.12 }}>
+          <BadgePin art={art} imageUrl={imageUrl} size={size} />
+        </span>
+      </span>
     </span>
   )
 }

@@ -158,6 +158,21 @@ export function toNextTier(def: BadgeDef, progress: [number, number] | undefined
   return Math.max(0, Math.ceil(((def.tiers ?? DEFAULT_TIERS)[next - 1] / 100) * total) - have)
 }
 
+/** How far the collector is from the current look to the next one switched on (0–1) — the ghost
+ *  fill on a pin. Tiered, not the whole badge: with Grayscale at 50% of 10 cards, 3 cards shows
+ *  60%; once Grayscale is reached it starts again at 0 toward Painted. 0 at the top. */
+export function tierFill(def: BadgeDef, progress: [number, number] | undefined): number {
+  const [have, total] = progress ?? [0, def.slots.length]
+  const tier = badgeTier(def, progress)
+  const next = nextTier(def, progress)
+  if (!next || !total) return 0
+  const t = def.tiers ?? DEFAULT_TIERS
+  const need = (k: BadgeTier) => (k ? Math.ceil((t[k - 1] / 100) * total) : 0)
+  const from = need(tier)
+  const to = need(next)
+  return to > from ? Math.max(0, Math.min(1, (have - from) / (to - from))) : 0
+}
+
 export function isMastered(def: BadgeDef, progress: [number, number] | undefined, earned: boolean): boolean {
   return !!def.growing && earned && def.slots.length > 0 && (progress?.[0] ?? 0) >= def.slots.length && (progress?.[1] ?? 0) === def.slots.length
 }
