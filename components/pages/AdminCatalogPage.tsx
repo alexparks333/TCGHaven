@@ -330,6 +330,29 @@ export function CatalogBrowser() {
     return () => { stale = true }
   }, [activeGame])
 
+  // Sets and categories change in other tabs too (Needs Review makes sets) — re-read them when
+  // you come back to this tab, keeping whichever set is open.
+  useEffect(() => {
+    const onFocus = () => {
+      fetch(`/api/sets?game=${activeGame}&fresh=${Date.now()}`, { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: SetOption[] | null) => {
+          if (!data?.length) return
+          setSets(data)
+          setActiveSet((cur) => {
+            const same = cur && data.find((s) => s.name === cur.name)
+            if (!same) return data[0] // the open set was deleted elsewhere
+            // Same set, unchanged: keep the object so the card table doesn't reload on every focus
+            return JSON.stringify(same) === JSON.stringify(cur) ? cur : same
+          })
+        })
+        .catch(() => {})
+      reloadCategories()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [activeGame, reloadCategories])
+
   // Whole-catalog search results are game-scoped and would otherwise show stale matches from
   // whatever game was active before switching tabs.
   // Anything open belongs to the old game — an edit form left open would write into the new
@@ -503,7 +526,7 @@ export function CatalogBrowser() {
       const data = await res.json()
       if (!res.ok) { setActionError(data.error ?? 'Failed to delete set.'); return }
 
-      setActionSuccess(`Deleted "${activeSet.name}" and ${snap.size} card${snap.size === 1 ? '' : 's'}.`)
+      setActionSuccess(`Deleted "${activeSet.name}" and ${snap.size} card${snap.size === 1 ? '' : 's'}.${data.returnedToReview ? ` ${data.returnedToReview} of them came from Needs Review and are back there to place again.` : ''}`)
       reloadSets()
       reloadCategories()
     } catch (err) {

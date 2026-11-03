@@ -201,6 +201,24 @@ export async function DELETE(request: Request) {
 
   sets.splice(idx, 1)
 
+  // Cards Needs Review placed in this set go back to review with no set (their catalog cards
+  // were deleted with the set) — otherwise they'd point at a set that no longer exists.
+  let returnedToReview = 0
+  if (game === 'riftbound') {
+    for (const p of registry.riftbound.placements ?? []) {
+      if (p.setName !== setName && p.previousSetName !== setName) continue
+      if (p.previousSetName === setName) p.previousSetName = null
+      if (p.setName === setName) {
+        p.setName = null
+        p.reviewed = false
+        p.denied = false
+        p.auto = false
+        delete p.decidedAt
+        returnedToReview++
+      }
+    }
+  }
+
   await ensureAdminAuth()
   await saveSetRegistry(registry)
 
@@ -208,5 +226,5 @@ export async function DELETE(request: Request) {
   if (game === 'pokemon') invalidatePokemonSetsCache()
   if (game === 'mtg') invalidateMtgSetsCache()
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, returnedToReview })
 }
