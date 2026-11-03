@@ -20,6 +20,8 @@ export const dynamic = 'force-dynamic'
 //   displayName  — the name the website shows ('' = back to the name built from TCGplayer's)
 //   image        — 'tcgplayer' | 'riot' | 'none' | 'auto' (TCGplayer's photo if any, else Riot's)
 //   reviewed     — mark checked
+// Also { completeReview: at } / { reopenReview: at } — file a sync's review (by its addedAt) under
+// Completed on Needs Review, or bring it back. `changes` may be empty then.
 // Every change applies to the catalog card (`tcg-{productId}`) right away, so it doesn't wait for
 // the next sync, which then keeps it.
 
@@ -66,7 +68,9 @@ export async function POST(request: Request) {
   if (unauthorized) return unauthorized
 
   const body = await request.json().catch(() => null)
-  const changes = Array.isArray(body?.changes) ? (body.changes as Change[]) : null
+  const completeReview = typeof body?.completeReview === 'string' ? body.completeReview : null
+  const reopenReview = typeof body?.reopenReview === 'string' ? body.reopenReview : null
+  const changes = Array.isArray(body?.changes) ? (body.changes as Change[]) : completeReview || reopenReview ? [] : null
   if (!changes || changes.some((c) => typeof c?.productId !== 'number')) {
     return NextResponse.json({ error: 'Expected { changes: [{ productId: number, setName?, reviewed?, denied?, displayName? }] }' }, { status: 400 })
   }
@@ -142,6 +146,15 @@ export async function POST(request: Request) {
   }
   registry.riftbound.placements = placements
 
+  let completed = registry.riftbound.completedReviews ?? []
+  if (completeReview) {
+    const open = placements.filter((p) => p.addedAt === completeReview && !p.reviewed && !p.denied && !p.ignored)
+    if (open.length) return NextResponse.json({ error: `${open.length} card${open.length === 1 ? ' is' : 's are'} still waiting for a decision` }, { status: 409 })
+    completed = [...completed.filter((c) => c.at !== completeReview), { at: completeReview, completedAt: new Date().toISOString() }]
+  }
+  if (reopenReview) completed = completed.filter((c) => c.at !== reopenReview)
+  registry.riftbound.completedReviews = completed
+
   await ensureAdminAuth()
   await saveSetRegistry(registry)
 
@@ -175,5 +188,5 @@ export async function POST(request: Request) {
   // delta pull; this server's is just dropped so it reloads now. The next sync rewrites the snapshot.
   if (changedCards > 0) invalidateCatalogCache('riftbound')
 
-  return NextResponse.json({ ok: true, placements, changedCards, images })
+  return NextResponse.json({ ok: true, placements, completedReviews: completed, changedCards, images })
 }

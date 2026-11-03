@@ -130,7 +130,14 @@ export interface SetRegistry {
   schemaVersion: number
   pokemon: { sets: PokemonRegistrySet[] }
   lorcana: { groupOrder: string[]; sets: LorcanaRegistrySet[] }
-  riftbound: { groupOrder: string[]; sets: RiftboundRegistrySet[]; placements?: RiftboundPlacement[] }
+  riftbound: {
+    groupOrder: string[]
+    sets: RiftboundRegistrySet[]
+    placements?: RiftboundPlacement[]
+    // Sync reviews staff marked complete on Needs Review (by the sync's `addedAt`) — filed away
+    // under Completed, reopenable
+    completedReviews?: Array<{ at: string; completedAt: string }>
+  }
   onepiece: { sets: OnePieceRegistrySet[] }
   mtg: { sets: MtgRegistrySet[] }
 }

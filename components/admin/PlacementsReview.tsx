@@ -48,7 +48,7 @@ interface RegistrySet {
 }
 
 interface RegistryResponse {
-  riftbound: { groupOrder: string[]; sets: RegistrySet[]; placements?: Placement[] }
+  riftbound: { groupOrder: string[]; sets: RegistrySet[]; placements?: Placement[]; completedReviews?: Array<{ at: string; completedAt: string }> }
 }
 
 interface CatalogCard {
@@ -154,6 +154,7 @@ export function PlacementsReview() {
   const [riotByCode, setRiotByCode] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [openBatch, setOpenBatch] = useState<string | null>(null) // a sync's addedAt
+  const [showCompleted, setShowCompleted] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The last action, undoable from the toast (or ⌘Z) for a few seconds
@@ -339,6 +340,33 @@ export function PlacementsReview() {
   if (!registry || batches.length === 0) return null
 
   const open = batches.find((b) => b.at === openBatch) ?? null
+  // A review is filed under Completed once staff complete it (and only while every card in it is
+  // still decided — bringing one back puts it back on top).
+  const completedAt = new Map((registry.completedReviews ?? []).map((c) => [c.at, c.completedAt]))
+  const isFiled = (b: { at: string; list: Placement[] }) => completedAt.has(b.at) && b.list.every(isDone)
+  const activeBatches = batches.filter((b) => !isFiled(b))
+  const filedBatches = batches.filter(isFiled)
+
+  async function setReviewComplete(at: string, complete: boolean) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await adminFetch('/api/set-registry/placements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(complete ? { completeReview: at } : { reopenReview: at }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      setRegistry((r) => (r ? { ...r, placements: data.placements, completedReviews: data.completedReviews } : r))
+      return true
+    } catch (err) {
+      setError((err as Error).message)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <>
@@ -347,12 +375,41 @@ export function PlacementsReview() {
           <Sparkles size={18} style={{ color: ACCENT }} />
           <h2 className="text-lg font-bold text-ink">New cards found by syncs</h2>
         </div>
-        <p className="text-slate-400 text-sm mb-4">Each sync that found new TCGplayer cards waits here. Open one to accept, ignore or deny its cards.</p>
-        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
-          {batches.map((b) => (
-            <BatchNode key={b.at} at={b.at} list={b.list} cards={cards} onOpen={() => setOpenBatch(b.at)} />
-          ))}
-        </div>
+        <p className="text-slate-400 text-sm mb-4">Each sync that found new TCGplayer cards waits here. Open one to accept, ignore or deny its cards, then complete it.</p>
+        {error && !openBatch && <div className="text-xs text-red-600 mb-3">{error}</div>}
+        {activeBatches.length === 0 ? (
+          <div className="text-sm text-slate-400 py-4">All caught up — every sync review is complete.</div>
+        ) : (
+          <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+            {activeBatches.map((b) => (
+              <BatchNode key={b.at} at={b.at} list={b.list} cards={cards} busy={busy} onOpen={() => setOpenBatch(b.at)} onComplete={() => setReviewComplete(b.at, true)} />
+            ))}
+          </div>
+        )}
+
+        {filedBatches.length > 0 && (
+          <div className="mt-5">
+            <button onClick={() => setShowCompleted((v) => !v)} className="text-xs font-semibold text-slate-500 hover:text-ink flex items-center gap-1">
+              <ChevronRight size={13} className={cn('transition-transform', showCompleted && 'rotate-90')} />
+              Completed reviews ({filedBatches.length})
+            </button>
+            {showCompleted && (
+              <div className="mt-2 space-y-1.5">
+                {filedBatches.map((b) => (
+                  <div key={b.at} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/30 px-3 py-2 text-sm">
+                    <Check size={14} className="text-emerald-700 shrink-0" />
+                    <span className="text-ink font-medium">Riftbound · Sync · {syncTime(b.at)}</span>
+                    <span className="text-xs text-slate-500">{b.list.length} cards · completed {timeAgo(completedAt.get(b.at)!)}</span>
+                    <div className="ml-auto flex items-center gap-1">
+                      <button onClick={() => setOpenBatch(b.at)} className="text-xs px-2.5 py-1 rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800/60">Look again</button>
+                      <button disabled={busy} onClick={() => setReviewComplete(b.at, false)} className="text-xs px-2.5 py-1 rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800/60 disabled:opacity-50">Reopen</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {open && (
@@ -367,6 +424,8 @@ export function PlacementsReview() {
           error={error}
           save={save}
           createSet={createSet}
+          completed={isFiled(open)}
+          onComplete={async () => { if (await setReviewComplete(open.at, true)) setOpenBatch(null) }}
           onClose={() => setOpenBatch(null)}
         />
       )}
@@ -387,7 +446,9 @@ export function PlacementsReview() {
 }
 
 // One sync's finds, as a node on Needs Review.
-function BatchNode({ at, list, cards, onOpen }: { at: string; list: Placement[]; cards: Map<string, CatalogCard>; onOpen: () => void }) {
+function BatchNode({
+  at, list, cards, busy, onOpen, onComplete,
+}: { at: string; list: Placement[]; cards: Map<string, CatalogCard>; busy: boolean; onOpen: () => void; onComplete: () => void }) {
   const done = list.filter(isDone).length
   const accepted = list.filter((p) => p.reviewed && !isDenied(p) && !p.ignored).length
   const ignored = list.filter((p) => p.ignored).length
@@ -396,9 +457,13 @@ function BatchNode({ at, list, cards, onOpen }: { at: string; list: Placement[];
   const pct = Math.round((done / list.length) * 100)
   const previews = list.filter((p) => !isDone(p)).concat(list.filter(isDone)).slice(0, 5)
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === 'Enter') onOpen() }}
       className={cn(
+        'cursor-pointer',
         'group text-left rounded-2xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg',
         complete ? 'border-slate-800 bg-slate-900/30' : 'border-slate-700 bg-slate-900/60',
       )}
@@ -437,16 +502,29 @@ function BatchNode({ at, list, cards, onOpen }: { at: string; list: Placement[];
       <div className="mt-3 h-1.5 rounded-full bg-slate-800 overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: complete ? '#4d8a5b' : `linear-gradient(90deg, ${ACCENT}, #e0a15a)` }} />
       </div>
-      <div className="mt-3 text-xs font-semibold flex items-center gap-1" style={{ color: ACCENT }}>
-        {complete ? 'Look again' : 'Review'} <ChevronRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+      <div className="mt-3 flex items-center gap-2">
+        <span className="text-xs font-semibold flex items-center gap-1" style={{ color: ACCENT }}>
+          {complete ? 'Look again' : 'Review'} <ChevronRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+        </span>
+        {complete && (
+          <button
+            disabled={busy}
+            onClick={(e) => { e.stopPropagation(); onComplete() }}
+            className="ml-auto text-xs font-semibold px-3 py-1.5 rounded-lg text-white flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+            style={{ background: '#4d8a5b' }}
+            title="File this review under Completed"
+          >
+            <Check size={13} /> Complete review
+          </button>
+        )}
       </div>
-    </button>
+    </div>
   )
 }
 
 // The review board for one sync's cards — a full-screen layer over the staff portal.
 function ReviewBoard({
-  at, placements, registry, cards, riotByCode, busy, error, save, createSet, onClose,
+  at, placements, registry, cards, riotByCode, busy, error, save, createSet, completed, onComplete, onClose,
 }: {
   at: string
   placements: Placement[]
@@ -457,6 +535,8 @@ function ReviewBoard({
   error: string | null
   save: (changes: Change[]) => Promise<boolean>
   createSet: (name: string, cardexGroup: string, isNewCategory: boolean) => Promise<boolean>
+  completed: boolean
+  onComplete: () => void
   onClose: () => void
 }) {
   // Two tabs: "To review" (by where the sync put each card) and "Reviewed" (everything decided —
@@ -588,7 +668,18 @@ function ReviewBoard({
             </div>
             <div className="text-xs text-slate-500">Accept what’s right · Ignore to decide next sync · Deny to never see it again</div>
           </div>
-          <div className="ml-auto w-full sm:w-72">
+          {doneCount === placements.length && !completed && (
+            <button
+              disabled={busy}
+              onClick={onComplete}
+              className="ml-auto order-last sm:order-none text-sm font-semibold px-4 py-2 rounded-xl text-white flex items-center gap-1.5 shadow disabled:opacity-50"
+              style={{ background: '#4d8a5b' }}
+              title="Every card is handled — file this review under Completed"
+            >
+              <Check size={15} /> Complete review
+            </button>
+          )}
+          <div className={cn('w-full sm:w-72', !(doneCount === placements.length && !completed) && 'ml-auto')}>
             <div className="flex items-baseline justify-between text-xs mb-1.5">
               <span className="text-slate-400"><span className="text-ink font-semibold text-base">{doneCount}</span> of {placements.length} handled</span>
               <span className="font-semibold" style={{ color: ACCENT }}>{pct}%</span>
@@ -677,7 +768,14 @@ function ReviewBoard({
                 {tab === 'reviewed' ? 'Cards you accept, ignore or deny show up here, newest first.' : doneCount === placements.length ? 'Every card from this sync is handled.' : 'Nothing left to review here.'}
               </div>
               {tab === 'todo' && doneCount === placements.length && (
-                <button onClick={onClose} className="mt-4 text-sm font-semibold px-4 py-2 rounded-xl text-white" style={{ background: ACCENT }}>Back to Needs Review</button>
+                <div className="mt-4 flex justify-center gap-2">
+                  {!completed && (
+                    <button disabled={busy} onClick={onComplete} className="text-sm font-semibold px-4 py-2 rounded-xl text-white flex items-center gap-1.5 disabled:opacity-50" style={{ background: '#4d8a5b' }}>
+                      <Check size={15} /> Complete review
+                    </button>
+                  )}
+                  <button onClick={onClose} className="text-sm font-semibold px-4 py-2 rounded-xl bg-slate-800 text-ink hover:bg-slate-700">Back to Needs Review</button>
+                </div>
               )}
             </div>
           ) : (
