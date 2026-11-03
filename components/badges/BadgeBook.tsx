@@ -411,7 +411,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       onPointerEnter={(e) => { if (interactive && e.pointerType === 'mouse') setOpen(true) }}
       onPointerLeave={() => { setOpen(false); setTilt(null) }}
       onPointerMove={(e) => {
-        if (tier < 3 || e.pointerType !== 'mouse') return // the light-catching tilt is the Full pin's
+        if (tier === 0 || tier === 2 || e.pointerType !== 'mouse') return // the light-catching tilt: Full and the (polished) Grayscale pin — Painted is satin
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
       }}
@@ -448,7 +448,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
               <span
                 className="pinbook-glint absolute inset-0"
                 style={{
-                  background: `radial-gradient(circle at ${tilt.x * 100}% ${tilt.y * 100}%, rgba(255,255,255,0.55), rgba(255,255,255,0.08) 35%, transparent 60%)`,
+                  background: `radial-gradient(circle at ${tilt.x * 100}% ${tilt.y * 100}%, rgba(255,255,255,${tier === 1 ? 0.4 : 0.55}), rgba(255,255,255,0.06) 35%, transparent 60%)`,
                   ...(art && { WebkitMask: `url("${art.src}") center / contain no-repeat`, mask: `url("${art.src}") center / contain no-repeat` }),
                 }}
               />

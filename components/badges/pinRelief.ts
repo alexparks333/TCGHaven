@@ -67,8 +67,8 @@ export interface LiveRelief extends Relief {
   /** The Lenticular finish's picture sets (each: URLs, left to right), every picture the whole pin
    *  framed like the art. A lenticular pixel's set is in the finish map's blue channel. */
   setLenticular(sets: string[][]): Promise<void>
-  /** Which of the badge's three looks (lib/badges.ts badgeTier): 1 Grayscale — no colour, matte, no
-   *  finishes; 2 Painted — colour, satin, no finishes; 3 Full — as designed. */
+  /** Which of the badge's three looks (lib/badges.ts badgeTier): 1 Grayscale — no colour, a little
+   *  shine, no finishes; 2 Painted — colour, satin, no finishes; 3 Full — as designed. */
   setTier(tier: 1 | 2 | 3): void
   /** Each pixel's finish, RGBA (R = FINISHES id in lib/reliefStudio.ts, G/B = its settings), size²;
    *  null = all Auto. Holes are cut when the pin is built (cleanRelief's `holes`), not here. */
@@ -485,8 +485,9 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     for (const { m, color, roughness, clearcoat } of metals) {
       const l = color.r * 0.299 + color.g * 0.587 + color.b * 0.114
       m.color.copy(tier === 1 ? new THREE.Color(l, l, l) : color)
-      m.roughness = tier < 3 ? Math.max(roughness, 0.6) : roughness
-      m.clearcoat = tier < 3 ? 0 : clearcoat
+      // Grayscale is polished silver-grey (a little shine, a light clearcoat); Painted is satin
+      m.roughness = tier === 1 ? Math.max(roughness, 0.32) : tier === 2 ? Math.max(roughness, 0.6) : roughness
+      m.clearcoat = tier === 1 ? Math.min(clearcoat, 0.4) : tier === 2 ? 0 : clearcoat
     }
   }
   // The textures only the shaders hold (not in any material slot, so disposing the materials
@@ -855,7 +856,8 @@ if (fin < 0.5 && dCov > 0.0) {
 }
 metalnessFactor = mix(metalnessFactor, 1.0, vWall);
 roughnessFactor = mix(roughnessFactor, wallRough, vWall);
-if (tierLook < 2.5) { roughnessFactor = max(roughnessFactor, 0.6); metalnessFactor *= 0.6; }`,
+if (tierLook < 1.5) { roughnessFactor = max(roughnessFactor, 0.32); metalnessFactor *= 0.85; }
+else if (tierLook < 2.5) { roughnessFactor = max(roughnessFactor, 0.6); metalnessFactor *= 0.6; }`,
   look: `
 if (fin > 2.5 && vWall < 0.99) {
   vec3 dBase = diffuseColor.rgb, eBase = totalEmissiveRadiance;

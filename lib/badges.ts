@@ -128,7 +128,7 @@ export const DEFAULT_BADGES: BadgeDef[] = [
 /** A growing badge whose every current slot the collector fills right now (`have` from their
  *  progress, checked against the badge's slots today — a badge that grew since is not mastered). */
 // The three looks a pin can have, unlocked by progress (each badge's tiers, set in the staff
-// portal): 1 Grayscale — no colour, matte, no finishes; 2 Painted — full colour, satin (little
+// portal): 1 Grayscale — no colour, a little shine (polished grey), no finishes; 2 Painted — full colour, satin (little
 // shine), no finishes; 3 Full — the pin as designed. 0 = not unlocked yet (a hole in the book).
 // Follows current progress: selling cards below a tier drops the pin back down. A badge can switch
 // looks off (tiersOff): they're skipped, the pin keeping the look below until the next one on.

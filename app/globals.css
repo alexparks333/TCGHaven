@@ -671,9 +671,10 @@
   display: inline-block;
   filter: drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.75)) drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55));
 }
-/* A pin's tier (lib/badges.ts badgeTier): Grayscale — no colour; Painted — colour, a little flatter
+/* A pin's tier (lib/badges.ts badgeTier): Grayscale — no colour, crisp and a little shiny (it
+   catches the light on hover too); Painted — colour, a little flatter
    (no shine: the Full pin alone catches the light) */
-.pinbook-tier-1 { filter: grayscale(1) contrast(1.05) drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.75)) drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55)); }
+.pinbook-tier-1 { filter: grayscale(1) contrast(1.18) brightness(1.06) drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.75)) drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55)); }
 .pinbook-tier-2 { filter: saturate(0.92) contrast(0.96) drop-shadow(0 1.5px 1px rgba(0, 0, 0, 0.75)) drop-shadow(0 10px 12px rgba(0, 0, 0, 0.55)); }
 /* An earned pin on its way to the next look (BadgeBook TierRise): that look rises over it from the
    bottom, a little see-through, with a soft top edge */
