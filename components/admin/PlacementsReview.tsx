@@ -174,6 +174,20 @@ export function PlacementsReview() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Sets and categories made elsewhere (the Catalog page, another tab) since this page loaded —
+  // re-read when a sync's review opens and whenever you come back to the tab.
+  const refreshRegistry = useCallback(() => {
+    fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((reg: RegistryResponse | null) => { if (reg?.riftbound) setRegistry(reg.riftbound) })
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    window.addEventListener('focus', refreshRegistry)
+    return () => window.removeEventListener('focus', refreshRegistry)
+  }, [refreshRegistry])
+  useEffect(() => { if (openBatch) refreshRegistry() }, [openBatch, refreshRegistry])
+
   const placements = useMemo(() => registry?.placements ?? [], [registry])
   placementsRef.current = placements
   // One node per sync that found cards, newest first.
@@ -437,7 +451,7 @@ function ReviewBoard({
   const [focusId, setFocusId] = useState<number | null>(null)
   // Cards a New set is for — moved into it on create, or (from the card viewer) just handed the
   // new set's name to select, so the move still waits for Accept.
-  const [newSetFor, setNewSetFor] = useState<{ ids: number[]; onCreated?: (setName: string) => void } | null>(null)
+  const [newSetFor, setNewSetFor] = useState<{ ids: number[]; onCreated?: (setName: string) => void; category?: string } | null>(null)
   const [moveMenu, setMoveMenu] = useState(false)
 
   // Esc closes the board when nothing on top of it is open
@@ -677,7 +691,7 @@ function ReviewBoard({
                 categories={categories}
                 sets={registry.sets}
                 onPick={(setName: string) => bulk(selectedIds.map((productId) => (filter === DENIED ? { productId, denied: false, setName, reviewed: true } : { productId, setName, reviewed: true })))}
-                onNewSet={() => { setMoveMenu(false); setNewSetFor({ ids: selectedIds }) }}
+                onNewSet={(category) => { setMoveMenu(false); setNewSetFor({ ids: selectedIds, category }) }}
                 onClose={() => setMoveMenu(false)}
               />
             )}
@@ -723,12 +737,12 @@ function ReviewBoard({
           riotArt={riotArtOf(focus)}
           onImage={(image) => save([{ productId: focus.productId, image }])}
           onUnreview={() => save([{ productId: focus.productId, reviewed: false }])}
-          onNewSet={(onCreated) => setNewSetFor({ ids: [focus.productId], onCreated })}
+          onNewSet={(onCreated, category) => setNewSetFor({ ids: [focus.productId], onCreated, category })}
         />
       )}
 
       {newSetFor && (
-        <NewSetDialog categories={categories} busy={busy} onCancel={() => setNewSetFor(null)} onCreate={onCreateSet} />
+        <NewSetDialog categories={categories} initialCategory={newSetFor.category} busy={busy} onCancel={() => setNewSetFor(null)} onCreate={onCreateSet} />
       )}
     </div>,
     document.body,
@@ -863,16 +877,21 @@ function CardTile({
 // Pick a set: categories as headings, sets as buttons.
 function SetChoices({
   categories, sets, current, busy, onPick, onNewSet,
-}: { categories: string[]; sets: RegistrySet[]; current?: string | null; busy?: boolean; onPick: (setName: string) => void; onNewSet: () => void }) {
+}: { categories: string[]; sets: RegistrySet[]; current?: string | null; busy?: boolean; onPick: (setName: string) => void; onNewSet: (category?: string) => void }) {
   return (
     <div className="space-y-3">
       {categories.map((cat) => {
         const list = sets.filter((s) => s.cardexGroup === cat)
-        if (list.length === 0) return null
         return (
           <div key={cat}>
             <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">{cat}</div>
             <div className="flex flex-wrap gap-1.5">
+              {list.length === 0 && (
+                // An empty category (just created) — start its first set right here
+                <button disabled={busy} onClick={() => onNewSet(cat)} className="text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-slate-600 text-slate-400 hover:text-ink flex items-center gap-1 disabled:opacity-50">
+                  <Plus size={12} /> New set in {cat}
+                </button>
+              )}
               {list.map((s) => (
                 <button
                   key={s.setName}
@@ -892,7 +911,7 @@ function SetChoices({
         )
       })}
       <div className="flex flex-wrap gap-1.5 pt-1">
-        <button disabled={busy} onClick={onNewSet} className="text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-slate-600 text-slate-300 hover:text-ink flex items-center gap-1 disabled:opacity-50">
+        <button disabled={busy} onClick={() => onNewSet()} className="text-xs px-2.5 py-1.5 rounded-lg border border-dashed border-slate-600 text-slate-300 hover:text-ink flex items-center gap-1 disabled:opacity-50">
           <Plus size={12} /> New set…
         </button>
       </div>
@@ -902,7 +921,7 @@ function SetChoices({
 
 function SetMenu({
   categories, sets, onPick, onNewSet, onClose,
-}: { categories: string[]; sets: RegistrySet[]; onPick: (setName: string) => void; onNewSet: () => void; onClose: () => void }) {
+}: { categories: string[]; sets: RegistrySet[]; onPick: (setName: string) => void; onNewSet: (category?: string) => void; onClose: () => void }) {
   return (
     <>
       <div className="fixed inset-0" onClick={onClose} />
@@ -931,7 +950,7 @@ function FocusViewer({
   onPrev: () => void
   onNext: () => void
   onAccept: (setName: string) => void
-  onNewSet: (onCreated: (setName: string) => void) => void
+  onNewSet: (onCreated: (setName: string) => void, category?: string) => void
   onIgnore: () => void
   onDeny: () => void
   onRename: (displayName: string) => void
@@ -1048,7 +1067,7 @@ function FocusViewer({
                 )}
               </div>
               <div className="text-sm font-semibold text-ink mt-3 mb-2">1. Where does it go?</div>
-              <SetChoices categories={categories} sets={sets} current={choice} busy={busy} onPick={setChoice} onNewSet={() => onNewSet(setChoice)} />
+              <SetChoices categories={categories} sets={sets} current={choice} busy={busy} onPick={setChoice} onNewSet={(category) => onNewSet(setChoice, category)} />
 
               <div className="text-sm font-semibold text-ink mt-5 mb-2">2. {denied ? 'Bring it back?' : 'Your call'}</div>
               <div className="flex gap-2">
@@ -1151,10 +1170,10 @@ function NameEditor({
 const NEW_CATEGORY = '__new_category__'
 
 function NewSetDialog({
-  categories, busy, onCancel, onCreate,
-}: { categories: string[]; busy: boolean; onCancel: () => void; onCreate: (name: string, category: string, isNew: boolean) => void }) {
+  categories, initialCategory, busy, onCancel, onCreate,
+}: { categories: string[]; initialCategory?: string; busy: boolean; onCancel: () => void; onCreate: (name: string, category: string, isNew: boolean) => void }) {
   const [name, setName] = useState('')
-  const [group, setGroup] = useState(categories.includes('Promos') ? 'Promos' : categories[0] ?? NEW_CATEGORY)
+  const [group, setGroup] = useState(initialCategory && categories.includes(initialCategory) ? initialCategory : categories.includes('Promos') ? 'Promos' : categories[0] ?? NEW_CATEGORY)
   const [newCategory, setNewCategory] = useState('')
   const nameRef = useRef<HTMLInputElement>(null)
   const categoryRef = useRef<HTMLInputElement>(null)
