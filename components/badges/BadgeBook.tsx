@@ -425,7 +425,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           // The shadow sits on a wrapper that doesn't tilt, and the pin isn't scaled up: a drop-shadow
           // filter on the tilting element (and a 6% scale-up) made the browser stretch a flat bitmap
           // of the pin — blurry on hover
-          <span className={cn('pinbook-pin-shadow block', `pinbook-tier-${tier}`)}>
+          <span className="pinbook-pin-shadow block">
           <span
             className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
             style={{
@@ -442,7 +442,15 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
                 <span className="pinbook-platinum-gap absolute inset-[-0.8%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(art?.src), mask: pinMask(art?.src) }} />
               </>
             )}
-            <BadgePin art={def.art} imageUrl={def.imageUrl} size={pinSize(def, pin)} />
+            {/* The pin in its look; the next look rising over it in the same box, so the two line up
+                exactly and tilt together (flex: no gap under the image; no shrinking a pin drawn
+                bigger than its slot) */}
+            <span className={cn('flex [&>*]:shrink-0', tier < 3 && `pinbook-look-${tier}`)}><BadgePin art={def.art} imageUrl={def.imageUrl} size={pinSize(def, pin)} /></span>
+            {next > 0 && fill > 0 && (
+              <span className="absolute inset-0 pointer-events-none" aria-hidden>
+                <TierRise size={pinSize(def, pin)} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
+              </span>
+            )}
             {tilt && (
               <span
                 className="pinbook-glint absolute inset-0"
@@ -456,12 +464,6 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           </span>
         ) : (
           <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
-        )}
-        {/* Grayscale or Painted: the next look rises over the pin from the bottom as it's collected */}
-        {earnedAt && next > 0 && fill > 0 && (
-          <span className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden>
-            <TierRise size={pinSize(def, pin)} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
-          </span>
         )}
       </span>
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
@@ -575,7 +577,7 @@ function TierRise({ size, imageUrl, art, tier, progress }: { size: number; image
   return (
     <span className="relative block" style={{ width: size, height: size * 1.12 }}>
       <span className="pin-tier-rise absolute inset-x-0 bottom-0 overflow-hidden" style={{ height: `${riseHeight(trimmed, progress)}%` }}>
-        <span className={cn('absolute inset-x-0 bottom-0 flex justify-center', tier === 2 && 'pin-tier-rise-painted')} style={{ height: size * 1.12 }}>
+        <span className={cn('absolute inset-x-0 bottom-0 flex justify-center', tier === 2 && 'pinbook-look-2')} style={{ height: size * 1.12 }}>
           <BadgePin art={art} imageUrl={imageUrl} size={size} />
         </span>
       </span>
