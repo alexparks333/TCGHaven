@@ -386,7 +386,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
             {Array.from(roles.entries()).map(([i, role]) => (
               <div key={`page${i}`} className="absolute top-0" style={pageStyle(i, role)}>
                 {i === -1 ? <BookCover set={set} badges={badges} /> : (
-                  <Half content={page(i)} side={i % 2 === 1 ? 'right' : 'left'} W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
+                  <Half content={page(i)} side={i % 2 === 1 ? 'right' : 'left'} placed W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
                 )}
                 <div className="absolute inset-0 pointer-events-none" style={shadeStyle(i, role)} />
               </div>
@@ -502,13 +502,15 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
 type PageBits = Omit<React.ComponentProps<typeof PinPage>, 'page' | 'side'>
 
 // One half of the open spread: the cover showing round the page (its rim), and the page on it.
-function Half({ content, side, W, H, coverVars, set, badges, pageProps }: {
-  content: Content; side: Side; W: number; H: number; coverVars: React.CSSProperties
+// Placed on its side of a spread-wide box; `placed`: inside a page box that's already on its side
+// (pageStyle) — offsetting again put every right-hand page off the spread, leaving it black.
+function Half({ content, side, placed, W, H, coverVars, set, badges, pageProps }: {
+  content: Content; side: Side; placed?: boolean; W: number; H: number; coverVars: React.CSSProperties
   set: BadgeSet; badges: SharedBadges | null; pageProps: PageBits
 }) {
   if (content === null) return null
   return (
-    <div className="absolute top-0" style={{ left: side === 'left' ? 0 : W, width: W, height: H }}>
+    <div className="absolute top-0" style={{ left: side === 'left' || placed ? 0 : W, width: W, height: H }}>
       {content !== 'cover' && (
         <div
           className={cn('pinbook-cover absolute inset-0', side === 'left' ? 'rounded-l-[14px]' : 'rounded-r-[14px]')}
