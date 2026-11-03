@@ -2003,6 +2003,11 @@ function EditCardForm({
 }) {
   const [number, setNumber] = useState(card.number)
   const [cardSet, setCardSet] = useState(card.setName)
+  // Two pickers — category, then a set in it — so a game with lots of sets (Pokémon) isn't one
+  // huge list. Games without categories just get the set list.
+  const sectionOf = (name: string) => setSections?.find(([, list]) => list.some((s) => s.name === name))?.[0] ?? null
+  const [section, setSection] = useState(() => sectionOf(card.setName))
+  const sectionSets = setSections ? setSections.find(([label]) => label === section)?.[1] ?? [] : sets
   // Which cards can change set: hand-added ones, and Needs Review cards (their set lives in the
   // review record, which every sync follows). A regular synced card's set comes from its source,
   // so the next sync would just move it back.
@@ -2065,22 +2070,34 @@ function EditCardForm({
           <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
             className={cn(FIELD_CLASS, 'w-full')} />
           {/* The set it's in — its category is the set's (Categories panel) */}
-          <select
-            value={cardSet}
-            onChange={(e) => setCardSet(e.target.value)}
-            disabled={!movable}
-            title={movable ? 'Move this card to another set' : "This card's set comes from the sync — it would be moved back on the next one"}
-            className={cn(FIELD_CLASS, 'w-full', !movable && 'opacity-60 cursor-not-allowed')}
-          >
-            {!sets.some((s) => s.name === card.setName) && <option value={card.setName}>{card.setName}</option>}
-            {setSections
-              ? setSections.map(([label, list]) => (
-                  <optgroup key={label} label={label}>
-                    {list.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-                  </optgroup>
-                ))
-              : sets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-          </select>
+          <div className="flex gap-2" title={movable ? 'Move this card to another set' : "This card's set comes from the sync — it would be moved back on the next one"}>
+            {setSections && (
+              <select
+                value={section ?? ''}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setSection(next)
+                  // The card's own set if it's in this category, else the category's first set
+                  const list = setSections.find(([label]) => label === next)?.[1] ?? []
+                  setCardSet(list.some((s) => s.name === card.setName) ? card.setName : list[0]?.name ?? card.setName)
+                }}
+                disabled={!movable}
+                className={cn(FIELD_CLASS, 'w-2/5 min-w-0', !movable && 'opacity-60 cursor-not-allowed')}
+              >
+                {!section && <option value="">Category…</option>}
+                {setSections.map(([label]) => <option key={label} value={label}>{label}</option>)}
+              </select>
+            )}
+            <select
+              value={cardSet}
+              onChange={(e) => setCardSet(e.target.value)}
+              disabled={!movable}
+              className={cn(FIELD_CLASS, 'flex-1 min-w-0', !movable && 'opacity-60 cursor-not-allowed')}
+            >
+              {!sectionSets.some((s) => s.name === cardSet) && <option value={cardSet}>{cardSet}</option>}
+              {sectionSets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+            </select>
+          </div>
           <input placeholder="Image URL (paste a link, or use the box →)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
             className={cn(FIELD_CLASS, 'w-full')} />
           {/* A synced card's price comes from its source on every sync — not editable here (a typed
