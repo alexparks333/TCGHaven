@@ -476,8 +476,23 @@ export function CatalogBrowser() {
   async function saveCardEdit(id: string, patch: Record<string, unknown>) {
     setActionError(null)
     setActionSuccess(null)
+    const movedTo = typeof patch.setName === 'string' ? sets.find((s) => s.name === patch.setName) ?? null : null
     try {
-      await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
+      const reviewCard = id.startsWith('tcg-') && (activeGame === 'riftbound' || activeGame === 'lorcana')
+      if (movedTo && reviewCard) {
+        // A Needs Review card's set is its review record's — the sync rebuilds it from that. The
+        // route moves the catalog card too (and gives a Riftbound one its new set's code).
+        const res = await adminFetch('/api/set-registry/placements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: activeGame, changes: [{ productId: Number(id.slice(4)), setName: movedTo.name, reviewed: true }] }),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `Move failed (${res.status})`)
+        delete patch.setName
+      } else if (movedTo) {
+        Object.assign(patch, activeGame === 'riftbound' ? { setCode: movedTo.code } : { set: movedTo.code })
+      }
+      if (Object.keys(patch).length) await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
       // A card from Needs Review (`tcg-…`) is rebuilt by every sync from its review record, so a
       // rename has to be saved there too, or the next sync puts the old name back.
       if (id.startsWith('tcg-') && (activeGame === 'riftbound' || activeGame === 'lorcana') && typeof patch.name === 'string') {
@@ -493,10 +508,14 @@ export function CatalogBrowser() {
       return
     }
     setEditingCard(null)
-    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c)))
+    if (movedTo) Object.assign(patch, { setName: movedTo.name })
+    // Moved to another set: it leaves this set's list (search results just show the new set)
+    setCards((prev) => (movedTo && movedTo.name !== activeSet?.name
+      ? prev.filter((c) => c.id !== id)
+      : prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c))))
     setGlobalResults((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } as CatalogCard : c)))
 
-    setActionSuccess('Catalog updated.')
+    setActionSuccess(movedTo ? `Moved to ${movedTo.name}.` : 'Catalog updated.')
   }
 
   // Deletes a custom (source: "manual") set entirely: every card doc under its setName, then
@@ -821,6 +840,8 @@ export function CatalogBrowser() {
             key={editingCard.id}
             game={activeGame}
             card={editingCard}
+            sets={sets}
+            setSections={setSections}
             onSave={(patch) => saveCardEdit(editingCard.id, patch)}
             onCancel={() => setEditingCard(null)}
           />
@@ -1971,9 +1992,21 @@ function AddCardForm({
 }
 
 function EditCardForm({
-  game, card, onSave, onCancel,
-}: { game: Game; card: CatalogCard; onSave: (patch: Record<string, unknown>) => Promise<void>; onCancel: () => void }) {
+  game, card, sets, setSections, onSave, onCancel,
+}: {
+  game: Game
+  card: CatalogCard
+  sets: SetOption[]
+  setSections: Array<[string, SetOption[]]> | null // the set picker's category sections
+  onSave: (patch: Record<string, unknown>) => Promise<void>
+  onCancel: () => void
+}) {
   const [number, setNumber] = useState(card.number)
+  const [cardSet, setCardSet] = useState(card.setName)
+  // Which cards can change set: hand-added ones, and Needs Review cards (their set lives in the
+  // review record, which every sync follows). A regular synced card's set comes from its source,
+  // so the next sync would just move it back.
+  const movable = !!card.isCustom || (card.id.startsWith('tcg-') && (game === 'riftbound' || game === 'lorcana'))
   const [name, setName] = useState(card.name)
   const [rarity, setRarity] = useState(card.rarity ?? '')
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? '')
@@ -1990,6 +2023,7 @@ function EditCardForm({
     const next: Record<string, unknown> = {
       number,
       name,
+      setName: cardSet,
       rarity: rarity || '',
       imageUrl: imageUrl || '',
       marketPrice: parseFloat(marketPrice) || 0,
@@ -1999,7 +2033,7 @@ function EditCardForm({
     // Only what was actually changed — a card opened from whole-catalog search arrives without
     // some fields (notes), and writing every field back erased them.
     const before: Record<string, unknown> = {
-      number: card.number, name: card.name, rarity: card.rarity ?? '', imageUrl: card.imageUrl ?? '',
+      number: card.number, name: card.name, setName: card.setName, rarity: card.rarity ?? '', imageUrl: card.imageUrl ?? '',
       marketPrice: card.marketPrice || 0, marketPriceFoil: card.marketPriceFoil || 0, notes: card.notes ?? '',
     }
     const patch = Object.fromEntries(Object.entries(next).filter(([k, v]) => v !== before[k] && !(priceLinked && k.startsWith('marketPrice'))))
@@ -2030,6 +2064,23 @@ function EditCardForm({
           </div>
           <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)}
             className={cn(FIELD_CLASS, 'w-full')} />
+          {/* The set it's in — its category is the set's (Categories panel) */}
+          <select
+            value={cardSet}
+            onChange={(e) => setCardSet(e.target.value)}
+            disabled={!movable}
+            title={movable ? 'Move this card to another set' : "This card's set comes from the sync — it would be moved back on the next one"}
+            className={cn(FIELD_CLASS, 'w-full', !movable && 'opacity-60 cursor-not-allowed')}
+          >
+            {!sets.some((s) => s.name === card.setName) && <option value={card.setName}>{card.setName}</option>}
+            {setSections
+              ? setSections.map(([label, list]) => (
+                  <optgroup key={label} label={label}>
+                    {list.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+                  </optgroup>
+                ))
+              : sets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+          </select>
           <input placeholder="Image URL (paste a link, or use the box →)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
             className={cn(FIELD_CLASS, 'w-full')} />
           {/* A synced card's price comes from its source on every sync — not editable here (a typed
