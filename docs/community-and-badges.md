@@ -170,6 +170,14 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   title, earned pill) is drawn exactly like the shelf's the whole way. Desktop does the same
   (BadgeLibrary `Flyer` `at: shelf | mid | cover`; phases `grow` / `settle`), and both flights draw
   `BookThickness` (the shelf book's page block + shadow) under the cover until it opens.
+  **Smooth turns on iPhone (2026-11-03)** — the turn used to stall and then snap. Four rules now:
+  every page is its own layer at all times (`will-change: transform`) and a page out of sight waits
+  edge-on at the spine, never `opacity: 0` (Safari doesn't draw a see-through layer ahead, so the
+  landing page was drawn mid-turn); a motion settles on the `transitionend` of the element marked
+  `data-end` (the timer is only a fallback — firing on time while the phone started late snapped
+  the page); in-book motions start in the same frame (styles flushed, no two-frame wait); pages are
+  memoized (`Half`, stable `pageProps`) so starting a turn redraws no pins. The page area has
+  `touch-action: none` so iOS can't take a swipe as a scroll or back gesture.
   Page titles size to the page (`cqw`, `.pinbook-page` is a size container), shrinking for long names. A slight pull-back (scale ~0.93–0.95) during moves; the moving
   layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG
   filters every frame). Uses `PinPage`/`PinholeFilter`/`buildPages` exported from BadgeBook.

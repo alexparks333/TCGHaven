@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { PinInspector } from './pinInspectorLoader'
 import { ChevronLeft, ChevronRight, ChevronDown, X } from 'lucide-react'
@@ -63,6 +63,10 @@ type Anim =
   | { kind: 'shut'; go: boolean }           // the cover swinging shut
   | { kind: 'flyBack'; to: DOMRect; go: boolean }
 
+// The motions inside the open book (vs the flights between it and the shelf)
+const IN_BOOK = new Set<Anim['kind']>(['pan', 'turn', 'shut', 'jump'])
+const BLANK: Page = { kind: 'blank' } // one object, so a blank page isn't redrawn every frame
+
 type Content = Page | 'cover' | null
 type Side = 'left' | 'right'
 
@@ -108,38 +112,61 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     return () => { html.style.overflow = prev }
   }, [])
 
-  // Each motion: lay out its start, start it on the next frame, then settle into its end state.
-  useEffect(() => {
-    if (!anim || !box) return
-    if (!anim.go) {
-      const r = requestAnimationFrame(() => requestAnimationFrame(() => setAnim((a) => (a ? { ...a, go: true } : a))))
-      return () => cancelAnimationFrame(r)
+  // Each motion: lay out its start, start it, then settle into its end state.
+  // A motion inside the book starts at once, in the same frame as its start layout (the styles are
+  // flushed first so it still transitions): waiting two frames made a swipe feel late. The flights
+  // keep the two frames — the shelf book's spot has to be on screen first.
+  useLayoutEffect(() => {
+    if (!anim || !box || anim.go) return
+    if (IN_BOOK.has(anim.kind)) {
+      void areaRef.current?.offsetWidth
+      setAnim((a) => (a ? { ...a, go: true } : a))
+      return
     }
+    const r = requestAnimationFrame(() => requestAnimationFrame(() => setAnim((a) => (a ? { ...a, go: true } : a))))
+    return () => cancelAnimationFrame(r)
+  }, [anim, box])
+
+  // Settle when the motion has really finished: the element marked data-end (the one whose
+  // transition ends last) says so. A timer alone fired before the end whenever the phone was slow
+  // to start the motion — the page snapped the rest of the way. The timer stays as the fallback.
+  useEffect(() => {
+    if (!anim?.go || !box) return
     const ms = {
       fly: FLY_MS + 60, grow: GROW_MS + 80, shrink: GROW_MS + 80, flyBack: FLY_MS + 40,
       pan: PAN_MS, turn: p === -1 ? OPEN_MS : TURN_MS, shut: SHUT_MS, jump: JUMP_MS, close: CLOSE_MS,
-    }[anim.kind]
-    const t = setTimeout(() => {
-      if (anim.kind === 'fly') setAnim({ kind: 'grow', go: false })
-      else if (anim.kind === 'grow') setAnim({ kind: 'turn', dir: 1, to: 0, go: false }) // now the cover opens
-      else if (anim.kind === 'close' || anim.kind === 'flyBack') onClose()
-      else if (anim.kind === 'shut') {
+    }[anim.kind] + (IN_BOOK.has(anim.kind) ? 250 : 0)
+    const a = anim
+    let done = false
+    const settle = () => {
+      if (done) return
+      done = true
+      if (a.kind === 'fly') setAnim({ kind: 'grow', go: false })
+      else if (a.kind === 'grow') setAnim({ kind: 'turn', dir: 1, to: 0, go: false }) // now the cover opens
+      else if (a.kind === 'close' || a.kind === 'flyBack') onClose()
+      else if (a.kind === 'shut') {
         // Shut: the closed cover fills the screen — settle it into its own shape, then fly it home
         setP(-1)
         const spot = getShelfSpot()
         setAnim(spot ? { kind: 'shrink', to: spot, go: false } : { kind: 'close', go: false })
       }
-      else if (anim.kind === 'shrink') setAnim({ kind: 'flyBack', to: anim.to, go: false })
+      else if (a.kind === 'shrink') setAnim({ kind: 'flyBack', to: a.to, go: false })
       else {
-        setP(anim.to)
+        setP(a.to)
         setAnim(null)
-        if (anim.kind === 'jump') {
-          const page = PAGES[anim.to]
+        if (a.kind === 'jump') {
+          const page = PAGES[a.to]
           if (page?.kind === 'badges') setFlash((f) => ({ chapter: page.chapter, n: (f?.n ?? 0) + 1 }))
         }
       }
-    }, ms)
-    return () => clearTimeout(t)
+    }
+    const onEnd = (e: TransitionEvent) => {
+      if (e.propertyName === 'transform' && (e.target as HTMLElement).dataset?.end !== undefined) settle()
+    }
+    const root = areaRef.current
+    root?.addEventListener('transitionend', onEnd)
+    const t = setTimeout(settle, ms)
+    return () => { clearTimeout(t); root?.removeEventListener('transitionend', onEnd) }
   }, [anim, box, onClose, PAGES, p, getShelfSpot])
 
   const busy = !!anim
@@ -194,8 +221,9 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const W = box?.width ?? 0
   const H = box?.height ?? 0
   const pin = Math.max(44, Math.min(200, (W - RIM) * 0.33, (H - RIM * 2) * 0.215))
-  const pageProps = { badges, isMe, pin, onInspect: setInspect, flash }
-  const page = (i: number): Content => (i === -1 ? 'cover' : PAGES[i] ?? { kind: 'blank' })
+  // Kept the same between renders, so starting a motion redraws no pins (Half is memoized)
+  const pageProps = useMemo(() => ({ badges, isMe, pin, onInspect: setInspect, flash }), [badges, isMe, pin, flash])
+  const page = (i: number): Content => (i === -1 ? 'cover' : PAGES[i] ?? BLANK)
   const go = !!anim?.go
 
   // Every page in play and its role (see the top of the file). First role given to a page wins.
@@ -252,29 +280,32 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const atShelf = (anim?.kind === 'fly' && !go) || (anim?.kind === 'flyBack' && go)
   // How a page looks in its role; `go` = the motion is running
   const half = ms / 2
+  // Every page is its own layer at all times (will-change), drawn once while the book is still and
+  // then only moved. A page out of sight waits edge-on at the spine (where it's a line under the
+  // spine) rather than see-through: iPhone Safari doesn't draw a see-through layer ahead, so the
+  // landing page — pins, pinhole filters and all — was drawn mid-turn, and the turn stalled.
   const pageStyle = (i: number, role: Role): React.CSSProperties => {
     const area: Side = i === -1 || i % 2 === 1 ? 'right' : 'left'
     const lift = area === 'right' ? -90 : 90 // edge-on, its outer edge lifted toward you
     const base: React.CSSProperties = {
       left: area === 'left' ? 0 : W, width: W, height: H,
       transformOrigin: area === 'right' ? 'left center' : 'right center',
+      willChange: 'transform',
     }
     switch (role) {
-      case 'flat': return { ...base, zIndex: 3, transform: 'rotateY(0deg)', opacity: 1 }
-      case 'under': return { ...base, zIndex: 2, transform: 'rotateY(0deg)', opacity: 1 }
+      case 'flat': return { ...base, zIndex: 3, transform: 'rotateY(0deg)' }
+      case 'under': return { ...base, zIndex: 2, transform: 'rotateY(0deg)' }
       case 'hidden': return { ...base, zIndex: 0, transform: 'rotateY(0deg)', opacity: 0 }
-      case 'ready': return { ...base, zIndex: 1, transform: `rotateY(${lift}deg)`, opacity: 0 }
+      case 'ready': return { ...base, zIndex: 1, transform: `rotateY(${lift}deg)` }
       case 'front': return {
         ...base, zIndex: 15,
         transform: go ? `rotateY(${lift}deg)` : 'rotateY(0deg)',
-        opacity: go ? 0 : 1,
-        transition: go ? `transform ${half}ms cubic-bezier(0.5, 0, 0.9, 0.55), opacity 0s linear ${half}ms` : 'none',
+        transition: go ? `transform ${half}ms cubic-bezier(0.5, 0, 0.9, 0.55)` : 'none',
       }
       case 'back': return {
         ...base, zIndex: 15,
         transform: go ? 'rotateY(0deg)' : `rotateY(${lift}deg)`,
-        opacity: go ? 1 : 0,
-        transition: go ? `transform ${half}ms cubic-bezier(0.1, 0.45, 0.5, 1) ${half}ms, opacity 0s linear ${half}ms` : 'none',
+        transition: go ? `transform ${half}ms cubic-bezier(0.1, 0.45, 0.5, 1) ${half}ms` : 'none',
       }
     }
   }
@@ -287,12 +318,12 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   }
   const shownChapter = (() => { const pg = PAGES[Math.max(0, shownPage)]; return pg?.kind === 'badges' ? pg.chapter : -1 })()
 
-  const coverVars = {
+  const coverVars = useMemo(() => ({
     ['--leather-from' as string]: set.cover.from,
     ['--leather-to' as string]: set.cover.to,
     ['--accent' as string]: set.cover.accent,
     ...(set.coverImage && { backgroundImage: `url("${badgeAsset(set.coverImage)}")`, backgroundSize: '200% 100%' }),
-  } as React.CSSProperties
+  } as React.CSSProperties), [set])
 
   return createPortal(
     <div
@@ -356,7 +387,8 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
       <div
         ref={areaRef}
         className="relative flex-1 overflow-hidden"
-        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        // The swipes are ours: without this iPhone could take one as a scroll or a back gesture
+        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)', touchAction: 'none', overscrollBehavior: 'contain' }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -371,6 +403,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           >
           <div
             className="absolute top-0 left-0 will-change-transform"
+            data-end={anim?.kind === 'pan' ? '' : undefined}
             style={{
               width: W * 2, height: H,
               transform: `translateX(${cam}px)`,
@@ -383,7 +416,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           >
             {/* Every page in play, one element each (keyed by page number) — see the top of the file */}
             {Array.from(roles.entries()).map(([i, role]) => (
-              <div key={`page${i}`} className="absolute top-0" style={pageStyle(i, role)}>
+              <div key={`page${i}`} className="absolute top-0" style={pageStyle(i, role)} data-end={role === 'back' ? '' : undefined}>
                 {i === -1 ? <BookCover set={set} badges={badges} /> : (
                   <Half content={page(i)} side={i % 2 === 1 ? 'right' : 'left'} placed W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
                 )}
@@ -431,6 +464,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         {box && anim?.kind === 'jump' && (
           <div
             className="absolute top-0 left-0 z-20"
+            data-end=""
             style={{
               width: W, height: H,
               opacity: go ? 1 : 0,
@@ -503,7 +537,7 @@ type PageBits = Omit<React.ComponentProps<typeof PinPage>, 'page' | 'side'>
 // One half of the open spread: the cover showing round the page (its rim), and the page on it.
 // Placed on its side of a spread-wide box; `placed`: inside a page box that's already on its side
 // (pageStyle) — offsetting again put every right-hand page off the spread, leaving it black.
-function Half({ content, side, placed, W, H, coverVars, set, badges, pageProps }: {
+const Half = memo(function Half({ content, side, placed, W, H, coverVars, set, badges, pageProps }: {
   content: Content; side: Side; placed?: boolean; W: number; H: number; coverVars: React.CSSProperties
   set: BadgeSet; badges: SharedBadges | null; pageProps: PageBits
 }) {
@@ -519,7 +553,7 @@ function Half({ content, side, placed, W, H, coverVars, set, badges, pageProps }
       <Face content={content} side={side} W={W} H={H} set={set} badges={badges} pageProps={pageProps} />
     </div>
   )
-}
+})
 
 // What's printed on one side of a sheet: a page of pins (inset from the cover's rim), or the cover
 function Face({ content, side, set, badges, pageProps }: {
