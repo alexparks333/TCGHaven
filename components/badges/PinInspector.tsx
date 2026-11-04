@@ -93,7 +93,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
         setProg(0.3)
         const key = reliefBuildKey(def.imageUrl, def.finishMapUrl, def.relief?.holeSmooth, def.relief?.artHoles)
         const build = def.reliefBuildUrl && def.reliefBuildKey === key ? { url: badgeAsset(def.reliefBuildUrl)!, key } : undefined
-        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier > 0 ? tier as 1 | 2 | 3 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined, detailSlots: def.relief && def.detailMapUrl ? detailSlots(reliefSettings(def.relief)).slots : undefined }, badgeAsset(def.finishMapUrl), badgeAsset(def.detailMapUrl), build)
+        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier === 1 ? 1 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined, detailSlots: def.relief && def.detailMapUrl ? detailSlots(reliefSettings(def.relief)).slots : undefined }, badgeAsset(def.finishMapUrl), badgeAsset(def.detailMapUrl), build)
           .then(() => (def.normalMapUrl ? stage?.setNormalMap(badgeAsset(def.normalMapUrl)!) : undefined))
           .then(done)
           .catch((e) => { setError(`Couldn't build the pin from the art: ${e.message}`); setLoading(false) })

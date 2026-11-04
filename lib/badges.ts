@@ -82,10 +82,12 @@ export interface BadgeDef {
   reliefKit?: Record<string, string>
   relief?: ReliefSettings
   // Tiers: how far through the badge a collector is (have / total, %) decides which look their pin
-  // has — [Grayscale, Painted, Full], each the % that unlocks it. Unset = DEFAULT_TIERS.
-  tiers?: [number, number, number]
+  // has — [Grayscale, Full], each the % that unlocks it. Unset = DEFAULT_TIERS. Badges saved while
+  // there was a middle look (Painted, removed 2026-11-03) hold [Grayscale, Painted, Full]: read
+  // through tierPercents(), which skips the middle.
+  tiers?: [number, number] | [number, number, number]
   displayScale?: number // how big its pin is drawn wherever pins show flat (book pages, shelf, lists), 1 = as is (0.1–5) — evens out art framed bigger or smaller than the rest; unset = 1
-  tiersOff?: (1 | 2 | 3)[] // looks switched off for this badge (skipped: the pin keeps the look below until the next one on); unset = all on
+  tiersOff?: (1 | 2 | 3)[] // [1] = Grayscale switched off (the pin stays a hole until Full). Anything else is from the old three looks and ignored — read through looksOn(); unset = both on
   finishMapUrl?: string // the Relief Studio's per-pixel finishes (R = FINISHES id in lib/reliefStudio.ts); unset = all Auto
   detailMapUrl?: string // its details over them (R = slot, lib/reliefStudio.ts detailMap; the slots come from relief.details); unset = none
   // The relief's shape worked out by the Studio on save (pinRelief.ts bakeReliefBuild), so the 3D
@@ -131,32 +133,45 @@ export const DEFAULT_BADGES: BadgeDef[] = [
 
 /** A growing badge whose every current slot the collector fills right now (`have` from their
  *  progress, checked against the badge's slots today — a badge that grew since is not mastered). */
-// The three looks a pin can have, unlocked by progress (each badge's tiers, set in the staff
-// portal): 1 Grayscale — no colour, a little shine (polished grey), no finishes; 2 Painted — full colour, satin (little
-// shine), no finishes; 3 Full — the pin as designed. 0 = not unlocked yet (a hole in the book).
+// The two looks a pin can have, unlocked by progress (each badge's tiers, set in the staff
+// portal): 1 Grayscale — no colour, a little shine (polished grey), no finishes; 3 Full — the pin
+// as designed. 0 = not unlocked yet (a hole in the book). (There's no 2: it was a middle Painted
+// look, removed 2026-11-03 — the numbers are kept so badges saved before still read right.)
 // Follows current progress: selling cards below a tier drops the pin back down. A badge can switch
-// looks off (tiersOff): they're skipped, the pin keeping the look below until the next one on.
-export type BadgeTier = 0 | 1 | 2 | 3
-export const DEFAULT_TIERS: [number, number, number] = [50, 75, 90]
+// Grayscale off (tiersOff): the pin then stays a hole until Full.
+export type BadgeTier = 0 | 1 | 3
+export type BadgeLook = Exclude<BadgeTier, 0>
+export const DEFAULT_TIERS: [number, number] = [75, 90]
+/** A badge's [Grayscale, Full] percentages (an old three-look setting: its middle skipped). */
+export function tierPercents(def: Pick<BadgeDef, 'tiers'>): [number, number] {
+  const t = def.tiers
+  if (!t) return DEFAULT_TIERS
+  return t.length === 3 ? [t[0], t[2]] : [t[0], t[1]]
+}
+/** The looks switched on for a badge, lowest first. Only Grayscale can be off: Full is always on
+ *  (an old setting switching Full or the middle look off is ignored). */
+export function looksOn(def: Pick<BadgeDef, 'tiersOff'>): BadgeLook[] {
+  return def.tiersOff?.includes(1) ? [3] : [1, 3]
+}
 /** The size to draw a badge's pin at, for a slot made for `size` (its Display size applied). */
 export const pinSize = (def: Pick<BadgeDef, 'displayScale'>, size: number) => size * (def.displayScale ?? 1)
-export const TIER_NAMES = ['Locked', 'Grayscale', 'Painted', 'Full'] as const
+export const TIER_NAMES: Record<BadgeTier, string> = { 0: 'Locked', 1: 'Grayscale', 3: 'Full' }
 export function badgeTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
   const [have, total] = progress ?? [0, def.slots.length]
   if (!total) return 0
-  for (const k of [3, 2, 1] as const) if (!def.tiersOff?.includes(k) && have >= tierNeed(def, k, total)) return k
+  for (const k of [...looksOn(def)].reverse()) if (have >= tierNeed(def, k, total)) return k
   return 0
 }
 /** How many of `total` slots unlock look `k` (0 for none). The one rule every count, bar and fill
  *  uses: worked in whole cards, so a percentage that doesn't divide evenly (29% of 100 is
  *  28.999… in floating point) can't unlock a look at a different count than the one shown. */
 export function tierNeed(def: Pick<BadgeDef, 'tiers'>, k: BadgeTier, total: number): number {
-  return k ? Math.ceil(((def.tiers ?? DEFAULT_TIERS)[k - 1] * total) / 100 - 1e-9) : 0
+  return k ? Math.ceil((tierPercents(def)[k === 1 ? 0 : 1] * total) / 100 - 1e-9) : 0
 }
 /** The next look up that's switched on, or 0 at the top. */
 export function nextTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
   const tier = badgeTier(def, progress)
-  return ([1, 2, 3] as const).find((k) => k > tier && !def.tiersOff?.includes(k)) ?? 0
+  return looksOn(def).find((k) => k > tier) ?? 0
 }
 /** How many more of the badge's slots unlock the next look (0 at the top). */
 export function toNextTier(def: BadgeDef, progress: [number, number] | undefined): number {
@@ -168,7 +183,7 @@ export function toNextTier(def: BadgeDef, progress: [number, number] | undefined
 
 /** How far the collector is from the current look to the next one switched on (0–1) — the ghost
  *  fill on a pin. Tiered, not the whole badge: with Grayscale at 50% of 10 cards, 3 cards shows
- *  60%; once Grayscale is reached it starts again at 0 toward Painted. 0 at the top. */
+ *  60%; once Grayscale is reached it starts again at 0 toward Full. 0 at the top. */
 export function tierFill(def: BadgeDef, progress: [number, number] | undefined): number {
   const [have, total] = progress ?? [0, def.slots.length]
   const tier = badgeTier(def, progress)

@@ -60,7 +60,7 @@ npm run test:search / test:snapshot / test:variants
   Needs Review, Badges, Team. Admin-only API routes check the caller with `verifyAdminRequest()`;
   the client sends `adminFetch()`.
 - **Community** — Friends, profiles (`/u/{username}`), shared Cardex, Haven Badges (pin books,
-  3D pins, three tiers by progress), Pin Display.
+  3D pins, two looks by progress), Pin Display.
 
 ## Rules that bite (one line each — full write-ups in `docs/quirks.md`)
 
@@ -100,8 +100,9 @@ npm run test:search / test:snapshot / test:variants
 
 - Books and badges are one Firestore doc, `badge_catalog/main`, edited in the staff portal
   (`components/admin/BadgesAdmin.tsx`); read live via `useBadgeCatalog()`.
-- **Tiers** (`lib/badges.ts` `badgeTier()`): Grayscale / Painted / Full, unlocked by current
-  progress at each badge's `tiers` percentages (default 50 / 75 / 90). Followed by the pin book,
+- **Tiers** (`lib/badges.ts` `badgeTier()`): Grayscale (1) / Full (3), unlocked by current
+  progress at each badge's `tiers` percentages (default 75 / 90). No Painted look any more (removed
+  2026-11-03) — read old saved settings only through `tierPercents()` / `looksOn()`. Followed by the pin book,
   phone book, shelf counts, Pin Display and the 3D view. The Dev panel's "Preview badge progress"
   slider fakes progress on this device (dev server only).
 - **3D pins** (`components/badges/pinRelief.ts` + `PinInspector.tsx`): a relief built from the art

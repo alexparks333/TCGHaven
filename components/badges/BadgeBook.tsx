@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, chaptersOf, isMastered, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -393,7 +393,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   const size = Math.min(pinSize(def, pin), pin)
   const art = useTrimmedArt(def.imageUrl) // the art cropped to the pin, as BadgePin draws it — the masks follow it
   useEffect(() => { preloadPinInspector() }, []) // the 3D view's code, so a click opens it at once
-  // The pin shows once its first tier is reached, in that tier's look (Grayscale / Painted / Full)
+  // The pin shows once its first tier is reached, in that tier's look (Grayscale / Full)
   const tier = badgeTier(def, badges?.progress[def.id])
   const earnedAt = tier > 0 ? badges?.earned[def.id] ?? 1 : undefined
   const [have, total] = badges?.progress[def.id] ?? [0, def.slots.length]
@@ -413,7 +413,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       onPointerEnter={(e) => { if (interactive && e.pointerType === 'mouse') setOpen(true) }}
       onPointerLeave={() => { setOpen(false); setTilt(null) }}
       onPointerMove={(e) => {
-        if (tier === 0 || tier === 2 || e.pointerType !== 'mouse') return // the light-catching tilt: Full and the (polished) Grayscale pin — Painted is satin
+        if (tier === 0 || e.pointerType !== 'mouse') return // the light-catching tilt (Full, and the polished Grayscale pin)
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
       }}
@@ -448,10 +448,10 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
             {/* The pin in its look; the next look rising over it in the same box, so the two line up
                 exactly and tilt together (flex: no gap under the image; no shrinking a pin drawn
                 bigger than its slot) */}
-            <span className={cn('flex [&>*]:shrink-0', tier < 3 && `pinbook-look-${tier}`)}><BadgePin art={def.art} imageUrl={def.imageUrl} size={size} /></span>
+            <span className={cn('flex [&>*]:shrink-0', tier === 1 && 'pinbook-look-1')}><BadgePin art={def.art} imageUrl={def.imageUrl} size={size} /></span>
             {next > 0 && fill > 0 && (
               <span className="absolute inset-0 pointer-events-none" aria-hidden>
-                <TierRise size={size} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
+                <TierRise size={size} imageUrl={def.imageUrl} art={def.art} progress={fill} />
               </span>
             )}
             {tilt && (
@@ -497,16 +497,15 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
 }
 
 // The colour of each stretch of the hover bar: the look being collected toward in it
-const TIER_BAR = { 1: '#8d8a84', 2: '#7a3fc4', 3: '#c99a42' } as const
+const TIER_BAR = { 1: '#8d8a84', 3: '#c99a42' } as const
 
-// The hover card's bar: the whole badge, split into the stretch toward each look (Grayscale,
-// Painted, Full — looks switched off are skipped) in its own colour; the part collected is solid,
+// The hover card's bar: the whole badge, split into the stretch toward each look (Grayscale, then
+// Full — Grayscale skipped if it's switched off) in its own colour; the part collected is solid,
 // the rest faint. It ends at the top look (Full): nothing past it to collect toward.
 function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: number }) {
-  const on = ([1, 2, 3] as const).filter((k) => !def.tiersOff?.includes(k))
+  const on = looksOn(def)
   const stops = on.map((k) => tierNeed(def, k, total))
-  const zones: { tier: 1 | 2 | 3; from: number; to: number }[] = on.map((k, i) => ({ tier: k, from: i ? stops[i - 1] : 0, to: stops[i] }))
-  if (!zones.length) zones.push({ tier: 3, from: 0, to: total }) // every look switched off: one bar to the whole badge
+  const zones = on.map((k, i) => ({ tier: k, from: i ? stops[i - 1] : 0, to: stops[i] }))
   const shown = zones.filter((z) => z.to > z.from)
   return (
     <>
@@ -529,8 +528,8 @@ function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: num
   )
 }
 
-// The ghost in the look it's heading for — Grayscale for most badges (the first look switched on)
-const GHOST_LOOK: Record<number, string> = { 1: 'grayscale(1) contrast(1.05)', 2: 'saturate(0.92) contrast(0.96)', 3: 'saturate(0.85)' }
+// The ghost in the look it's heading for — Grayscale, or Full when Grayscale is switched off
+const GHOST_LOOK: Record<BadgeTier, string | undefined> = { 0: undefined, 1: 'grayscale(1) contrast(1.05)', 3: 'saturate(0.85)' }
 
 function PinHole({ size, hovered, imageUrl, art, tier, progress }: { size: number; hovered: boolean; imageUrl?: string; art: string; tier: BadgeTier; progress: number }) {
   // The pin's own shape pressed into the velvet: the
@@ -572,14 +571,14 @@ function riseHeight(trimmed: { aspect: number } | null | undefined, p: number) {
   return p > 0 ? (artTop + p * (1 - 2 * artTop)) * 100 : 0
 }
 
-// An earned pin on its way to the next look: that look (Painted, or Full) rises over it from the
+// A Grayscale pin on its way to Full: the Full pin rises over it from the
 // bottom, a little see-through, as far as the collector has got (tierFill).
-function TierRise({ size, imageUrl, art, tier, progress }: { size: number; imageUrl?: string; art: string; tier: BadgeTier; progress: number }) {
+function TierRise({ size, imageUrl, art, progress }: { size: number; imageUrl?: string; art: string; progress: number }) {
   const trimmed = useTrimmedArt(imageUrl)
   return (
     <span className="relative block" style={{ width: size, height: size * 1.12 }}>
       <span className="pin-tier-rise absolute inset-x-0 bottom-0 overflow-hidden" style={{ height: `${riseHeight(trimmed, progress)}%` }}>
-        <span className={cn('absolute inset-x-0 bottom-0 flex justify-center', tier === 2 && 'pinbook-look-2')} style={{ height: size * 1.12 }}>
+        <span className="absolute inset-x-0 bottom-0 flex justify-center" style={{ height: size * 1.12 }}>
           <BadgePin art={art} imageUrl={imageUrl} size={size} />
         </span>
       </span>

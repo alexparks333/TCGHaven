@@ -48,7 +48,7 @@ export interface ReliefLook {
   depth?: number
   wall?: number
   lenticular?: string[][] // the Lenticular finish's picture sets, as URLs the browser may load (via badgeAsset)
-  tier?: 1 | 2 | 3        // which look (setTier); unset = Full
+  tier?: 1 | 3            // which look (setTier): 1 Grayscale, 3 Full; unset = Full
   holeSmooth?: number     // 0–1: how much the art's own holes (its enclosed transparency) are rounded off
   artHoles?: boolean      // cut the art's enclosed transparency out as holes (ReliefSettings.artHoles); unset = no
   metalColor?: string     // the metal of the sides, back and gold walls (hex); unset = the original gold
@@ -69,9 +69,9 @@ export interface LiveRelief extends Relief {
   /** The Lenticular finish's picture sets (each: URLs, left to right), every picture the whole pin
    *  framed like the art. A lenticular pixel's set is in the finish map's blue channel. */
   setLenticular(sets: string[][]): Promise<void>
-  /** Which of the badge's three looks (lib/badges.ts badgeTier): 1 Grayscale — no colour, a little
-   *  shine, no finishes; 2 Painted — colour, satin, no finishes; 3 Full — as designed. */
-  setTier(tier: 1 | 2 | 3): void
+  /** Which of the badge's two looks (lib/badges.ts badgeTier): 1 Grayscale — no colour, a little
+   *  shine, no finishes; 3 Full — as designed. */
+  setTier(tier: 1 | 3): void
   /** Each pixel's finish, RGBA (R = FINISHES id in lib/reliefStudio.ts, G/B = its settings), size²;
    *  null = all Auto. Holes are cut when the pin is built (cleanRelief's `holes`), not here. */
   setFinish(finish: Uint8Array | null, size: number): void
@@ -102,7 +102,7 @@ export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?:
   if (detailUrl && look?.detailSlots?.length) r.setDetails(readFinish(await loadImage(detailUrl), HN), HN, look.detailSlots)
   if (look?.lenticular?.some((s) => s.length)) await r.setLenticular(look.lenticular)
   if (look?.metalColor) r.setMetal(look.metalColor, look.metalRough)
-  if (look?.tier && look.tier < 3) r.setTier(look.tier)
+  if (look?.tier === 1) r.setTier(1)
   return r
 }
 
@@ -411,7 +411,7 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     const m = (o as THREE.Mesh).material as THREE.MeshPhysicalMaterial | undefined
     if (m && m !== faceMaterial && 'clearcoat' in m && !metals.some((x) => x.m === m)) metals.push({ m, color: m.color.clone(), roughness: m.roughness, clearcoat: m.clearcoat, made: [m.color.clone(), m.roughness] })
   })
-  let tierNow: 1 | 2 | 3 = 3
+  let tierNow: 1 | 3 = 3
   // The metal's colour and roughness (the Studio's Global tab): the sides, skirt and hole walls
   // take it as is, the brushed back a touch lighter and rougher (as the gold always was), the
   // relief's gold walls the same colour. No colour = the metal as made.
@@ -429,16 +429,16 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     finishUniforms.wallRough.value = c || rough !== undefined ? Math.min(1, r + 0.02) : 0.32
     setTier(tierNow)
   }
-  function setTier(tier: 1 | 2 | 3) {
+  function setTier(tier: 1 | 3) {
     tierNow = tier
     finishUniforms.tierLook.value = tier
-    if (tier < 3 && faceMaterial.transmission > 0) { faceMaterial.transmission = 0; faceMaterial.needsUpdate = true }
+    if (tier === 1 && faceMaterial.transmission > 0) { faceMaterial.transmission = 0; faceMaterial.needsUpdate = true }
     for (const { m, color, roughness, clearcoat } of metals) {
       const l = color.r * 0.299 + color.g * 0.587 + color.b * 0.114
       m.color.copy(tier === 1 ? new THREE.Color(l, l, l) : color)
-      // Grayscale is polished silver-grey (a little shine, a light clearcoat); Painted is satin
-      m.roughness = tier === 1 ? Math.max(roughness, 0.24) : tier === 2 ? Math.max(roughness, 0.6) : roughness
-      m.clearcoat = tier === 1 ? Math.max(clearcoat, 0.55) : tier === 2 ? 0 : clearcoat
+      // Grayscale is polished silver-grey (a little shine, a light clearcoat)
+      m.roughness = tier === 1 ? Math.max(roughness, 0.24) : roughness
+      m.clearcoat = tier === 1 ? Math.max(clearcoat, 0.55) : clearcoat
     }
   }
   // The textures only the shaders hold (not in any material slot, so disposing the materials
@@ -959,7 +959,7 @@ uniform float hasFinish;
 uniform sampler2D lentAtlas;
 uniform vec3 lentGrid; // the lenticular pictures' grid: columns, rows, how many
 uniform vec2 lentSets[8]; // each lenticular set: its first picture in the grid, how many
-uniform float tierLook;   // 1 Grayscale, 2 Painted, 3 Full (the badge's tier)
+uniform float tierLook;   // 1 Grayscale, 3 Full (the badge's tier)
 uniform float normalStrength; // the normal map's tilt, scaled (1 = as made)
 uniform vec3 wallColor;       // the metal of the relief's steep walls (the pin's metal)
 uniform float wallRough;
@@ -1051,8 +1051,7 @@ if (fin < 0.5 && dCov > 0.0) {
 }
 metalnessFactor = mix(metalnessFactor, 1.0, vWall);
 roughnessFactor = mix(roughnessFactor, wallRough, vWall);
-if (tierLook < 1.5) { roughnessFactor = max(roughnessFactor, 0.24); metalnessFactor *= 0.95; }
-else if (tierLook < 2.5) { roughnessFactor = max(roughnessFactor, 0.6); metalnessFactor *= 0.6; }`,
+if (tierLook < 1.5) { roughnessFactor = max(roughnessFactor, 0.24); metalnessFactor *= 0.95; }`,
   look: `
 if (fin > 2.5 && vWall < 0.99) {
   vec3 dBase = diffuseColor.rgb, eBase = totalEmissiveRadiance;

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
-import { DEFAULT_TIERS, TIER_NAMES, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
+import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierPercents, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
@@ -336,31 +336,27 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             <input className="input-field" value={b.slotNoun} onChange={(e) => patch({ slotNoun: e.target.value })} placeholder="Legends" />
           </Field>
 
-          <Field label="Tier percentages" hint="How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick a look to skip it: the pin keeps the look below until the next one that's on.">
-            <div className="grid grid-cols-3 gap-2">
-              {([1, 2, 3] as const).map((t) => {
-                const tiers = b.tiers ?? DEFAULT_TIERS
-                const off = b.tiersOff ?? []
-                const on = !off.includes(t)
+          <Field label="Tier percentages" hint="How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick Grayscale to skip it: the pin stays a hole until Full.">
+            <div className="grid grid-cols-2 gap-2">
+              {([1, 3] as const).map((t, i) => {
+                const tiers = tierPercents(b)
+                const on = looksOn(b).includes(t)
                 return (
                   <div key={t} className="block">
                     <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-0.5"
-                      title={on && off.length === 2 ? 'At least one look has to stay on' : on ? `Skip the ${TIER_NAMES[t]} look` : `Use the ${TIER_NAMES[t]} look`}>
-                      <input type="checkbox" checked={on} disabled={on && off.length === 2}
-                        onChange={(e) => {
-                          const next = e.target.checked ? off.filter((x) => x !== t) : [...off, t].sort()
-                          patch({ tiersOff: next.length ? next : undefined })
-                        }} />
+                      title={t === 3 ? 'Full is always on' : on ? 'Skip the Grayscale look' : 'Use the Grayscale look'}>
+                      <input type="checkbox" checked={on} disabled={t === 3}
+                        onChange={(e) => patch({ tiersOff: e.target.checked ? undefined : [1] })} />
                       {TIER_NAMES[t]}
                     </label>
                     <div className={cn('flex items-center gap-1', !on && 'opacity-40')}>
-                      <TierPercent value={tiers[t - 1]} disabled={!on}
+                      <TierPercent value={tiers[i]} disabled={!on}
                         onCommit={(v) => {
-                          const next = [...tiers] as [number, number, number]
-                          next[t - 1] = v
-                          // keep them in order: Grayscale ≤ Painted ≤ Full
-                          for (let i: number = t; i < 3; i++) next[i] = Math.max(next[i], next[i - 1])
-                          for (let i: number = t - 2; i >= 0; i--) next[i] = Math.min(next[i], next[i + 1])
+                          const next = [...tiers] as [number, number]
+                          next[i] = v
+                          // keep them in order: Grayscale ≤ Full
+                          if (i === 0) next[1] = Math.max(next[1], v)
+                          else next[0] = Math.min(next[0], v)
                           patch({ tiers: next.join() === DEFAULT_TIERS.join() ? undefined : next })
                         }} />
                       <span className="text-xs text-slate-500">%</span>

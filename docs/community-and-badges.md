@@ -108,12 +108,17 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   darkens toward upright, the back brightens as it lays down, the uncovered page starts in its
   shadow (`TurnShadow`) — all ending exactly at the flat look. An unearned badge is a pin-shaped hole in the felt;
   hover/tap shows the pin (greyed), name, how to earn it and progress (e.g. 2 / 12 Legends).
-  **Progress fill is tiered** (`tierFill()` in `lib/badges.ts`): it measures from the current look
-  to the next one switched on, not the whole badge. A hole ghosts in toward Grayscale (Grayscale at
-  50% of 10 cards: 3 cards = 60% filled); an earned Grayscale/Painted pin has the next look rising
-  over it from the bottom (`TierRise` in `BadgeBook.tsx`), starting again at 0 after each tier. The
-  hover card reads "To Painted · 6 / 8" over a bar of the whole badge split into one coloured
-  stretch per look (`TierBar`); the hole's ghost is drawn in the look it heads for (Grayscale). The phone book uses the same `BadgeSpot`.
+  **Two looks** (`lib/badges.ts`): Grayscale (default 75%) and Full (default 90%), per badge in
+  `tiers`; Grayscale can be switched off (`tiersOff: [1]` — the pin stays a hole until Full). The
+  tier numbers are 1 and 3: a middle Painted look (2) was removed 2026-11-03, and badges saved
+  before still hold three percentages / old `tiersOff` values — always read them through
+  `tierPercents()` / `looksOn()`, which skip the old middle look.
+  **Progress fill is tiered** (`tierFill()`): it measures from the current look to the next, not
+  the whole badge. A hole ghosts in toward Grayscale (Grayscale at 50% of 10 cards: 3 cards = 60%
+  filled); an earned Grayscale pin has the Full pin rising over it from the bottom (`TierRise` in
+  `BadgeBook.tsx`), starting again at 0. The hover card reads "To Full · 8 / 9" over a bar of the
+  whole badge split into one coloured stretch per look (`TierBar`); the hole's ghost is drawn in
+  the look it heads for (Grayscale). Every count goes through `tierNeed()` (whole cards). The phone book uses the same `BadgeSpot`.
 - **Badge Sets & the shelf** (`BADGE_SETS` in `lib/badges.ts`; each badge has a `set`): every set
   is its own pin book — one per game: Riftbound (holds Origins Overnumbered), Pokémon, Lorcana,
   One Piece, Magic. A book with no badges yet shows its `monogram` medallion and "Coming soon". `components/badges/BadgeLibrary.tsx` (Badges page + profile Badges tab)
