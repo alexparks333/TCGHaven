@@ -178,6 +178,12 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   the page); in-book motions start in the same frame (styles flushed, no two-frame wait); pages are
   memoized (`Half`, stable `pageProps`) so starting a turn redraws no pins. The page area has
   `touch-action: none` so iOS can't take a swipe as a scroll or back gesture.
+  **Never run an endless paint animation over a moving page.** The mastered pins' platinum
+  highlight (`--plat-a` in a conic gradient) repaints its pin every frame; over a turning page iPhone
+  Safari couldn't redraw in time and the pins blinked and swapped mid-turn. It now runs only on the
+  phone book page on screen with the book still (`phonebook-page` / `phonebook-live`), pauses during
+  desktop turns (`pinbook-turning`), and the shelf's bar shine pauses under the open phone book
+  (`html.phonebook-open`).
   Page titles size to the page (`cqw`, `.pinbook-page` is a size container), shrinking for long names. A slight pull-back (scale ~0.93–0.95) during moves; the moving
   layers are `will-change: transform` (without it the pan stalled ~600ms re-drawing the pinhole SVG
   filters every frame). Uses `PinPage`/`PinholeFilter`/`buildPages` exported from BadgeBook.

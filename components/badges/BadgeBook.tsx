@@ -189,7 +189,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
 
       {/* Full page: on desktop the book stretches to fill the window (below the page title);
           on phones, and inside a profile, it keeps a book's proportions. */}
-      <div ref={bookRef} tabIndex={-1} className={cn('pinbook relative w-full outline-none aspect-[1.42]', full && 'md:aspect-auto md:h-[calc(100dvh-148px)] md:min-h-[420px]')}>
+      <div ref={bookRef} tabIndex={-1} className={cn('pinbook relative w-full outline-none aspect-[1.42]', turn && 'pinbook-turning', full && 'md:aspect-auto md:h-[calc(100dvh-148px)] md:min-h-[420px]')}>
         {/* Stacked page edges */}
         {[0, 1, 2].map((i) => (
           <div key={`l${i}`} className="pinbook-edge pinbook-edge-left absolute top-[1%] bottom-[1%] rounded-l-xl" style={{ left: `${-(i + 1) * 1.1}%`, width: '50%', zIndex: -1 - i, opacity: i < leftEdges ? 1 : 0, transition: edgeFade }} />

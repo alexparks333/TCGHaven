@@ -649,6 +649,12 @@
   box-shadow: 0 0 0 1px #d9dee3, 0 0 0 2px rgba(20, 16, 12, 0.85), 0 1px 3px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 @media (prefers-reduced-motion: reduce) { .pinbook-platinum { animation: none; } }
+/* The highlight repaints its pin every frame. Over a moving page that's too much for iPhone Safari:
+   it couldn't redraw the page in time, so the pins blinked and swapped mid-turn. It pauses while a
+   page turns (desktop), and in the phone book runs only on the page on screen with the book still. */
+.pinbook-turning .pinbook-platinum,
+.phonebook-page .pinbook-platinum { animation-play-state: paused; }
+.phonebook-page.phonebook-live .pinbook-platinum { animation-play-state: running; }
 /* Picking the chapter that's already open: its title glints */
 @keyframes pinbook-title-flash { 0% { filter: brightness(1); } 30% { filter: brightness(1.8) drop-shadow(0 0 10px rgba(246, 220, 152, 0.8)); } 100% { filter: brightness(1); } }
 .pinbook-title-flash { animation: pinbook-title-flash 0.9s ease-out; }
@@ -741,6 +747,7 @@
   animation: badge-bar-shine 2.4s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) { .badge-bar-complete { animation: none; } }
+.phonebook-open .badge-bar-complete { animation-play-state: paused; } /* under the phone book, out of sight */
 /* An earned pin's moving glint (BadgeBook BadgeSpot) — clipped to the pin's shape */
 .pinbook-glint {
   pointer-events: none;

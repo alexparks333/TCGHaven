@@ -104,12 +104,13 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     return () => window.removeEventListener('resize', measure)
   }, [])
 
-  // The page behind stays put while the book is open
+  // The page behind stays put while the book is open (and its endless shines pause — globals.css)
   useEffect(() => {
     const html = document.documentElement
     const prev = html.style.overflow
     html.style.overflow = 'hidden'
-    return () => { html.style.overflow = prev }
+    html.classList.add('phonebook-open')
+    return () => { html.style.overflow = prev; html.classList.remove('phonebook-open') }
   }, [])
 
   // Each motion: lay out its start, start it, then settle into its end state.
@@ -416,7 +417,8 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           >
             {/* Every page in play, one element each (keyed by page number) — see the top of the file */}
             {Array.from(roles.entries()).map(([i, role]) => (
-              <div key={`page${i}`} className="absolute top-0" style={pageStyle(i, role)} data-end={role === 'back' ? '' : undefined}>
+              // phonebook-live: the one page whose mastered pins' platinum highlight runs (globals.css)
+              <div key={`page${i}`} className={cn('phonebook-page absolute top-0', !anim && i === p && 'phonebook-live')} style={pageStyle(i, role)} data-end={role === 'back' ? '' : undefined}>
                 {i === -1 ? <BookCover set={set} badges={badges} /> : (
                   <Half content={page(i)} side={i % 2 === 1 ? 'right' : 'left'} placed W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
                 )}
@@ -472,7 +474,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
               transition: `transform ${JUMP_MS}ms ${EASE_PAN}, opacity ${JUMP_MS}ms ease`,
             }}
           >
-            <div className="absolute top-0" style={{ left: anim.to % 2 === 1 ? -W : 0, width: W * 2, height: H }}>
+            <div className="phonebook-page absolute top-0" style={{ left: anim.to % 2 === 1 ? -W : 0, width: W * 2, height: H }}>
               <Half content={page(anim.to)} side={anim.to % 2 === 1 ? 'right' : 'left'} W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
               <Spine x={W} H={H} />
             </div>
