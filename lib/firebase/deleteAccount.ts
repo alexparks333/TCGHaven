@@ -3,6 +3,7 @@ import {
 } from 'firebase/firestore'
 import {
   type User, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, deleteUser,
+  sendSignInLinkToEmail, isSignInWithEmailLink, checkActionCode, ActionCodeOperation,
 } from 'firebase/auth'
 import { auth, db, googleProvider, ADMIN_UID } from './config'
 
@@ -14,10 +15,47 @@ import { auth, db, googleProvider, ADMIN_UID } from './config'
 //   friendships              every pair they're in, sent or received
 //   shared_cardex/{uid}, shared_badges/{uid}, usernames they hold, profiles/{uid}
 //   the sign-in itself (Firebase Auth) — last
+//
+// Two factors before anything is deleted (2026-11-04): Settings only emails a confirmation link
+// (sendDeleteEmail); the link's page (/confirm-delete) checks it was sent to this account's inbox
+// and asked for on this device in the last hour (checkDeleteLink), then needs the password or
+// Google sign-in again (confirmIdentity) right before deleting.
 // Old invite_codes can't be found by owner (rules forbid listing); they map a code to a uid that
 // no longer exists, which /invite already treats as not found.
 
 const USER_FOLDERS = ['cards', 'soldCards', 'deletedCards', 'collections', 'settings', 'priceHistory', 'purchases']
+
+// The request, kept on the device that asked: the link only works there, within the hour
+const REQUEST_KEY = 'tcghaven-delete-request'
+const REQUEST_MS = 60 * 60 * 1000
+
+export async function sendDeleteEmail(user: User): Promise<void> {
+  if (!user.email) throw new Error('This account has no email address to confirm with.')
+  await sendSignInLinkToEmail(auth, user.email, { url: `${window.location.origin}/confirm-delete`, handleCodeInApp: true })
+  try { localStorage.setItem(REQUEST_KEY, JSON.stringify({ uid: user.uid, at: Date.now() })) } catch { /* blocked — the link page says so */ }
+}
+
+export function cancelDeleteRequest() {
+  try { localStorage.removeItem(REQUEST_KEY) } catch { /* nothing kept */ }
+}
+
+/** null = the link is good for deleting this account; otherwise why not, in words */
+export async function checkDeleteLink(user: User, href: string): Promise<string | null> {
+  if (!isSignInWithEmailLink(auth, href)) return 'This isn’t a confirmation link. Start again from Settings → Delete account.'
+  let req: { uid?: string; at?: number } | null = null
+  try { req = JSON.parse(localStorage.getItem(REQUEST_KEY) ?? 'null') } catch { /* unreadable — treated as none */ }
+  if (!req || req.uid !== user.uid) return 'Open this link on the same device (and browser) where you asked to delete your account.'
+  if (Date.now() - (req.at ?? 0) > REQUEST_MS) return 'This link has expired. Start again from Settings → Delete account.'
+  const code = new URL(href).searchParams.get('oobCode') ?? ''
+  try {
+    const info = await checkActionCode(auth, code)
+    if (info.operation !== ActionCodeOperation.EMAIL_SIGNIN) return 'This isn’t a confirmation link. Start again from Settings → Delete account.'
+    if ((info.data.email ?? '').toLowerCase() !== (user.email ?? '').toLowerCase()) return 'This link was sent to a different account’s email.'
+  } catch {
+    return 'This link has expired or was already used. Start again from Settings → Delete account.'
+  }
+  return null
+}
 
 export type DeleteStep = 'confirming' | 'profile' | 'friends' | 'collection' | 'account'
 
@@ -72,6 +110,7 @@ export async function deleteAccount(user: User, onStep: (s: DeleteStep) => void)
   try {
     for (const k of Object.keys(localStorage)) if (k.includes(uid)) localStorage.removeItem(k)
   } catch { /* storage blocked — nothing kept */ }
+  cancelDeleteRequest()
 }
 
 // A whole folder, a page at a time (a batch holds at most 500 writes)

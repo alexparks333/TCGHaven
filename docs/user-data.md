@@ -105,8 +105,12 @@ login).
 ### Deleting an account (2026-11-04)
 
 Settings (⚙️ on your profile) → **Delete account** — required by the App Store for any app with
-sign-up. `lib/firebase/deleteAccount.ts` runs it as the user (there's no admin SDK), in this order:
-sign in again (`confirmIdentity` — nothing is deleted if that fails), then profile + usernames +
+sign-up. **Two factors** (screens in `components/account/DeleteAccount.tsx`): Settings only emails a
+confirmation link (`sendDeleteEmail` — Firebase's email-link sign-in, which must stay enabled in the
+Firebase console); the link opens `/confirm-delete`, which checks it (`checkDeleteLink`: sent to this
+account's inbox, asked for on this device within the hour) and then needs the password / Google
+sign-in again. `lib/firebase/deleteAccount.ts` runs it as the user (there's no admin SDK), in this
+order: sign in again (`confirmIdentity` — nothing is deleted if that fails), then profile + usernames +
 shared copies in one all-or-nothing batch, then friendships, then every `users/{uid}` folder
 (`USER_FOLDERS` — **add any new per-user folder there**), then the Auth user, then this device's
 uid-keyed localStorage. `firestore.rules` lets an owner delete their own `profiles/{uid}` and
