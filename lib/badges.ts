@@ -88,6 +88,10 @@ export interface BadgeDef {
   tiersOff?: (1 | 2 | 3)[] // looks switched off for this badge (skipped: the pin keeps the look below until the next one on); unset = all on
   finishMapUrl?: string // the Relief Studio's per-pixel finishes (R = FINISHES id in lib/reliefStudio.ts); unset = all Auto
   detailMapUrl?: string // its details over them (R = slot, lib/reliefStudio.ts detailMap; the slots come from relief.details); unset = none
+  // The relief's shape worked out by the Studio on save (pinRelief.ts bakeReliefBuild), so the 3D
+  // view needn't — used only while reliefBuildKey still matches the art, finish map and hole settings
+  reliefBuildUrl?: string
+  reliefBuildKey?: string
 }
 
 // The standard pin backs every 3D pin gets (built in components/badges/pinBacks.ts)

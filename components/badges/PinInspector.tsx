@@ -14,6 +14,7 @@ import { badgeTier, isMastered, nextTier, toNextTier, TIER_NAMES, type BadgeDef 
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_STAR, PIN_RIBBON } from './BadgePin'
 import { buildRelief, disposeRelief, type ReliefLook } from './pinRelief'
+import { reliefBuildKey } from '@/lib/reliefBuild'
 import { detailSlots, lenticularPictures, reliefSettings } from '@/lib/reliefStudio'
 import { assemblePin, addBackHardware, type PinBackId } from './pinBacks'
 import { PolishingBar } from './pinInspectorLoader'
@@ -87,9 +88,12 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
           .then(done)
           .catch((e) => { setError(`Couldn't load the 3D pin: ${e.message}`); setLoading(false) })
       } else if (def.imageUrl) {
-        // No model: a relief built from the uploaded art
+        // No model: a relief built from the uploaded art — its shape from the Studio's saved build
+        // while that was made from this art, finish map and hole settings
         setProg(0.3)
-        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier > 0 ? tier as 1 | 2 | 3 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined, detailSlots: def.relief && def.detailMapUrl ? detailSlots(reliefSettings(def.relief)).slots : undefined }, badgeAsset(def.finishMapUrl), badgeAsset(def.detailMapUrl))
+        const key = reliefBuildKey(def.imageUrl, def.finishMapUrl, def.relief?.holeSmooth, def.relief?.artHoles)
+        const build = def.reliefBuildUrl && def.reliefBuildKey === key ? { url: badgeAsset(def.reliefBuildUrl)!, key } : undefined
+        stage.useRelief(badgeAsset(def.imageUrl)!, badgeAsset(def.depthMapUrl), { ...def.relief, tier: tier > 0 ? tier as 1 | 2 | 3 : undefined, lenticular: def.relief ? lenticularPictures(reliefSettings(def.relief), def.imageUrl).map((set) => set.map((u) => badgeAsset(u)!)) : undefined, detailSlots: def.relief && def.detailMapUrl ? detailSlots(reliefSettings(def.relief)).slots : undefined }, badgeAsset(def.finishMapUrl), badgeAsset(def.detailMapUrl), build)
           .then(() => (def.normalMapUrl ? stage?.setNormalMap(badgeAsset(def.normalMapUrl)!) : undefined))
           .then(done)
           .catch((e) => { setError(`Couldn't build the pin from the art: ${e.message}`); setLoading(false) })
@@ -98,7 +102,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       }
     }).catch((e) => { setError(String(e)); setLoading(false) })
     return () => { disposed = true; stage?.dispose(); api.current = null }
-  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.detailMapUrl, def.pinBack, def.modelFrontPositiveZ, def.displayScale, mystery, tier])
+  }, [def.model, def.imageUrl, def.normalMapUrl, def.depthMapUrl, def.relief, def.finishMapUrl, def.detailMapUrl, def.reliefBuildUrl, def.reliefBuildKey, def.pinBack, def.modelFrontPositiveZ, def.displayScale, mystery, tier])
 
   const [have, total] = progress ?? [0, def.slots.length]
   const mastered = isMastered(def, progress, !!earnedAt)
@@ -161,7 +165,7 @@ interface StageApi {
   loadModel: (url: string, back?: PinBackId, frontPositiveZ?: boolean, onProgress?: (fraction: number) => void) => Promise<void>
   warm: () => Promise<void>
   blackout: () => void
-  useRelief: (url: string, depthUrl?: string, look?: ReliefLook, finishUrl?: string, detailUrl?: string) => Promise<void>
+  useRelief: (url: string, depthUrl?: string, look?: ReliefLook, finishUrl?: string, detailUrl?: string, build?: { url: string; key: string }) => Promise<void>
   setFaceImage: (url: string) => Promise<void>
   setNormalMap: (url: string) => Promise<void>
   reset: () => void
@@ -304,8 +308,8 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement, displ
       renderer.render(scene, camera)
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
     },
-    async useRelief(url, depthUrl, look, finishUrl, detailUrl) {
-      const r = await buildRelief(url, renderer.capabilities.getMaxAnisotropy(), depthUrl, look, finishUrl, detailUrl)
+    async useRelief(url, depthUrl, look, finishUrl, detailUrl, build) {
+      const r = await buildRelief(url, renderer.capabilities.getMaxAnisotropy(), depthUrl, look, finishUrl, detailUrl, build)
       addBackHardware(r.group, r.backZ)
       reliefMat = r.faceMaterial
       show(r.group)

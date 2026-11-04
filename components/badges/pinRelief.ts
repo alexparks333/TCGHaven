@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { HOLE_SMOOTH, RELIEF_BUILD_VERSION } from '@/lib/reliefBuild'
 
 // Turns a flat piece of pin art (PNG with transparency — or a picture on a plain white
 // background) into a 3D enamel pin, with no hand-made model:
@@ -24,7 +25,9 @@ const GRID = COARSE ? 320 : 560
 // A real relief (HavenRelief): read at the art's full resolution and meshed about twice as densely,
 // so the sculpted detail holds up side-on, not just head-on
 const HN = 2048
-const CLEAN_GRID = COARSE ? 640 : 1100
+const FINE_GRID = 1100
+const COARSE_GRID = 640
+const CLEAN_GRID = COARSE ? COARSE_GRID : FINE_GRID
 const BODY = 0.035   // metal body thickness
 const BEVEL = 0.012
 const RELIEF = 0.018 // tallest relief above the body — real pins are shallow (≈⅓ of the body)
@@ -54,8 +57,7 @@ export interface ReliefLook {
   detailSlots?: number[][] // the detail map's slots (lib/reliefStudio.ts detailSlots), when it has one
 }
 
-/** The art's own holes are rounded off this much unless the Studio says otherwise (ReliefSettings.holeSmooth) */
-export const HOLE_SMOOTH = 0.3
+export { HOLE_SMOOTH }
 
 /** A real relief whose surface can be re-shaped in place — the Relief Studio's live preview. */
 export interface LiveRelief extends Relief {
@@ -85,15 +87,16 @@ export interface LiveRelief extends Relief {
 // Finishes, by id — keep in step with FINISHES in lib/reliefStudio.ts (that's where they're named)
 export const FINISH_HOLE = 6
 
-export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?: string, look?: ReliefLook, finishUrl?: string, detailUrl?: string): Promise<Relief> {
-  const img = await loadImage(url)
+/** `build`: the badge's shape worked out ahead by the Studio (bakeReliefBuild), with the key
+ *  (lib/reliefBuild.ts) it must have been made for — pass it only while that matches the badge. */
+export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?: string, look?: ReliefLook, finishUrl?: string, detailUrl?: string, build?: { url: string; key: string }): Promise<Relief> {
+  const [img, baked] = await Promise.all([loadImage(url), depthUrl && build ? loadReliefBuild(build.url, build.key) : null])
   if (!depthUrl) return guessedRelief(img, maxAnisotropy)
   // A real relief height map (HavenRelief / the Relief Studio) is used exactly as made
   const fineHeight = reliefHeight(await loadImage(depthUrl), img) // HN×HN, with its own alpha
   // The Studio's finish map (R = finish id per pixel), when the badge has one
   const finish = finishUrl ? readFinish(await loadImage(finishUrl), HN) : null
-  const holes = finish ? Uint8Array.from({ length: HN * HN }, (_, i) => (finish[i * 4] % 16 === FINISH_HOLE ? 1 : 0)) : null
-  const r = cleanRelief(img, maxAnisotropy, fineHeight.a, HN, CLEAN_GRID, holes?.some((v) => v) ? { mask: holes, size: HN } : undefined, look?.holeSmooth, !!look?.artHoles)
+  const r = cleanRelief(img, maxAnisotropy, fineHeight.a, HN, CLEAN_GRID, baked ? undefined : finishHoles(finish), look?.holeSmooth, !!look?.artHoles, baked ?? undefined)
   r.setHeight(fineHeight.h, HN, look)
   if (finish) r.setFinish(finish, HN)
   if (detailUrl && look?.detailSlots?.length) r.setDetails(readFinish(await loadImage(detailUrl), HN), HN, look.detailSlots)
@@ -101,6 +104,13 @@ export async function buildRelief(url: string, maxAnisotropy: number, depthUrl?:
   if (look?.metalColor) r.setMetal(look.metalColor, look.metalRough)
   if (look?.tier && look.tier < 3) r.setTier(look.tier)
   return r
+}
+
+// The finish map's Hole pixels as a mask (HN²), or undefined when it has none
+function finishHoles(finish: Uint8Array | null): { mask: Uint8Array; size: number } | undefined {
+  if (!finish) return undefined
+  const mask = Uint8Array.from({ length: HN * HN }, (_, i) => (finish[i * 4] % 16 === FINISH_HOLE ? 1 : 0))
+  return mask.some((v) => v) ? { mask, size: HN } : undefined
 }
 
 function readFinish(img: HTMLImageElement, size: number): Uint8Array {
@@ -118,16 +128,20 @@ function readFinish(img: HTMLImageElement, size: number): Uint8Array {
  *  With `artHoles`, transparent areas inside the art (enclosed by the pin, not open to its edge)
  *  are holes too, their edges rounded off by `holeSmooth` (0–1). */
 export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha: Float32Array, size: number, grid: number,
-  holes?: { mask: Uint8Array; size: number }, holeSmooth = HOLE_SMOOTH, artHoles = false): LiveRelief {
+  holes?: { mask: Uint8Array; size: number }, holeSmooth = HOLE_SMOOTH, artHoles = false, baked?: ReliefBuild): LiveRelief {
   const { rgba } = readPixels(img, N)
   const artAlpha = alphaOf(rgba)
-  const art = artHoles ? withArtHoles(holes, alpha, size, holeSmooth) : { holes, fill: null, raw: null }
-  holes = art.holes
-  if (holes) {
-    // The face runs on across the holes (they're cut from it per pixel, by holeTexture): solid there
-    const k = holes.size / size
-    alpha = alpha.map((a, i) => (holes.mask[Math.floor(Math.floor(i / size) * k) * holes.size + Math.floor((i % size) * k)] || art.raw?.[i] ? 1 : a))
+  // The shape (holes, outline, the face cut to the pin): the Studio's, worked out ahead, or now
+  let shape: ReliefShape, mesh: ReliefMesh | undefined = baked?.meshes.find((m) => m.grid === grid)
+  if (baked) shape = baked.shape
+  else {
+    const made = reliefShape(artAlpha, alpha, size, holes, holeSmooth, artHoles)
+    shape = made.shape
+    mesh = reliefMesh(made.cut, size, grid, outlineShape(shape.outline))
   }
+  if (!mesh) mesh = reliefMesh(cutAlpha(alpha, size, shape), size, grid, outlineShape(shape.outline)) // made for another grid
+  holes = shape.holes ?? undefined
+  const art = { raw: shape.raw }
   const classes = classify(rgba, artAlpha)
   solidifyGold(classes) // metal only in solid gold areas, never flecks
 
@@ -168,14 +182,13 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   const finishUniforms = installWallShader(faceMaterial)
 
   const group = new THREE.Group()
-  const outline = traceOutline(artAlpha)
+  const outline = outlineShape(shape.outline)
   // A hole has one wall, standing on its smooth edge (holeLoops) from the face right down to the
   // back plate. Everything else is cut along the same edge per pixel by the hole map: the face (in
   // its shader) and the body and back plate (holeDiscard) — openings triangulated into the body
   // folded over on intricate holes and filled them back in with gold.
-  const holeField0 = holes ? holeField(holes.mask, holes.size) : null
-  const holeEdges = holeField0 ? holeLoops(holeField0, holes!.size) : []
-  const holeTex = holeField0 ? holeTexture(holeField0, holes!.size) : null
+  const holeEdges = shape.loops
+  const holeTex = shape.field && holes ? holeTexture(shape.field, holes.size) : null
   if (holeTex) {
     finishUniforms.holeMap.value = holeTex
     finishUniforms.hasHoles.value = 1
@@ -187,33 +200,17 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   // The height carried a few pixels into the holes before the hole's top edge samples it: a height
   // map is 0 where the art is transparent, and the edge (on the border) caught that 0 at every
   // other point — a saw-toothed wall
-  let band: { size: number; idx: number[]; hole: Uint8Array } | null = null
+  let band: HoleBand | null = shape.band
   function intoHoles(h: Float32Array, hsize: number): Float32Array {
-    const hm = holes!
-    if (band?.size !== hsize) {
-      const k = hm.size / hsize
-      let holeAt: Uint8Array = new Uint8Array(hsize * hsize)
-      for (let i = 0; i < holeAt.length; i++) holeAt[i] = hm.mask[Math.floor(Math.floor(i / hsize) * k) * hm.size + Math.floor((i % hsize) * k)]
-      // a little past the edge too: the height map falls away just inside a cutout's edge, and that
-      // drop showed as a fringe of gold wall teeth along it
-      holeAt = dilate(holeAt, hsize, Math.max(1, Math.round(3 * hsize / 2048)))
-      const hole = (x: number, y: number) => holeAt[y * hsize + x] === 1
-      const r = Math.max(3, Math.round(10 * hsize / 2048)), idx: number[] = []
-      for (let y = 0; y < hsize; y++) for (let x = 0; x < hsize; x++) {
-        if (!hole(x, y)) continue
-        near: for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-          const nx = x + dx, ny = y + dy
-          if (nx >= 0 && ny >= 0 && nx < hsize && ny < hsize && !hole(nx, ny)) { idx.push(y * hsize + x); break near }
-        }
-      }
-      band = { size: hsize, idx, hole: holeAt }
-    }
+    if (band?.size !== hsize) band = holeBand(holes!, hsize)
     const out = h.slice(), known = Uint8Array.from(band.hole, (v) => 1 - v) // solid, or filled already
-    for (const i of band.idx) out[i] = 0
+    const bandIdx = band.idx
+    for (let j = 0; j < bandIdx.length; j++) out[bandIdx[j]] = 0
     // grown outward from the solid side, a pixel ring per pass
     for (let pass = 0; pass < Math.max(3, Math.round(10 * hsize / 2048)) + 1; pass++) {
       const prev = out.slice(), was = known.slice()
-      for (const i of band.idx) {
+      for (let j = 0; j < bandIdx.length; j++) {
+        const i = bandIdx[j]
         if (was[i]) continue
         const x = i % hsize
         let best = 0, n = 0
@@ -231,14 +228,15 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   // than sloping down to zero (that slope got stretched edge colour — a ragged silver fringe)
   const face = new THREE.PlaneGeometry(1, 1, grid, grid)
   const pos = face.attributes.position
-  const keep: number[] = []
   const idx = face.index!.array
-  const inside = (vi: number) => sample(alpha, pos.getX(vi) + 0.5, 0.5 - pos.getY(vi), size) > 0.5
-  for (let t = 0; t < idx.length; t += 3) if (inside(idx[t]) && inside(idx[t + 1]) && inside(idx[t + 2])) keep.push(idx[t], idx[t + 1], idx[t + 2])
-  face.setIndex(keep)
+  const keep = keptIndices(idx, mesh.keep)
+  face.setIndex(new THREE.BufferAttribute(keep, 1))
   // Its bounds are the pin's, not the whole square: the grid's unused corners stay in the geometry,
   // and measured with them every pin framed as the full picture, margin and all (PinInspector's fit)
-  const used = Array.from(new Set(keep))
+  const usedAt = new Uint8Array(pos.count)
+  for (let i = 0; i < keep.length; i++) usedAt[keep[i]] = 1
+  const used: number[] = []
+  for (let i = 0; i < usedAt.length; i++) if (usedAt[i]) used.push(i)
   const faceBounds = () => {
     const b = new THREE.Box3(), v = new THREE.Vector3()
     for (const i of used) b.expandByPoint(v.fromBufferAttribute(pos, i))
@@ -249,65 +247,18 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   face.setAttribute('wall', wallAttr)
   group.add(new THREE.Mesh(face, faceMaterial))
 
-  // A gold skirt from the relief's cut edge down into the body: without it the edge floats above
-  // the body's top wherever the relief there is raised, and you see straight through the gap
-  const edgeUse = new Map<number, number>()
-  const edgeKey = (a: number, b: number) => (a < b ? a * pos.count + b : b * pos.count + a)
-  for (let t = 0; t < keep.length; t += 3) for (let e = 0; e < 3; e++) {
-    const k = edgeKey(keep[t + e], keep[t + ((e + 1) % 3)])
-    edgeUse.set(k, (edgeUse.get(k) ?? 0) + 1)
-  }
-  const rim: number[] = [] // face vertex per skirt vertex (top ones), -1 = bottom
-  for (let t = 0; t < keep.length; t += 3) for (let e = 0; e < 3; e++) {
-    const a = keep[t + e], b = keep[t + ((e + 1) % 3)]
-    if (edgeUse.get(edgeKey(a, b)) === 1) rim.push(a, b, -1 - b, a, -1 - b, -1 - a)
-  }
-  // The cut edge follows the mesh grid in little steps; pull every edge vertex onto the smooth
-  // outline the body is built from, so the skirt is one clean wall meeting the body's bevel — not a
-  // staircase. Onto the nearest point along the outline's segments, not its nearest corner: corners
-  // can be a few grid cells apart, and a vertex pulled that far sideways made a spike at the edge.
-  // (Holes don't cut the face's mesh — see holeWalls below.)
-  const segs: number[] = [] // x1, y1, x2, y2, 0
-  const addLoop = (pts: THREE.Vector2[]) => {
-    for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; segs.push(a.x, a.y, b.x, b.y, 0) }
-  }
-  addLoop(outline.getPoints())
-  const reach = 4 / grid
-  const bins = new Map<number, number[]>() // segments by the reach-sized cells they touch
-  const binOf = (cx: number, cy: number) => (cx + 4096) * 8192 + (cy + 4096)
-  for (let s = 0; s < segs.length; s += 5) {
-    const x0 = Math.floor(Math.min(segs[s], segs[s + 2]) / reach), x1 = Math.floor(Math.max(segs[s], segs[s + 2]) / reach)
-    const y0 = Math.floor(Math.min(segs[s + 1], segs[s + 3]) / reach), y1 = Math.floor(Math.max(segs[s + 1], segs[s + 3]) / reach)
-    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
-      const k = binOf(cx, cy)
-      const list = bins.get(k)
-      if (list) list.push(s); else bins.set(k, [s])
-    }
-  }
+  // A gold skirt from the relief's cut edge down into the body (reliefMesh's rim), its top on the
+  // face's edge vertices, which reliefMesh pulled onto the smooth outline
+  const rim = mesh.rim
   const uv = face.attributes.uv
-  const snapped = new Set<number>()
-  for (const v of rim) {
-    if (v < 0 || snapped.has(v)) continue
-    snapped.add(v)
-    const x = pos.getX(v), y = pos.getY(v)
-    let bd = reach * reach, bx = 0, by = 0, found = false
-    const cx = Math.floor(x / reach), cy = Math.floor(y / reach)
-    for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-      for (const s of bins.get(binOf(cx + ox, cy + oy)) ?? []) {
-        const ax = segs[s], ay = segs[s + 1], dx = segs[s + 2] - ax, dy = segs[s + 3] - ay
-        const l2 = dx * dx + dy * dy
-        const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0
-        const px = ax + t * dx, py = ay + t * dy, d = (px - x) ** 2 + (py - y) ** 2
-        if (d < bd) { bd = d; bx = px; by = py; found = true }
-      }
-    }
-    if (!found) continue
-    pos.setXY(v, bx, by)
-    uv.setXY(v, bx + 0.5, by + 0.5)
+  for (let i = 0; i < mesh.snapV.length; i++) {
+    const v = mesh.snapV[i], x = mesh.snapXY[i * 2], y = mesh.snapXY[i * 2 + 1]
+    pos.setXY(v, x, y)
+    uv.setXY(v, x + 0.5, y + 0.5)
   }
   uv.needsUpdate = true
   const skirtPos = new Float32Array(rim.length * 3)
-  rim.forEach((v, i) => {
+  rim.forEach((v: number, i: number) => {
     const src = v >= 0 ? v : -1 - v
     skirtPos[i * 3] = pos.getX(src); skirtPos[i * 3 + 1] = pos.getY(src)
     skirtPos[i * 3 + 2] = front - 0.004
@@ -323,10 +274,10 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   const wallTops: number[] = [] // x, y per loop point, in wall-vertex order (top, bottom pairs)
   const wallIdx: number[] = []
   for (const loop of holeEdges) {
-    const first = wallTops.length / 2
-    for (let i = 0; i < loop.length; i++) {
-      wallTops.push(loop[i].x, loop[i].y)
-      const a = (first + i) * 2, b = (first + (i + 1) % loop.length) * 2
+    const first = wallTops.length / 2, n = loop.length / 2
+    for (let i = 0; i < n; i++) {
+      wallTops.push(loop[i * 2], loop[i * 2 + 1])
+      const a = (first + i) * 2, b = (first + (i + 1) % n) * 2
       wallIdx.push(a, b, a + 1, b, b + 1, a + 1)
     }
   }
@@ -357,7 +308,7 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     face.computeVertexNormals()
     face.computeBoundingSphere()
     faceBounds()
-    rim.forEach((v, i) => { if (v >= 0) skirtPos[i * 3 + 2] = pos.getZ(v) })
+    rim.forEach((v: number, i: number) => { if (v >= 0) skirtPos[i * 3 + 2] = pos.getZ(v) })
     skirt.attributes.position.needsUpdate = true
     skirt.computeVertexNormals()
     skirt.computeBoundingSphere()
@@ -502,6 +453,249 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
   return { group, faceMaterial, backZ, outline, setHeight, setHighlight, setOverlay, setFinish, setDetails, setNormalStrength, setMetal, setLenticular, setTier }
 }
 
+// ── The relief's shape, worked out once ──────────────────────────────────────────────────────
+
+// The slow part of building a real relief (seconds) depends only on the art's cut-out, the Studio's
+// Hole finish and its hole settings — not on heights, colours or finishes: which pixels are holes,
+// their smooth edges, the pin's outline, the face mesh cut to it with its edge pulled onto the
+// outline, and the band round each hole that the height is carried into. So the Studio works it out
+// once, on "Save relief to badge" (bakeReliefBuild), and the badge keeps it as a small file
+// (reliefBuildUrl); the 3D view loads that instead (loadReliefBuild) while its key (reliefBuildKey:
+// the art, finish map and hole settings it was made from) still matches. Otherwise — an older badge,
+// or the art changed outside the Studio — cleanRelief works it out as it always did.
+
+type Holes = { mask: Uint8Array; size: number }
+type HoleBand = { size: number; idx: Int32Array; hole: Uint8Array }
+
+/** The grid-free part: the same for every mesh resolution. */
+export interface ReliefShape {
+  outline: Float32Array       // the pin's outline (traceOutline), x, y per point
+  holes: Holes | null         // every hole: the Hole finish's and the art's own (withArtHoles)
+  raw: Uint8Array | null      // the art's own holes as they are (alpha's size²)
+  field: Uint8Array | null    // holeField as 0–255 (holes.size²) — the hole texture
+  loops: Float32Array[]       // the holes' smooth edges (holeLoops), x, y per point
+  band: HoleBand | null       // intoHoles' band, at the height map's size (HN)
+}
+
+/** The face mesh at one grid resolution. */
+export interface ReliefMesh {
+  grid: number
+  keep: Uint8Array            // per triangle of the grid's PlaneGeometry: 1 = part of the face
+  rim: Int32Array             // the skirt's vertices: a face vertex, or -1 - vertex for its bottom
+  snapV: Int32Array           // face edge vertices pulled onto the outline…
+  snapXY: Float32Array        // …and where to (x, y each)
+}
+
+export interface ReliefBuild { v: number; key: string; shape: ReliefShape; meshes: ReliefMesh[] }
+
+// (The key and version — reliefBuildKey, RELIEF_BUILD_VERSION — are in lib/reliefBuild.ts; bump the
+// version when any of the steps below changes what they make.)
+
+/** The Studio, on save: the build for this art (`artUrl`, loadable as the 3D view loads it), its
+ *  finish map and hole settings — as a file to upload (gzipped). */
+export async function bakeReliefBuild(artUrl: string, finishUrl: string | undefined, holeSmooth: number | undefined, artHoles: boolean | undefined, key: string): Promise<Blob> {
+  const img = await loadImage(artUrl)
+  const finish = finishUrl ? readFinish(await loadImage(finishUrl), HN) : null
+  const { rgba } = readPixels(img, N)
+  // exactly as buildRelief → cleanRelief would on the collector's device
+  const { shape, cut } = reliefShape(alphaOf(rgba), artAlphaAt(img), HN, finishHoles(finish), holeSmooth ?? HOLE_SMOOTH, !!artHoles)
+  if (shape.holes) shape.band = holeBand(shape.holes, HN)
+  const outline = outlineShape(shape.outline)
+  const meshes = [FINE_GRID, COARSE_GRID].map((g) => reliefMesh(cut, HN, g, outline))
+  return packBuild({ v: RELIEF_BUILD_VERSION, key, shape, meshes })
+}
+
+// Loaded once per session: reopening a pin skips the download
+const builds = new Map<string, Promise<ReliefBuild | null>>()
+/** A badge's build, or null if it can't be read or wasn't made for `key` (cleanRelief then works
+ *  the shape out itself). */
+export function loadReliefBuild(url: string, key: string): Promise<ReliefBuild | null> {
+  let p = builds.get(url)
+  if (!p) {
+    p = unpackBuild(url).catch((e) => { console.warn('Couldn’t read the pin’s saved build — building it here instead:', e); builds.delete(url); return null })
+    builds.set(url, p)
+  }
+  return p.then((b) => (b && b.v === RELIEF_BUILD_VERSION && b.key === key ? b : null))
+}
+
+function reliefShape(artAlpha: Float32Array, alpha: Float32Array, size: number, holes: Holes | undefined, holeSmooth: number, artHoles: boolean): { shape: ReliefShape; cut: Float32Array } {
+  const art = artHoles ? withArtHoles(holes, alpha, size, holeSmooth) : { holes, fill: null, raw: null }
+  const h = art.holes ?? null
+  const field = h ? holeField(h.mask, h.size) : null
+  const shape: ReliefShape = {
+    outline: Float32Array.from(traceOutline(artAlpha).getPoints().flatMap((p) => [p.x, p.y])),
+    holes: h,
+    raw: art.raw,
+    field: field ? Uint8Array.from(field, (v) => Math.min(255, Math.max(0, Math.round(v * 255)))) : null,
+    loops: field ? holeLoops(field, h!.size).map((l) => Float32Array.from(l.flatMap((p) => [p.x, p.y]))) : [],
+    band: null,
+  }
+  return { shape, cut: cutAlpha(alpha, size, shape) }
+}
+
+// The cut-out the face is cut along: the face runs on across the holes (they're cut from it per
+// pixel, by holeTexture), so it's solid there
+function cutAlpha(alpha: Float32Array, size: number, shape: ReliefShape): Float32Array {
+  const holes = shape.holes
+  if (!holes) return alpha
+  const k = holes.size / size
+  return alpha.map((a, i) => (holes.mask[Math.floor(Math.floor(i / size) * k) * holes.size + Math.floor((i % size) * k)] || shape.raw?.[i] ? 1 : a))
+}
+
+function outlineShape(pts: Float32Array): THREE.Shape {
+  const v: THREE.Vector2[] = []
+  for (let i = 0; i < pts.length; i += 2) v.push(new THREE.Vector2(pts[i], pts[i + 1]))
+  return new THREE.Shape(v)
+}
+
+// The face mesh at `grid`: the relief surface cut cleanly at the pin's outline (triangles outside
+// it dropped, rather than sloping down to zero — that slope got stretched edge colour, a ragged
+// silver fringe), and the skirt round its cut edge.
+function reliefMesh(cut: Float32Array, size: number, grid: number, outline: THREE.Shape): ReliefMesh {
+  const face = new THREE.PlaneGeometry(1, 1, grid, grid)
+  const pos = face.attributes.position
+  const idx = face.index!.array
+  const inside = (vi: number) => sample(cut, pos.getX(vi) + 0.5, 0.5 - pos.getY(vi), size) > 0.5
+  const keepTri = new Uint8Array(idx.length / 3)
+  const keep: number[] = []
+  for (let t = 0; t < idx.length; t += 3) {
+    if (inside(idx[t]) && inside(idx[t + 1]) && inside(idx[t + 2])) { keepTri[t / 3] = 1; keep.push(idx[t], idx[t + 1], idx[t + 2]) }
+  }
+  // A gold skirt from the relief's cut edge down into the body: without it the edge floats above
+  // the body's top wherever the relief there is raised, and you see straight through the gap
+  const edgeUse = new Map<number, number>()
+  const edgeKey = (a: number, b: number) => (a < b ? a * pos.count + b : b * pos.count + a)
+  for (let t = 0; t < keep.length; t += 3) for (let e = 0; e < 3; e++) {
+    const k = edgeKey(keep[t + e], keep[t + ((e + 1) % 3)])
+    edgeUse.set(k, (edgeUse.get(k) ?? 0) + 1)
+  }
+  const rim: number[] = [] // face vertex per skirt vertex (top ones), -1 = bottom
+  for (let t = 0; t < keep.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = keep[t + e], b = keep[t + ((e + 1) % 3)]
+    if (edgeUse.get(edgeKey(a, b)) === 1) rim.push(a, b, -1 - b, a, -1 - b, -1 - a)
+  }
+  // The cut edge follows the mesh grid in little steps; pull every edge vertex onto the smooth
+  // outline the body is built from, so the skirt is one clean wall meeting the body's bevel — not a
+  // staircase. Onto the nearest point along the outline's segments, not its nearest corner: corners
+  // can be a few grid cells apart, and a vertex pulled that far sideways made a spike at the edge.
+  // (Holes don't cut the face's mesh — see holeWalls in cleanRelief.)
+  const segs: number[] = [] // x1, y1, x2, y2, 0
+  const pts = outline.getPoints()
+  for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; segs.push(a.x, a.y, b.x, b.y, 0) }
+  const reach = 4 / grid
+  const bins = new Map<number, number[]>() // segments by the reach-sized cells they touch
+  const binOf = (cx: number, cy: number) => (cx + 4096) * 8192 + (cy + 4096)
+  for (let s = 0; s < segs.length; s += 5) {
+    const x0 = Math.floor(Math.min(segs[s], segs[s + 2]) / reach), x1 = Math.floor(Math.max(segs[s], segs[s + 2]) / reach)
+    const y0 = Math.floor(Math.min(segs[s + 1], segs[s + 3]) / reach), y1 = Math.floor(Math.max(segs[s + 1], segs[s + 3]) / reach)
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
+      const k = binOf(cx, cy)
+      const list = bins.get(k)
+      if (list) list.push(s); else bins.set(k, [s])
+    }
+  }
+  const snapV: number[] = [], snapXY: number[] = []
+  const snapped = new Set<number>()
+  for (const v of rim) {
+    if (v < 0 || snapped.has(v)) continue
+    snapped.add(v)
+    const x = pos.getX(v), y = pos.getY(v)
+    let bd = reach * reach, bx = 0, by = 0, found = false
+    const cx = Math.floor(x / reach), cy = Math.floor(y / reach)
+    for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+      for (const s of bins.get(binOf(cx + ox, cy + oy)) ?? []) {
+        const ax = segs[s], ay = segs[s + 1], dx = segs[s + 2] - ax, dy = segs[s + 3] - ay
+        const l2 = dx * dx + dy * dy
+        const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0
+        const px = ax + t * dx, py = ay + t * dy, d = (px - x) ** 2 + (py - y) ** 2
+        if (d < bd) { bd = d; bx = px; by = py; found = true }
+      }
+    }
+    if (!found) continue
+    snapV.push(v); snapXY.push(bx, by)
+  }
+  face.dispose()
+  return { grid, keep: keepTri, rim: Int32Array.from(rim), snapV: Int32Array.from(snapV), snapXY: Float32Array.from(snapXY) }
+}
+
+// The grid's index, only the triangles `keepTri` keeps
+function keptIndices(idx: ArrayLike<number>, keepTri: Uint8Array): Uint32Array {
+  let n = 0
+  for (let t = 0; t < keepTri.length; t++) n += keepTri[t]
+  const out = new Uint32Array(n * 3)
+  for (let t = 0, o = 0; t < keepTri.length; t++) {
+    if (!keepTri[t]) continue
+    out[o++] = idx[t * 3]; out[o++] = idx[t * 3 + 1]; out[o++] = idx[t * 3 + 2]
+  }
+  return out
+}
+
+// The height carried a few pixels into the holes before the hole's top edge samples it: a height
+// map is 0 where the art is transparent, and the edge (on the border) caught that 0 at every
+// other point — a saw-toothed wall. The band: the hole pixels near solid ones, at `hsize`.
+function holeBand(hm: Holes, hsize: number): HoleBand {
+  const k = hm.size / hsize
+  let holeAt: Uint8Array = new Uint8Array(hsize * hsize)
+  for (let i = 0; i < holeAt.length; i++) holeAt[i] = hm.mask[Math.floor(Math.floor(i / hsize) * k) * hm.size + Math.floor((i % hsize) * k)]
+  // a little past the edge too: the height map falls away just inside a cutout's edge, and that
+  // drop showed as a fringe of gold wall teeth along it
+  holeAt = dilate(holeAt, hsize, Math.max(1, Math.round(3 * hsize / 2048)))
+  const hole = (x: number, y: number) => holeAt[y * hsize + x] === 1
+  const r = Math.max(3, Math.round(10 * hsize / 2048)), idx: number[] = []
+  for (let y = 0; y < hsize; y++) for (let x = 0; x < hsize; x++) {
+    if (!hole(x, y)) continue
+    near: for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      const nx = x + dx, ny = y + dy
+      if (nx >= 0 && ny >= 0 && nx < hsize && ny < hsize && !hole(nx, ny)) { idx.push(y * hsize + x); break near }
+    }
+  }
+  return { size: hsize, idx: Int32Array.from(idx), hole: holeAt }
+}
+
+// The build file: [header length (u32)] [header JSON] [each typed array, 4-byte aligned], gzipped.
+// The header is the build with every typed array swapped for { $: its number, t: its type }.
+const ARRAY_TYPES = { u8: Uint8Array, i32: Int32Array, u32: Uint32Array, f32: Float32Array } as const
+type ArrayType = keyof typeof ARRAY_TYPES
+
+async function packBuild(b: ReliefBuild): Promise<Blob> {
+  const arrays: ArrayBufferView[] = []
+  const body = JSON.stringify(b, (_k, v) => {
+    if (!ArrayBuffer.isView(v)) return v
+    const t = (Object.keys(ARRAY_TYPES) as ArrayType[]).find((k) => v instanceof ARRAY_TYPES[k])
+    if (!t) throw new Error('unexpected array in the build')
+    arrays.push(v)
+    return { $: arrays.length - 1, t }
+  })
+  const header = new TextEncoder().encode(JSON.stringify({ body, lens: arrays.map((a) => a.byteLength) }))
+  const parts: BlobPart[] = [new Uint32Array([header.length]), header]
+  let at = 4 + header.length
+  for (const a of arrays) {
+    const pad = (4 - (at % 4)) % 4
+    if (pad) parts.push(new Uint8Array(pad))
+    parts.push(new Uint8Array(a.buffer, a.byteOffset, a.byteLength) as Uint8Array<ArrayBuffer>)
+    at += pad + a.byteLength
+  }
+  const zipped = new Blob(parts).stream().pipeThrough(new CompressionStream('gzip'))
+  return new Response(zipped).blob()
+}
+
+async function unpackBuild(url: string): Promise<ReliefBuild> {
+  if (typeof DecompressionStream === 'undefined') throw new Error('this browser can’t unzip it')
+  const res = await fetch(url)
+  if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`)
+  const buf = await new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()
+  const hl = new DataView(buf).getUint32(0, true)
+  const { body, lens } = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hl))) as { body: string; lens: number[] }
+  const offsets: number[] = []
+  let at = 4 + hl
+  for (const len of lens) { at += (4 - (at % 4)) % 4; offsets.push(at); at += len }
+  return JSON.parse(body, (_k, v) => {
+    if (!v || typeof v !== 'object' || typeof v.$ !== 'number') return v
+    const T = ARRAY_TYPES[v.t as ArrayType]
+    return new T(buf, offsets[v.$], lens[v.$] / T.BYTES_PER_ELEMENT)
+  }) as ReliefBuild
+}
+
 // The art's own holes (transparent areas the pin encloses: everything transparent that a flood
 // from the border can't reach), from the cutout at full size (`alpha`, an²) — rounded off by
 // `smooth` (a blurred mask cut at half, as the Studio's Hole finish does: the raw pixel edge traced
@@ -561,12 +755,13 @@ function holeDiscard(mat: THREE.Material, map: THREE.Texture) {
   mat.needsUpdate = true
 }
 
-function holeTexture(field: Float32Array, size: number): THREE.CanvasTexture {
+// `field`: holeField as 0–255 (ReliefShape.field)
+function holeTexture(field: Uint8Array, size: number): THREE.CanvasTexture {
   const c = document.createElement('canvas')
   c.width = c.height = size
   const ctx = c.getContext('2d')!
   const img = ctx.createImageData(size, size)
-  for (let i = 0; i < field.length; i++) { const v = Math.round(field[i] * 255); img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255 }
+  for (let i = 0; i < field.length; i++) { const v = field[i]; img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v; img.data[i * 4 + 3] = 255 }
   ctx.putImageData(img, 0, 0)
   const t = new THREE.CanvasTexture(c)
   t.minFilter = THREE.LinearFilter // no mipmaps: a far-off pin's holes mustn't swell or close
@@ -1244,17 +1439,25 @@ function heightMap(rgba: Uint8ClampedArray, alpha: Float32Array, k: Uint8Array):
 
 // A HavenRelief height map (white = high), used exactly as made: zero outside the art's cutout.
 function reliefHeight(img: HTMLImageElement, art: HTMLImageElement): { h: Float32Array; a: Float32Array } {
-  const read = (im: HTMLImageElement) => {
-    const c = document.createElement('canvas')
-    c.width = c.height = HN
-    const ctx = c.getContext('2d', { willReadFrequently: true })!
-    ctx.drawImage(im, 0, 0, HN, HN)
-    return ctx.getImageData(0, 0, HN, HN).data
-  }
-  const d = read(img), ad = read(art)
-  const h = new Float32Array(HN * HN), a = new Float32Array(HN * HN)
-  for (let i = 0; i < HN * HN; i++) { a[i] = ad[i * 4 + 3] / 255; h[i] = a[i] < 0.02 ? 0 : d[i * 4] / 255 }
+  const d = readSquare(img), a = artAlphaAt(art)
+  const h = new Float32Array(HN * HN)
+  for (let i = 0; i < HN * HN; i++) h[i] = a[i] < 0.02 ? 0 : d[i * 4] / 255
   return { h, a }
+}
+
+// The art's cut-out at HN² — what reliefHeight gives the relief as its alpha (and the build is made from)
+function artAlphaAt(art: HTMLImageElement): Float32Array {
+  const ad = readSquare(art), a = new Float32Array(HN * HN)
+  for (let i = 0; i < HN * HN; i++) a[i] = ad[i * 4 + 3] / 255
+  return a
+}
+
+function readSquare(im: HTMLImageElement): Uint8ClampedArray {
+  const c = document.createElement('canvas')
+  c.width = c.height = HN
+  const ctx = c.getContext('2d', { willReadFrequently: true })!
+  ctx.drawImage(im, 0, 0, HN, HN)
+  return ctx.getImageData(0, 0, HN, HN).data
 }
 
 function normalMap(h: Float32Array, strength: number): HTMLCanvasElement {

@@ -17,7 +17,8 @@ import {
   type DetailKind, type LenticularSet, analyzeArt, recalculateNormals, compose, detailMap, finishMap, finishPng, heightPng, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
   type Composed, type ReliefKit, type ReliefSettings,
 } from '@/lib/reliefStudio'
-import { HOLE_SMOOTH, cleanRelief, disposeRelief, type LiveRelief } from '@/components/badges/pinRelief'
+import { HOLE_SMOOTH, bakeReliefBuild, cleanRelief, disposeRelief, type LiveRelief } from '@/components/badges/pinRelief'
+import { reliefBuildKey } from '@/lib/reliefBuild'
 
 // Staff portal → Badges → edit badge → Relief Studio. Uploading pin art in the editor already sent
 // it to the HavenRelief analysis server (tools/havenrelief/server.py — the GPU PC for now, a cloud
@@ -413,12 +414,22 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
       }
       const finish = finishMap(kit.full, activeMaterials(settings), settings.finishOpts)
       const detailed = detailMap(kit.full, settings)
+      const imageUrl = reliefKit['art.webp']
+      const depthMapUrl = await put('depth', height)
+      const finishMapUrl = finish ? await put('finish', await finishPng(finish.map, kit.full.size)) : undefined
+      const detailMapUrl = detailed ? await put('detail', await finishPng(detailed.map, kit.full.size)) : undefined
+      // The pin's shape, worked out once here so the 3D view doesn't have to (pinRelief.ts
+      // bakeReliefBuild) — from the files just saved, loaded as the 3D view loads them
+      setStatus('Building the 3D pin…')
+      const buildKey = reliefBuildKey(imageUrl, finishMapUrl, settings.holeSmooth, settings.artHoles)
+      const build = await bakeReliefBuild(badgeAsset(imageUrl)!, badgeAsset(finishMapUrl), settings.holeSmooth, settings.artHoles, buildKey)
+      const buildRef = ref(staffStorage, `badges/${id}/build-${stamp}.bin`)
+      await uploadBytes(buildRef, build, { contentType: 'application/octet-stream' })
       setStatus('Saving the badge…')
       await onApply({
-        imageUrl: reliefKit['art.webp'], normalMapUrl: reliefKit['normal.png'], depthMapUrl: await put('depth', height),
-        finishMapUrl: finish ? await put('finish', await finishPng(finish.map, kit.full.size)) : undefined,
-        detailMapUrl: detailed ? await put('detail', await finishPng(detailed.map, kit.full.size)) : undefined,
+        imageUrl, normalMapUrl: reliefKit['normal.png'], depthMapUrl, finishMapUrl, detailMapUrl,
         reliefKit, relief: settings,
+        reliefBuildUrl: await getDownloadURL(buildRef), reliefBuildKey: buildKey,
       })
       onClose()
     } catch (e) {

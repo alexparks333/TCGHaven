@@ -15,6 +15,7 @@ import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
 import { analyzeArt, loadKit, reliefServerUp, reliefSettings, saveKit } from '@/lib/reliefStudio'
+import { badgeBuildKey, needsReliefBuild } from '@/lib/reliefBuild'
 import ChaptersBoard from './ChaptersBoard'
 import CardexCardPicker from './CardexCardPicker'
 
@@ -35,6 +36,36 @@ export function BadgesAdmin() {
   const [preview, setPreview] = useState<BadgeDef | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [building, setBuilding] = useState<string | null>(null)
+  const latest = useRef(catalog)
+  latest.current = catalog
+  const toBuild = catalog.badges.filter(needsReliefBuild)
+
+  // Works out each relief badge's 3D shape once (pinRelief.ts bakeReliefBuild — the Studio does it
+  // on every save; this catches badges saved before that, or changed outside the Studio), so the
+  // collector's 3D view opens in a moment instead of building the pin itself. Saved after each one.
+  async function buildPins() {
+    setError('')
+    const { bakeReliefBuild } = await import('@/components/badges/pinRelief') // three.js only when needed
+    const done = new Map<string, Pick<BadgeDef, 'reliefBuildUrl' | 'reliefBuildKey'>>()
+    try {
+      for (let i = 0; i < toBuild.length; i++) {
+        const b = toBuild[i]
+        setBuilding(`Building ${b.name} (${i + 1} of ${toBuild.length})…`)
+        await new Promise((r) => setTimeout(r, 30)) // let the status paint before the heavy work
+        const key = badgeBuildKey(b)
+        const file = await bakeReliefBuild(badgeAsset(b.imageUrl)!, badgeAsset(b.finishMapUrl), b.relief?.holeSmooth, b.relief?.artHoles, key)
+        const r = ref(staffStorage, `badges/${b.id}/build-${Date.now()}.bin`)
+        await uploadBytes(r, file, { contentType: 'application/octet-stream' })
+        done.set(b.id, { reliefBuildUrl: await getDownloadURL(r), reliefBuildKey: key })
+        // onto the newest catalog, with every build so far (the live copy may not have caught up)
+        await persist({ ...latest.current, badges: latest.current.badges.map((x) => ({ ...x, ...done.get(x.id) })) })
+      }
+    } catch (e) {
+      console.error(e)
+      setError(`Couldn’t build every 3D pin — ${e instanceof Error ? e.message : String(e)}`)
+    } finally { setBuilding(null) }
+  }
 
   const selected = catalog.sets.find((s) => s.id === setId) ?? catalog.sets[0]
   async function persist(next: BadgeCatalog) {
@@ -68,11 +99,23 @@ export function BadgesAdmin() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-ink">Badges</h1>
-        <p className="text-slate-400 text-sm mt-0.5">
-          The pin books and Haven Badges collectors earn. Changes go live for everyone as soon as you save.
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-ink">Badges</h1>
+          <p className="text-slate-400 text-sm mt-0.5">
+            The pin books and Haven Badges collectors earn. Changes go live for everyone as soon as you save.
+          </p>
+        </div>
+        {(toBuild.length > 0 || building) && (
+          <button
+            onClick={buildPins}
+            disabled={!!building || busy}
+            className="btn-secondary !px-3 !py-1.5 !text-xs shrink-0 disabled:opacity-60"
+            title="Works out each relief pin's 3D shape once, so it opens in a moment in the collector app (the Relief Studio does this on every save)"
+          >
+            {building ? <><Loader2 size={13} className="animate-spin" />{building}</> : <><Cuboid size={13} />Build 3D pins ({toBuild.length})</>}
+          </button>
+        )}
       </div>
 
       {error && (
