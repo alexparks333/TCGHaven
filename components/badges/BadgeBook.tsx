@@ -388,6 +388,9 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
+  // Display size, but never bigger than the slot: the book always capped it there (the image's
+  // max-width), and the look wrapper's shrink-0 for lining up the next look's layer dropped that cap
+  const size = Math.min(pinSize(def, pin), pin)
   const art = useTrimmedArt(def.imageUrl) // the art cropped to the pin, as BadgePin draws it — the masks follow it
   useEffect(() => { preloadPinInspector() }, []) // the 3D view's code, so a click opens it at once
   // The pin shows once its first tier is reached, in that tier's look (Grayscale / Painted / Full)
@@ -445,10 +448,10 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
             {/* The pin in its look; the next look rising over it in the same box, so the two line up
                 exactly and tilt together (flex: no gap under the image; no shrinking a pin drawn
                 bigger than its slot) */}
-            <span className={cn('flex [&>*]:shrink-0', tier < 3 && `pinbook-look-${tier}`)}><BadgePin art={def.art} imageUrl={def.imageUrl} size={pinSize(def, pin)} /></span>
+            <span className={cn('flex [&>*]:shrink-0', tier < 3 && `pinbook-look-${tier}`)}><BadgePin art={def.art} imageUrl={def.imageUrl} size={size} /></span>
             {next > 0 && fill > 0 && (
               <span className="absolute inset-0 pointer-events-none" aria-hidden>
-                <TierRise size={pinSize(def, pin)} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
+                <TierRise size={size} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
               </span>
             )}
             {tilt && (
@@ -463,7 +466,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           </span>
           </span>
         ) : (
-          <PinHole size={pinSize(def, pin)} hovered={open} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
+          <PinHole size={size} hovered={open} imageUrl={def.imageUrl} art={def.art} tier={next} progress={fill} />
         )}
       </span>
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
