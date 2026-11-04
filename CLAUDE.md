@@ -43,6 +43,10 @@ npm run test:search / test:snapshot / test:variants
   function limit, so `npm run download-cards` locally is its reliable fallback.
 - Removed on purpose — don't bring back: Pack Analysis (2026-10-08) and Spending (2026-10-24).
   Leftover `registry/main` `packAnalysis` fields and `users/{uid}/purchases` docs are unread.
+- **Every push to main runs `.github/workflows/checks.yml`** (typecheck, lint, the 4 test suites, a
+  production build); Vercel's Deployment Checks hold a new version off www.tcghaven.org until it
+  passes. `gh run list --workflow checks.yml` / `gh run watch` show it. The build only needs the six
+  public `NEXT_PUBLIC_FIREBASE_*` values (GitHub repository variables) — never add real secrets.
 - A change to any `route.ts`'s exports or handler signature needs a real `npm run build` too:
   `tsc` alone won't catch an invalid Next.js route export (quirk 24).
 - HavenRelief (the pin AI) runs on the Windows PC: `tools/havenrelief/` (README there);
