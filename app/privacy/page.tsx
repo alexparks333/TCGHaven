@@ -7,7 +7,7 @@ import Link from 'next/link'
 
 export const metadata: Metadata = { title: 'Privacy Policy · TCGHaven' }
 
-const CONTACT_EMAIL = 'support@tcghaven.org' // TODO(owner): confirm this inbox exists before the App Store submission
+const CONTACT_EMAIL = 'support@tcghaven.org'
 const UPDATED = 'November 4, 2026'
 
 export default function Page() {
