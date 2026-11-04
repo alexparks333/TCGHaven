@@ -15,6 +15,7 @@ in that area:**
 | Card search ranking, prices / price history, the Cardex | `docs/search-prices-cardex.md` |
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
+| The iPhone app (`mobile/`, Expo + EAS), the site↔app bridge (`lib/nativeApp.ts`) | `docs/ios-app.md` |
 | Where a file lives | `docs/file-map.md` |
 | The full story behind any gotcha below | `docs/quirks.md` |
 

@@ -7,6 +7,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithCredential,
+  GoogleAuthProvider,
   signOut as firebaseSignOut,
   updateProfile,
   deleteUser,
@@ -14,6 +16,7 @@ import {
 } from 'firebase/auth'
 import { doc, getDoc } from 'firebase/firestore'
 import { auth, db, googleProvider } from '@/lib/firebase/config'
+import { inApp, nativeGoogleIdToken } from '@/lib/nativeApp'
 import { loadCards, loadCardChanges, loadSoldCards } from '@/lib/firebase/db'
 import { readInventoryCache, writeInventoryCache, clearInventoryCache, INVENTORY_FULL_SYNC_EVERY_MS } from '@/lib/inventoryCache'
 import type { Card } from '@/lib/types'
@@ -207,7 +210,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signInWithGoogle = async () => {
-    const result = await signInWithPopup(auth, googleProvider)
+    // In the iPhone app Google's web popup is blocked — its native sheet gives the token instead
+    let result
+    if (inApp()) {
+      const idToken = await nativeGoogleIdToken()
+      // closed the sheet: the same error as closing Google's web popup, which the pages already handle
+      if (!idToken) throw Object.assign(new Error('Google sign-in was closed.'), { code: 'auth/popup-closed-by-user' })
+      result = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken))
+    } else {
+      result = await signInWithPopup(auth, googleProvider)
+    }
     const isNewUser = getAdditionalUserInfo(result)?.isNewUser ?? false
     if (isNewUser && sessionStorage.getItem(PASSCODE_VERIFIED_KEY) !== '1') {
       // Google's popup already created the account before we can intervene — since this wasn't

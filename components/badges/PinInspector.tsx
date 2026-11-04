@@ -18,6 +18,7 @@ import { reliefBuildKey } from '@/lib/reliefBuild'
 import { detailSlots, lenticularPictures, reliefSettings } from '@/lib/reliefStudio'
 import { assemblePin, addBackHardware, type PinBackId } from './pinBacks'
 import { PolishingBar } from './pinInspectorLoader'
+import { haptic } from '@/lib/nativeApp'
 
 // Inspect a Haven Badge in 3D — drag to turn it over, scroll/pinch to zoom, like the pin inspect
 // view in Counter-Strike. Opened by clicking a badge in the pin book. Loaded on demand (three.js
@@ -51,6 +52,8 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
   // it never flashes up half-built
   const [prog, setProg] = useState(0)
   const [error, setError] = useState('')
+
+  useEffect(() => { haptic('soft') }, []) // the pin lifted out of the book (iPhone app)
 
   useEffect(() => {
     // Escape closes just this viewer — caught first (capture) and stopped, so a dialog underneath

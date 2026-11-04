@@ -3,8 +3,9 @@ import {
 } from 'firebase/firestore'
 import {
   type User, EmailAuthProvider, reauthenticateWithCredential, reauthenticateWithPopup, deleteUser,
-  sendSignInLinkToEmail, isSignInWithEmailLink, checkActionCode, ActionCodeOperation,
+  sendSignInLinkToEmail, isSignInWithEmailLink, checkActionCode, ActionCodeOperation, GoogleAuthProvider,
 } from 'firebase/auth'
+import { inApp, nativeGoogleIdToken } from '../nativeApp'
 import { auth, db, googleProvider, ADMIN_UID } from './config'
 
 // Delete my account (Settings) — required for the App Store (apps with sign-up must offer it).
@@ -70,6 +71,11 @@ export async function confirmIdentity(user: User, password?: string): Promise<vo
   if (user.providerData.some((p) => p.providerId === 'password')) {
     if (!password) throw new Error('Enter your password.')
     await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email ?? '', password))
+  } else if (inApp()) {
+    // the iPhone app: Google's native sheet (its web popup is blocked there)
+    const idToken = await nativeGoogleIdToken()
+    if (!idToken) throw Object.assign(new Error('Google sign-in was closed.'), { code: 'auth/popup-closed-by-user' })
+    await reauthenticateWithCredential(user, GoogleAuthProvider.credential(idToken))
   } else {
     await reauthenticateWithPopup(user, googleProvider)
   }

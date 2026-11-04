@@ -11,6 +11,7 @@ import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { buildPages, PinPage, PinholeFilter, ROMAN, type Page } from './BadgeBook'
 import { BookCover, BookThickness } from './BadgeLibrary'
+import { haptic } from '@/lib/nativeApp'
 
 
 // The pin book on a phone held upright. A whole two-page spread on a narrow screen made every pin
@@ -174,11 +175,13 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const next = useCallback(() => {
     if (busy || p < 0 || p >= N - 1) return
     setMenu(false)
+    haptic('selection') // a light tick per page in the iPhone app
     setAnim(p % 2 === 0 ? { kind: 'pan', to: p + 1, go: false } : { kind: 'turn', dir: 1, to: p + 1, go: false })
   }, [busy, p, N])
   const prev = useCallback(() => {
     if (busy || p <= 0) return
     setMenu(false)
+    haptic('selection')
     setAnim(p % 2 === 1 ? { kind: 'pan', to: p - 1, go: false } : { kind: 'turn', dir: -1, to: p - 1, go: false })
   }, [busy, p])
   const close = useCallback(() => {
@@ -193,7 +196,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     if (t === p) setFlash((f) => ({ chapter: i, n: (f?.n ?? 0) + 1 }))
     else if (t === p + 1) next()
     else if (t === p - 1) prev()
-    else setAnim({ kind: 'jump', to: t, go: false })
+    else { haptic('selection'); setAnim({ kind: 'jump', to: t, go: false }) }
   }
 
   useEffect(() => {
