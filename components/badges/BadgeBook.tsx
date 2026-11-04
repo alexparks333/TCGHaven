@@ -455,7 +455,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
               <span
                 className="pinbook-glint absolute inset-0"
                 style={{
-                  background: `radial-gradient(circle at ${tilt.x * 100}% ${tilt.y * 100}%, rgba(255,255,255,${tier === 1 ? 0.4 : 0.55}), rgba(255,255,255,0.06) 35%, transparent 60%)`,
+                  background: `radial-gradient(circle at ${tilt.x * 100}% ${tilt.y * 100}%, rgba(255,255,255,${tier === 1 ? 0.48 : 0.55}), rgba(255,255,255,0.06) 35%, transparent 60%)`,
                   ...(art && { WebkitMask: `url("${art.src}") center / contain no-repeat`, mask: `url("${art.src}") center / contain no-repeat` }),
                 }}
               />

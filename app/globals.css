@@ -674,7 +674,7 @@
 /* A pin's tier (lib/badges.ts badgeTier): Grayscale — no colour, crisp and a little shiny (it
    catches the light on hover too); Painted — colour, a little flatter
    (no shine: the Full pin alone catches the light) */
-.pinbook-look-1 { filter: grayscale(1) contrast(1.18) brightness(1.06); }
+.pinbook-look-1 { filter: grayscale(1) contrast(1.26) brightness(1.1); }
 .pinbook-look-2 { filter: saturate(0.92) contrast(0.96); } /* also the Painted look rising over a Grayscale pin */
 /* An earned pin on its way to the next look (BadgeBook TierRise): that look rises over it from the
    bottom, a little see-through, with a soft top edge */
