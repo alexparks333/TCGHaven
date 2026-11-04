@@ -40,6 +40,7 @@ const config: ExpoConfig = {
   extra: {
     siteUrl: SITE_URL,
     inspectable: INSPECTABLE,
+    eas: { projectId: '08d1c0b7-cd4c-48d6-bf77-467d4fb3361b' }, // expo.dev/@alexhparks/tcghaven
   },
   owner: 'alexhparks',
 }
