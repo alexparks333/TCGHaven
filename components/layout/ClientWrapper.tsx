@@ -33,6 +33,8 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   // collector app's shell, session or background price loading applies there.
   const pathname = usePathname()
   if (pathname?.startsWith('/admin')) return <>{children}</>
+  // The privacy policy is public and stands alone (linked from the App Store listing)
+  if (pathname === '/privacy') return <>{children}</>
   // The Badges pin book fills the whole window, so that page drops the usual content-width cap.
   const fullWidth = pathname === '/badges'
   return (

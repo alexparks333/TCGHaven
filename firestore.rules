@@ -115,7 +115,8 @@ service cloud.firestore {
         && (!('privacy' in request.resource.data) || request.resource.data.privacy.keys().hasOnly(['cardex', 'badges']))
         && (!('pinDisplay' in request.resource.data) || (request.resource.data.pinDisplay is list && request.resource.data.pinDisplay.size() <= 6))
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
-      allow delete: if false;
+      // Only by its owner, deleting their account (lib/firebase/deleteAccount.ts)
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // Username claims — the doc id is the username, so two people can't hold the same one. A
@@ -166,9 +167,11 @@ service cloud.firestore {
         request.auth.uid == uid ||
         get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('badges', false) == true
       );
-      allow write: if signedIn() && request.auth.uid == uid
+      allow create, update: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['earned', 'progress', 'updatedAt'])
         && request.resource.data.earned is map && request.resource.data.progress is map;
+      // A delete has no new data to check, so it can't share the rule above (deleting an account)
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // Old personal invite links — /invite/{code} now just opens that person's Haven. Looked up one

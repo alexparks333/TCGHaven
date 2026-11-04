@@ -102,6 +102,18 @@ by deleting the freshly-created Firebase Auth account if the passcode step faile
 to a plain sign-out if the delete itself throws for a reason other than requiring a recent
 login).
 
+### Deleting an account (2026-11-04)
+
+Settings (⚙️ on your profile) → **Delete account** — required by the App Store for any app with
+sign-up. `lib/firebase/deleteAccount.ts` runs it as the user (there's no admin SDK), in this order:
+sign in again (`confirmIdentity` — nothing is deleted if that fails), then profile + usernames +
+shared copies in one all-or-nothing batch, then friendships, then every `users/{uid}` folder
+(`USER_FOLDERS` — **add any new per-user folder there**), then the Auth user, then this device's
+uid-keyed localStorage. `firestore.rules` lets an owner delete their own `profiles/{uid}` and
+`shared_badges/{uid}` for this. The Owner account (`ADMIN_UID`) can't be deleted from the app.
+Old `invite_codes` can't be listed and are left (they point at a uid that's gone). The public
+privacy policy is `app/privacy/page.tsx` (no app shell — ClientWrapper); keep it true to the code.
+
 ### Key Firestore Rules
 
 - Firestore rejects `undefined` values entirely. `db.ts` has a `clean()` function that
