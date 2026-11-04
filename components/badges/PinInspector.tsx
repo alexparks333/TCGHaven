@@ -53,7 +53,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
   const [prog, setProg] = useState(0)
   const [error, setError] = useState('')
 
-  useEffect(() => { haptic('soft') }, []) // the pin lifted out of the book (iPhone app)
+  useEffect(() => { haptic('light') }, []) // the pin lifted out of the book (iPhone app)
 
   useEffect(() => {
     // Escape closes just this viewer — caught first (capture) and stopped, so a dialog underneath
