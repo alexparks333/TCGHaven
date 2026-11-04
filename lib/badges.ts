@@ -144,10 +144,14 @@ export const TIER_NAMES = ['Locked', 'Grayscale', 'Painted', 'Full'] as const
 export function badgeTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
   const [have, total] = progress ?? [0, def.slots.length]
   if (!total) return 0
-  const pct = (have / total) * 100
-  const t = def.tiers ?? DEFAULT_TIERS
-  for (const k of [3, 2, 1] as const) if (!def.tiersOff?.includes(k) && pct >= t[k - 1]) return k
+  for (const k of [3, 2, 1] as const) if (!def.tiersOff?.includes(k) && have >= tierNeed(def, k, total)) return k
   return 0
+}
+/** How many of `total` slots unlock look `k` (0 for none). The one rule every count, bar and fill
+ *  uses: worked in whole cards, so a percentage that doesn't divide evenly (29% of 100 is
+ *  28.999… in floating point) can't unlock a look at a different count than the one shown. */
+export function tierNeed(def: Pick<BadgeDef, 'tiers'>, k: BadgeTier, total: number): number {
+  return k ? Math.ceil(((def.tiers ?? DEFAULT_TIERS)[k - 1] * total) / 100 - 1e-9) : 0
 }
 /** The next look up that's switched on, or 0 at the top. */
 export function nextTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
@@ -159,7 +163,7 @@ export function toNextTier(def: BadgeDef, progress: [number, number] | undefined
   const [have, total] = progress ?? [0, def.slots.length]
   const next = nextTier(def, progress)
   if (!next || !total) return 0
-  return Math.max(0, Math.ceil(((def.tiers ?? DEFAULT_TIERS)[next - 1] / 100) * total) - have)
+  return Math.max(0, tierNeed(def, next, total) - have)
 }
 
 /** How far the collector is from the current look to the next one switched on (0–1) — the ghost
@@ -170,10 +174,8 @@ export function tierFill(def: BadgeDef, progress: [number, number] | undefined):
   const tier = badgeTier(def, progress)
   const next = nextTier(def, progress)
   if (!next || !total) return 0
-  const t = def.tiers ?? DEFAULT_TIERS
-  const need = (k: BadgeTier) => (k ? Math.ceil((t[k - 1] / 100) * total) : 0)
-  const from = need(tier)
-  const to = need(next)
+  const from = tierNeed(def, tier, total)
+  const to = tierNeed(def, next, total)
   return to > from ? Math.max(0, Math.min(1, (have - from) / (to - from))) : 0
 }
 

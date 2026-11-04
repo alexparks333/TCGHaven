@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { createPortal } from 'react-dom'
 
@@ -8,12 +9,22 @@ import { createPortal } from 'react-dom'
 // right away; and if it isn't there yet, the click still answers at once with the same frosted
 // screen and "Polishing badge…" bar while it arrives.
 
-const load = () => import('./PinInspector')
+// Downloading the code can fail (a dropped connection, or a new deploy since the page loaded): that
+// open closes again at once instead of crashing the book (it works again after a reload).
+const load = () => import('./PinInspector').catch((e) => {
+  console.error('Couldn’t load the 3D view', e)
+  started = false
+  return { default: Failed }
+})
+function Failed({ onClose }: { onClose: () => void }) {
+  useEffect(() => { onClose() }, [onClose])
+  return null
+}
 let started = false
 export function preloadPinInspector() {
   if (started) return
   started = true
-  load().catch(() => { started = false }) // try again next time
+  load()
 }
 
 export const PinInspector = dynamic(load, { ssr: false, loading: () => <InspectorShell /> })

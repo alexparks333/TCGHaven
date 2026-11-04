@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, chaptersOf, DEFAULT_TIERS, isMastered, nextTier, pinSize, tierFill, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, badgeTier, chaptersOf, isMastered, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -402,7 +402,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   const next = nextTier(def, badges?.progress[def.id])
   // Tiered: how far from this look to the next (not the whole badge) — the ghost fill and the bar
   const fill = tierFill(def, badges?.progress[def.id])
-  const needNext = next ? Math.ceil(((def.tiers ?? DEFAULT_TIERS)[next - 1] / 100) * total) : total
+  const needNext = next ? tierNeed(def, next, total) : total
   // An earned growing badge that has new cards since: how many to master it again
   const toMaster = def.growing && earnedAt && tier === 3 && !mastered ? Math.max(0, def.slots.length - have) : 0
 
@@ -503,9 +503,8 @@ const TIER_BAR = { 1: '#8d8a84', 2: '#7a3fc4', 3: '#c99a42' } as const
 // Painted, Full — looks switched off are skipped) in its own colour; the part collected is solid,
 // the rest faint. It ends at the top look (Full): nothing past it to collect toward.
 function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: number }) {
-  const t = def.tiers ?? DEFAULT_TIERS
   const on = ([1, 2, 3] as const).filter((k) => !def.tiersOff?.includes(k))
-  const stops = on.map((k) => Math.ceil((t[k - 1] / 100) * total))
+  const stops = on.map((k) => tierNeed(def, k, total))
   const zones: { tier: 1 | 2 | 3; from: number; to: number }[] = on.map((k, i) => ({ tier: k, from: i ? stops[i - 1] : 0, to: stops[i] }))
   if (!zones.length) zones.push({ tier: 3, from: 0, to: total }) // every look switched off: one bar to the whole badge
   const shown = zones.filter((z) => z.to > z.from)
@@ -513,7 +512,7 @@ function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: num
     <>
       <span className="flex h-1.5 gap-px rounded-full overflow-hidden">
         {shown.map((z) => (
-          <span key={z.from} className="relative block h-full" style={{ flexGrow: z.to - z.from, flexBasis: 0, background: `${TIER_BAR[z.tier]}33` }}>
+          <span key={z.tier} className="relative block h-full" style={{ flexGrow: z.to - z.from, flexBasis: 0, background: `${TIER_BAR[z.tier]}33` }}>
             <span className="absolute inset-y-0 left-0 block" style={{ background: TIER_BAR[z.tier], width: `${Math.max(0, Math.min(1, (have - z.from) / (z.to - z.from))) * 100}%` }} />
           </span>
         ))}
