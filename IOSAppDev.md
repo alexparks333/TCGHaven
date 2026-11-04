@@ -41,6 +41,11 @@ was tried and dropped on 2026-11-04 (not needed for a web app).
 - The launch screen comes down as soon as the site has drawn.
 - Share sheet and Sign in with Apple helpers are written, not wired to buttons yet.
 
+**Automatic checks before deploying** (live): every push to main runs `.github/workflows/checks.yml`
+(typecheck, lint, tests, production build); Vercel's Deployment Checks keep a new version off
+www.tcghaven.org until it passes. GitHub CLI (`gh`) is set up on this Mac — install and
+`gh auth login` on the new one.
+
 **Phone pin book fixes** (live): smooth page turns, pins no longer swapping mid-turn — still to be
 confirmed on a real iPhone.
 
