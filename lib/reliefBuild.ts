@@ -1,8 +1,6 @@
-import type { BadgeDef } from './badges'
-
 // Which Relief Studio build (components/badges/pinRelief.ts bakeReliefBuild — the pin's shape,
-// worked out once) a badge can use. Kept apart from pinRelief.ts so the staff portal can tell which
-// badges need one without loading three.js.
+// worked out once) a badge can use. Kept apart from pinRelief.ts so the key can be checked without
+// loading three.js.
 
 /** The art's own holes are rounded off this much unless the Studio says otherwise (ReliefSettings.holeSmooth) */
 export const HOLE_SMOOTH = 0.3
@@ -16,12 +14,3 @@ export function reliefBuildKey(imageUrl: string | undefined, finishMapUrl: strin
   return JSON.stringify([RELIEF_BUILD_VERSION, imageUrl ?? '', finishMapUrl ?? '', holeSmooth ?? HOLE_SMOOTH, !!artHoles])
 }
 
-/** The key for this badge as it is now. */
-export function badgeBuildKey(b: BadgeDef): string {
-  return reliefBuildKey(b.imageUrl, b.finishMapUrl, b.relief?.holeSmooth, b.relief?.artHoles)
-}
-
-/** A relief badge (art + Studio height map, no 3D model) whose build is missing or out of date. */
-export function needsReliefBuild(b: BadgeDef): boolean {
-  return !b.model && !!b.imageUrl && !!b.depthMapUrl && b.reliefBuildKey !== badgeBuildKey(b)
-}

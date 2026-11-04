@@ -309,9 +309,10 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
     `reliefBuildKey`. The 3D view loads it (`loadReliefBuild`, cached per session) only while the
     key (`lib/reliefBuild.ts reliefBuildKey`: version + art URL + finish URL + hole settings) still
     matches the badge; otherwise `cleanRelief` works it out live as before. The result is identical
-    (checked point for point). Badges → **Build 3D pins (n)** builds every relief badge whose build
-    is missing or stale. Changing any step in `reliefShape` / `reliefMesh` / `holeBand`? Bump
-    `RELIEF_BUILD_VERSION` so old builds are ignored, then press Build 3D pins.
+    (checked point for point). Every badge was built once (2026-11-03); the one-off "Build 3D pins"
+    button that did it was removed after. Changing any step in `reliefShape` / `reliefMesh` /
+    `holeBand`? Bump `RELIEF_BUILD_VERSION` so old builds are ignored — each pin then builds live
+    (slow) until it's re-saved in the Relief Studio (or bring back a bulk button: git `e9921aa`).
 - **Pin Display (profile Badges tab, 2026-10-29)** — `components/badges/BadgeShowcase.tsx`: the
   Badges tab opens on a velvet display pad (book velvet + gold frame in a leather border) with
   `PIN_DISPLAY_SPOTS` (6) spots the owner fills: click an empty spot (a round carved pinhole,
