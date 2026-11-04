@@ -1,0 +1,54 @@
+name: Checks
+
+# Every push to main (and every pull request): typecheck, lint, the test suites and a full
+# production build. Vercel's Deployment Checks wait for this job before a new version goes live on
+# www.tcghaven.org, so a push that breaks any of these never reaches the site.
+#
+# Setup (done once, 2026-11-04): the six NEXT_PUBLIC_FIREBASE_* repository variables (Settings →
+# Secrets and variables → Actions → Variables). They're public (every visitor's browser gets them)
+# and are the only settings the build needs — no real secrets are used here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {} # a "Run workflow" button in the Actions tab
+
+# A newer push cancels the older run still going on the same branch
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Tests
+        run: |
+          npm run test:prices
+          npm run test:search
+          npm run test:variants
+          npm run test:snapshot
+      # Catches what tsc can't — e.g. an invalid Next.js route export (CLAUDE.md rule 24)
+      - name: Production build
+        run: npm run build
