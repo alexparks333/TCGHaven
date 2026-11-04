@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [dataLoading, setDataLoading] = useState(false)
   const [dataProgress, setDataProgress] = useState<DataLoadProgress>({ done: 0, total: DATA_STEPS.length, pending: [...DATA_STEPS] })
-  const { loadUserCards, loadUserSoldCards, clearUserData, setTrackedGames } = useStore()
+  const { loadUserCards, loadUserSoldCards, clearUserData, applyAccountTrackedGames } = useStore()
 
   useEffect(() => {
     // Tracks the uid the current in-flight load belongs to, so a load that
@@ -144,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           track('your games', loadTrackedGames(firebaseUser.uid).catch((err) => { console.error('Failed to load tracked games:', err); return undefined })),
         ]).then(([inventory, soldCards, trackedGames]) => {
           if (activeUid !== firebaseUser.uid) return // signed out mid-load
-          if (trackedGames !== undefined) setTrackedGames(trackedGames ?? DEFAULT_TRACKED_GAMES)
+          if (trackedGames !== undefined) applyAccountTrackedGames(trackedGames ?? DEFAULT_TRACKED_GAMES)
           loadUserCards(inventory?.cards ?? [])
           // Keep this device's saved copy in step with every later change (add/edit/sell/delete)
           // so the next open only has to ask Firestore for changes made elsewhere.

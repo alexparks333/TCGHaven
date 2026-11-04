@@ -2,8 +2,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from './config'
 import type { Game } from '../types'
 
-// Per-user display preferences that should follow the account across devices (unlike the
-// localStorage-only filter prefs in lib/store.ts). One small doc, covered by the existing
+// Per-user display preferences that follow the account across devices. One small doc, covered by the existing
 // users/{uid}/** rule in firestore.rules.
 function prefsRef(userId: string) {
   return doc(db, 'users', userId, 'settings', 'preferences')
@@ -14,7 +13,10 @@ const VALID_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg
 // null = never saved — the caller falls back to DEFAULT_TRACKED_GAMES (Riftbound only).
 export async function loadTrackedGames(userId: string): Promise<Game[] | null> {
   const snap = await getDoc(prefsRef(userId))
-  const raw = snap.data()?.trackedGames
+  return parseTrackedGames(snap.data()?.trackedGames)
+}
+
+export function parseTrackedGames(raw: unknown): Game[] | null {
   if (!Array.isArray(raw)) return null
   const games = raw.filter((g): g is Game => VALID_GAMES.includes(g))
   return games.length > 0 ? games : null
@@ -31,11 +33,16 @@ export async function saveTrackedGames(userId: string, games: Game[]): Promise<v
 export type TimeFrame = 'entry' | '1d' | '7d' | '30d' | '365d'
 const VALID_TIME_FRAMES: TimeFrame[] = ['entry', '1d', '7d', '30d', '365d']
 
+export const PORTFOLIO_SORTS = ['pnl', 'pnlAsc', 'pnlPct', 'pnlPctAsc', 'value', 'valueAsc', 'name', 'nameDesc'] as const
+export type PortfolioSort = typeof PORTFOLIO_SORTS[number]
+
 export interface FilterPrefs {
   calcFloor: number
   activeGames: Game[]
   timeFrame: TimeFrame
   hiddenGroups: string[]
+  portfolioSort: PortfolioSort
+  includeSold: boolean
 }
 
 // Anything malformed in the stored doc is dropped field-by-field rather than trusted.
@@ -47,6 +54,8 @@ export function parseFilterPrefs(raw: unknown): Partial<FilterPrefs> | null {
   if (Array.isArray(r.activeGames)) out.activeGames = r.activeGames.filter((g): g is Game => VALID_GAMES.includes(g))
   if (VALID_TIME_FRAMES.includes(r.timeFrame as TimeFrame)) out.timeFrame = r.timeFrame as TimeFrame
   if (Array.isArray(r.hiddenGroups)) out.hiddenGroups = r.hiddenGroups.filter((g): g is string => typeof g === 'string')
+  if (PORTFOLIO_SORTS.includes(r.portfolioSort as PortfolioSort)) out.portfolioSort = r.portfolioSort as PortfolioSort
+  if (typeof r.includeSold === 'boolean') out.includeSold = r.includeSold
   return Object.keys(out).length > 0 ? out : null
 }
 

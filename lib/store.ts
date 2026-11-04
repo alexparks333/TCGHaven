@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import { Card, Game, SoldCard } from './types'
 import type { PriceStatus } from './api/priceStatus'
 import { sharpImageUrl } from './utils'
+import type { PortfolioSort } from './firebase/preferences'
 
 interface TCGStore {
   cards: Card[]
@@ -35,6 +36,10 @@ interface TCGStore {
   trackedGames: Game[]
   timeFrame: 'entry' | '1d' | '7d' | '30d' | '365d'
   hiddenGroups: string[]
+  // Portfolio's card-list sort and its "include sold" toggle — account-wide like the Filters
+  // panel (lib/preferencesSync.ts), so they never reset on a page visit or another device.
+  portfolioSort: PortfolioSort
+  includeSold: boolean
   cardUnlocks: { id: string; card: Card }[]
 
   // Populated by AuthProvider on login
@@ -58,6 +63,11 @@ interface TCGStore {
   setShowFilters: (v: boolean) => void
   setActiveGames: (games: Game[]) => void
   setTrackedGames: (games: Game[]) => void
+  // The account's saved tracked games arriving (sign-in / another device) — unlike
+  // setTrackedGames, never touches the Portfolio game filter.
+  applyAccountTrackedGames: (games: Game[]) => void
+  setPortfolioSort: (sort: PortfolioSort) => void
+  setIncludeSold: (v: boolean) => void
   setTimeFrame: (frame: 'entry' | '1d' | '7d' | '30d' | '365d') => void
   toggleHiddenGroup: (group: string) => void
   pushCardUnlock: (card: Card) => void
@@ -111,6 +121,8 @@ export const useStore = create<TCGStore>()(
   trackedGames: DEFAULT_TRACKED_GAMES,
   timeFrame: 'entry' as const,
   hiddenGroups: [] as string[],
+  portfolioSort: 'pnl' as PortfolioSort,
+  includeSold: false,
   cardUnlocks: [] as { id: string; card: Card }[],
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
@@ -157,13 +169,18 @@ export const useStore = create<TCGStore>()(
   setCalcFloor: (v) => set({ calcFloor: v }),
   setShowFilters: (v) => set({ showFilters: v }),
   setActiveGames: (games) => set({ activeGames: games }),
-  // A newly tracked game also gets switched on in Portfolio's game filter — otherwise a game the
-  // user had toggled off there long ago would look like it was tracked but showed nothing.
+  // A game the user newly tracks (Inventory's "+") also gets switched on in Portfolio's game
+  // filter — otherwise a game toggled off there long ago would look tracked but show nothing.
+  // Only for that click: loading the account's games uses applyAccountTrackedGames, or every
+  // sign-in on a fresh device would switch filtered-out games back on (and save that).
   setTrackedGames: (games) =>
     set((state) => ({
       trackedGames: games,
       activeGames: Array.from(new Set([...state.activeGames, ...games.filter((g) => !state.trackedGames.includes(g))])),
     })),
+  applyAccountTrackedGames: (games) => set({ trackedGames: games }),
+  setPortfolioSort: (portfolioSort) => set({ portfolioSort }),
+  setIncludeSold: (includeSold) => set({ includeSold }),
   setTimeFrame: (frame) => set({ timeFrame: frame }),
   toggleHiddenGroup: (group) =>
     set((state) => ({
@@ -181,6 +198,8 @@ export const useStore = create<TCGStore>()(
         trackedGames: state.trackedGames,
         timeFrame: state.timeFrame,
         hiddenGroups: state.hiddenGroups,
+        portfolioSort: state.portfolioSort,
+        includeSold: state.includeSold,
         lastPriceRefresh: state.lastPriceRefresh,
       }),
     }

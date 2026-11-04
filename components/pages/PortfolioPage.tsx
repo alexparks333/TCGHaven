@@ -6,6 +6,7 @@ import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle
 import { useRouter } from 'next/navigation'
 import { useStore, portfolioGames } from '@/lib/store'
 import type { PriceStatus } from '@/lib/api/priceStatus'
+import type { PortfolioSort } from '@/lib/firebase/preferences'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
@@ -14,7 +15,6 @@ import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
-type SortKey = 'pnl' | 'pnlAsc' | 'pnlPct' | 'pnlPctAsc' | 'value' | 'valueAsc' | 'name' | 'nameDesc'
 
 const TIME_LABELS: Record<string, string> = { 'entry': 'Since Entry', '1d': '24H', '7d': '7D', '30d': '30D', '365d': '1Y' }
 const TIME_FRAME_OPTIONS: { value: 'entry' | '1d' | '7d' | '30d' | '365d'; label: string }[] = [
@@ -32,14 +32,12 @@ export default function PortfolioPage() {
   const {
     cards, priceBaselines, priceStatus, priceLoad,
     soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
-    hiddenGroups,
+    hiddenGroups, portfolioSort: sort, setPortfolioSort: setSort, includeSold, setIncludeSold,
   } = useStore()
   // Only games the user tracks (Inventory's game tabs) count toward anything on this page — see
   // portfolioGames() in lib/store.ts.
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
-  const [sort, setSort] = useState<SortKey>('pnl')
   const [cardSearch, setCardSearch] = useState('')
-  const [includeSold, setIncludeSold] = useState(false)
 
   const totalSoldRevenue = useMemo(
     () => soldCards.filter((c) => activeGames.includes(c.game)).reduce((s, c) => s + c.soldPrice, 0),
@@ -256,7 +254,7 @@ export default function PortfolioPage() {
               <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Total Invested</span>
               {timeFrame === 'entry' && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); setIncludeSold((v) => !v) }}
+                  onClick={(e) => { e.stopPropagation(); setIncludeSold(!includeSold) }}
                   title={includeSold ? 'Click to remove sold proceeds' : 'Click to subtract sold proceeds from cost basis'}
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
                     includeSold
@@ -443,7 +441,7 @@ export default function PortfolioPage() {
                   </span>
                 )}
               </div>
-              <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none">
+              <select value={sort} onChange={(e) => setSort(e.target.value as PortfolioSort)} className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none">
               <optgroup label="P&amp;L $">
                 <option value="pnl">Best P&amp;L $</option>
                 <option value="pnlAsc">Worst P&amp;L $</option>

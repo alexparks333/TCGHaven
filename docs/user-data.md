@@ -142,18 +142,25 @@ privacy policy is `app/privacy/page.tsx` (no app shell — ClientWrapper); keep 
 always re-loaded from Firestore on login), but wrapped in Zustand's `persist` middleware with a
 `localStorage` backing (`createJSONStorage(() => localStorage)`, key `"tcghaven-filters"`) for a
 small, deliberately-scoped slice of display/filter preferences via `partialize`:
-`calcFloor`, `activeGames`, `trackedGames`, `timeFrame`, `hiddenGroups`,
-`lastPriceRefresh`. None of this is inventory data — it's UI state that's reasonable to survive a
+`calcFloor`, `activeGames`, `trackedGames`, `timeFrame`, `hiddenGroups`, `portfolioSort`,
+`includeSold`, `lastPriceRefresh`. None of this is inventory data — it's UI state that's reasonable to survive a
 refresh/relaunch without waiting on Firestore.
 
-**Filters follow the account, live.** The Filters panel's settings (`calcFloor`, `activeGames`,
-`hiddenGroups`) plus Portfolio's own P&L window (`timeFrame`, set only from Portfolio's own
-buttons — it was removed from the Filters panel as a duplicate) are also stored on `users/{uid}/settings/preferences` (`filters`
-field, next to `trackedGames`). `lib/preferencesSync.ts`'s `startPreferencesSync()` (started by
-`AuthProvider.tsx` on sign-in) listens to that doc with `onSnapshot` and writes local changes back
-(debounced 600ms), so a filter set on the website is the filter on the phone and vice versa, until
-either changes it. localStorage is only the first-paint copy. An account that has never saved
-filters gets the first signed-in device's.
+**Portfolio settings follow the account, live** — website and iPhone app alike, and they only
+change when the user changes them. The Filters panel (`calcFloor`, `activeGames`, `hiddenGroups`)
+plus Portfolio's own P&L window (`timeFrame`), card sort (`portfolioSort`) and "include sold"
+toggle (`includeSold`) are stored on `users/{uid}/settings/preferences` (`filters` field, next to
+`trackedGames`). `lib/preferencesSync.ts`'s `startPreferencesSync()` (started by `AuthProvider.tsx`
+on sign-in) listens to that doc with `onSnapshot` (tracked games included) and writes local
+changes back — clicks at once, the typed floor after a 600 ms pause, any pending save flushed on
+`pagehide` / app backgrounded. A pending local change is never overwritten by an older remote
+copy. localStorage is only the first-paint copy. An account that has never saved filters (or an
+older save missing a field) gets filled in from the first signed-in device.
+
+- **Loading the account's tracked games must use `applyAccountTrackedGames()`**, never
+  `setTrackedGames()` — the latter (Inventory's "+") also switches the new game on in the Portfolio
+  filter, which at sign-in on a fresh device (localStorage = Riftbound only) switched every
+  filtered-out game back on and saved that to the account (fixed 2026-11-04).
 
 ### State Shape (abridged — see `lib/store.ts` for the full shape)
 
