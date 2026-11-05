@@ -1,9 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { doc, getDoc, onSnapshot, writeBatch, serverTimestamp, type Firestore } from 'firebase/firestore'
+import { doc, getDoc, onSnapshot, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore'
 import { db } from './firebase/config'
 import { DEFAULT_BADGE_CATALOG, type BadgeCatalog } from './badges'
+import { rebaseList } from './rebase'
 
 // The badge catalog (every pin book and badge), edited in the staff portal (/admin/badges) and
 // stored as one doc: badge_catalog/main = { sets, badges }. Until the doc exists, the built-in
@@ -82,13 +83,23 @@ export function useBadgeCatalog(): { catalog: BadgeCatalog; loaded: boolean } {
   return state
 }
 
-/** Staff portal: save the whole catalog (pass the staff session's Firestore). */
-export async function saveBadgeCatalog(firestore: Firestore, catalog: BadgeCatalog): Promise<void> {
-  // Firestore rejects undefined values — drop optional fields that aren't set.
-  const clean = JSON.parse(JSON.stringify(catalog)) as BadgeCatalog
-  // Both in one batch: the version stamp is what tells every open app to fetch main again.
-  const batch = writeBatch(firestore)
-  batch.set(doc(firestore, 'badge_catalog', 'main'), { ...clean, updatedAt: serverTimestamp() })
-  batch.set(doc(firestore, 'badge_catalog', 'version'), { v: Date.now(), updatedAt: serverTimestamp() })
-  await batch.commit()
+/** Staff portal: save an edit (pass the staff session's Firestore). `base` is the catalog the edit
+ *  was made from, `next` the result. Several staff can work at once: only what this edit changed
+ *  (base → next: badges and books added, changed, deleted or reordered) is replayed onto the
+ *  latest saved catalog, in a transaction — so another person's save in between is never undone. */
+export async function saveBadgeCatalog(firestore: Firestore, base: BadgeCatalog, next: BadgeCatalog): Promise<void> {
+  const mainRef = doc(firestore, 'badge_catalog', 'main')
+  await runTransaction(firestore, async (tx) => {
+    const snap = await tx.get(mainRef)
+    const latest = snap.exists() ? fromDoc(snap.data() as Partial<BadgeCatalog>) : base
+    const merged: BadgeCatalog = {
+      sets: rebaseList(base.sets, next.sets, latest.sets, (s) => s.id),
+      badges: rebaseList(base.badges, next.badges, latest.badges, (b) => b.id),
+    }
+    // Firestore rejects undefined values — drop optional fields that aren't set.
+    const clean = JSON.parse(JSON.stringify(merged)) as BadgeCatalog
+    // Both together: the version stamp is what tells every open app to fetch main again.
+    tx.set(mainRef, { ...clean, updatedAt: serverTimestamp() })
+    tx.set(doc(firestore, 'badge_catalog', 'version'), { v: Date.now(), updatedAt: serverTimestamp() })
+  })
 }

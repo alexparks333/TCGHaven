@@ -477,10 +477,11 @@ visible even from the "last known status" view, not just right after clicking Sy
   write to a git-tracked file). Replaced the hardcoded `LORCANA_GROUPS`/`RIFTBOUND_GROUPS`/
   `LORCANA_KNOWN`/`RIFTBOUND_KNOWN` (`CardexPage.tsx`), `BOOSTER_SETS` (the since-removed Pack Analysis route),
   `RIFTBOUND_SETS` (`lib/api/riftbound.ts`), and `LORCANA_SETS_FALLBACK` (`lib/api/lorcana.ts`).
-- `lib/api/registry.ts` — `loadSetRegistry`/`saveSetRegistry`/`invalidateRegistryCache` plus the
+- `lib/api/registry.ts` — `loadSetRegistry`/`updateSetRegistry`/`invalidateRegistryCache` plus the
   per-game `getXRegistrySets` readers, all async now (a Firestore read
   isn't free the way a local fs read was) with a short in-process staleness cache, mirroring
   `lib/api/catalog.ts`'s shape just without the chunked-snapshot machinery (this doc is tiny).
+  Every write goes through `updateSetRegistry(change)` — a transaction on the latest doc (quirk 33).
 - `scripts/lib/catalog-sync.mjs` — the actual per-game scraping + Firestore-sync logic
   (`downloadPokemon`/`downloadLorcana`/`downloadRiftbound`/`downloadOnePiece`/`downloadMTG`/
   `syncToFirestore`/`ensureSignedIn`), shared verbatim by `scripts/download-card-catalog.mjs`

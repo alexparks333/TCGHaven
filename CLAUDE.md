@@ -43,7 +43,7 @@ npm run test:search / test:snapshot / test:variants
   function limit, so `npm run download-cards` locally is its reliable fallback.
 - Removed on purpose — don't bring back: Pack Analysis (2026-10-08) and Spending (2026-10-24).
   Leftover `registry/main` `packAnalysis` fields and `users/{uid}/purchases` docs are unread.
-- **Deploy gate:** every push to main runs `.github/workflows/checks.yml` (typecheck, lint, 4 test
+- **Deploy gate:** every push to main runs `.github/workflows/checks.yml` (typecheck, lint, 5 test
   suites, production build, ~90 s); Vercel holds the new version off www.tcghaven.org until it
   passes. Failed → fix and push again (`gh run watch` shows why); Vercel's Force Promote is the
   emergency override. CI uses only the six public `NEXT_PUBLIC_FIREBASE_*` repo variables — never real secrets.
@@ -98,6 +98,7 @@ npm run test:search / test:snapshot / test:variants
 30. A `page.tsx` wraps its lazy component (`export default function Page()`), never exports it directly.
 31. `sharpImageUrl()` upgrades old thumbnail-size inventory images.
 32. Every card `<img>` goes through `cardImage(url, size)`.
+33. Shared docs (registry, badge catalog, Text Keys) are saved as a change on the latest copy — `updateSetRegistry()`, `saveBadgeCatalog(db, base, next)` — never `setDoc` of a copy.
 
 ## Badges & the Relief Studio — the essentials
 

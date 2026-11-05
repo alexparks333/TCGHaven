@@ -23,7 +23,7 @@ import { Readable } from 'node:stream'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes, runTransaction,
 } from 'firebase/firestore'
 import { normSetName } from './text-norm.mjs'
 import {
@@ -400,6 +400,38 @@ export async function loadRegistry() {
   } catch {
     return null
   }
+}
+
+// Saves what a sync found for Needs Review onto the LATEST registry, in a transaction. The sync
+// read the registry when it started — minutes ago — and staff may have decided cards, moved sets
+// or edited categories since; writing its old copy back would silently undo all of that. So
+// only this run's own additions are applied to the fresh doc:
+//   added      — placements new this run (skipped if one with that productId exists by now)
+//   reoffered  — ignored placements offered again: applied only if still ignored
+//   newSets    — sets new this run (skipped if a set by that name / TCGplayer group exists by now)
+//   completed  — a review to file as completed (the first run's)
+export async function savePlacementsOnLatest(game, { added = [], reoffered = [], newSets = [], completed = null }) {
+  const ref = doc(db, 'registry', 'main')
+  await runTransaction(db, async (tx) => {
+    const side = (await tx.get(ref)).data()?.[game] ?? {}
+    const placements = [...(side.placements ?? [])]
+    const index = new Map(placements.map((p, i) => [String(p.productId), i]))
+    for (const r of reoffered) {
+      const i = index.get(String(r.productId))
+      if (i !== undefined && placements[i].ignored) placements[i] = r
+    }
+    for (const p of added) if (!index.has(String(p.productId))) placements.push(p)
+    const update = { [`${game}.placements`]: placements }
+    if (newSets.length) {
+      const sets = [...(side.sets ?? [])]
+      for (const s of newSets) {
+        if (!sets.some((x) => x.setName === s.setName || (s.tcgcsvGroupId != null && x.tcgcsvGroupId === s.tcgcsvGroupId))) sets.push(s)
+      }
+      update[`${game}.sets`] = sets
+    }
+    if (completed) update[`${game}.completedReviews`] = [...(side.completedReviews ?? []), completed]
+    tx.update(ref, update)
+  })
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -976,6 +1008,8 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
   const unhideIds = []
   let changed = false
   let newPlacements = 0
+  const added = []
+  const reoffered = []
 
   for (const card of promoById.values()) {
     const productId = card.id.replace(/^tcg-/, '')
@@ -988,6 +1022,7 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
         ...(firstRun ? { decidedAt: nowIso } : {}),
       }
       placements.push(p)
+      added.push(p)
       byProduct.set(productId, p)
       changed = true
       if (!firstRun) newPlacements++
@@ -995,6 +1030,7 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
       // "Ignore" = ask again next sync — this is it
       Object.assign(p, { ignored: false, reviewed: false, auto: true, addedAt: nowIso })
       delete p.decidedAt
+      reoffered.push(p)
       unhideIds.push(card.id)
       changed = true
       newPlacements++
@@ -1010,10 +1046,8 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
   for (const p of placements) if (p.ignored) hideIds.push(`tcg-${p.productId}`)
 
   if (changed) {
-    const update = { [`${game}.placements`]: placements }
-    if (firstRun) update[`${game}.completedReviews`] = [...(side.completedReviews ?? []), { at: nowIso, completedAt: nowIso }]
     try {
-      await updateDoc(doc(db, 'registry', 'main'), update)
+      await savePlacementsOnLatest(game, { added, reoffered, completed: firstRun ? { at: nowIso, completedAt: nowIso } : null })
     } catch (err) {
       console.warn(`   ⚠️  Couldn't save ${game} promo review to the registry: ${err.message}`)
     }
@@ -1442,7 +1476,7 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
   if (save && (newSets.length || newPlacements.length || returned.length)) {
     rb.placements = [...placements, ...newPlacements]
     try {
-      await updateDoc(doc(db, 'registry', 'main'), { 'riftbound.sets': rb.sets, 'riftbound.placements': rb.placements })
+      await savePlacementsOnLatest('riftbound', { added: newPlacements, reoffered: returned, newSets })
     } catch (err) {
       console.warn(`   ⚠️  Couldn't save new placements to the registry: ${err.message}`)
     }

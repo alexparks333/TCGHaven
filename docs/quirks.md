@@ -504,3 +504,22 @@ Cardex follow-ups: sets are cached per session and the other sets in the open gr
 view at once (double-tap-to-add is now a quick second tap landing on the zoom view —
 `ZoomCardData.onDoubleTap`), the full-size image is preloaded on press, and `ZoomImage` lays it
 exactly over the tile's copy and fades it in (no snap or shift).
+
+### 33. Several staff (and the syncs) share a few big docs — save a change, never a copy
+
+`registry/main`, `badge_catalog/main` and `registry/textKeys` are each one doc that many people
+and processes write. The old pattern — read the doc, edit it, `setDoc` it back — let whoever saved
+last silently undo everything saved in between: two staff in Needs Review, one in Categories while
+a Riftbound sync ran (the sync wrote back the copy it read minutes earlier), two badge editors. A
+test with 8 saves at once kept 1 of 8 the old way, 8 of 8 with transactions (2026-11-04).
+
+Now: **registry** — only `updateSetRegistry(change)` (lib/api/registry.ts) writes it: a Firestore
+transaction that runs `change` on the latest copy and re-runs it if anyone wrote meanwhile (so
+`change` must be pure — fetch first); throw `RegistryRejection` to refuse. The sync engine's own
+placement saves use `savePlacementsOnLatest()` (catalog-sync.mjs), which applies only that run's
+additions. **Badges / Text Keys** — `saveBadgeCatalog(db, base, next)` / `saveTextKeys(db, base,
+keys)` replay just this person's edit onto the latest list (`rebaseList()` in lib/rebase.ts,
+tested by `npm run test:rebase`); the badge and book editors also merge field-by-field
+(`mergeEdit()`) and ask before overwriting a field someone else changed while the form was open.
+Card edits were already safe — `updateDoc` with only the changed fields.
+

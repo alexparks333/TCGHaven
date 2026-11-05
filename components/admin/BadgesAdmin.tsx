@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
+import { sameValue, mergeEdit } from '@/lib/rebase'
 import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierPercents, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
@@ -36,9 +37,11 @@ export function BadgesAdmin() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const selected = catalog.sets.find((s) => s.id === setId) ?? catalog.sets[0]
+  // `next` is always computed from this render's `catalog` — that's the base the edit is replayed
+  // from onto the latest saved catalog (lib/badgeCatalog.ts), so other staff's saves survive.
   async function persist(next: BadgeCatalog) {
     setBusy(true); setError('')
-    try { await saveBadgeCatalog(staffDb, next) } catch (e) {
+    try { await saveBadgeCatalog(staffDb, catalog, next) } catch (e) {
       console.error(e); setError('Couldn’t save — check you’re signed in as staff and try again.')
       throw e
     } finally { setBusy(false) }
@@ -143,14 +146,24 @@ export function BadgesAdmin() {
           initial={editBadge}
           onPreview={setPreview}
           onClose={() => setEditBadge(null)}
-          onSave={async (b, originalId) => {
-            const exists = catalog.badges.some((x) => x.id === originalId && originalId)
+          onSave={async (edited, originalId, opened) => {
+            const live = originalId ? catalog.badges.find((x) => x.id === originalId) : undefined
+            // Someone else may have saved this badge while it was open: keep their changes, apply
+            // only the fields changed here — and ask before overwriting a field both changed.
+            let b = edited
+            if (live && !sameValue(live, opened)) {
+              const { merged, clashes } = mergeEdit(opened, edited, live)
+              if (clashes.length && !confirm(`Someone else saved changes to this badge while you had it open (${clashes.join(', ')}).\n\nOK = save yours over theirs for those. Cancel = keep editing (their version is in the list behind this window).`)) return false
+              b = merged
+            }
+            const exists = !!live
             const badges = exists ? catalog.badges.map((x) => (x.id === originalId ? b : x)) : [...catalog.badges, b]
             // a chapter typed in the editor joins the book's chapter list (at the end)
             const sets = catalog.sets.map((s) => (s.id === b.set && !chaptersOf(catalog, s.id).includes(b.page) ? { ...s, chapters: [...chaptersOf(catalog, s.id), b.page] } : s))
             await persist({ ...catalog, sets, badges })
             setSetId(b.set)
             setEditBadge(null)
+            return b
           }}
         />
       )}
@@ -159,8 +172,15 @@ export function BadgesAdmin() {
           catalog={catalog}
           initial={editSet}
           onClose={() => setEditSet(null)}
-          onSave={async (s, originalId) => {
-            const exists = !!originalId && catalog.sets.some((x) => x.id === originalId)
+          onSave={async (edited, originalId) => {
+            const live = originalId ? catalog.sets.find((x) => x.id === originalId) : undefined
+            let s = edited
+            if (live && editSet && !sameValue(live, editSet)) {
+              const { merged, clashes } = mergeEdit(editSet, edited, live)
+              if (clashes.length && !confirm(`Someone else saved changes to this book while you had it open (${clashes.join(', ')}).\n\nOK = save yours over theirs for those. Cancel = keep editing.`)) return
+              s = merged
+            }
+            const exists = !!live
             const sets = exists ? catalog.sets.map((x) => (x.id === originalId ? s : x)) : [...catalog.sets, s]
             await persist({ ...catalog, sets })
             setSetId(s.id)
@@ -235,7 +255,8 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
   catalog: BadgeCatalog
   initial: BadgeDef
   onClose: () => void
-  onSave: (b: BadgeDef, originalId: string) => Promise<void>
+  // opened = the badge as this editor opened it (to tell this person's changes from others')
+  onSave: (b: BadgeDef, originalId: string, opened: BadgeDef) => Promise<BadgeDef | false>
   onPreview: (b: BadgeDef) => void
 }) {
   const isNew = !initial.id
@@ -276,7 +297,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
     if (isNew && catalog.badges.some((x) => x.id === id)) return setError(`A badge with the id "${id}" already exists — change the name.`)
     setSaving(true)
     try {
-      await onSave({ ...b, id, game: book?.game ?? b.game, name: b.name.trim(), page: b.page.trim() }, initial.id)
+      await onSave({ ...b, id, game: book?.game ?? b.game, name: b.name.trim(), page: b.page.trim() }, initial.id, initial)
     } catch {
       setError('Couldn’t save.')
     } finally {

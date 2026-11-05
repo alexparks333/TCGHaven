@@ -87,7 +87,7 @@ TCGHaven/
 │   │   │                             cardSearch.test.mts (`npm run test:search`)
 │   │   ├── searchTerms.ts         ← searchOptionsFor(game) — per-game extra searchable words
 │   │   │                             (rarity labels, Riftbound cardType, One Piece "parallel")
-│   │   ├── registry.ts            ← loadSetRegistry()/saveSetRegistry() etc. — Firestore
+│   │   ├── registry.ts            ← loadSetRegistry()/updateSetRegistry() etc. — Firestore
 │   │                             registry/main doc, short in-process staleness cache (§17)
 │   │   ├── search.ts              ← searchCards(), getSetsForGame()/invalidateSetsCache() —
 │   │   │                             unified entry point (§5's New Set cache note)

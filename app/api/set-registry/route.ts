@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { loadSetRegistry, saveSetRegistry, invalidateRegistryCache } from '@/lib/api/registry'
+import { loadSetRegistry, invalidateRegistryCache, updateSetRegistry, RegistryRejection } from '@/lib/api/registry'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
 import { invalidateSetsCache } from '@/lib/api/search'
@@ -38,18 +38,18 @@ export async function PUT(request: Request) {
   }
   const game: Game = gameRaw
 
-  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
-  const registry = await loadSetRegistry()
-  const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
-  const idx = sets.findIndex((s) => s.setName === setName)
-  if (idx === -1) {
-    return NextResponse.json({ error: `No ${game} set named "${setName}" in the registry` }, { status: 404 })
-  }
-
-  sets[idx] = { ...sets[idx], ...patch }
-
   await ensureAdminAuth()
-  await saveSetRegistry(registry)
+  let saved: Record<string, unknown>
+  try {
+    // On the latest registry, in a transaction — another staff member's change can't be undone
+    saved = await updateSetRegistry((registry) => {
+      const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
+      const idx = sets.findIndex((s) => s.setName === setName)
+      if (idx === -1) throw new RegistryRejection(`No ${game} set named "${setName}" in the registry`, 404)
+      sets[idx] = { ...sets[idx], ...patch }
+      return sets[idx]
+    })
+  } catch (e) { return rejected(e) }
 
   // Same reasoning as the POST handler below — a patch here (e.g. fixing a "Needs Review" set's
   // cardexGroup or tcgcsvGroupId) needs the set picker to reflect it without a server restart.
@@ -57,7 +57,7 @@ export async function PUT(request: Request) {
   if (game === 'pokemon') invalidatePokemonSetsCache()
   if (game === 'mtg') invalidateMtgSetsCache()
 
-  return NextResponse.json({ ok: true, set: sets[idx] })
+  return NextResponse.json({ ok: true, set: saved })
 }
 
 // Registers a brand new set — e.g. a curated/custom set that isn't sourced from any of the
@@ -93,70 +93,71 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'cardexGroup is required for lorcana/riftbound sets' }, { status: 400 })
   }
 
-  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
-  const registry = await loadSetRegistry()
-
-  if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && cardexGroup) {
-    const groupOrder = registry[game].groupOrder
-    // `newCardexGroup: true` creates the category too (added after the existing ones). A group
-    // some set already uses counts as known even if groupOrder doesn't list it (Riftbound's
-    // "Special", which the Cardex always puts last).
-    const inUse = (registry[game].sets as Array<{ cardexGroup?: string | null }>).some((s) => s.cardexGroup === cardexGroup)
-    if (body?.newCardexGroup === true && !groupOrder.includes(cardexGroup) && !inUse) groupOrder.push(cardexGroup)
-    else if (!groupOrder.includes(cardexGroup) && !inUse) {
-      return NextResponse.json({ error: `"${cardexGroup}" isn't a known Cardex group for ${game} (expected one of: ${groupOrder.join(', ')})` }, { status: 400 })
-    }
-  }
-
-  const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
-  if (sets.some((s) => String(s.setName).toLowerCase() === setName.toLowerCase())) {
-    return NextResponse.json({ error: `A ${game} set named "${setName}" already exists` }, { status: 409 })
-  }
-
-  const newSet: Record<string, unknown> = game === 'riftbound'
-    ? {
-        setName,
-        setCode: code || setName.slice(0, 3).toUpperCase(),
-        releaseDate,
-        cardCount: 0,
-        cardexGroup,
-        tcgcsvGroupId: null,
-        groupMatchConfidence: null,
-        needsReview: false,
-        source: 'manual',
-      }
-    : game === 'lorcana'
-    ? {
-        setName,
-        code: code || null,
-        lorcastId: null,
-        releaseDate,
-        cardexGroup,
-        needsReview: false,
-        source: 'manual',
-      }
-    : game === 'onepiece'
-    ? {
-        // No code -> falls outside the OP/ST/EB/PRB prefixes buildOnePieceGroups() looks for,
-        // landing this set in the "Promos & Special" bucket — a reasonable default for a custom
-        // set that (unlike a real upstream one) has no official print-numbering prefix anyway.
-        setName,
-        code: code || '',
-        releaseDate,
-        cardCount: 0,
-        source: 'manual',
-      }
-    : {
-        setName,
-        code: code || null,
-        releaseDate,
-        source: 'manual',
-      }
-
-  sets.push(newSet)
-
   await ensureAdminAuth()
-  await saveSetRegistry(registry)
+  let newSet: Record<string, unknown>
+  try {
+    newSet = await updateSetRegistry((registry) => {
+      if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && cardexGroup) {
+        const groupOrder = registry[game].groupOrder
+        // `newCardexGroup: true` creates the category too (added after the existing ones). A group
+        // some set already uses counts as known even if groupOrder doesn't list it (Riftbound's
+        // "Special", which the Cardex always puts last).
+        const inUse = (registry[game].sets as Array<{ cardexGroup?: string | null }>).some((s) => s.cardexGroup === cardexGroup)
+        if (body?.newCardexGroup === true && !groupOrder.includes(cardexGroup) && !inUse) groupOrder.push(cardexGroup)
+        else if (!groupOrder.includes(cardexGroup) && !inUse) {
+          throw new RegistryRejection(`"${cardexGroup}" isn't a known Cardex group for ${game} (expected one of: ${groupOrder.join(', ')})`)
+        }
+      }
+
+      const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
+      if (sets.some((s) => String(s.setName).toLowerCase() === setName.toLowerCase())) {
+        throw new RegistryRejection(`A ${game} set named "${setName}" already exists`, 409)
+      }
+
+      const newSet: Record<string, unknown> = game === 'riftbound'
+        ? {
+            setName,
+            setCode: code || setName.slice(0, 3).toUpperCase(),
+            releaseDate,
+            cardCount: 0,
+            cardexGroup,
+            tcgcsvGroupId: null,
+            groupMatchConfidence: null,
+            needsReview: false,
+            source: 'manual',
+          }
+        : game === 'lorcana'
+        ? {
+            setName,
+            code: code || null,
+            lorcastId: null,
+            releaseDate,
+            cardexGroup,
+            needsReview: false,
+            source: 'manual',
+          }
+        : game === 'onepiece'
+        ? {
+            // No code -> falls outside the OP/ST/EB/PRB prefixes buildOnePieceGroups() looks for,
+            // landing this set in the "Promos & Special" bucket — a reasonable default for a custom
+            // set that (unlike a real upstream one) has no official print-numbering prefix anyway.
+            setName,
+            code: code || '',
+            releaseDate,
+            cardCount: 0,
+            source: 'manual',
+          }
+        : {
+            setName,
+            code: code || null,
+            releaseDate,
+            source: 'manual',
+          }
+
+      sets.push(newSet)
+      return newSet
+    })
+  } catch (e) { return rejected(e) }
 
   // getSetsForGame() caches its result in-process indefinitely (see lib/api/search.ts) — this
   // runs server-side in the same process as that cache, so a direct call is enough (no client
@@ -188,43 +189,49 @@ export async function DELETE(request: Request) {
   }
   const game: Game = gameRaw
 
-  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
-  const registry = await loadSetRegistry()
-  const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
-  const idx = sets.findIndex((s) => s.setName === setName)
-  if (idx === -1) {
-    return NextResponse.json({ error: `No ${game} set named "${setName}" in the registry` }, { status: 404 })
-  }
-  if (sets[idx].source !== 'manual') {
-    return NextResponse.json({ error: `"${setName}" isn't a custom set — only sets created via "New Set" can be deleted.` }, { status: 400 })
-  }
-
-  sets.splice(idx, 1)
-
-  // Cards Needs Review placed in this set go back to review with no set (their catalog cards
-  // were deleted with the set) — otherwise they'd point at a set that no longer exists.
-  let returnedToReview = 0
-  if (game === 'riftbound') {
-    for (const p of registry.riftbound.placements ?? []) {
-      if (p.setName !== setName && p.previousSetName !== setName) continue
-      if (p.previousSetName === setName) p.previousSetName = null
-      if (p.setName === setName) {
-        p.setName = null
-        p.reviewed = false
-        p.denied = false
-        p.auto = false
-        delete p.decidedAt
-        returnedToReview++
-      }
-    }
-  }
-
   await ensureAdminAuth()
-  await saveSetRegistry(registry)
+  let returnedToReview = 0
+  try {
+    returnedToReview = await updateSetRegistry((registry) => {
+      const sets = registry[game].sets as unknown as Array<Record<string, unknown>>
+      const idx = sets.findIndex((s) => s.setName === setName)
+      if (idx === -1) throw new RegistryRejection(`No ${game} set named "${setName}" in the registry`, 404)
+      if (sets[idx].source !== 'manual') {
+        throw new RegistryRejection(`"${setName}" isn't a custom set — only sets created via "New Set" can be deleted.`)
+      }
+
+      sets.splice(idx, 1)
+
+      // Cards Needs Review placed in this set go back to review with no set (their catalog cards
+      // were deleted with the set) — otherwise they'd point at a set that no longer exists.
+      let returned = 0
+      if (game === 'riftbound') {
+        for (const p of registry.riftbound.placements ?? []) {
+          if (p.setName !== setName && p.previousSetName !== setName) continue
+          if (p.previousSetName === setName) p.previousSetName = null
+          if (p.setName === setName) {
+            p.setName = null
+            p.reviewed = false
+            p.denied = false
+            p.auto = false
+            delete p.decidedAt
+            returned++
+          }
+        }
+      }
+      return returned
+    })
+  } catch (e) { return rejected(e) }
 
   invalidateSetsCache(game)
   if (game === 'pokemon') invalidatePokemonSetsCache()
   if (game === 'mtg') invalidateMtgSetsCache()
 
   return NextResponse.json({ ok: true, returnedToReview })
+}
+
+// A RegistryRejection from inside updateSetRegistry → the error response it describes
+function rejected(e: unknown) {
+  if (e instanceof RegistryRejection) return NextResponse.json({ error: e.message }, { status: e.status })
+  throw e
 }

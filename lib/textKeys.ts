@@ -1,8 +1,9 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
-import { doc, onSnapshot, serverTimestamp, setDoc, type Firestore } from 'firebase/firestore'
+import { doc, onSnapshot, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
+import { rebaseList } from '@/lib/rebase'
 
 // Text Keys — words in a card's name that the collector app draws in their own colour / weight,
 // e.g. "(Nexus Promo)" in purple, slightly italic. Edited by staff from the Admin Catalog's Text
@@ -59,12 +60,22 @@ export function useTextKeys(): TextKey[] {
   return useSyncExternalStore(subscribe, () => current, () => DEFAULT_TEXT_KEYS)
 }
 
-/** Staff portal: save the whole list (pass the staff session's Firestore). */
-export async function saveTextKeys(firestore: Firestore, keys: TextKey[]): Promise<void> {
-  const clean = keys
-    .map((k) => ({ id: k.id, text: k.text.trim(), show: k.show?.trim() ?? '', color: k.color || '', bold: !!k.bold, italic: !!k.italic }))
-    .filter((k) => k.text)
-  await setDoc(doc(firestore, 'registry', 'textKeys'), { keys: clean, updatedAt: serverTimestamp() })
+const cleanKeys = (keys: TextKey[]) => keys
+  .map((k) => ({ id: k.id, text: k.text.trim(), show: k.show?.trim() ?? '', color: k.color || '', bold: !!k.bold, italic: !!k.italic }))
+  .filter((k) => k.text)
+
+/** Staff portal: save an edit of the list (pass the staff session's Firestore). `base` = the list
+ *  the editor opened with: only the keys changed since then (added, edited, deleted, reordered)
+ *  are replayed onto the latest saved list, in a transaction — another staff member's save in
+ *  between survives. */
+export async function saveTextKeys(firestore: Firestore, base: TextKey[], keys: TextKey[]): Promise<void> {
+  const ref = doc(firestore, 'registry', 'textKeys')
+  await runTransaction(firestore, async (tx) => {
+    const snap = await tx.get(ref)
+    const latest = snap.exists() && Array.isArray(snap.data().keys) ? (snap.data().keys as TextKey[]) : DEFAULT_TEXT_KEYS
+    const merged = rebaseList(cleanKeys(base), cleanKeys(keys), cleanKeys(latest), (k) => k.id)
+    tx.set(ref, { keys: merged, updatedAt: serverTimestamp() })
+  })
 }
 
 export function textKeyStyle(k: TextKey): React.CSSProperties {

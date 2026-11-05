@@ -64,7 +64,9 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   `DEFAULT_BADGE_CATALOG` in `lib/badges.ts` is only the fallback until that doc exists. main is a
   few hundred KB, so apps listen to the tiny `badge_catalog/version` (`{ v }`, stamped in the same
   batch by `saveBadgeCatalog()`) and fetch main only when `v` differs from the copy kept in
-  localStorage — always save through `saveBadgeCatalog()`, or open apps won't see the change.
+  localStorage — always save through `saveBadgeCatalog(db, base, next)`, or open apps won't see the
+  change. It replays only base → next onto the latest catalog in a transaction, and the badge/book
+  editors merge field-by-field, asking before overwriting a field someone else changed (quirk 33).
   The admin page: book tabs (add/edit/delete — name, subtitle, monogram, game, cover colours with a
   live cover preview), the book's badges by page (preview in 3D, move up/down, edit, delete), and a
   badge editor — name (id is slugged from it once), book, page, description, slot noun, requirement

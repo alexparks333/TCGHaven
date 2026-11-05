@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { invalidateRegistryCache, loadSetRegistry, saveSetRegistry, type RiftboundPlacement } from '@/lib/api/registry'
+import { updateSetRegistry, RegistryRejection, type RiftboundPlacement } from '@/lib/api/registry'
 import { loadCatalog, invalidateCatalogCache } from '@/lib/api/catalog'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
@@ -82,89 +82,100 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Expected { changes: [{ productId: number, setName?, reviewed?, denied?, displayName? }] }' }, { status: 400 })
   }
 
-  invalidateRegistryCache() // read-modify-write: never from a stale copy (a sync on another process may have changed it)
-  const registry = await loadSetRegistry()
-  const side = registry[game]
-  const placements = side.placements ?? []
-  const setByName = new Map((side.sets as Array<{ setName: string; setCode?: string; code?: string | null; tcgplayerOnly?: boolean; tcgplayerRarity?: string }>).map((s) => [s.setName, s]))
-  const touched = new Map<number, { placement: RiftboundPlacement; moved: boolean; renamed: boolean; image: Change['image'] }>()
-  const mark = (p: RiftboundPlacement, what: 'moved' | 'renamed') => {
-    const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
-    t[what] = true
-    touched.set(p.productId, t)
-  }
-
-  for (const change of changes) {
-    const p = placements.find((x) => x.productId === change.productId)
-    if (!p) return NextResponse.json({ error: `No placement for TCGplayer product ${change.productId}` }, { status: 404 })
-    const decisionBefore = `${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}`
-    if (typeof change.setName === 'string' && !setByName.has(change.setName)) {
-      return NextResponse.json({ error: `No Riftbound set named "${change.setName}"` }, { status: 404 })
-    }
-
-    if (change.ignored === true && !p.ignored) {
-      p.ignored = true
-      p.reviewed = false
-      mark(p, 'moved')
-    } else if (p.ignored && (change.ignored === false || change.reviewed === true || change.setName !== undefined || change.denied !== undefined)) {
-      p.ignored = false
-      mark(p, 'moved')
-    }
-
-    if (change.denied === true && !p.denied) {
-      p.previousSetName = p.setName
-      p.setName = null
-      p.denied = true
-      p.reviewed = true
-      p.auto = false
-      mark(p, 'moved')
-    } else if (change.denied === false && (p.denied || p.setName === null)) {
-      // (setName null without `denied` = left out before Deny existed, or the sync couldn't place it)
-      p.denied = false
-      p.setName = change.setName !== undefined ? change.setName : p.previousSetName ?? null
-      delete p.previousSetName
-      p.reviewed = false
-      p.auto = false
-      mark(p, 'moved')
-    } else if (change.setName !== undefined && change.setName !== p.setName) {
-      p.setName = change.setName
-      p.denied = false
-      p.auto = false
-      mark(p, 'moved')
-    }
-
-    if (change.displayName !== undefined) {
-      const name = change.displayName.trim()
-      if (name && name !== defaultName(p.name, game)) p.displayName = name
-      else delete p.displayName
-      mark(p, 'renamed')
-    }
-    if (change.image !== undefined) {
-      if (change.image === 'auto') delete p.image
-      else p.image = change.image
-      const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
-      t.image = change.image
-      touched.set(p.productId, t)
-    }
-    if (change.reviewed !== undefined) p.reviewed = change.reviewed
-    // When staff last decided on it (accept / ignore / deny / move) — the Reviewed tab's order.
-    // Back in the review queue = no decision.
-    if (!p.reviewed && !p.denied && !p.ignored) delete p.decidedAt
-    else if (`${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}` !== decisionBefore) p.decidedAt = new Date().toISOString()
-  }
-  side.placements = placements
-
-  let completed = side.completedReviews ?? []
-  if (completeReview) {
-    const open = placements.filter((p) => p.addedAt === completeReview && !p.reviewed && !p.denied && !p.ignored)
-    if (open.length) return NextResponse.json({ error: `${open.length} card${open.length === 1 ? ' is' : 's are'} still waiting for a decision` }, { status: 409 })
-    completed = [...completed.filter((c) => c.at !== completeReview), { at: completeReview, completedAt: new Date().toISOString() }]
-  }
-  if (reopenReview) completed = completed.filter((c) => c.at !== reopenReview)
-  side.completedReviews = completed
-
   await ensureAdminAuth()
-  await saveSetRegistry(registry)
+  type SetInfo = { setName: string; setCode?: string; code?: string | null; tcgplayerOnly?: boolean; tcgplayerRarity?: string }
+  type Touched = { placement: RiftboundPlacement; moved: boolean; renamed: boolean; image: Change['image'] }
+  // On the latest registry, in a transaction: two staff deciding cards at the same moment (or a
+  // sync adding new ones meanwhile) both land, instead of the last save undoing the other's.
+  // Re-run from scratch if the doc changed underneath, so everything is rebuilt in here.
+  let applied: { touched: Map<number, Touched>; setByName: Map<string, SetInfo>; placements: RiftboundPlacement[]; completed: Array<{ at: string; completedAt: string }> }
+  try {
+    applied = await updateSetRegistry((registry) => {
+      const side = registry[game]
+      const placements = side.placements ?? []
+      const setByName = new Map((side.sets as SetInfo[]).map((s) => [s.setName, s]))
+      const touched = new Map<number, Touched>()
+      const mark = (p: RiftboundPlacement, what: 'moved' | 'renamed') => {
+        const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
+        t[what] = true
+        touched.set(p.productId, t)
+      }
+
+      for (const change of changes) {
+        const p = placements.find((x) => x.productId === change.productId)
+        if (!p) throw new RegistryRejection(`No placement for TCGplayer product ${change.productId}`, 404)
+        const decisionBefore = `${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}`
+        if (typeof change.setName === 'string' && !setByName.has(change.setName)) {
+          throw new RegistryRejection(`No Riftbound set named "${change.setName}"`, 404)
+        }
+
+        if (change.ignored === true && !p.ignored) {
+          p.ignored = true
+          p.reviewed = false
+          mark(p, 'moved')
+        } else if (p.ignored && (change.ignored === false || change.reviewed === true || change.setName !== undefined || change.denied !== undefined)) {
+          p.ignored = false
+          mark(p, 'moved')
+        }
+
+        if (change.denied === true && !p.denied) {
+          p.previousSetName = p.setName
+          p.setName = null
+          p.denied = true
+          p.reviewed = true
+          p.auto = false
+          mark(p, 'moved')
+        } else if (change.denied === false && (p.denied || p.setName === null)) {
+          // (setName null without `denied` = left out before Deny existed, or the sync couldn't place it)
+          p.denied = false
+          p.setName = change.setName !== undefined ? change.setName : p.previousSetName ?? null
+          delete p.previousSetName
+          p.reviewed = false
+          p.auto = false
+          mark(p, 'moved')
+        } else if (change.setName !== undefined && change.setName !== p.setName) {
+          p.setName = change.setName
+          p.denied = false
+          p.auto = false
+          mark(p, 'moved')
+        }
+
+        if (change.displayName !== undefined) {
+          const name = change.displayName.trim()
+          if (name && name !== defaultName(p.name, game)) p.displayName = name
+          else delete p.displayName
+          mark(p, 'renamed')
+        }
+        if (change.image !== undefined) {
+          if (change.image === 'auto') delete p.image
+          else p.image = change.image
+          const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
+          t.image = change.image
+          touched.set(p.productId, t)
+        }
+        if (change.reviewed !== undefined) p.reviewed = change.reviewed
+        // When staff last decided on it (accept / ignore / deny / move) — the Reviewed tab's order.
+        // Back in the review queue = no decision.
+        if (!p.reviewed && !p.denied && !p.ignored) delete p.decidedAt
+        else if (`${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}` !== decisionBefore) p.decidedAt = new Date().toISOString()
+      }
+      side.placements = placements
+
+      let completed = side.completedReviews ?? []
+      if (completeReview) {
+        const open = placements.filter((p) => p.addedAt === completeReview && !p.reviewed && !p.denied && !p.ignored)
+        if (open.length) throw new RegistryRejection(`${open.length} card${open.length === 1 ? ' is' : 's are'} still waiting for a decision`, 409)
+        completed = [...completed.filter((c) => c.at !== completeReview), { at: completeReview, completedAt: new Date().toISOString() }]
+      }
+      if (reopenReview) completed = completed.filter((c) => c.at !== reopenReview)
+      side.completedReviews = completed
+      return { touched, setByName, placements, completed }
+    })
+  } catch (e) {
+    if (e instanceof RegistryRejection) return NextResponse.json({ error: e.message }, { status: e.status })
+    throw e
+  }
+  const { touched, setByName, placements, completed } = applied
 
   // Apply to the catalog cards now. One the sync hasn't built yet is created by the next sync.
   let changedCards = 0

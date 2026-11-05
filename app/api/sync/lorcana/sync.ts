@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { loadSetRegistry, saveSetRegistry, invalidateRegistryCache } from '@/lib/api/registry'
+import { loadSetRegistry, updateSetRegistry, invalidateRegistryCache } from '@/lib/api/registry'
 import { invalidateSetsCache } from '@/lib/api/search'
 import { invalidateCatalogCache } from '@/lib/api/catalog'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
@@ -21,20 +21,26 @@ export async function runLorcanaSync(): Promise<Response> {
     // Read after the download: it saves the promo review (lorcana.placements) itself, which this
     // must not overwrite. Always the live doc — we're about to append to it.
     invalidateRegistryCache()
-    const registry = await loadSetRegistry()
-    const knownNames = new Set(registry.lorcana.sets.map((s) => s.setName))
-    const newNames: string[] = result.setNames.filter((n: string) => !knownNames.has(n))
+    const unknown = (sets: Array<{ setName: string }>) => {
+      const known = new Set(sets.map((s) => s.setName))
+      return (result.setNames as string[]).filter((n) => !known.has(n))
+    }
+    let newNames = unknown((await loadSetRegistry()).lorcana.sets)
 
     if (newNames.length > 0) {
       const nowIso = new Date().toISOString()
-      for (const setName of newNames) {
-        registry.lorcana.sets.push({
-          setName, code: null, lorcastId: null, releaseDate: null,
-          cardexGroup: 'Special Sets',
-          needsReview: true, source: 'auto-detected', addedAt: nowIso,
-        } as (typeof registry.lorcana.sets)[number])
-      }
-      await saveSetRegistry(registry)
+      // Added to the latest registry in a transaction, so a staff edit made meanwhile isn't undone
+      newNames = await updateSetRegistry((registry) => {
+        const adding = unknown(registry.lorcana.sets)
+        for (const setName of adding) {
+          registry.lorcana.sets.push({
+            setName, code: null, lorcastId: null, releaseDate: null,
+            cardexGroup: 'Special Sets',
+            needsReview: true, source: 'auto-detected', addedAt: nowIso,
+          } as (typeof registry.lorcana.sets)[number])
+        }
+        return adding
+      })
       // getSetsForGame()'s own wrapping cache (lib/api/search.ts) never expires on its own and
       // doesn't know the registry changed underneath it — without this, a newly-auto-detected
       // set is fully written to Firestore but stays invisible in the set picker (AddCardDialog,

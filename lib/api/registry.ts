@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, runTransaction, type DocumentSnapshot } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 
 // Single source of truth for Lorcana/Riftbound set metadata that used to be hardcoded
@@ -169,24 +169,47 @@ export function invalidateRegistryCache() {
 
 export async function loadSetRegistry(): Promise<SetRegistry> {
   if (_cache && Date.now() - _cache.loadedAt < STALE_MS) return _cache.data
-  const snap = await getDoc(doc(db, ...REGISTRY_DOC_PATH))
-  // Merge over EMPTY_REGISTRY rather than trusting the stored doc alone — the real Firestore
-  // document predates every game added after the registry's first write, so a brand-new game
-  // key (e.g. `onepiece`) is genuinely `undefined` on it at runtime despite `SetRegistry` (and
-  // the `as` cast below) claiming it's always present. Without this merge, every reader of
-  // `registry.onepiece.sets` throws "Cannot read properties of undefined" the first time it
-  // runs against real production data — caught when One Piece's own sync route hit exactly that.
-  const data = snap.exists() ? { ...EMPTY_REGISTRY, ...(snap.data() as Partial<SetRegistry>) } : EMPTY_REGISTRY
+  const data = fromSnap(await getDoc(doc(db, ...REGISTRY_DOC_PATH)))
   _cache = { data, loadedAt: Date.now() }
   return data
 }
 
-// Callers must have already authenticated the shared `auth` instance as the admin sync
-// account (see lib/firebase/adminAuth.ts's ensureAdminAuth()) — Firestore rejects this write
-// otherwise (see the `registry/{doc}` rule in firestore.rules).
-export async function saveSetRegistry(registry: SetRegistry): Promise<void> {
-  await setDoc(doc(db, ...REGISTRY_DOC_PATH), registry)
+// Merge over EMPTY_REGISTRY rather than trusting the stored doc alone — the real Firestore
+// document predates every game added after the registry's first write, so a brand-new game
+// key (e.g. `onepiece`) is genuinely `undefined` on it at runtime despite `SetRegistry` (and
+// the `as` cast below) claiming it's always present. Without this merge, every reader of
+// `registry.onepiece.sets` throws "Cannot read properties of undefined" the first time it
+// runs against real production data — caught when One Piece's own sync route hit exactly that.
+// Deep-copied, so a caller changing it can never touch EMPTY_REGISTRY or another caller's copy.
+function fromSnap(snap: DocumentSnapshot): SetRegistry {
+  const data = snap.exists() ? { ...EMPTY_REGISTRY, ...(snap.data() as Partial<SetRegistry>) } : EMPTY_REGISTRY
+  return structuredClone(data)
+}
+
+/** A change refused by updateSetRegistry's `change` (bad input, a name taken…) — nothing is saved. */
+export class RegistryRejection extends Error {
+  constructor(message: string, public status = 400) { super(message) }
+}
+
+// The ONLY way to write the registry. Several staff (and the syncs) change this one doc, so a
+// plain read → edit → save lets whoever saves last silently undo everyone else's changes made in
+// between. This runs `change` on the latest copy inside a Firestore transaction — if anyone else
+// writes the doc meanwhile, Firestore re-runs `change` on their version — so every change lands.
+// `change` may run more than once: it must only edit the registry it's given (no fetches, no
+// other writes) — do slow work before. Throw RegistryRejection to save nothing.
+// Callers must have already authenticated the shared `auth` instance as the admin sync account
+// (lib/firebase/adminAuth.ts's ensureAdminAuth()) — Firestore rejects the write otherwise (see the
+// `registry/{doc}` rule in firestore.rules).
+export async function updateSetRegistry<T>(change: (registry: SetRegistry) => T): Promise<T> {
+  const ref = doc(db, ...REGISTRY_DOC_PATH)
+  const { registry, result } = await runTransaction(db, async (tx) => {
+    const registry = fromSnap(await tx.get(ref))
+    const result = change(registry)
+    tx.set(ref, registry)
+    return { registry, result }
+  })
   _cache = { data: registry, loadedAt: Date.now() }
+  return result
 }
 
 export async function getPokemonRegistrySets(): Promise<PokemonRegistrySet[]> {

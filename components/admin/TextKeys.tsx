@@ -104,19 +104,22 @@ export function TextKeysButton() {
 
 function TextKeysEditor({ onClose }: { onClose: () => void }) {
   const live = useTextKeys()
+  // The list as this editor opened it: saving replays only the changes made here onto the latest
+  // list (lib/textKeys.ts), so another staff member's save meanwhile isn't undone.
+  const [opened] = useState<TextKey[]>(live)
   const [draft, setDraft] = useState<TextKey[]>(() => live.map((k) => ({ ...k })))
   const [sample, setSample] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const change = (id: string, patch: Partial<TextKey>) => setDraft((d) => d.map((k) => (k.id === id ? { ...k, ...patch } : k)))
-  const dirty = JSON.stringify(draft) !== JSON.stringify(live)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(opened)
 
   async function save() {
     setSaving(true)
     setError(null)
     try {
-      await saveTextKeys(staffDb, draft)
+      await saveTextKeys(staffDb, opened, draft)
       onClose()
     } catch (err) {
       setError(`Save failed: ${(err as Error).message}`)
