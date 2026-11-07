@@ -11,7 +11,7 @@ import { useStaff } from '@/components/admin/StaffAuthProvider'
 import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { regenerateSnapshot, refreshCatalogCaches, normNum } from '@/lib/api/catalog'
-import { getAllSyncStatuses, getSyncStatus, type SyncStatus } from '@/lib/api/syncStatus'
+import { getAllSyncStatuses, getSyncStatus, type SyncStatus, type PokemonSourceReport } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game } from '@/lib/types'
 import { useScrollLock } from '@/lib/useScrollLock'
@@ -26,6 +26,16 @@ interface SetOption {
   cardCount?: number
   isCustom?: boolean
   series?: string // Pokémon's era — the set picker's sections for Pokémon
+}
+
+// A card whose set and name live in its Needs Review record (every sync rebuilds it from that), so
+// edits go through POST /api/set-registry/placements: Riftbound's and Lorcana's TCGplayer promo
+// cards are all `tcg-` cards; Pokémon's `tcg-` cards also include whole sets and variants built
+// from TCGplayer (synced like any other card), so only the review's carry `fromReview`.
+function isReviewCard(game: string, card: Pick<CatalogCard, 'id' | 'fromReview'>): boolean {
+  if (!card.id.startsWith('tcg-')) return false
+  if (game === 'riftbound' || game === 'lorcana') return true
+  return game === 'pokemon' && !!card.fromReview
 }
 
 interface CatalogCard {
@@ -43,6 +53,9 @@ interface CatalogCard {
   isCustom?: boolean
   isHidden?: boolean
   priceSource?: string // Pokémon backup prices: 'tcgplayer-backup' | 'cardmarket'
+  // Pokémon: a TCGplayer promo product from Needs Review (its set lives in the review record).
+  // Riftbound's and Lorcana's are every `tcg-` card — see isReviewCard().
+  fromReview?: boolean
   // Set-level fact, not stored per card — populated client-side from the active set (browse
   // mode) or passed through by the whole-catalog search route (search mode, where rows span
   // multiple sets so it can't just be read off one shared "active set").
@@ -85,6 +98,7 @@ interface GameSyncResult {
   newlyBrokenImages?: number
   newlyFixedImages?: number
   newPlacements?: number
+  sourceReport?: PokemonSourceReport
   unplaced?: number
   groupMatches?: Array<{ setName: string; matched: boolean; confidence: number | null }>
 }
@@ -242,6 +256,17 @@ export function SyncPanel() {
                       {s.result.newPlacements} new TCGplayer card{s.result.newPlacements > 1 ? 's' : ''} added to sets
                       {s.result.unplaced ? ` (${s.result.unplaced} couldn't be placed)` : ''} — check them on{' '}
                       <a href="/admin/review" className="underline">Needs Review</a>.
+                    </div>
+                  )}
+                  {game === 'pokemon' && s.result.sourceReport && (
+                    <div>
+                      TCGplayer (main source): {s.result.sourceReport.linked.toLocaleString()} cards matched to GitHub,{' '}
+                      {s.result.sourceReport.variants.toLocaleString()} TCGplayer-only versions
+                      {s.result.sourceReport.newSets.length > 0 && <>, sets GitHub doesn&apos;t have yet: {s.result.sourceReport.newSets.map((x) => `${x.name} (${x.cards})`).join(', ')}</>}
+                      . GitHub (check) disagrees on {s.result.sourceReport.differences} card{s.result.sourceReport.differences === 1 ? '' : 's'}
+                      {s.result.sourceReport.skippedGroups.length > 0 && <span className="text-amber-600"> · {s.result.sourceReport.skippedGroups.length} group(s) skipped this sync</span>}
+                      {s.result.sourceReport.stalePriceSets.length > 0 && <span className="text-amber-600"> · prices kept from last sync for {s.result.sourceReport.stalePriceSets.length} set(s)</span>}
+                      .
                     </div>
                   )}
                   {!!s.result.newRarities?.length && (
@@ -480,7 +505,7 @@ export function CatalogBrowser() {
     setActionSuccess(null)
     const movedTo = typeof patch.setName === 'string' ? sets.find((s) => s.name === patch.setName) ?? null : null
     try {
-      const reviewCard = id.startsWith('tcg-') && (activeGame === 'riftbound' || activeGame === 'lorcana')
+      const reviewCard = isReviewCard(activeGame, findDisplayedCard(id) ?? { id })
       if (movedTo && reviewCard) {
         // A Needs Review card's set is its review record's — the sync rebuilds it from that. The
         // route moves the catalog card too (and gives a Riftbound one its new set's code).
@@ -497,7 +522,7 @@ export function CatalogBrowser() {
       if (Object.keys(patch).length) await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
       // A card from Needs Review (`tcg-…`) is rebuilt by every sync from its review record, so a
       // rename has to be saved there too, or the next sync puts the old name back.
-      if (id.startsWith('tcg-') && (activeGame === 'riftbound' || activeGame === 'lorcana') && typeof patch.name === 'string') {
+      if (reviewCard && typeof patch.name === 'string') {
         await adminFetch('/api/set-registry/placements', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1992,7 +2017,7 @@ function EditCardForm({
   // Which cards can change set: hand-added ones, and Needs Review cards (their set lives in the
   // review record, which every sync follows). A regular synced card's set comes from its source,
   // so the next sync would just move it back.
-  const movable = !!card.isCustom || (card.id.startsWith('tcg-') && (game === 'riftbound' || game === 'lorcana'))
+  const movable = !!card.isCustom || isReviewCard(game, card)
   const [name, setName] = useState(card.name)
   const [rarity, setRarity] = useState(card.rarity ?? '')
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? '')

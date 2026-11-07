@@ -32,7 +32,25 @@ export interface SyncStatus {
   // couldn't place) — listed on Needs Review. See discoverRiftboundProducts() in catalog-sync.mjs.
   newPlacements?: number
   unplaced?: number
+  // Pokémon: the secondary source check (TCGplayer primary, GitHub secondary — see
+  // scripts/lib/pokemon-tcgplayer.mjs): how many cards each source decided, and where they disagree
+  sourceReport?: PokemonSourceReport
   error?: string
+}
+
+export interface PokemonSourceReport {
+  at: string
+  linked: number                 // TCGplayer products that are GitHub's cards (GitHub ids kept)
+  variants: number               // TCGplayer-only versions of GitHub cards (Poké Ball patterns, stamps…)
+  newSets: Array<{ name: string; cards: number }> // sets built from TCGplayer (GitHub didn't have them)
+  oddGroups: number              // promo / special groups (their new cards go through Needs Review)
+  githubOnly: number             // GitHub cards TCGplayer doesn't list (kept as they are)
+  differences: number            // linked cards where the two disagree (number / name / rarity tier)
+  differenceExamples: Array<{ id: string; product: number; diffs: Array<{ field: string; github: string; tcgplayer: string }> }>
+  claimedCaughtUp: Array<{ group?: string; githubSet: string; kept: string }>
+  contentMatched: Array<{ group: string; setId: string; matched: number; of: number }>
+  skippedGroups: Array<{ group?: string; reason: string }>
+  stalePriceSets: string[]
 }
 
 // `id` is normally a Game, but also accepts a distinct key like "mtg-new-set-check" for a

@@ -13,6 +13,7 @@ export default function Page() {
       <div className="space-y-6">
         <PlacementsReview game="riftbound" />
         <PlacementsReview game="lorcana" />
+        <PlacementsReview game="pokemon" />
         <div className="max-w-3xl">
           <NeedsReviewCard />
         </div>

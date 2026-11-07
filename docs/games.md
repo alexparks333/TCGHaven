@@ -5,20 +5,65 @@ the original CLAUDE.md layout.
 
 ## Pokémon — Data Source, Schema, Add-a-Set Guide
 
-### Data Source
+### Data Source — TCGplayer primary, GitHub secondary (2026-11-06)
 
-**GitHub repository:** `github.com/PokemonTCG/pokemon-tcg-data`
+**Primary: TCGplayer** (`tcgcsv.com` category 3) decides which cards exist, and prices every card.
+**Secondary: GitHub** (`github.com/PokemonTCG/pokemon-tcg-data`, one JSON file per set in
+`cards/en/`, set metadata in `sets/en.json`) supplies names, images, rarities and ids for the cards
+it has, and is the source TCGplayer is checked against. All of it is in
+`scripts/lib/pokemon-tcgplayer.mjs` (pure, tested by `npm run test:pokemon-source`);
+`downloadPokemon()` / `planPokemonCatalog()` in catalog-sync.mjs fetch and write.
 
-This is the official Pokémon TCG SDK data repository. It contains one JSON file per set
-in `cards/en/` (e.g. `sv7.json`, `swsh1.json`, `base1.json`). The download script
-fetches the GitHub file listing via the GitHub API, then downloads all set files in
-parallel using their raw CDN URLs (no rate limiting, no API key required).
+Why: GitHub is days behind on new sets (Delta Reign was on TCGplayer on release day, not on
+GitHub) and never has whole kinds of cards — Prismatic Evolutions' Poké Ball / Master Ball
+patterns (GitHub 180 cards, TCGplayer 347), Black Bolt / White Flare / Ascended Heroes patterns,
+Prize Pack, Jumbo, League, Blister and Deck exclusives, World Championship decks. ~28.7k cards vs
+GitHub's ~20.5k. The pictures are practically identical for modern cards.
 
-Set metadata (names) comes from:
-`https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json`
+**The rule: a card's id never changes once it exists** (inventory links by `apiId` = catalog id).
 
-**Prices:** `tcgcsv.com` category 3 (TCGPlayer mirror) — same "download script fetches this at
-sync time and stores it on the card doc" shape every other game uses, see below.
+- **Linked** — a TCGplayer product that IS a GitHub card keeps GitHub's id (`sv7-1`), name, image
+  and rarity. Linking needs the same card, not just the same number: (A) same set + number + a name
+  that agrees (`namesAgree()`: tolerant of "★"/"Star", "♀"/"F", "Bubbly W Energy", "Delta …"),
+  (B) same set + a name unique on both sides (SV Black Star Promos are numbered differently past
+  #100 — GitHub's Armarouge ex is 105, TCGplayer's 125), (C) any group, same number + name, one
+  GitHub card fits (Best of Game sits in TCGplayer's "Best of Promos", Guardians Rising 19a in
+  "Alternate Art Promos", the EX Trainer Kits…). The plain product is the card; a special copy
+  (`SPECIAL_COPY`: Staff, Winner, Finalist, Misprint, Stamped…) never is, whatever its price.
+- **Variants** — every other product in a GitHub set's group becomes its own card, id
+  `tcg-{productId}`, in that set (`set` = GitHub set id): Poké Ball Pattern, [Staff], Black Dot
+  Error… A finish the card itself isn't sold in at all keeps its first variant's price (Black Bolt
+  has no plain reverse holo — the patterns are its reverse holos — as before the rewrite).
+- **New sets** — an unmatched group that's a whole numbered set (`isNumberedSet()`: "NNN/TTT" with
+  one total, not a promo-ish name) is added automatically as set `tcg-{groupId}`, named without
+  TCGplayer's code ("ME06: Delta Reign" → "Delta Reign"), series from the prefix. Never reviewed.
+- **Promo / special groups** (Prize Pack, Jumbo, WCD, League…) — a set per group (series
+  "Promos & Special", last in the Cardex); their cards go through Needs Review (below).
+- **Claimed sets** — a set built from TCGplayer is recorded on its set-list entry
+  (`tcgplayerGroupId`) and stays TCGplayer's. When GitHub catches up, GitHub's copy is left out
+  (`shadowedGithubSets`) — no duplicate, no id handover.
+- **Safety:** a GitHub set file that fails to download → its TCGplayer groups are skipped (else
+  they'd become duplicates); a group CSV that fails → its GitHub set is left out of that run (keeps
+  today's prices instead of $0); >10% of groups failing aborts the sync; a group no name rule matches
+  is matched by its contents (`matchGroupsByContent()`) before it could become a duplicate set.
+- **GitHub id collisions** — a few GitHub sets reuse a number (Celebrations Classic Collection #15
+  is four cards). They used to collapse into one catalog card; now the card the catalog shows keeps
+  the id and the others use GitHub's own (`resolveIdCollisions()`).
+- **Secondary check** — every sync compares linked cards (number / name / rarity *tier* — TCGplayer's
+  rarities are coarser) and records counts in `sync_status/pokemon.sourceReport`, shown on the Sync
+  panel. `npm run pokemon-source-report -- --out report.json` runs the whole plan read-only and
+  diffs it against the live catalog (writes nothing) — run it before changing the matching.
+
+### Pokémon promo review (2026-11-06)
+
+Same Needs Review as Lorcana/Riftbound (`reviewTcgplayerPromos('pokemon', …)`), but stored in its
+own doc, **`registry/pokemon-review`** (`{ placements, completedReviews, baseline }`) —
+registry/main is one Firestore doc (1 MiB cap, ~311 bytes per placement) and Pokémon has ~6.5k
+promo products. The first run records the existing ones as accepted by id only (`baseline`); only
+promos TCGplayer adds after that are reviewed. `lib/api/review.ts` says where each game's review
+lives (`REVIEW_DOCS`, mirrored in catalog-sync.mjs); GET `/api/set-registry/placements?game=pokemon`
+returns it with Pokémon's sets (catalog_meta set list + custom sets). Review cards carry
+`fromReview: true` so the Admin Catalog edits them through their review record.
 
 ### Catalog Schema (`catalog/pokemon/cards/{id}` Firestore doc)
 
@@ -76,19 +121,10 @@ value instead of being silently invisible to sorting/filtering.
 
 ### How New Pokémon Sets Are Added
 
-New sets appear in the GitHub repo automatically when Pokémon releases them (usually
-within 24 hours of release). To pull them in:
-
-```bash
-npm run download-cards   # re-downloads all sets from GitHub, syncs into Firestore
-```
-
-That's it — no `npm run build`/restart needed (see [§4](#card-catalog-system--deep-dive-firestore-backed)),
-no code changes required. The download script fetches the full GitHub file listing
-dynamically — it does not have a hardcoded set list. There's no Admin Catalog "New Set"
-equivalent for Pokémon (its set list comes live from `api.pokemontcg.io`, not
-the registry) — for Pokémon, individual missing cards can still be added via
-"Add Missing Card" once the set itself exists in that live list.
+Nothing to do. TCGplayer lists a new set on release day; the next sync (4×/day, or the staff
+portal's Sync button / `npm run download-cards -- --only pokemon`) adds it as a `tcg-{groupId}` set.
+When GitHub adds the same set later, the TCGplayer one stays (see Claimed sets above). Individual
+missing cards can still be added via "Add Missing Card".
 
 ### AddCardDialog behavior for Pokémon
 

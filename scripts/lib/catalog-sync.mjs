@@ -25,14 +25,12 @@ import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes, runTransaction,
 } from 'firebase/firestore'
-import { normSetName } from './text-norm.mjs'
 import {
   PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, buildDailyEntries, buildDayPrices,
   dayDocId, encodePriceMap, decodePriceChunks, mergeFirsts,
 } from './price-history.mjs'
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
-import { fallbackPokemonSetId } from './pokemon-groups.mjs'
-import { EDITION_GROUPS, newPriceEntry, addPriceRow, legacyFields } from './pokemon-variants.mjs'
+import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
 import { writeCompressedSnapshot } from './snapshot-codec.mjs'
 import { JP_CATEGORY, JP_CATALOG, isSingleRow, jpCard, jpSetMeta, placeholderDates } from './pokemon-jp.mjs'
 
@@ -402,6 +400,14 @@ export async function loadRegistry() {
   }
 }
 
+// Games whose Needs Review lives in its own `registry/{doc}` instead of `registry/main.{game}`:
+// Pokémon has thousands of TCGplayer promo products, and registry/main is one Firestore document
+// (1 MiB cap — it was 184 KB with Lorcana's 356 + Riftbound's 172 placements at ~311 bytes each).
+// Same shape as a registry side ({ placements, completedReviews }) plus `baseline`: the promo
+// products the first run found, recorded as accepted by id only (6.5k placements would be ~2 MB).
+// Keep in sync with REVIEW_DOCS in lib/api/review.ts.
+export const REVIEW_DOCS = { pokemon: 'pokemon-review' }
+
 // Saves what a sync found for Needs Review onto the LATEST registry, in a transaction. The sync
 // read the registry when it started — minutes ago — and staff may have decided cards, moved sets
 // or edited categories since; writing its old copy back would silently undo all of that. So
@@ -410,10 +416,13 @@ export async function loadRegistry() {
 //   reoffered  — ignored placements offered again: applied only if still ignored
 //   newSets    — sets new this run (skipped if a set by that name / TCGplayer group exists by now)
 //   completed  — a review to file as completed (the first run's)
-export async function savePlacementsOnLatest(game, { added = [], reoffered = [], newSets = [], completed = null }) {
-  const ref = doc(db, 'registry', 'main')
+//   baseline   — (own-doc games) product ids recorded as accepted by the first run
+export async function savePlacementsOnLatest(game, { added = [], reoffered = [], newSets = [], completed = null, baseline = null }) {
+  const own = REVIEW_DOCS[game]
+  const ref = doc(db, 'registry', own ?? 'main')
   await runTransaction(db, async (tx) => {
-    const side = (await tx.get(ref)).data()?.[game] ?? {}
+    const snap = await tx.get(ref)
+    const side = (own ? snap.data() : snap.data()?.[game]) ?? {}
     const placements = [...(side.placements ?? [])]
     const index = new Map(placements.map((p, i) => [String(p.productId), i]))
     for (const r of reoffered) {
@@ -421,6 +430,12 @@ export async function savePlacementsOnLatest(game, { added = [], reoffered = [],
       if (i !== undefined && placements[i].ignored) placements[i] = r
     }
     for (const p of added) if (!index.has(String(p.productId))) placements.push(p)
+    if (own) {
+      const next = { placements, completedReviews: [...(side.completedReviews ?? []), ...(completed ? [completed] : [])], updatedAt: serverTimestamp() }
+      if (baseline) next.baseline = [...new Set([...(side.baseline ?? []), ...baseline])]
+      tx.set(ref, next, { merge: true })
+      return
+    }
     const update = { [`${game}.placements`]: placements }
     if (newSets.length) {
       const sets = [...(side.sets ?? [])]
@@ -483,196 +498,137 @@ function parseCsv(text) {
   return rows
 }
 
-// Normalize a card number for matching: "001/195" → "1", "TG01/TG30" → "TG1"
-function normCardNum(n) {
-  const base = String(n ?? '').split('/')[0].trim()
-  return base.replace(/^([A-Za-z]*)0*(\d+)([a-z]?)$/, (_, alpha, digits, suffix) =>
-    alpha.toUpperCase() + parseInt(digits, 10) + suffix
-  ) || base
-}
-
 // ── Pokemon ───────────────────────────────────────────────────────────────────
-// Card data: github.com/PokemonTCG/pokemon-tcg-data (all sets, raw CDN, no rate limit)
-// Prices:    tcgcsv.com category 3 (TCGPlayer mirror, daily updates, no API key)
+// Primary:   tcgcsv.com category 3 (TCGplayer) — which cards exist, and every price
+// Secondary: github.com/PokemonTCG/pokemon-tcg-data — names / images / rarities for the cards it
+//            has (and their ids), and the check TCGplayer is compared against.
+// How the two are put together: scripts/lib/pokemon-tcgplayer.mjs.
 
-export async function downloadPokemon() {
-  console.log('\n🎴 Pokemon TCG...')
-
-  // ── Phase 1: Card data from GitHub ──────────────────────────────────────────
-  const sets = await fetchJSON(
-    'https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json'
-  )
+// GitHub (pokemon-tcg-data): every set, and every card as a catalog card with $0 prices.
+// `unavailableSetIds` = sets whose card file failed to download this run (see buildPokemonCatalog).
+async function fetchGithubPokemon() {
+  const sets = await fetchJSON('https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json')
+  if (!Array.isArray(sets) || sets.length < 100) throw new Error(`GitHub returned ${sets?.length ?? 0} Pokémon sets — not syncing against a partial set list`)
   const setNameById = Object.fromEntries(sets.map((s) => [s.id, s.name]))
-  console.log(`   ${sets.length} sets found`)
-
   const files = await fetchJSON(
     'https://api.github.com/repos/PokemonTCG/pokemon-tcg-data/contents/cards/en',
     githubApiHeaders({ Accept: 'application/vnd.github.v3+json' })
   )
-
-  const all = []
-  let done = 0
-  await Promise.all(
-    files.map(async (file) => {
-      const setId = file.name.replace('.json', '')
-      try {
-        const cards = await fetchJSON(file.download_url)
-        for (const c of cards) {
-          if (!c?.name || !c?.images?.small) continue
-          all.push({
-            id: `${setId}-${c.number}`,
-            name: c.name,
-            set: setId,
-            setName: setNameById[setId] ?? setId,
-            number: String(c.number ?? ''),
-            // Not every card has one (mostly Basic Energy, plus a handful of promo-only sets
-            // like McDonald's Collections) — '' rather than omitting the field entirely, so
-            // syncToFirestore()'s field-level diffing (comparing JSON.stringify per key) always
-            // has something to compare and this can't silently vanish on a later resync.
-            rarity: c.rarity ?? '',
-            imageUrl: c.images.large ?? c.images.small,
-            marketPrice: 0,
-            marketPriceFoil: 0,
-            lowPriceNM: 0,
-            lowPriceNMFoil: 0,
-            // Always present (even empty) so a printing TCGplayer stops pricing is cleared on
-            // the next sync instead of lingering.
-            variantPrices: {},
-          })
-        }
-      } catch (err) {
-        console.warn(`   ⚠️  Skipped ${file.name}: ${err.message}`)
+  const cards = []
+  const unavailableSetIds = new Set(sets.map((s) => s.id)) // until its file downloads
+  await Promise.all(files.map(async (file) => {
+    const setId = file.name.replace('.json', '')
+    let list = null
+    for (let attempt = 0; attempt < 3 && list === null; attempt++) {
+      try { list = await fetchJSON(file.download_url) } catch (err) {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+        else console.warn(`   ⚠️  Skipped ${file.name}: ${err.message}`)
       }
-      done++
-      if (done % 20 === 0) process.stdout.write(`   ${done}/${files.length} sets...\r`)
-    })
-  )
-  console.log(`   ${all.length} cards from GitHub`)
+    }
+    if (!Array.isArray(list)) return
+    unavailableSetIds.delete(setId)
+    for (const c of list) {
+      if (!c?.name || !c?.images?.small) continue
+      cards.push({
+        id: `${setId}-${c.number}`,
+        _ghId: c.id, // GitHub's own id — only used when two cards would share one (resolveIdCollisions)
+        name: c.name,
+        set: setId,
+        setName: setNameById[setId] ?? setId,
+        number: String(c.number ?? ''),
+        // '' rather than omitted (mostly Basic Energy has none), so it can't vanish on a resync
+        rarity: c.rarity ?? '',
+        imageUrl: c.images.large ?? c.images.small,
+        marketPrice: 0,
+        marketPriceFoil: 0,
+        lowPriceNM: 0,
+        lowPriceNMFoil: 0,
+        // Always present (even empty) so a printing TCGplayer stops pricing is cleared next sync
+        variantPrices: {},
+      })
+    }
+  }))
+  // A set listed in sets/en.json with no card file at all yet isn't "unavailable" — it's empty
+  const fileIds = new Set(files.map((f) => f.name.replace('.json', '')))
+  for (const id of [...unavailableSetIds]) if (!fileIds.has(id)) unavailableSetIds.delete(id)
+  return { sets, cards, unavailableSetIds }
+}
 
-  // ── Phase 2: Prices from tcgcsv.com (category 3 = Pokemon) ─────────────────
-  const TCGP_HEADERS = {
-    // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
-    'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
-    'Referer': 'https://tcgcsv.com/',
-    'Accept': 'application/json,text/csv,*/*',
+const POKEMON_TCGCSV_HEADERS = {
+  // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
+  'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)',
+  'Referer': 'https://tcgcsv.com/',
+  'Accept': 'application/json,text/csv,*/*',
+}
+
+// TCGplayer (tcgcsv category 3): every group and its products. Retries each CSV; a sync with more
+// than 10% of groups failing is aborted rather than run on a partial catalog.
+async function fetchTcgplayerPokemon() {
+  const groups = (await fetchJSON('https://tcgcsv.com/tcgplayer/3/groups', POKEMON_TCGCSV_HEADERS)).results ?? []
+  if (groups.length < 150) throw new Error(`TCGplayer returned ${groups.length} Pokémon groups — not syncing against a partial list`)
+  const productsByGroup = new Map()
+  const failedGroupIds = new Set()
+  for (let i = 0; i < groups.length; i += 20) {
+    await Promise.all(groups.slice(i, i + 20).map(async (g) => {
+      let csv = null
+      for (let attempt = 0; attempt < 3 && csv === null; attempt++) {
+        try { csv = await fetchText(`https://tcgcsv.com/tcgplayer/3/${g.groupId}/ProductsAndPrices.csv`, POKEMON_TCGCSV_HEADERS) } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+        }
+      }
+      if (csv === null) { failedGroupIds.add(g.groupId); return }
+      productsByGroup.set(g.groupId, productsFromRows(parseCsv(csv)))
+    }))
+    process.stdout.write(`   TCGplayer: ${Math.min(i + 20, groups.length)}/${groups.length} groups...\r`)
   }
-  console.log('   Fetching prices from tcgcsv.com...')
-  try {
-    // Build normalized name → setId map from GitHub data
-    // "Silver Tempest" → "swsh12"
-    const nameToSetId = new Map()
-    for (const s of sets) {
-      nameToSetId.set(normSetName(s.name), s.id)
-    }
-
-    // Fetch all TCGPlayer groups for Pokemon
-    const groupData = await fetchJSON('https://tcgcsv.com/tcgplayer/3/groups', TCGP_HEADERS)
-    const groups = groupData.results ?? []
-
-    // setId lookup for abbreviation matching
-    const setIdSet = new Set(sets.map((s) => s.id))
-
-    // Map tcgcsv groupId → GitHub setId
-    const groupToSetId = new Map()
-    // Groups whose edition subtypes need re-reading (Base Set (Shadowless) — see
-    // pokemon-variants.mjs's EDITION_GROUPS): groupId → { unlimitedIs }.
-    const groupEditionOpts = new Map()
-    for (const g of groups) {
-      const special = EDITION_GROUPS[g.name]
-      if (special) {
-        if (setIdSet.has(special.setId)) {
-          groupToSetId.set(g.groupId, special.setId)
-          groupEditionOpts.set(g.groupId, { unlimitedIs: special.unlimitedIs })
-        }
-        continue
-      }
-      // Strategy 1: strip set-code prefix like "SWSH12: " / "SV07: " / "SV: "
-      const stripped = g.name.replace(/^[A-Z0-9]+:\s*/i, '').trim()
-      // Also try stripping known subset suffixes
-      const stripped2 = stripped.replace(/\s+(Trainer Gallery|Shiny Vault|Galarian Gallery|Radiant Collection|Classic Collection)$/i, '').trim()
-      const nameCandidates = [stripped, stripped2, g.name]
-      let matched = false
-      for (const v of nameCandidates) {
-        const norm = normSetName(v)
-        if (nameToSetId.has(norm)) {
-          groupToSetId.set(g.groupId, nameToSetId.get(norm))
-          matched = true
-          break
-        }
-      }
-      // Strategy 2: match by abbreviation (strip leading zeros from numeric suffix)
-      // "SWSH01" → "swsh1", "SM01" → "sm1"
-      if (!matched && g.abbreviation) {
-        const abbrev = g.abbreviation.toLowerCase()
-          .replace(/^([a-z]+)0*([1-9]\d*)$/, '$1$2')  // swsh01 → swsh1
-        if (setIdSet.has(abbrev)) {
-          groupToSetId.set(g.groupId, abbrev)
-          matched = true
-        }
-      }
-      // Strategy 3: TCGplayer's older naming ("XY - Flashfire", "EX Emerald", ...) — see
-      // pokemon-groups.mjs. Only for groups nothing above matched.
-      if (!matched) {
-        const id = fallbackPokemonSetId(g.name, nameToSetId, setIdSet)
-        if (id) groupToSetId.set(g.groupId, id)
-      }
-    }
-    console.log(`   Matched ${groupToSetId.size}/${groups.length} TCGPlayer groups to GitHub sets`)
-
-    // Download price CSVs in parallel batches of 20
-    // priceMap key: `${setId}:${normalizedNumber}` → a pokemon-variants.mjs price entry (every
-    // edition × finish TCGplayer prices for that card)
-    const priceMap = new Map()
-    const groupEntries = [...groupToSetId.entries()]
-    const BATCH = 20
-    for (let i = 0; i < groupEntries.length; i += BATCH) {
-      const batch = groupEntries.slice(i, i + BATCH)
-      await Promise.all(
-        batch.map(async ([groupId, setId]) => {
-          try {
-            const csv = await fetchText(`https://tcgcsv.com/tcgplayer/3/${groupId}/ProductsAndPrices.csv`, TCGP_HEADERS)
-            const rows = parseCsv(csv)
-            const editionOpts = groupEditionOpts.get(groupId) ?? {}
-            for (const row of rows) {
-              const extNum = row.extNumber ?? ''
-              if (!extNum || !/^[A-Z0-9]*\d/.test(extNum)) continue
-              const num = normCardNum(extNum)
-              const key = `${setId}:${num}`
-              if (!priceMap.has(key)) priceMap.set(key, newPriceEntry())
-              addPriceRow(priceMap.get(key), row, editionOpts)
-            }
-          } catch {
-            // silently skip groups that fail — card still appears with $0 price
-          }
-        })
-      )
-      process.stdout.write(`   Prices: ${Math.min(i + BATCH, groupEntries.length)}/${groupEntries.length} sets...\r`)
-    }
-
-    // Merge prices into cards
-    let priced = 0
-    for (const card of all) {
-      const num = normCardNum(card.number)
-      const key = `${card.set}:${num}`
-      const p = priceMap.get(key)
-      if (p) {
-        // Classic fields = the default edition (Unlimited when priced); variantPrices = every
-        // printing, for cards whose owner picked an edition/finish (lib/pricing.ts).
-        Object.assign(card, legacyFields(p))
-        if (card.marketPrice > 0 || card.marketPriceFoil > 0) priced++
-      }
-    }
-    console.log(`   Prices found for ${priced}/${all.length} cards`)
-  } catch (err) {
-    console.warn(`   ⚠️  Price fetch failed: ${err.message} — catalog saved without prices`)
+  if (failedGroupIds.size > groups.length * 0.1) {
+    throw new Error(`${failedGroupIds.size}/${groups.length} TCGplayer Pokémon groups failed to download — not syncing a partial catalog`)
   }
+  return { groups, productsByGroup, failedGroupIds }
+}
 
-  // ── Phase 3: backup prices, only for cards TCGplayer's feed left unpriced ──
-  // See price-fallback.mjs. Non-fatal: any failure just leaves those cards at $0 this run.
+/**
+ * What a Pokémon sync would write, without writing anything: both sources fetched and built into
+ * one catalog (pokemon-tcgplayer.mjs). downloadPokemon() writes it; scripts/pokemon-source-report.mjs
+ * only reports it — so the report shows exactly what a sync does.
+ */
+export async function planPokemonCatalog() {
+  const [gh, tcg, meta] = await Promise.all([
+    fetchGithubPokemon(),
+    fetchTcgplayerPokemon(),
+    getDoc(doc(db, 'catalog_meta', 'pokemon')),
+  ])
+  console.log(`   GitHub: ${gh.sets.length} sets, ${gh.cards.length} cards${gh.unavailableSetIds.size ? ` (${gh.unavailableSetIds.size} set files failed)` : ''}`)
+  // Cards that would share one catalog id keep it by what the catalog shows now
+  const shared = collidingIds(gh.cards)
+  const existingNameById = new Map()
+  for (const id of shared) {
+    const snap = await getDoc(doc(db, 'catalog', 'pokemon', 'cards', id))
+    if (snap.exists()) existingNameById.set(id, snap.data().name)
+  }
+  const idMoves = resolveIdCollisions(gh.cards, existingNameById)
+  const previousSets = meta.data()?.sets ?? []
+  const built = buildPokemonCatalog({
+    ghSets: gh.sets, ghCards: gh.cards, groups: tcg.groups, productsByGroup: tcg.productsByGroup,
+    previousSets, unavailableSetIds: gh.unavailableSetIds, failedGroupIds: tcg.failedGroupIds,
+  })
+  const r = built.report
+  r.idMoves = idMoves
+  console.log(`   TCGplayer: ${tcg.groups.length} groups${tcg.failedGroupIds.size ? ` (${tcg.failedGroupIds.size} failed)` : ''} · ${r.linked} linked to GitHub cards · ${r.variants.length} variants GitHub lacks · ${r.newSets.length} new set(s) · ${built.placements.length} card(s) for review`)
+  return { ...built, gh, tcg, previousSets }
+}
+
+export async function downloadPokemon() {
+  console.log('\n🎴 Pokemon TCG...')
+  const plan = await planPokemonCatalog()
+  const all = plan.cards
+
+  // Backup prices, only for cards TCGplayer's feed left unpriced — see price-fallback.mjs. It looks
+  // cards up on GitHub's API by id, so only GitHub's own cards. Non-fatal.
   const backupRef = doc(db, 'catalog_meta', 'pokemon-price-backup')
   try {
     await ensureSignedIn()
-    await fillPokemonPriceGaps(all, {
+    await fillPokemonPriceGaps(all.filter((c) => !c.id.startsWith('tcg-')), {
       loadCache: async () => { const snap = await getDoc(backupRef); return snap.exists() ? snap.data() : null },
       saveCache: (data) => setDoc(backupRef, { ...data, updatedAt: serverTimestamp() }),
     })
@@ -680,19 +636,50 @@ export async function downloadPokemon() {
     console.warn(`   ⚠️  Backup prices skipped: ${err.message}`)
   }
 
-  all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
-  const result = await syncToFirestore('pokemon', all, { fieldDefaults: { priceSource: '' } })
-  // The set list (same data api.pokemontcg.io/v2/sets serves — it's built from this repo), saved
-  // so the app reads one Firestore doc instead of that API, which fails often enough (500/502)
-  // that a cold "Loading sets…" took ~9s of retries. Oldest first, like the API's orderBy.
-  const setList = sets
-    .map((s) => ({
-      id: s.id, name: s.name, series: s.series ?? '', releaseDate: s.releaseDate ?? '', total: s.total ?? 0,
-      images: { symbol: s.images?.symbol ?? '', logo: s.images?.logo ?? '' },
-    }))
-    .sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
-  await setDoc(doc(db, 'catalog_meta', 'pokemon'), { sets: setList }, { merge: true })
-  return result
+  // Cards that can't be placed by number go through Needs Review (accept / ignore / deny / move)
+  const promoById = new Map()
+  for (const card of all) {
+    if (!card._review) continue
+    delete card._review
+    promoById.set(card.id, card)
+  }
+  const placementOf = new Map(plan.placements.map((x) => [`tcg-${x.product.productId}`, x]))
+  for (const card of promoById.values()) {
+    const x = placementOf.get(card.id)
+    card._groupId = x?.product.groupId
+  }
+  const groupNames = plan.tcg.groups.map((g) => ({ groupId: g.groupId, setName: g.name }))
+  const review = await reviewTcgplayerPromos('pokemon', promoById, groupNames, { setIdByName: new Map(plan.sets.map((x) => [x.name, x.id])) })
+  // `fromReview`: the Admin Catalog edits these through their review record (isReviewCard())
+  const reviewed = new Map(review.cards.map((c) => [c.id, { ...c, fromReview: true }]))
+  const cards = all.filter((c) => !promoById.has(c.id) || reviewed.has(c.id)).map((c) => reviewed.get(c.id) ?? c)
+
+  cards.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
+  const result = await syncToFirestore('pokemon', cards, { fieldDefaults: { priceSource: '' }, hideIds: review.hideIds, unhideIds: review.unhideIds })
+  // The set list, saved so the app reads one Firestore doc instead of api.pokemontcg.io (which
+  // fails often enough that a cold "Loading sets…" took ~9s). Oldest first, like the API's orderBy.
+  // TCGplayer-built sets carry `tcgplayerGroupId` — that's what keeps them claimed next sync.
+  await setDoc(doc(db, 'catalog_meta', 'pokemon'), { sets: plan.sets }, { merge: true })
+  return { ...result, newPlacements: review.newPlacements, sourceReport: summarizeSourceReport(plan.report) }
+}
+
+// The secondary check's findings, small enough for a status doc (counts + a few examples each)
+export function summarizeSourceReport(r) {
+  const few = (list, n = 10) => list.slice(0, n)
+  return {
+    at: new Date().toISOString(),
+    linked: r.linked,
+    variants: r.variants.length,
+    newSets: r.newSets.map((s) => ({ name: s.name, cards: s.cards })),
+    oddGroups: r.oddGroups.length,
+    githubOnly: r.githubOnly.length,
+    differences: r.differences.length,
+    differenceExamples: few(r.differences),
+    claimedCaughtUp: r.claimedCaughtUp,
+    contentMatched: r.contentMatched,
+    skippedGroups: r.skippedGroups,
+    stalePriceSets: r.stalePriceSets,
+  }
 }
 
 // ── Pokémon (Japanese) ────────────────────────────────────────────────────────
@@ -992,14 +979,24 @@ export async function downloadLorcana() {
 //   denied   → hidden, and never offered again (stays in placements)
 // The first run records every promo already in the catalog as accepted, in one review that's
 // filed as completed, so switching this on doesn't drop hundreds of known cards on staff.
-async function reviewTcgplayerPromos(game, promoById, groups) {
+// `setIdByName` (Pokémon): a card's `set` is its set's id, so a card staff moved follows to that id.
+async function reviewTcgplayerPromos(game, promoById, groups, { setIdByName = null } = {}) {
   const strip = (card) => { delete card._groupId; return card }
-  const registry = await loadRegistry()
-  const side = registry?.[game]
+  const own = REVIEW_DOCS[game]
+  let side
+  if (own) {
+    const snap = await getDoc(doc(db, 'registry', own))
+    side = snap.exists() ? snap.data() : {}
+  } else {
+    side = (await loadRegistry())?.[game]
+  }
   if (!side) return { cards: [...promoById.values()].map(strip), hideIds: [], unhideIds: [], newPlacements: 0 }
 
   const firstRun = !Array.isArray(side.placements)
   const placements = side.placements ?? []
+  // Own-doc games: the first run's products are recorded as accepted by id (see REVIEW_DOCS)
+  const baseline = new Set((side.baseline ?? []).map(String))
+  const newBaseline = []
   const byProduct = new Map(placements.map((p) => [String(p.productId), p]))
   const groupName = new Map(groups.map((g) => [g.groupId, g.setName]))
   const nowIso = new Date().toISOString()
@@ -1014,6 +1011,12 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
   for (const card of promoById.values()) {
     const productId = card.id.replace(/^tcg-/, '')
     let p = byProduct.get(productId)
+    if (!p && own && (firstRun || baseline.has(productId))) {
+      // Accepted as found (first run's backlog) — kept where the sync placed it
+      if (firstRun) { newBaseline.push(Number(productId)); changed = true }
+      cards.push(strip(card))
+      continue
+    }
     if (!p) {
       p = {
         productId: Number(productId), groupId: card._groupId, groupName: groupName.get(card._groupId) ?? card.setName,
@@ -1038,6 +1041,7 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
     strip(card)
     if (!p.setName || p.denied) { hideIds.push(card.id); continue }
     card.setName = p.setName
+    if (setIdByName?.has(p.setName)) card.set = setIdByName.get(p.setName)
     if (p.displayName) card.name = p.displayName
     if (p.image === 'none') card.imageUrl = ''
     cards.push(card)
@@ -1047,12 +1051,16 @@ async function reviewTcgplayerPromos(game, promoById, groups) {
 
   if (changed) {
     try {
-      await savePlacementsOnLatest(game, { added, reoffered, completed: firstRun ? { at: nowIso, completedAt: nowIso } : null })
+      await savePlacementsOnLatest(game, {
+        added, reoffered,
+        completed: firstRun && !own ? { at: nowIso, completedAt: nowIso } : null,
+        baseline: own && firstRun ? newBaseline : null,
+      })
     } catch (err) {
       console.warn(`   ⚠️  Couldn't save ${game} promo review to the registry: ${err.message}`)
     }
   }
-  if (firstRun) console.log(`   Promo review: recorded ${placements.length} existing promo cards as accepted (first run)`)
+  if (firstRun) console.log(`   Promo review: recorded ${own ? newBaseline.length : placements.length} existing promo cards as accepted (first run)`)
   else if (newPlacements) console.log(`   🆕 ${newPlacements} promo card(s) waiting on Needs Review`)
   return { cards, hideIds, unhideIds, newPlacements }
 }

@@ -523,3 +523,14 @@ tested by `npm run test:rebase`); the badge and book editors also merge field-by
 (`mergeEdit()`) and ask before overwriting a field someone else changed while the form was open.
 Card edits were already safe — `updateDoc` with only the changed fields.
 
+### 34. Pokémon (English): TCGplayer decides which cards exist — and a card's id never changes
+
+Since 2026-11-06 the English catalog is built from TCGplayer (primary) with GitHub's
+pokemon-tcg-data as the secondary check (`scripts/lib/pokemon-tcgplayer.mjs`, games.md Pokémon).
+Cards GitHub has keep GitHub's id; everything else is `tcg-{productId}`, and a set built from
+TCGplayer (`tcg-{groupId}`) stays TCGplayer's when GitHub catches up. Never "switch" a card to the
+other source's id — inventory links by id. Linking needs the same *card*, not just the same number:
+number-only linking had priced ordinary promos by their [Staff] copies (Charizard SM158 $1,250 vs
+$121.95) and Wizards promo Pikachu #1 by a Clefable. Before changing the matching, run
+`npm run pokemon-source-report` (read-only) and compare. Pokémon's Needs Review is in
+`registry/pokemon-review`, not registry/main (doc size).

@@ -30,15 +30,14 @@ export async function runPokemonSync(): Promise<Response> {
     // since every write here stamps updatedAt — but there's no reason to make a freshly-run sync
     // wait up to 2 minutes to show its own results when this process already has the answer now.
     invalidateCatalogCache('pokemon')
-    // Pokemon has no registry to diff new sets against (its set list comes live from
-    // api.pokemontcg.io) — syncToFirestore() computes newSetNames generically instead (pre-sync
-    // vs post-sync distinct set names), the same signal Lorcana/Riftbound/One Piece get from
-    // their own registry diffing. New sets already show up automatically in the live set picker
-    // with zero action needed — this is purely a "here's what just changed" notice.
+    // New sets (from either source — TCGplayer's arrive first) show up in the set picker on their
+    // own; newSetNames (syncToFirestore: pre- vs post-sync set names) is just the notice.
     const newRarities = findNewRarities(result.cards)
     const status = {
       ok: true, at: new Date().toISOString(), setCount: result.setNames.length,
       newSets: result.newSetNames, newRarities,
+      // TCGplayer promo cards waiting on Needs Review, and the GitHub cross-check
+      newPlacements: result.newPlacements ?? 0, sourceReport: result.sourceReport,
       totalBrokenImages: result.totalBrokenImages, newlyBrokenImages: result.newlyBrokenImages, newlyFixedImages: result.newlyFixedImages,
     }
     await recordSyncStatus('pokemon', status)

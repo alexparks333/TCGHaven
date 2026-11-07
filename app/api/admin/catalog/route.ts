@@ -33,8 +33,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'game must be pokemon, lorcana, riftbound, onepiece, or mtg' }, { status: 400 })
   }
 
+  // `?prefix=tcg-` — only cards whose id starts with it (Needs Review's TCGplayer cards, without
+  // sending all ~28k Pokémon cards)
+  const prefix = searchParams.get('prefix')
   const catalog = await loadCatalog<CatalogCard>(game)
-  const filtered = setName ? catalog.filter((c) => c.setName === setName) : catalog
+  const filtered = catalog.filter((c) => (!setName || c.setName === setName) && (!prefix || c.id.startsWith(prefix)))
   const sorted = sortCatalogCards(filtered)
 
   const cards = sorted.map((c) => ({ ...c, isCustom: c.source === 'manual', isHidden: !!c.hidden }))

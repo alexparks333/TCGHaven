@@ -11,8 +11,10 @@ import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { cn, formatCurrency } from '@/lib/utils'
 import { GAME_COLORS } from '@/lib/types'
 
-// One per game with promo review: Riftbound and Lorcana (see ReviewGame). Only odd cards come
-// here — promos and other TCGplayer-only products; new regular sets arrive on their own.
+// One per game with promo review: Riftbound, Lorcana and Pokémon (see ReviewGame). Only odd cards
+// come here — promos and other TCGplayer-only products; new regular sets arrive on their own.
+// Pokémon's review is stored in its own doc and its sets come from its set list, not the registry —
+// both through GET /api/set-registry/placements?game=pokemon (lib/api/review.ts).
 //
 // New TCGplayer cards (staff portal → Needs Review): every Riftbound sync places promos and other
 // TCGplayer-only products into the set it thinks they belong to (catalog-sync.mjs's
@@ -55,11 +57,14 @@ interface RegistryResponse {
   riftbound: ReviewSide
   lorcana: ReviewSide
 }
+// (Pokémon's review isn't on the registry response — see loadReviewSide)
 
 interface ReviewSide { groupOrder: string[]; sets: RegistrySet[]; placements?: Placement[]; completedReviews?: Array<{ at: string; completedAt: string }> }
 
-export type ReviewGame = 'riftbound' | 'lorcana'
-const GAME_LABEL: Record<ReviewGame, string> = { riftbound: 'Riftbound', lorcana: 'Lorcana' }
+export type ReviewGame = 'riftbound' | 'lorcana' | 'pokemon'
+const GAME_LABEL: Record<ReviewGame, string> = { riftbound: 'Riftbound', lorcana: 'Lorcana', pokemon: 'Pokémon' }
+// Pokémon's custom sets (made from the review) go in the Cardex's "Custom Sets" group
+const POKEMON_CUSTOM_GROUP = 'Custom Sets'
 // The game whose review this is, for the board, viewer and dialogs (portals keep context)
 const ReviewGameContext = createContext<ReviewGame>('riftbound')
 const useReviewGame = () => useContext(ReviewGameContext)
@@ -83,7 +88,7 @@ const ACCENT = '#b5532f' // the review UI's accent (buttons, progress)
 const tcgPhotoUrl = (productId: number) => `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`
 // "Riftbound Organized Play Promotional Cards" → "Organized Play"
 const sourceLabel = (p: Placement) =>
-  (p.groupName ?? '').replace(/^(riftbound|disney lorcana):?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
+  (p.groupName ?? '').replace(/^(riftbound|disney lorcana|pokemon):?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
 const numberSortKey = (n: string) => parseInt(n.replace(/^\D+/, ''), 10) || 0
 // Denied = staff don't want the card (hidden, never re-added by a sync). A card left out before
 // Deny existed (no set, already reviewed) counts too; an unreviewed one with no set is one the
@@ -153,12 +158,29 @@ function describe(changes: Change[]): string {
   return `Accepted ${cards}`
 }
 
-// Same as placementDefaultName() in catalog-sync.mjs (Lorcana's promos keep TCGplayer's name)
+// Same as placementDefaultName() in catalog-sync.mjs (Lorcana's and Pokémon's promos keep the sync's name)
 export function defaultCardName(tcgplayerName: string, game: ReviewGame = 'riftbound'): string {
-  if (game === 'lorcana') return tcgplayerName
+  if (game !== 'riftbound') return tcgplayerName
   const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
   const parens = Array.from(tcgplayerName.matchAll(/\(([^)]*)\)/g)).map((m) => m[1].trim()).filter(Boolean)
   return `${base} (${parens.join(', ') || 'Promo'})`
+}
+
+// A game's review and the sets its cards can go in. no-store / ?fresh: the public GETs are
+// CDN-cached, and a review needs the current list.
+async function loadReviewSide(game: ReviewGame): Promise<ReviewSide | null> {
+  if (game === 'pokemon') {
+    const res = await fetch(`/api/set-registry/placements?game=pokemon&fresh=${Date.now()}`, { cache: 'no-store' })
+    if (!res.ok) return null
+    const data = await res.json() as { placements: Placement[]; completedReviews: ReviewSide['completedReviews']; sets: RegistrySet[] }
+    // The Cardex groups Pokémon sets by series — its categories here, newest first like the Cardex
+    const sets = [...data.sets].reverse()
+    const groupOrder = Array.from(new Set(sets.map((s) => s.cardexGroup ?? 'Other')))
+    return { groupOrder, sets, placements: data.placements, completedReviews: data.completedReviews }
+  }
+  const res = await fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' })
+  const reg = res.ok ? await res.json() as RegistryResponse : null
+  return reg?.[game] ?? null
 }
 
 export function PlacementsReview({ game = 'riftbound' }: { game?: ReviewGame }) {
@@ -180,16 +202,15 @@ export function PlacementsReview({ game = 'riftbound' }: { game?: ReviewGame }) 
   riotByCodeRef.current = riotByCode
 
   useEffect(() => {
-    // no-store: the public GET is CDN-cached for a minute, and a review needs the current list
     Promise.all([
-      // ?fresh: not the CDN-cached copy
-      fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
+      loadReviewSide(game),
       // The catalog copy of each placed card (`tcg-{productId}`) — its art is Riot's when
-      // TCGplayer has no photo yet, plus its price.
-      fetch(`/api/admin/catalog?game=${game}`).then((r) => (r.ok ? r.json() : [])),
+      // TCGplayer has no photo yet, plus its price. Riftbound needs every card (Riot's art by
+      // code); the others only their `tcg-` cards.
+      fetch(`/api/admin/catalog?game=${game}${game === 'riftbound' ? '' : '&prefix=tcg-'}`).then((r) => (r.ok ? r.json() : [])),
     ])
-      .then(([reg, catalog]: [RegistryResponse | null, CatalogCard[]]) => {
-        setRegistry(reg?.[game] ?? null)
+      .then(([side, catalog]: [ReviewSide | null, CatalogCard[]]) => {
+        setRegistry(side)
         const list = Array.isArray(catalog) ? catalog : []
         setCards(new Map(list.filter((c) => c.id.startsWith('tcg-')).map((c) => [c.id, c])))
         const riot = new Map<string, string>()
@@ -206,10 +227,7 @@ export function PlacementsReview({ game = 'riftbound' }: { game?: ReviewGame }) 
   // Sets and categories made elsewhere (the Catalog page, another tab) since this page loaded —
   // re-read when a sync's review opens and whenever you come back to the tab.
   const refreshRegistry = useCallback(() => {
-    fetch(`/api/set-registry?fresh=${Date.now()}`, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((reg: RegistryResponse | null) => { if (reg?.[game]) setRegistry(reg[game]) })
-      .catch(() => {})
+    loadReviewSide(game).then((side) => { if (side) setRegistry(side) }).catch(() => {})
   }, [game])
   useEffect(() => {
     window.addEventListener('focus', refreshRegistry)
@@ -1325,8 +1343,8 @@ function NewSetDialog({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [onCancel])
 
-  const isNew = group === NEW_CATEGORY
-  const category = isNew ? newCategory.trim() : group
+  const isNew = game !== 'pokemon' && group === NEW_CATEGORY
+  const category = game === 'pokemon' ? POKEMON_CUSTOM_GROUP : isNew ? newCategory.trim() : group
   const taken = isNew && categories.some((c) => c.toLowerCase() === category.toLowerCase())
   const ready = !busy && !!name.trim() && !!category && !taken
   const submit = () => { if (ready) onCreate(name.trim(), category, isNew) }
@@ -1346,6 +1364,9 @@ function NewSetDialog({
           placeholder="e.g. K/DA Couture Collection"
           className="input-field mb-3"
         />
+        {game === 'pokemon' ? (
+          <p className="text-[11px] text-slate-500 mb-3">Shown in the Cardex under {POKEMON_CUSTOM_GROUP}.</p>
+        ) : (<>
         <label className="block text-xs text-slate-400 mb-1">Cardex category</label>
         <select
           value={group}
@@ -1373,6 +1394,7 @@ function NewSetDialog({
             </p>
           </>
         )}
+        </>)}
         <div className="flex justify-end gap-2 mt-1">
           <button onClick={onCancel} className="text-xs px-3 py-1.5 rounded-lg text-slate-400 hover:text-ink">Cancel</button>
           <button

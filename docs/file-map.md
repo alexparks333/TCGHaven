@@ -43,6 +43,9 @@ TCGHaven/
 │       │                             default printing (§7 Editions & Finishes) — shared with
 │       │                             lib/pricing.ts; tests: `npm run test:variants`
 │       ├── pokemon-jp.mjs         ← Japanese catalog building blocks (§7 Japanese Pokémon)
+│       ├── pokemon-tcgplayer.mjs  ← English catalog: TCGplayer primary + GitHub secondary — linking,
+│       │                             variants, new sets, claimed sets, id collisions (games.md
+│       │                             Pokémon) — tests: `npm run test:pokemon-source`
 │       ├── snapshot-codec.mjs     ← gzipped catalog snapshots (§4) — `npm run test:snapshot`
 │       └── price-fallback.mjs     ← fillPokemonPriceGaps() — gap-only backup prices from
 │                                     pokemontcg.io / tcgdex (§13 Pokémon)

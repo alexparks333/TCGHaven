@@ -103,8 +103,9 @@ cold instance loads the catalog + search index while the user types.
 `scripts/backfill-compressed-snapshots.mjs` builds the compressed copies from the plain ones
 (one-off; any sync also writes them). Tests: `npm run test:snapshot`.
 
-**Pokémon set list:** `downloadPokemon()` saves the set list (same data as api.pokemontcg.io's
-`/sets` — built from the same GitHub repo) to `catalog_meta/pokemon.sets`; `getPokemonSets()` reads
+**Pokémon set list:** `downloadPokemon()` saves the set list (GitHub's sets plus the ones built
+from TCGplayer — `source: 'tcgplayer'`, `tcgplayerGroupId`, `kind` 'set' | 'special'; see games.md
+Pokémon) to `catalog_meta/pokemon.sets`; `getPokemonSets()` reads
 that first and only calls the live API if it's missing. That API failed 2 of 3 calls while this was
 diagnosed, and its retry loop made a cold "Loading sets…" take ~9s.
 

@@ -48,6 +48,7 @@ jobs:
           npm run test:prices
           npm run test:search
           npm run test:variants
+          npm run test:pokemon-source
           npm run test:snapshot
           npm run test:rebase
       # Catches what tsc can't — e.g. an invalid Next.js route export (CLAUDE.md rule 24)

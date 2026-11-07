@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { updateSetRegistry, RegistryRejection, type RiftboundPlacement } from '@/lib/api/registry'
+import { RegistryRejection, type RiftboundPlacement } from '@/lib/api/registry'
+import { updateReviewSide, loadReviewSide, loadPokemonReviewSets, isReviewGame, type ReviewGame, type ReviewSetInfo } from '@/lib/api/review'
 import { loadCatalog, invalidateCatalogCache } from '@/lib/api/catalog'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
@@ -27,9 +28,9 @@ export const dynamic = 'force-dynamic'
 
 // Same naming as placementDefaultName() in catalog-sync.mjs (duplicated across the runtime
 // boundary on purpose, like the other shared helpers there).
-// Lorcana's promo cards keep TCGplayer's name as-is (catalog-sync.mjs's Phase 3)
+// Lorcana's and Pokémon's promo cards keep the sync's name as-is
 function defaultName(tcgplayerName: string, game: ReviewGame = 'riftbound'): string {
-  if (game === 'lorcana') return tcgplayerName
+  if (game !== 'riftbound') return tcgplayerName
   const base = tcgplayerName.replace(/\s*\([^)]*\)/g, '').trim()
   const parens = Array.from(tcgplayerName.matchAll(/\(([^)]*)\)/g)).map((m) => m[1].trim()).filter(Boolean)
   return `${base} (${parens.join(', ') || 'Promo'})`
@@ -65,16 +66,26 @@ async function riotArt(publicCode: string | undefined): Promise<string> {
   return all.find((c) => !c.id.startsWith('tcg-') && (c.publicCode ?? '').split('-').slice(1).join('-') === code)?.imageUrl ?? ''
 }
 
-// Games whose promo cards go through Needs Review: Riftbound (discoverRiftboundProducts) and
-// Lorcana (reviewTcgplayerPromos). `game` defaults to riftbound.
-type ReviewGame = 'riftbound' | 'lorcana'
+// Games whose promo cards go through Needs Review: Riftbound (discoverRiftboundProducts), Lorcana
+// and Pokémon (reviewTcgplayerPromos) — lib/api/review.ts says where each one's review is stored.
+// `game` defaults to riftbound.
+
+// GET ?game=pokemon — a game's review, for the Needs Review board (Riftbound's and Lorcana's are
+// also on GET /api/set-registry; Pokémon's has its own doc). Pokémon's also lists the sets a card
+// can be placed in, since its sets aren't in the registry.
+export async function GET(request: Request) {
+  const game = new URL(request.url).searchParams.get('game')
+  if (!isReviewGame(game)) return NextResponse.json({ error: 'game must be riftbound, lorcana or pokemon' }, { status: 400 })
+  const [side, sets] = await Promise.all([loadReviewSide(game), game === 'pokemon' ? loadPokemonReviewSets() : Promise.resolve(null)])
+  return NextResponse.json({ ...side, ...(sets ? { sets } : {}) }, { headers: { 'Cache-Control': 'no-store' } })
+}
 
 export async function POST(request: Request) {
   const unauthorized = await verifyAdminRequest(request)
   if (unauthorized) return unauthorized
 
   const body = await request.json().catch(() => null)
-  const game: ReviewGame = body?.game === 'lorcana' ? 'lorcana' : 'riftbound'
+  const game: ReviewGame = isReviewGame(body?.game) ? body.game : 'riftbound'
   const completeReview = typeof body?.completeReview === 'string' ? body.completeReview : null
   const reopenReview = typeof body?.reopenReview === 'string' ? body.reopenReview : null
   const changes = Array.isArray(body?.changes) ? (body.changes as Change[]) : completeReview || reopenReview ? [] : null
@@ -83,17 +94,18 @@ export async function POST(request: Request) {
   }
 
   await ensureAdminAuth()
-  type SetInfo = { setName: string; setCode?: string; code?: string | null; tcgplayerOnly?: boolean; tcgplayerRarity?: string }
+  type SetInfo = ReviewSetInfo
+  // Pokémon's sets aren't in the registry — read before the transaction (it must not fetch)
+  const pokemonSets = game === 'pokemon' ? await loadPokemonReviewSets() : undefined
   type Touched = { placement: RiftboundPlacement; moved: boolean; renamed: boolean; image: Change['image'] }
   // On the latest registry, in a transaction: two staff deciding cards at the same moment (or a
   // sync adding new ones meanwhile) both land, instead of the last save undoing the other's.
   // Re-run from scratch if the doc changed underneath, so everything is rebuilt in here.
   let applied: { touched: Map<number, Touched>; setByName: Map<string, SetInfo>; placements: RiftboundPlacement[]; completed: Array<{ at: string; completedAt: string }> }
   try {
-    applied = await updateSetRegistry((registry) => {
-      const side = registry[game]
+    applied = await updateReviewSide(game, (side, sets) => {
       const placements = side.placements ?? []
-      const setByName = new Map((side.sets as SetInfo[]).map((s) => [s.setName, s]))
+      const setByName = new Map(sets.map((s) => [s.setName, s]))
       const touched = new Map<number, Touched>()
       const mark = (p: RiftboundPlacement, what: 'moved' | 'renamed') => {
         const t = touched.get(p.productId) ?? { placement: p, moved: false, renamed: false, image: undefined }
@@ -106,7 +118,7 @@ export async function POST(request: Request) {
         if (!p) throw new RegistryRejection(`No placement for TCGplayer product ${change.productId}`, 404)
         const decisionBefore = `${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}`
         if (typeof change.setName === 'string' && !setByName.has(change.setName)) {
-          throw new RegistryRejection(`No Riftbound set named "${change.setName}"`, 404)
+          throw new RegistryRejection(`No ${game === 'riftbound' ? 'Riftbound' : game === 'lorcana' ? 'Lorcana' : 'Pokémon'} set named "${change.setName}"`, 404)
         }
 
         if (change.ignored === true && !p.ignored) {
@@ -170,7 +182,7 @@ export async function POST(request: Request) {
       if (reopenReview) completed = completed.filter((c) => c.at !== reopenReview)
       side.completedReviews = completed
       return { touched, setByName, placements, completed }
-    })
+    }, { sets: pokemonSets })
   } catch (e) {
     if (e instanceof RegistryRejection) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e
@@ -189,8 +201,10 @@ export async function POST(request: Request) {
     if (moved) {
       if (set && !p.ignored) {
         Object.assign(patch, { setName: set.setName, hidden: false })
-        // Riftbound cards carry their set's code and a placement rarity; Lorcana promos keep theirs
+        // Riftbound cards carry their set's code and a placement rarity; Lorcana promos keep theirs;
+        // a Pokémon card's `set` is its set's id
         if (game === 'riftbound') Object.assign(patch, { setCode: set.setCode, rarity: set.tcgplayerOnly ? set.tcgplayerRarity || 'Event Promo' : 'Promo' })
+        if (game === 'pokemon' && set.id) patch.set = set.id
       }
       else patch.hidden = true
     }

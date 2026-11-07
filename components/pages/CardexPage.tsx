@@ -224,10 +224,10 @@ function buildPokemonGroups(sets: PokemonSetOption[], game: 'pokemon' | 'pokemon
   }
 
   const groups: SetGroup[] = Array.from(byGroup.entries()).map(([label, sets]) => ({ label, sets }))
-  if (game === 'pokemon-jp') {
-    const promoIdx = groups.findIndex((g) => g.label === 'Promos & Special')
-    if (promoIdx >= 0) groups.push(groups.splice(promoIdx, 1)[0])
-  }
+  // Promo / special sets go after the eras: Japanese promo sets, and English TCGplayer promo groups
+  // GitHub doesn't have (Prize Pack, Jumbo, World Championship Decks… — pokemon-tcgplayer.mjs)
+  const promoIdx = groups.findIndex((g) => g.label === 'Promos & Special')
+  if (promoIdx >= 0) groups.push(groups.splice(promoIdx, 1)[0])
 
   // Custom sets (Admin Catalog "New Set", source: "manual") get their own trailing group rather
   // than being sorted into a real era — they aren't associated with any upstream series.
