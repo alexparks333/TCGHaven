@@ -13,6 +13,7 @@
     "test:prices": "node scripts/lib/price-fallback.test.mjs",
     "test:search": "node --experimental-strip-types --no-warnings lib/api/cardSearch.test.mts",
     "test:rebase": "node --experimental-strip-types --no-warnings lib/rebase.test.mts",
+    "test:relief": "node --experimental-strip-types --no-warnings lib/reliefLevels.test.mts",
     "test:variants": "node scripts/lib/pokemon-variants.test.mjs",
     "test:pokemon-source": "node scripts/lib/pokemon-tcgplayer.test.mjs",
     "test:onepiece-source": "node scripts/lib/onepiece-tcgplayer.test.mjs",

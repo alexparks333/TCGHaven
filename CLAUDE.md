@@ -120,4 +120,8 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
   per picture (HavenRelief server, cached); all sculpting and finishes are live in the browser.
   "Save relief to badge" saves the badge in the same click; unsaved work is kept per badge in
   localStorage. Kits are stored in Storage under `badges/{id}/kit-*/` (rules allow subfolders).
-- Never swap Depth Anything V2 Small for Base/Large — they're non-commercial.
+- **HavenRelief models** (2026-11-08): Segment Anything 2.1 Large (pieces), Marigold Depth v1.1
+  (layers), Marigold Normals v1.1 — all licensed for commercial use. Check a model's licence before
+  swapping one in (Depth Anything V2 Base/Large and Depth Anything 3 Large/Giant are
+  non-commercial). Stepped levels are ranked by borders (`lib/reliefLevels.ts`, Python twin
+  `piece_heights()` — keep the two in step; `npm run test:relief`).

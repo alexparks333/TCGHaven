@@ -5,10 +5,14 @@
 // the command line's default pin only).
 
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage'
+import { pieceHeights } from './reliefLevels'
 
 export interface ReliefSettings {
   mode: 'smooth' | 'stepped'
   levels: number        // stepped: how many flat, evenly spaced heights (2–8)
+  levelRule: 'borders' | 'depth' // stepped: how pieces are ranked into levels — by the change across their own
+                        // borders (lib/reliefLevels.ts), or by their median depth over the whole pin (reliefs
+                        // saved before 2026-11-08, so their per-piece level moves still land where they were)
   off: number[]         // stepped: levels switched off (0 = lowest) — their pieces join the nearest level still on
   soften: number        // 0–1: how soft every step edge is
   detail: number        // 0–1: how much fine sculpted detail rides on top
@@ -127,7 +131,7 @@ export const FINISHES: { id: number; name: string; hint: string; params: FinishP
 export const FINISH_HOLE = 6
 
 export const DEFAULT_RELIEF: ReliefSettings = {
-  mode: 'stepped', levels: 4, off: [], soften: 0.06, detail: 0.8, depth: 0.026, wall: 0.35, normalStrength: 1, artHoles: true, holeSmooth: 0.3, pieces: {}, soft: {}, flat: {}, flatDefault: 1, materials: {}, finishOpts: {}, details: {}, finishLayers: [], metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough, finishOff: [], names: {}, lenticularSets: [{ name: 'Set 1', frames: [], useArt: true }],
+  mode: 'stepped', levels: 8, levelRule: 'borders', off: [], soften: 0.06, detail: 1, depth: 0.026, wall: 0.35, normalStrength: 1, artHoles: true, holeSmooth: 0.3, pieces: {}, soft: {}, flat: {}, flatDefault: 0, materials: {}, finishOpts: {}, details: {}, finishLayers: [], metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough, finishOff: [], names: {}, lenticularSets: [{ name: 'Set 1', frames: [], useArt: true }],
 }
 
 /** Saved settings from an older Studio filled out with today's defaults (one picture list became
@@ -139,6 +143,8 @@ export const reliefSettings = (s?: Partial<ReliefSettings> & { lenticularFrames?
   if (s && rest.flatDefault === undefined) out.flatDefault = 0
   // nor did one from before "Use transparency channel" get holes from its art
   if (s && rest.artHoles === undefined) out.artHoles = false
+  // nor were its levels ranked by borders: keep the old rule, so its per-piece level moves still fit
+  if (s && rest.levelRule === undefined) out.levelRule = 'depth'
   if (!rest.lenticularSets?.length && (lenticularFrames?.length || lenticularArt === false)) {
     out.lenticularSets = [{ name: 'Set 1', frames: lenticularFrames ?? [], useArt: lenticularArt ?? true }]
   }
@@ -213,7 +219,8 @@ export interface KitArrays {
   detail: Float32Array  // -1..1 fine detail
   pieces: Int32Array    // piece id per pixel, 0 = outside the pin
   pieceCount: number
-  objects: number       // ids 1..objects are Segment Anything's objects; the rest are the gaps between them
+  objects: number       // ids 1..objects are the analysis's pieces; the rest are gaps split here (older kits only)
+  heights?: Float64Array // per piece id: its height for stepping by borders (pieceHeights), worked out once at full size
 }
 
 export interface ReliefKit {
@@ -253,6 +260,8 @@ export async function loadKit(files: Record<string, Blob>): Promise<ReliefKit> {
   }
   full.objects = full.pieceCount
   splitGaps(full)
+  // once, at full size, and shared with the preview: the levels you tweak are the levels saved
+  full.heights = pieceHeights(full)
   return { full, preview: half(full), art: files['art.webp'], normal: files['normal.png'], files }
 }
 
@@ -303,7 +312,7 @@ export function splitGaps(k: KitArrays) {
 
 function half(k: KitArrays): KitArrays {
   const s = k.size >> 1, n = s * s
-  const out: KitArrays = { size: s, alpha: new Float32Array(n), layers: new Float32Array(n), detail: new Float32Array(n), pieces: new Int32Array(n), pieceCount: k.pieceCount, objects: k.objects }
+  const out: KitArrays = { size: s, alpha: new Float32Array(n), layers: new Float32Array(n), detail: new Float32Array(n), pieces: new Int32Array(n), pieceCount: k.pieceCount, objects: k.objects, heights: k.heights }
   for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
     const a = 2 * y * k.size + 2 * x, b = a + k.size, i = y * s + x
     out.alpha[i] = (k.alpha[a] + k.alpha[a + 1] + k.alpha[b] + k.alpha[b + 1]) / 4
@@ -369,8 +378,11 @@ export function compose(k: KitArrays, s: ReliefSettings): Composed {
   let h: Float32Array = new Float32Array(n)
   if (s.mode === 'stepped' && s.levels >= 2) {
     const L = Math.round(s.levels)
-    const { med, area } = pieceStats(k)
-    // levels: area-weighted 1-D k-means over the pieces' medians
+    const stats = pieceStats(k)
+    const area = stats.area
+    // each piece's height: from its borders (lib/reliefLevels.ts), or for older reliefs its median depth
+    const med = s.levelRule === 'depth' || !k.heights ? stats.med : k.heights
+    // levels: area-weighted 1-D k-means over the pieces' heights
     const ids = Array.from({ length: P }, (_, p) => p).filter((p) => p > 0 && area[p] > 0)
     const sorted = ids.map((p) => med[p]).sort((a, b) => a - b)
     let c = Array.from({ length: L }, (_, j) => sorted[Math.min(sorted.length - 1, Math.floor(((j + 0.5) / L) * sorted.length))] ?? j / (L - 1))

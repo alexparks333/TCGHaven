@@ -1,7 +1,9 @@
 # HavenRelief — install PyTorch first for your GPU (see README), then: pip install -r requirements.txt
-diffusers==0.31.0
-transformers==4.52.4
+# transformers 5 for Segment Anything 2.1; diffusers 0.42 for Marigold Depth + Normals alongside it
+diffusers==0.42.1
+transformers==5.22.2
 accelerate>=1.0
 numpy>=1.26,<2.3
 scipy>=1.11
+scikit-image>=0.24
 pillow>=10.0

@@ -372,7 +372,7 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
       setStatus(`Analyzing on ${new URL(RELIEF_SERVER).host}… (about a minute on the GPU)`)
       const k = await loadKit(await analyzeArt(art, quality, settings.artHoles))
       setKit(k); setSelected(0); setOthers([])
-      setSettings((s) => ({ ...s, pieces: {}, soft: {}, flat: {}, materials: {}, finishOpts: {}, details: {}, finishLayers: [], finishOff: [], names: {}, off: [] })) // piece ids belong to one analysis
+      setSettings((s) => ({ ...s, levelRule: 'borders', pieces: {}, soft: {}, flat: {}, materials: {}, finishOpts: {}, details: {}, finishLayers: [], finishOff: [], names: {}, off: [] })) // piece ids belong to one analysis
       // saved straight away, so the analysis survives whatever happens next
       setStatus('Saving the kit…')
       setKitUrls(await saveKit(staffStorage, badge.id || 'new', k))
@@ -570,6 +570,13 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
                 <>
                   <Slider label="Levels" value={settings.levels} min={2} max={8} step={1} fmt={(v) => String(v)} onChange={(levels) => set({ levels, off: settings.off.filter((r) => r < levels) })}
                     hint="Flat, evenly spaced heights — like a die-struck pin" />
+                  {settings.levelRule === 'depth' && (
+                    <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-3 text-xs text-amber-200 flex flex-col gap-2">
+                      This relief ranks its levels the old way, by each piece&apos;s depth over the whole pin.
+                      <button onClick={() => set({ levelRule: 'borders', pieces: {}, off: [] })} className="btn-secondary !py-1.5 text-xs self-start">Rank by borders instead</button>
+                      <span className="text-[11px] text-amber-200/70">Usually far better: each piece is ranked against the pieces around it. Clears this relief&apos;s per-piece level moves.</span>
+                    </div>
+                  )}
                   {composed && composed.rankArea.length > 0 && (
                     <div className="flex flex-col gap-1">
                       {Array.from(composed.rankArea, (_, r) => r).reverse().map((r) => {

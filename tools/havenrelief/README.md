@@ -3,9 +3,9 @@
 Turns flat pin art into a sculpted bas-relief pin for TCG Haven: open models only (commercially
 licensed), running on your own machine. No per-pin fees.
 
-- **Layers:** Depth Anything V2 Small (Apache-2.0).
+- **Pieces:** Segment Anything 2.1 Large (Apache-2.0), plus a colour split for what it leaves.
+- **Layers:** Marigold Depth v1.1 (Open-RAIL++), at two sizes combined.
 - **Detail:** Marigold Normals v1.1 (Open-RAIL++).
-- **Pieces:** Segment Anything ViT-B (Apache-2.0).
 
 The AI makes a **relief kit** (raw results, no styling choices); the staff portal's **Relief
 Studio** turns it into a pin with live controls. Run the server for the Studio:
@@ -20,11 +20,11 @@ Every analysis is cached in `cache/` by the image's bytes, so the same art again
 
 | Machine | One pin (2048px) |
 |---|---|
-| NVIDIA RTX 4090 | about 10–30 s (about 1 min at `--quality high`) |
+| NVIDIA RTX 4090 | about 1–1½ min (about 2½ min at `--quality high`, which the Studio uses) |
 | Apple Silicon | a few minutes |
 | CPU only (e.g. the Intel MacBook) | up to about an hour |
 
-The first run also downloads the models once (about 5 GB).
+The first run also downloads the models once (about 6 GB).
 
 ## Setup: Windows + NVIDIA
 

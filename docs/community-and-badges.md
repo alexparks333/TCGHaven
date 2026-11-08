@@ -289,6 +289,22 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   (`ENV_SIZE`, 512 on phones) because three.js's default 256 showed as staircase blocks in it.
   Run on a Windows PC: `.venv` built with Python 3.13 + cu124 torch + torchvision works.
   Never swap in Depth Anything V2 Base/Large: they're non-commercial.
+- **HavenRelief analysis rework** (2026-11-08, tested on the Signature Mastery and Pokémon 151
+  pins). Depth Anything V2 Small saw every pin tilted (the bottom nearer), barely saw raised
+  lettering, and Segment Anything ViT-B left 40–55% of a pin with no piece — which the Studio then
+  cut into diagonal depth-band wedges. Now: **pieces** = Segment Anything 2.1 Large (Apache-2.0,
+  `transformers` 5) on the whole picture + 2×2 and 3×3 overlapping crops, de-duplicated, painted
+  largest first; what it leaves is split by colour (Felzenszwalb, scikit-image), so every pixel has
+  a piece. **Layers** = Marigold Depth v1.1 (Open-RAIL++, the normals' licence) at 768 (right
+  layering) and 1536 (fine raised parts), combined piece by piece at half weight (`fuse_depth()` —
+  full weight sank small raised figures). Normals unchanged. **Levels** are ranked by the change
+  across each piece's own borders (depth + detail, solved together; `lib/reliefLevels.ts` and its
+  Python twin `piece_heights()`), then spread by rank so all 8 levels get used. Reliefs saved
+  before this keep the old median-depth rule (`levelRule: 'depth'`) so their per-piece level moves
+  stay put; the Studio offers "Rank by borders instead". Rejected: Marigold at 1536 alone (tilted
+  plate), a blur-based depth blend (halos round letters), k-means on raw heights (one tall group
+  takes the top level). MoGe-2 (MIT) and Depth Anything 3 Mono-Large (Apache-2.0) are untested —
+  they only install from GitHub. About 2½ min a pin at `high` on the 4090.
 - **Relief Studio** (staff portal → Badges → edit badge → Relief Studio, 2026-10-29) —
   `components/admin/ReliefStudio.tsx` + `lib/reliefStudio.ts`. The AI runs **once per picture**
   on `tools/havenrelief/server.py` (`http://127.0.0.1:7861`, this PC's GPU for now —
@@ -299,10 +315,11 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   all three resident the card spilled into system RAM: 150s → 58s). Uploading pin art in the
   badge editor auto-analyzes and saves the kit with the badge (`reliefKit`); the Studio then opens
   straight onto live controls — everything below runs in the browser, no AI re-run:
-  - **Relief tab:** stepped/smooth, levels (each can be switched off), Flatten all pieces
-    (default 100%), soften, depth, detail (default 80%), gold walls; per piece raise/lower,
-    flatten, smooth edges. The gaps between Segment Anything objects are split into pieces too
-    (`splitGaps`), so every area is selectable.
+  - **Relief tab:** stepped/smooth, levels (default 8, each can be switched off), Flatten all
+    pieces (default 0%, so the sculpted detail shows on the steps — at 100% it wiped the detail
+    out), soften, depth, detail (default 100%), gold walls; per piece raise/lower, flatten, smooth
+    edges. Kits from before 2026-11-08 have gaps between Segment Anything objects; those are split
+    into pieces here (`splitGaps`), so every area is selectable.
   - **Material tab:** Photoshop-style Layers (one per piece; thumbnail, rename, eye = hide its
     finish) + Material properties: a finish per layer — Auto, Regular, Gold, Gemstone (real light
     transmission), Holographic, Color Fresnel, Hole (cut through relief, body and back, one gold

@@ -281,7 +281,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
       const kit = await loadKit(await analyzeArt(await r.blob(), 'high', useAlpha))
       const reliefKit = await saveKit(staffStorage, id || 'new', kit)
       // piece edits belong to one analysis — keep the rest of the settings
-      setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, pieces: {}, soft: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
+      setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, levelRule: 'borders', pieces: {}, soft: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
       setReliefJob({ state: 'done' })
     } catch (e) {
       setReliefJob({ state: 'error', msg: e instanceof Error ? e.message : String(e) })
