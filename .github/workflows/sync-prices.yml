@@ -1,6 +1,6 @@
 name: Sync card prices
 
-# Calls the deployed app's /api/cron/sync-prices route 4x/day so the shared Firestore catalog
+# Calls the deployed app's /api/cron/sync-prices route twice a day so the shared Firestore catalog
 # (names/images/set data AND prices — see CLAUDE.md "Cron-Driven Price Sync") stays fresh without
 # anyone needing to click Admin Catalog -> "Sync Card Data" by hand. This replaces relying on an
 # external scheduler (cron-job.org, etc.) with a scheduled workflow checked into this repo, so it's
@@ -20,8 +20,10 @@ name: Sync card prices
 
 on:
   schedule:
-    # Roughly 6am / 12pm / 6pm / 12am UTC — adjust to your timezone/preference if you like.
-    - cron: '0 0,6,12,18 * * *'
+    # tcgcsv (every TCGplayer price) publishes once a day, ~20:05 UTC. 21:00 UTC picks that up the
+    # same day; 09:00 UTC is the safety net (a late tcgcsv update, or a failed run) and catches the
+    # card sources that change between releases. Four runs a day re-read unchanged data three times.
+    - cron: '0 9,21 * * *'
   workflow_dispatch: {} # adds a manual "Run workflow" button in the Actions tab, for testing
 
 env:

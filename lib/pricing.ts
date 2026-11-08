@@ -9,7 +9,7 @@ import { variantPrice } from '@/scripts/lib/pokemon-variants.mjs'
 //    /api/cardex returns)
 //  - PersonalCollectionsView.tsx (via the same price routes)
 //  - app/api/price-history (shared history)
-// Every input is a catalog card's own price fields, refreshed 4x a day by the scheduled sync.
+// Every input is a catalog card's own price fields, refreshed twice a day by the scheduled sync.
 // There's one price per card — TCGplayer market price — no user-selectable price mode.
 
 export interface CatalogPriceFields {

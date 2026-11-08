@@ -10,7 +10,7 @@
 //                                      Cardmarket (the EU marketplace), converted EUR → USD and
 //                                      tagged priceSource 'cardmarket' so the app labels it Est.
 //
-// Cost rules (the sync runs 4x/day):
+// Cost rules (the sync runs twice a day):
 //  - Only cards still unpriced after layer 1 are ever looked up — never a whole set.
 //  - Each gap is re-checked at most once per FALLBACK_REFRESH_MS; the result (including "found
 //    nothing") is cached in one Firestore doc and reused by the other syncs that day.

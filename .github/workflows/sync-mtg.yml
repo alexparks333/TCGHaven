@@ -1,6 +1,6 @@
 name: Sync Magic prices
 
-# Magic's catalog (~102k printings from Scryfall) once a day. It isn't in the 4x/day sync-prices
+# Magic's catalog (~102k printings from Scryfall) once a day. It isn't in the twice-daily sync-prices
 # job: a full run takes ~4.5 minutes (Scryfall's ~77MB bulk file + comparing every card), too close
 # to the website's 5-minute function limit, so it runs here instead, as the same command an admin
 # runs locally (`npm run download-cards -- --only mtg`). Only cards whose data changed are written.

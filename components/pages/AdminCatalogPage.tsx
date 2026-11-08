@@ -140,7 +140,7 @@ export function SyncPanel() {
     pokemon: { status: 'idle' }, 'pokemon-jp': { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' },
   })
   // Last-known status per game, including from runs this session never triggered — the
-  // automatic 4x/day cron, or an admin syncing from a different browser/device. Without this, a
+  // automatic twice-daily cron, or an admin syncing from a different browser/device. Without this, a
   // failed cron run at 3am stays invisible until someone notices the catalog looks stale days
   // later; sync_status/{game} is what makes that visible here instead.
   const [lastStatus, setLastStatus] = useState<Partial<Record<SyncJob, SyncStatus>>>({})
@@ -1087,7 +1087,7 @@ function SetInfoBar({
 }
 
 // Whether a card's price updates itself. Every card a sync writes gets a fresh price each sync
-// (4×/day); a card added by hand (Add card → source: 'manual') is never touched by a sync, so its
+// (twice a day); a card added by hand (Add card → source: 'manual') is never touched by a sync, so its
 // price is whatever was typed in.
 const PRICE_SOURCE: Record<Game, string> = {
   pokemon: 'TCGplayer', lorcana: 'lorcast', riftbound: 'TCGplayer', onepiece: 'TCGplayer', mtg: 'Scryfall',

@@ -167,7 +167,7 @@ TCGHaven/
 │       │                             Integration.md" at the repo root.
 │       ├── cron/
 │       │   └── sync-prices/route.ts ← GET/POST, secret-protected — calls the pokemon/lorcana/
-│       │                             riftbound/onepiece sync.ts functions above 4x/day (MTG's
+│       │                             riftbound/onepiece sync.ts functions above twice a day (MTG's
 │       │                             full sync excluded on purpose, see sync/mtg above — but its
 │       │                             lightweight checkForNewMtgSets() runs here every time, see
 │       │                             §18), triggered by an external scheduler outside this repo

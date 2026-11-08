@@ -228,7 +228,7 @@ export default function PortfolioPage() {
           <div>
             <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
             <p className="text-slate-500 text-xs mt-0.5">
-              TCGplayer market prices · updated automatically 4× a day
+              TCGplayer market prices · updated automatically twice a day
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -578,7 +578,7 @@ export default function PortfolioPage() {
 }
 
 // Replaces the old manual "Refresh Prices" button: everyone's prices come from the same
-// scheduled catalog sync (4x a day — see components/PriceAutoUpdater.tsx), so this just says when
+// scheduled catalog sync (twice a day — see components/PriceAutoUpdater.tsx), so this just says when
 // that last happened, and turns into a warning if the latest scheduled update didn't go through
 // (failed, or overdue) so a broken sync can't go unnoticed. See lib/api/priceStatus.ts.
 function PriceUpdateStatus({ status }: { status: PriceStatus | null }) {

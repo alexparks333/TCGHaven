@@ -7,7 +7,7 @@ import { authFetch } from '@/lib/firebase/authFetch'
 import { loadPriceStatus } from '@/lib/api/priceStatus'
 import type { Card, Game } from '@/lib/types'
 
-// Prices live ONLY in the shared catalog (refreshed 4x a day by the scheduled sync) — nothing is
+// Prices live ONLY in the shared catalog (refreshed twice a day by the scheduled sync) — nothing is
 // ever copied onto a user's own cards anymore. This (mounted once in ClientWrapper, renders
 // nothing) just reads:
 //

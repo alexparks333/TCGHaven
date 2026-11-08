@@ -377,6 +377,9 @@ export function buildOnePieceCatalog({ apiCards, groups, productsByGroup, existi
       Object.assign(card, { tcgProductId: pid, tcgSubType: sub })
       // No TCGplayer price right now (sold out, new listing): the card keeps its last price
       if (price > 0) card.marketPrice = price
+      // A card made before TCGplayer photographed its product (OP18 before release) gets the photo
+      // once there is one — filling an empty picture changes nothing a collector has seen
+      if (!ex.imageUrl && products.get(pid).imageUrl) card.imageUrl = products.get(pid).imageUrl
     } else if (pid && !products.has(pid)) report.lostProducts.push({ id, productId: pid })
     if (Object.keys(card).length > 1) cards.push(card)
   }

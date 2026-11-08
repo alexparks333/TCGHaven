@@ -418,7 +418,7 @@ Settings' "Needs Review" editor to ever show for this game (same as Pokémon).
 
 **MTG** has no registry involvement at all either, exactly like Pokémon (its set list comes live
 from `api.scryfall.com/sets`) — but it's by far the biggest sync here (~99,000 cards vs.
-Pokémon's ~20k), and unlike every other game, it isn't wired into the automatic 4x/day cron at
+Pokémon's ~20k), and unlike every other game, it isn't wired into the automatic twice a day cron at
 all yet (see [§18](#cron-driven-price-sync)). Clicking this button IS still the one live way to
 sync it — a deliberate one-off admin action rather than a recurring background one — but read
 "MTG Integration.md" at the repo root before clicking it for the first time: that first click
@@ -532,7 +532,7 @@ on every single one of those calls (the single biggest external-API cost in the 
 every set ever added); for Lorcana it meant a live `api.lorcast.com` request per unique card (no
 bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh by far.
 
-**The redesign:** live price fetches now happen in exactly one place — a scheduled sync, 4x/day
+**The redesign:** live price fetches now happen in exactly one place — a scheduled sync, twice a day
 (intended as roughly 6am/12pm/6pm/12am) — instead of on every user's every page visit/click.
 
 - **`app/api/cron/sync-prices/route.ts`** — `GET`/`POST`, protected by a shared secret
@@ -569,7 +569,7 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
   concern is resolved.
 - **Not a Vercel Cron job** — deliberately, so this works on Vercel plans that don't support
   sub-daily cron schedules. It's triggered by **`.github/workflows/sync-prices.yml`**, a scheduled
-  GitHub Actions workflow checked into this repo (4x/day, `x-cron-secret` header sourced from a
+  GitHub Actions workflow checked into this repo (twice a day, `x-cron-secret` header sourced from a
   `CRON_SECRET` repository secret) — visible/runnable/auditable from the repo's Actions tab,
   including a manual "Run workflow" button for on-demand triggers. **Needs a one-time setup**
   before it actually fires: the workflow file has a placeholder Vercel URL that must be edited to
@@ -586,7 +586,7 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
   before — this part (record a history point on every refresh) didn't change, see
   `applyPriceUpdatesBatch` in [Firestore / User Data](#firestore--user-data) below. Practically:
   price *history* granularity is now driven by how often Alex clicks Refresh, not a fixed timer —
-  the catalog's own price data updates 4x/day regardless of whether anyone visits Portfolio at all.
+  the catalog's own price data updates twice a day regardless of whether anyone visits Portfolio at all.
 - **Previously-known gap, now fixed:** `app/api/sync/{pokemon,lorcana,riftbound,onepiece,mtg}/route.ts`
   used to have no request-level auth check of their own — they only signed *themselves* in as the
   Firestore admin account internally, so anyone who knew the URL could POST to them directly and

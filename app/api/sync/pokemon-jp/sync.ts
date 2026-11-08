@@ -9,8 +9,8 @@ import { recordSyncStatus } from '@/lib/api/syncStatus'
 // Japanese Pokémon catalog sync (scripts/lib/pokemon-jp.mjs). Same route.ts/sync.ts split as every
 // other game (CLAUDE.md quirk #24): route.ts checks the caller, the cron route calls this directly.
 //
-// `minIntervalHours`: the cron runs 4x a day, but TCGplayer's feed (tcgcsv) only refreshes once a
-// day and every run reads the whole ~30k-card catalog to diff against, so the scheduled run skips
+// `minIntervalHours`: the cron runs twice a day (09:00 + 21:00 UTC), but TCGplayer's feed (tcgcsv)
+// only refreshes once a day (~20:05 UTC) and every run reads the whole ~30k-card catalog to diff against, so the scheduled run skips
 // itself unless the last successful sync is at least this old. A manual Admin click passes 0.
 export async function runPokemonJapaneseSync({ minIntervalHours = 0 } = {}): Promise<Response> {
   try {

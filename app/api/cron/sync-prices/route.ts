@@ -7,7 +7,7 @@ import { runPokemonJapaneseSync } from '../../sync/pokemon-jp/sync'
 import { checkForNewMtgSets } from '@/lib/api/mtg'
 import { recordSyncStatus } from '@/lib/api/syncStatus'
 
-// Called by an external scheduler (cron-job.org, GitHub Actions, etc.) 4x/day to keep the shared
+// Called by an external scheduler (cron-job.org, GitHub Actions, etc.) twice a day to keep the shared
 // catalog's prices fresh — every user's card prices are then copied from it automatically
 // (components/PriceAutoUpdater.tsx), reading prices straight from Firestore (loadCatalog(), see lib/api/catalog.ts) instead of
 // each hitting tcgcsv/lorcast/pokemontcg.io live on every user click/page view. See CLAUDE.md

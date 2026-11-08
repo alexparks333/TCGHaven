@@ -121,7 +121,7 @@ value instead of being silently invisible to sorting/filtering.
 
 ### How New Pokémon Sets Are Added
 
-Nothing to do. TCGplayer lists a new set on release day; the next sync (4×/day, or the staff
+Nothing to do. TCGplayer lists a new set on release day; the next sync (twice a day, or the staff
 portal's Sync button / `npm run download-cards -- --only pokemon`) adds it as a `tcg-{groupId}` set.
 When GitHub adds the same set later, the TCGplayer one stays (see Claimed sets above). Individual
 missing cards can still be added via "Add Missing Card".
@@ -620,7 +620,12 @@ starter-deck reprints were priced as the original; Uta FILM RED as the plain Uta
 **The promise: no card already in the catalog changes anything a collector sees** — not its id,
 name, set, number, rarity or photo. Each existing card keeps the product its photo shows (that's
 how collectors logged it); only its price refreshes, from that product. When TCGplayer has no price
-right now, the card keeps its last one. Verified with `npm run onepiece-source-report` (exits 2 if
+right now, the card keeps its last one. One exception: a card made before TCGplayer photographed
+its product (`imageUrl` '' — OP18 before its Nov 20 release) gets the photo once there is one; an
+existing photo is never replaced. Photos TCGplayer hasn't taken (OP16's 75 Release Event Cards on
+2026-11-08) stay "No Image" — Bandai's official images (en.onepiece-cardgame.com, usable only through
+a proxy — CORP) exist for released base cards but not for event versions, and a base card's art isn't
+shown for a promo it might not match. Verified with `npm run onepiece-source-report` (exits 2 if
 any existing card would change visibly) and `node scripts/check-collection.mjs --all`.
 
 - **New cards** — every TCGplayer product (+ finish) that isn't a card yet becomes `tcg-{productId}`
@@ -794,7 +799,7 @@ price-merge pass at all; one bulk-data fetch is the whole sync.
 **Read `MTG Integration.md` at the repo root before touching anything MTG-related** — it has the
 full story on why the first real sync hasn't been run yet (Firestore write-quota risk) and the
 exact steps to turn it on. Short version: the code below is fully built and wired everywhere
-every other game is, but `app/api/cron/sync-prices/route.ts` (the 4x/day automatic price refresh)
+every other game is, but `app/api/cron/sync-prices/route.ts` (the twice a day automatic price refresh)
 and the default `npm run download-cards` (no flag) both deliberately skip MTG — only a manual
 Admin Catalog "Sync Card Data" click, or `npm run download-cards -- --include-mtg`, actually
 pulls it. Until a first sync runs, `catalog/mtg/cards` doesn't exist yet and every MTG search/
@@ -884,7 +889,7 @@ the same reason.
 ### Daily price sync (2026-11-08)
 
 Magic syncs once a day in its own GitHub Actions job, `.github/workflows/sync-mtg.yml` (09:00 UTC),
-running `npm run download-cards -- --only mtg` — not in the 4×/day sync-prices cron: a full run takes
+running `npm run download-cards -- --only mtg` — not in the twice a day sync-prices cron: a full run takes
 ~4.5 minutes (Scryfall's ~77MB bulk file + comparing ~102k cards), too close to the website's
 5-minute limit. Needs the ADMIN_EMAIL / ADMIN_PASSWORD repository secrets. Cost estimate: ~102k
 Firestore reads + ~40–70k writes a day ≈ $3–6/month. Before it, prices only updated when someone

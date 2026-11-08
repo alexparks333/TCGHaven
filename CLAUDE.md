@@ -57,7 +57,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
 - **Shared catalog** — every card's name, image, set, rarity and price lives in Firestore
   `catalog/{game}/cards/{id}` (public read, staff write), read through an in-memory per-process
   cache (`lib/api/catalog.ts`). Kept fresh by per-game syncs (`scripts/lib/catalog-sync.mjs`),
-  4×/day via the cron route. Every catalog write must stamp `updatedAt: serverTimestamp()`.
+  twice a day (09:00 + 21:00 UTC — tcgcsv publishes ~20:05 UTC) via the cron route. Every catalog write must stamp `updatedAt: serverTimestamp()`.
 - **Inventory** — `users/{uid}/cards/*`, written only through `lib/firebase/db.ts`. Prices are never
   stored per user: they're laid over cards from the catalog (`lib/pricing.ts` `catalogPrice()` is
   the one pricing rule). Catalog ↔ inventory link: `card.apiId` = catalog `id`.

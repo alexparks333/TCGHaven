@@ -3,7 +3,7 @@ import { db } from '@/lib/firebase/config'
 import type { Game } from '@/lib/types'
 import type { SyncStatus } from './syncStatus'
 
-// Everyone's prices come from the shared catalog, which the scheduled sync refreshes 4x a day
+// Everyone's prices come from the shared catalog, which the scheduled sync refreshes twice a day
 // (.github/workflows/sync-prices.yml → app/api/cron/sync-prices/route.ts). This reads whether
 // that's actually happening, for the "Prices updated …" / "update failed" line on Portfolio:
 //
@@ -16,12 +16,17 @@ import type { SyncStatus } from './syncStatus'
 // — avoided otherwise, since that doc also carries the set list and broken-image ids (~180KB for
 // Pokémon). Both are public-read in firestore.rules, so any signed-in user can show the same status.
 
-// Four runs a day = one every 6h; flag it once roughly two runs in a row have gone missing.
-const STALE_AFTER_MS = 9 * 60 * 60 * 1000
+// Flag a game once roughly two of its scheduled runs in a row have gone missing: the price sync runs
+// twice a day (09:00 + 21:00 UTC — .github/workflows/sync-prices.yml; Japanese Pokémon syncs at most
+// once a day of those), MTG once a day (sync-mtg.yml, 09:00 UTC).
+const HOUR = 60 * 60 * 1000
+const STALE_AFTER_MS: Partial<Record<Game, number>> = { mtg: 50 * HOUR }
+const DEFAULT_STALE_AFTER_MS = 27 * HOUR
+const staleAfter = (game: Game) => STALE_AFTER_MS[game] ?? DEFAULT_STALE_AFTER_MS
 
-// MTG is deliberately not on the scheduled sync yet (see "MTG Integration.md"), so its catalog
-// going "stale" is expected and must not trip the failure warning.
-const NOT_ON_SCHEDULE: Game[] = ['mtg']
+// MTG syncs once a day on its own schedule, so its time is left out of the shared "prices as of"
+// time (it would drag it back by up to a day) unless it's all that's shown.
+const OWN_SCHEDULE: Game[] = ['mtg']
 
 export interface PriceStatus {
   // Oldest last-successful-sync time across the games being shown — the honest "prices as of"
@@ -48,14 +53,12 @@ export async function loadPriceStatus(games: Game[]): Promise<PriceStatus> {
       const attempt = statusSnap.exists() ? (statusSnap.data() as SyncStatus) : null
       const attemptAt = attempt?.at ? new Date(attempt.at) : null
       const lastAttemptFailed = !!attempt && attempt.ok === false && !!attemptAt && (!lastGood || attemptAt > lastGood)
-      const overdue = !NOT_ON_SCHEDULE.includes(game) && (!lastGood || now - lastGood.getTime() > STALE_AFTER_MS)
+      const overdue = !lastGood || now - lastGood.getTime() > staleAfter(game)
       return { game, lastGood, failed: lastAttemptFailed || overdue }
     }),
   )
   const goods = perGame.map((g) => g.lastGood).filter((d): d is Date => !!d)
-  // An unscheduled game (MTG) only syncs when staff click it, so its old date would otherwise
-  // drag the "prices as of" time back by days — leave it out unless it's all that's tracked.
-  const scheduled = perGame.filter((g) => !NOT_ON_SCHEDULE.includes(g.game)).map((g) => g.lastGood).filter((d): d is Date => !!d)
+  const scheduled = perGame.filter((g) => !OWN_SCHEDULE.includes(g.game)).map((g) => g.lastGood).filter((d): d is Date => !!d)
   const asOf = scheduled.length > 0 ? scheduled : goods
   const failedGames = perGame.filter((g) => g.failed).map((g) => g.game)
   return {

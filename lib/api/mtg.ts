@@ -109,7 +109,7 @@ export function isMtgSetsCacheReliable(): boolean {
 /**
  * Lightweight "did a brand new MTG set appear on Scryfall" check — a live sets fetch and a
  * comparison against the last-seen code list, with zero writes to `catalog/mtg/cards`. MTG is
- * deliberately left off the automatic 4x/day cron (a full sync is ~99k Firestore writes, enough
+ * deliberately left off the automatic twice a day cron (a full sync is ~99k Firestore writes, enough
  * to blow through a Firebase Spark plan's daily quota in one run — see CLAUDE.md's MTG section),
  * which otherwise means a new MTG set can go unnoticed indefinitely until someone happens to
  * remember to click the manual Sync button. This closes that visibility gap safely: the cron can

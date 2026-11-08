@@ -105,6 +105,21 @@ assert.equal(productsFromRows([row(1, 9, 'Romance Dawn Booster Box', '', 100)]).
   assert.equal(card.tcgProductId, 700001)
 }
 
+// ── A card made before its product had a photo gets it once TCGplayer adds one (OP18 pre-release)…
+// …but a card that shows a photo never has it replaced
+{
+  const rows = [row(7, 712893, 'Nico Robin (Manga)', 'OP18-120', 900, 'Foil', 'SEC'), row(7, 712894, 'Nami', 'OP18-001', 1)]
+  const out = build({
+    groups: [G(7, 'The Dominance of God')], rows,
+    existing: [
+      { id: 'tcg-712893', name: 'Nico Robin (Manga)', setName: 'The Dominance Of God', imageUrl: '', tcgProductId: 712893, marketPrice: 0 },
+      { id: 'OP18-001', name: 'Nami', setName: 'The Dominance Of God', imageUrl: photo(712894), marketPrice: 1 },
+    ],
+  })
+  assert.equal(byId(out).get('tcg-712893').imageUrl, 'https://tcgplayer-cdn.tcgplayer.com/product/712893_in_1000x1000.jpg')
+  assert.ok(!('imageUrl' in byId(out).get('OP18-001')))
+}
+
 // ── A product sold in two finishes: each card keeps its own (P-066 Boa Hancock) ──
 {
   const rows = [row(6, 552138, 'Boa Hancock (Sealed Battle 2024 Vol. 2)', 'P-066', 180.42, 'Foil', 'PR'), row(6, 552138, 'Boa Hancock (Sealed Battle 2024 Vol. 2)', 'P-066', 7.99, 'Normal', 'PR')]

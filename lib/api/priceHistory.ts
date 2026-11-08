@@ -30,7 +30,7 @@ type MonthDoc = Map<string, DayEntry>   // 'DD' -> that day's entry, parsed
 const DAY_MS = 86_400_000
 
 // ── When did this catalog last sync? ──────────────────────────────────────────────────────────
-// History only changes when a sync lands (4x a day), so the caches below refresh on that, not on a
+// History only changes when a sync lands (twice a day), so the caches below refresh on that, not on a
 // timer. sync_status/{key}.lastGoodAt is stamped by every successful sync (catalog-sync.mjs) — a
 // small doc, checked at most every 5 minutes per catalog per server instance.
 const SYNC_CHECK_MS = 5 * 60 * 1000
