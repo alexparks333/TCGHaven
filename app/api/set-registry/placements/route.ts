@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { RegistryRejection, type RiftboundPlacement } from '@/lib/api/registry'
-import { updateReviewSide, loadReviewSide, loadPokemonReviewSets, isReviewGame, type ReviewGame, type ReviewSetInfo } from '@/lib/api/review'
+import { updateReviewSide, loadReviewSide, loadReviewSets, isReviewGame, type ReviewGame, type ReviewSetInfo } from '@/lib/api/review'
 import { loadCatalog, invalidateCatalogCache } from '@/lib/api/catalog'
 import { ensureAdminAuth } from '@/lib/firebase/adminAuth'
 import { verifyAdminRequest } from '@/lib/firebase/verifyAdminRequest'
@@ -71,12 +71,12 @@ async function riotArt(publicCode: string | undefined): Promise<string> {
 // `game` defaults to riftbound.
 
 // GET ?game=pokemon — a game's review, for the Needs Review board (Riftbound's and Lorcana's are
-// also on GET /api/set-registry; Pokémon's has its own doc). Pokémon's also lists the sets a card
-// can be placed in, since its sets aren't in the registry.
+// also on GET /api/set-registry; Pokémon's and One Piece's have their own docs). Those two also
+// list the sets a card can be placed in.
 export async function GET(request: Request) {
   const game = new URL(request.url).searchParams.get('game')
-  if (!isReviewGame(game)) return NextResponse.json({ error: 'game must be riftbound, lorcana or pokemon' }, { status: 400 })
-  const [side, sets] = await Promise.all([loadReviewSide(game), game === 'pokemon' ? loadPokemonReviewSets() : Promise.resolve(null)])
+  if (!isReviewGame(game)) return NextResponse.json({ error: 'game must be riftbound, lorcana, pokemon or onepiece' }, { status: 400 })
+  const [side, sets] = await Promise.all([loadReviewSide(game), loadReviewSets(game)])
   return NextResponse.json({ ...side, ...(sets ? { sets } : {}) }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
@@ -95,8 +95,8 @@ export async function POST(request: Request) {
 
   await ensureAdminAuth()
   type SetInfo = ReviewSetInfo
-  // Pokémon's sets aren't in the registry — read before the transaction (it must not fetch)
-  const pokemonSets = game === 'pokemon' ? await loadPokemonReviewSets() : undefined
+  // Pokémon's and One Piece's sets come from elsewhere — read before the transaction (it must not fetch)
+  const ownSets = (await loadReviewSets(game)) ?? undefined
   type Touched = { placement: RiftboundPlacement; moved: boolean; renamed: boolean; image: Change['image'] }
   // On the latest registry, in a transaction: two staff deciding cards at the same moment (or a
   // sync adding new ones meanwhile) both land, instead of the last save undoing the other's.
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
         if (!p) throw new RegistryRejection(`No placement for TCGplayer product ${change.productId}`, 404)
         const decisionBefore = `${p.reviewed}|${!!p.denied}|${!!p.ignored}|${p.setName}`
         if (typeof change.setName === 'string' && !setByName.has(change.setName)) {
-          throw new RegistryRejection(`No ${game === 'riftbound' ? 'Riftbound' : game === 'lorcana' ? 'Lorcana' : 'Pokémon'} set named "${change.setName}"`, 404)
+          throw new RegistryRejection(`No ${({ riftbound: 'Riftbound', lorcana: 'Lorcana', pokemon: 'Pokémon', onepiece: 'One Piece' } as const)[game]} set named "${change.setName}"`, 404)
         }
 
         if (change.ignored === true && !p.ignored) {
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
       if (reopenReview) completed = completed.filter((c) => c.at !== reopenReview)
       side.completedReviews = completed
       return { touched, setByName, placements, completed }
-    }, { sets: pokemonSets })
+    }, { sets: ownSets })
   } catch (e) {
     if (e instanceof RegistryRejection) return NextResponse.json({ error: e.message }, { status: e.status })
     throw e

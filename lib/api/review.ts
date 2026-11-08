@@ -4,15 +4,15 @@ import { updateSetRegistry, loadSetRegistry, invalidateRegistryCache, type Riftb
 
 // Where each game's Needs Review (TCGplayer promo placements) lives.
 //
-// Riftbound and Lorcana keep theirs on registry/main (`riftbound.placements`, …). Pokémon has its
-// own doc, registry/pokemon-review: it has thousands of TCGplayer promo products, and registry/main
-// is a single Firestore document (1 MiB cap; ~311 bytes per placement). Same shape as a registry
+// Riftbound and Lorcana keep theirs on registry/main (`riftbound.placements`, …). Pokémon and One
+// Piece have their own docs, registry/{game}-review: each has thousands of TCGplayer promo products,
+// and registry/main is a single Firestore document (1 MiB cap; ~311 bytes per placement). Same shape as a registry
 // side, plus `baseline` — the promo products the first run accepted, by id only.
 // Keep in sync with REVIEW_DOCS in scripts/lib/catalog-sync.mjs.
 
-export type ReviewGame = 'riftbound' | 'lorcana' | 'pokemon'
-export const REVIEW_GAMES: ReviewGame[] = ['riftbound', 'lorcana', 'pokemon']
-const REVIEW_DOCS: Partial<Record<ReviewGame, string>> = { pokemon: 'pokemon-review' }
+export type ReviewGame = 'riftbound' | 'lorcana' | 'pokemon' | 'onepiece'
+export const REVIEW_GAMES: ReviewGame[] = ['riftbound', 'lorcana', 'pokemon', 'onepiece']
+const REVIEW_DOCS: Partial<Record<ReviewGame, string>> = { pokemon: 'pokemon-review', onepiece: 'onepiece-review' }
 
 export interface ReviewSide {
   placements: RiftboundPlacement[]
@@ -49,6 +49,23 @@ export async function loadPokemonReviewSets(): Promise<ReviewSetInfo[]> {
       cardexGroup: 'Custom Sets',
     }))
   return [...listed, ...custom]
+}
+
+/**
+ * One Piece's sets, for placing a reviewed card: the registry's list (the sync keeps it complete).
+ * `cardexGroup` = the Cardex's group — Main Sets for a numbered booster (code OPnn), else Special.
+ */
+export async function loadOnePieceReviewSets(): Promise<ReviewSetInfo[]> {
+  invalidateRegistryCache()
+  const registry = await loadSetRegistry()
+  return registry.onepiece.sets.map((s) => ({ setName: s.setName, code: s.code, cardexGroup: /^OP\d+$/.test(s.code ?? '') ? 'Main Sets' : 'Special Sets' }))
+}
+
+/** The sets a game's reviewed cards can go in, for games whose sets aren't registry sides with a cardexGroup. */
+export async function loadReviewSets(game: ReviewGame): Promise<ReviewSetInfo[] | null> {
+  if (game === 'pokemon') return loadPokemonReviewSets()
+  if (game === 'onepiece') return loadOnePieceReviewSets()
+  return null
 }
 
 export function isReviewGame(game: unknown): game is ReviewGame {

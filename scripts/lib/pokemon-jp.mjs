@@ -13,7 +13,7 @@ export const JP_CATALOG = 'pokemon-jp'
 // Sealed product / accessories. Only consulted for rows with neither a collector number nor a
 // rarity: Japanese WotC-era singles (Expansion Pack, Jungle, Fossil, Neo, …) have no printed
 // number at all, so "no number" alone can't mean "not a card".
-const SEALED = /booster|\bbox\b|deck|\bpacks?\b|bundle|\btin\b|binder|sleeve|\bcase\b|\bkit\b|\bset\b|starter|premium|gift|display|playmat|\bcoin\b|marker|code card|\blot\b|card file|academy|card game classic|\bfile\b/i
+const SEALED = /booster|\bbox\b|deck|\bpacks?\b|bundle|\btin\b|binder|sleeve|\bcase\b|\bkit\b|\bset\b|starter|premium|gift|display|playmat|\bcoin\b|marker|code card|\blot\b|card file|academy|card game classic|\bfile\b|briefcase|\bcollection\b/i
 
 export function isSingleRow(row) {
   if ((row.extNumber ?? '').trim()) return true
@@ -46,6 +46,19 @@ export function jpImageUrl(row) {
   return url ? url.replace(/_200w\.jpg$/, '_in_1000x1000.jpg') : ''
 }
 
+/**
+ * A Japanese card's display name: cleanJpName(), plus the number tails TCGplayer leaves on some
+ * Japanese products — "Dragonite V- 049/071", "Erika's Tangela -743/742", "Black Belt's Training
+ * (143/175)", "Basic Water Energy 011/015" — and "Naganadel & Guzzlord -GX" → "…-GX". (English and
+ * One Piece names keep plain cleanJpName(): their existing cards' names must not change.)
+ */
+export function cleanJpCardName(name) {
+  return cleanJpName(name)
+    .replace(/[\s-]*\(?\b\d{1,3}\/\d{1,3}\)?\s*$/, '')
+    .replace(/\s+-(GX|EX)\b/g, '-$1')
+    .trim()
+}
+
 /** One catalog card from all of a product's rows (one row per printing TCGplayer prices). */
 export function jpCard(group, rows) {
   const first = rows[0]
@@ -54,7 +67,7 @@ export function jpCard(group, rows) {
   const rarity = (first.extRarity ?? '').trim()
   return {
     id: `jp-${first.productId}`,
-    name: cleanJpName(first.name),
+    name: cleanJpCardName(first.name),
     set: `jp-${group.groupId}`,
     setName: group.name,
     number: jpNumber(first.extNumber),

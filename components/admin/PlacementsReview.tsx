@@ -61,8 +61,8 @@ interface RegistryResponse {
 
 interface ReviewSide { groupOrder: string[]; sets: RegistrySet[]; placements?: Placement[]; completedReviews?: Array<{ at: string; completedAt: string }> }
 
-export type ReviewGame = 'riftbound' | 'lorcana' | 'pokemon'
-const GAME_LABEL: Record<ReviewGame, string> = { riftbound: 'Riftbound', lorcana: 'Lorcana', pokemon: 'Pokémon' }
+export type ReviewGame = 'riftbound' | 'lorcana' | 'pokemon' | 'onepiece'
+const GAME_LABEL: Record<ReviewGame, string> = { riftbound: 'Riftbound', lorcana: 'Lorcana', pokemon: 'Pokémon', onepiece: 'One Piece' }
 // Pokémon's custom sets (made from the review) go in the Cardex's "Custom Sets" group
 const POKEMON_CUSTOM_GROUP = 'Custom Sets'
 // The game whose review this is, for the board, viewer and dialogs (portals keep context)
@@ -88,7 +88,7 @@ const ACCENT = '#b5532f' // the review UI's accent (buttons, progress)
 const tcgPhotoUrl = (productId: number) => `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_in_1000x1000.jpg`
 // "Riftbound Organized Play Promotional Cards" → "Organized Play"
 const sourceLabel = (p: Placement) =>
-  (p.groupName ?? '').replace(/^(riftbound|disney lorcana|pokemon):?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
+  (p.groupName ?? '').replace(/^(riftbound|disney lorcana|pokemon|one piece):?\s*/i, '').replace(/promotional cards/i, '').trim() || 'Promo'
 const numberSortKey = (n: string) => parseInt(n.replace(/^\D+/, ''), 10) || 0
 // Denied = staff don't want the card (hidden, never re-added by a sync). A card left out before
 // Deny existed (no set, already reviewed) counts too; an unreviewed one with no set is one the
@@ -169,12 +169,12 @@ export function defaultCardName(tcgplayerName: string, game: ReviewGame = 'riftb
 // A game's review and the sets its cards can go in. no-store / ?fresh: the public GETs are
 // CDN-cached, and a review needs the current list.
 async function loadReviewSide(game: ReviewGame): Promise<ReviewSide | null> {
-  if (game === 'pokemon') {
-    const res = await fetch(`/api/set-registry/placements?game=pokemon&fresh=${Date.now()}`, { cache: 'no-store' })
+  if (game === 'pokemon' || game === 'onepiece') {
+    const res = await fetch(`/api/set-registry/placements?game=${game}&fresh=${Date.now()}`, { cache: 'no-store' })
     if (!res.ok) return null
     const data = await res.json() as { placements: Placement[]; completedReviews: ReviewSide['completedReviews']; sets: RegistrySet[] }
-    // The Cardex groups Pokémon sets by series — its categories here, newest first like the Cardex
-    const sets = [...data.sets].reverse()
+    // Pokémon's categories are its series (newest first, like the Cardex); One Piece's Main / Special Sets
+    const sets = game === 'pokemon' ? [...data.sets].reverse() : data.sets
     const groupOrder = Array.from(new Set(sets.map((s) => s.cardexGroup ?? 'Other')))
     return { groupOrder, sets, placements: data.placements, completedReviews: data.completedReviews }
   }
@@ -1343,8 +1343,8 @@ function NewSetDialog({
     return () => window.removeEventListener('keydown', onKey, true)
   }, [onCancel])
 
-  const isNew = game !== 'pokemon' && group === NEW_CATEGORY
-  const category = game === 'pokemon' ? POKEMON_CUSTOM_GROUP : isNew ? newCategory.trim() : group
+  const isNew = game !== 'pokemon' && game !== 'onepiece' && group === NEW_CATEGORY
+  const category = game === 'pokemon' ? POKEMON_CUSTOM_GROUP : game === 'onepiece' ? 'Special Sets' : isNew ? newCategory.trim() : group
   const taken = isNew && categories.some((c) => c.toLowerCase() === category.toLowerCase())
   const ready = !busy && !!name.trim() && !!category && !taken
   const submit = () => { if (ready) onCreate(name.trim(), category, isNew) }
@@ -1364,8 +1364,8 @@ function NewSetDialog({
           placeholder="e.g. K/DA Couture Collection"
           className="input-field mb-3"
         />
-        {game === 'pokemon' ? (
-          <p className="text-[11px] text-slate-500 mb-3">Shown in the Cardex under {POKEMON_CUSTOM_GROUP}.</p>
+        {game === 'pokemon' || game === 'onepiece' ? (
+          <p className="text-[11px] text-slate-500 mb-3">Shown in the Cardex under {game === 'pokemon' ? POKEMON_CUSTOM_GROUP : 'Special Sets'}.</p>
         ) : (<>
         <label className="block text-xs text-slate-400 mb-1">Cardex category</label>
         <select

@@ -601,52 +601,45 @@ or fuzzy name-matching — see below for why. Cardex integration works like Pok�
 grouped automatically (by set-code prefix here, not a `series` field), no per-set registry
 curation.
 
-### Data Sources
+### Data Sources — TCGplayer primary, apitcg secondary (2026-11-08)
 
-**Card data:** `github.com/apitcg/one-piece-tcg-data` (community-maintained, MIT-shaped exactly
-like `PokemonTCG/pokemon-tcg-data` — one JSON file per set/bucket under `cards/en/`, no API key,
-no rate limit beyond plain GitHub raw-content serving). Every print variant is already a separate
-array entry: a base card `"OP01-024"` and its "Parallel" alt-art reprint(s) `"OP01-024_p1"`,
-`"OP01-024_p2"`, ... share the same `code` but have distinct `id`s. This is also where secret
-rares (`SEC`) and one-off promo cards live — e.g. a special "DODGERS ONE PIECE NIGHT" giveaway
-Leader card shows up here as its own tiny "set" with exactly one card in it, the same way Lorcana's
-tcgcsv-sourced promo groups do.
+**Every One Piece card is one TCGplayer product** (tcgcsv category 68), plus its finish for the 20
+products TCGplayer prices as both Normal and Foil. The link is saved on the card — `tcgProductId`
+(+ `tcgSubType`) — set once, never re-guessed. **apitcg** (`github.com/apitcg/one-piece-tcg-data`)
+supplies names, rarities and set names for its cards, and the version descriptions the secondary
+check compares against. All of it: `scripts/lib/onepiece-tcgplayer.mjs` (pure; tests `npm run
+test:onepiece-source`); `downloadOnePiece()` / `planOnePieceCatalog()` fetch and write.
 
-**Price data:** `tcgcsv.com` category **68**. Unlike the other three games, price matching needs
-**no per-set group-ID bootstrap and no fuzzy set-name matching at all** — tcgcsv's `extNumber`
-column is *literally* the same card code apitcg uses (`"OP01-024"`), so cards match across the
-two sources by an exact string compare, with zero normalization. `downloadOnePiece()`
-(`scripts/lib/catalog-sync.mjs`) just fetches *every* tcgcsv group (there are ~90) and builds one
-global `code -> prices` map, rather than needing to know in advance which TCGPlayer group
-corresponds to which set.
+Why: apitcg stops at OP12 / EB02 / ST28 (3,048 versions) while TCGplayer has ~7,100 products
+(OP13–OP18, EB03–05, ST29–36, every regional / tournament / event promo, starter-deck reprints, SP…)
+— collectors couldn't find those. And the old sync gave apitcg's versions a price + photo **by
+position** (a code's base/_p1/_p2… against its products in productId order), which showed the wrong
+version on ~1 in 9 cards (EB01-006_p3, the Treasure Cup Chopper, showed the $3,000 PRB-01 Manga;
+starter-deck reprints were priced as the original; Uta FILM RED as the plain Uta).
 
-**Phase 3 — synthesizing cards for sets apitcg hasn't scraped yet:** apitcg's GitHub dataset can
-lag real TCGPlayer releases by weeks. When this app first synced One Piece, apitcg's `cards/en/`
-topped out at `op12.json` while OP13 through OP17 (five whole sets, hundreds of cards, including
-one of the game's most famous chase cards — OP13-118's "Red Super Alternate Art" secret-rare
-Luffy) were already selling on TCGPlayer with real prices. Rather than have those sets be
-invisible until apitcg catches up, `downloadOnePiece()` builds minimal card entries directly from
-tcgcsv's own CSV columns (`name`, `extRarity`, `imageUrl`) for any code with priced rows but no
-matching apitcg card — mirroring apitcg's own `id` scheme (base = the bare code, Parallels =
-`_p1`/`_p2`/...) so a synthesized card is indistinguishable from a real one to the rest of the
-app. Same "build catalog cards straight from TCGPlayer data when the primary source doesn't have
-them" pattern `downloadLorcana()`'s own Phase 3 already uses for its TCGPlayer-only promo groups.
-This also needs a set *name* for each synthesized set, which comes from the tcgcsv group's own
-`name` field — matched to a card's code prefix via that group's `abbreviation`, which turned out
-to need real parsing: some groups combine two sets under one abbreviation ("OP15-EB04" — one
-prefix per segment, e.g. `"Adventure on Kami's Island"` for **both** "OP15" and "EB04") or split
-one prefix's number across segments ("ST-31" → "ST31", "EB-03-04" → "EB03" **and** "EB04"). See
-the `groupNameByPrefix` parsing loop in `downloadOnePiece()` for the resulting rule (a pure-letters
-segment sets the "current" prefix for any pure-digits segment that follows it; a segment that's
-already letters+digits registers immediately and becomes the new current prefix).
+**The promise: no card already in the catalog changes anything a collector sees** — not its id,
+name, set, number, rarity or photo. Each existing card keeps the product its photo shows (that's
+how collectors logged it); only its price refreshes, from that product. When TCGplayer has no price
+right now, the card keeps its last one. Verified with `npm run onepiece-source-report` (exits 2 if
+any existing card would change visibly) and `node scripts/check-collection.mjs --all`.
 
-Synthesized sets still need a registry `code` for Cardex's Main-Sets-vs-Special-Sets bucketing
-(see below) — every synthesized card exists only because tcgcsv has a real numbered product group
-for it, which is the functional equivalent of apitcg's official bracket, so `downloadOnePiece()`
-registers each synthesized setName's prefix into the same `setBracketCodes` map real
-bracket-derived sets use (see Set Code Parsing below), letting a genuine OP13-17 set land in Main
-Sets the same as OP01-12 rather than getting stuck in Special Sets for lacking an apitcg bracket
-it was never going to have.
+- **New cards** — every TCGplayer product (+ finish) that isn't a card yet becomes `tcg-{productId}`
+  (`tcg-{productId}-foil` for a second finish). A product in its own product's group (a booster,
+  starter deck, deck set) joins the set that group's cards are already in (else the group's name,
+  cleaned: "ST-29: Starter Deck 29 Egghead" → "Egghead", "Extra Booster: X" → "X"). Products in
+  TCGplayer's promo buckets (`PROMO_POOL`: Promotion Cards, Release Event / Pre-Release Cards,
+  Anniversary Tournament Cards, Demo Deck, Revision Pack, Collection Sets) go through Needs Review,
+  placed in the event their name says ("(Winner Pack 2025 Vol. 1)" → that set; a "[Winner]" placing
+  isn't an event).
+- **New apitcg versions** (apitcg catching up) are linked by description (`linkApitcgVersions()`:
+  its `set.name` against the product's qualifiers + group name; a set's own versions in rarity order
+  — Parallel/Alternate Art, Manga, SP…) — and only added if that product isn't a card already.
+- **Secondary check** — the report lists apitcg versions whose description names a different product
+  than the one the card shows (211 on 2026-11-08). Nothing changes them: which version a collector
+  holds can't be told from here.
+- **Safety** — >10% of TCGplayer groups failing aborts; a failed group's cards are left as they are.
+- **Needs Review** is stored in `registry/onepiece-review` (like Pokémon's — see the Pokémon promo
+  review); the first run accepted the existing backlog (`baseline`).
 
 ### Catalog Schema (`catalog/onepiece/cards/{id}` Firestore doc)
 
@@ -715,15 +708,8 @@ its own `marketPrice`, not as a second price field on the base card. Consequence
   safe for Lorcana but not Riftbound: a catalog number here never has more than one *base* variant
   sharing it (the base/Parallel split lives entirely in separate `id`s, not in `number`).
 
-**The one genuine approximation in this whole integration:** TCGPlayer doesn't tag which product
-row is the "regular" print vs. which numbered Parallel it is — only the product *name* contains
-`"(Parallel)"` (sometimes with more descriptive suffixes like `"(Parallel) (Manga) (Alternate
-Art)"`). `downloadOnePiece()` sorts tcgcsv rows for a given code by `productId` ascending (a
-reasonable proxy for catalog/release order) and matches them **positionally** against apitcg's own
-base/`_p1`/`_p2`/... ordering. Rows with no market data are filtered out first (`price === 0` skip)
-so an unpriced listing can't silently displace a real variant's slot — but this is still an
-approximation, not a verified pairing. If a Parallel's price ever looks applied to the wrong art,
-this positional matching is the place to look.
+**Prices per version** come from each card's own TCGplayer product (`tcgProductId`) — see Data
+Sources above. (Before 2026-11-08 they were paired by position, which was wrong on ~1 in 9 cards.)
 
 ### How New One Piece Sets Are Added
 

@@ -14,6 +14,7 @@ export default function Page() {
         <PlacementsReview game="riftbound" />
         <PlacementsReview game="lorcana" />
         <PlacementsReview game="pokemon" />
+        <PlacementsReview game="onepiece" />
         <div className="max-w-3xl">
           <NeedsReviewCard />
         </div>

@@ -73,6 +73,8 @@ export async function runOnePieceSync(): Promise<Response> {
     const status = {
       ok: true, at: new Date().toISOString(), setCount: result.setNames.length,
       newSets: newNames, newRarities,
+      // TCGplayer promo cards waiting on Needs Review
+      newPlacements: result.newPlacements ?? 0,
       totalBrokenImages: result.totalBrokenImages, newlyBrokenImages: result.newlyBrokenImages, newlyFixedImages: result.newlyFixedImages,
     }
     await recordSyncStatus('onepiece', status)

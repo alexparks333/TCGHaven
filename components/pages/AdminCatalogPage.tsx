@@ -30,12 +30,12 @@ interface SetOption {
 
 // A card whose set and name live in its Needs Review record (every sync rebuilds it from that), so
 // edits go through POST /api/set-registry/placements: Riftbound's and Lorcana's TCGplayer promo
-// cards are all `tcg-` cards; Pokémon's `tcg-` cards also include whole sets and variants built
-// from TCGplayer (synced like any other card), so only the review's carry `fromReview`.
+// cards are all `tcg-` cards; Pokémon's and One Piece's `tcg-` cards also include whole sets and
+// versions built from TCGplayer (synced like any other card), so only the review's carry `fromReview`.
 function isReviewCard(game: string, card: Pick<CatalogCard, 'id' | 'fromReview'>): boolean {
   if (!card.id.startsWith('tcg-')) return false
   if (game === 'riftbound' || game === 'lorcana') return true
-  return game === 'pokemon' && !!card.fromReview
+  return (game === 'pokemon' || game === 'onepiece') && !!card.fromReview
 }
 
 interface CatalogCard {

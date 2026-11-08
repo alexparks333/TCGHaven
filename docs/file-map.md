@@ -43,6 +43,9 @@ TCGHaven/
 │       │                             default printing (§7 Editions & Finishes) — shared with
 │       │                             lib/pricing.ts; tests: `npm run test:variants`
 │       ├── pokemon-jp.mjs         ← Japanese catalog building blocks (§7 Japanese Pokémon)
+│       ├── onepiece-tcgplayer.mjs ← One Piece: every card = a TCGplayer product (`tcgProductId`),
+│       │                             apitcg secondary; existing cards never change (games.md One
+│       │                             Piece) — tests: `npm run test:onepiece-source`
 │       ├── pokemon-tcgplayer.mjs  ← English catalog: TCGplayer primary + GitHub secondary — linking,
 │       │                             variants, new sets, claimed sets, id collisions (games.md
 │       │                             Pokémon) — tests: `npm run test:pokemon-source`

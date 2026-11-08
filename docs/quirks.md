@@ -534,3 +534,12 @@ number-only linking had priced ordinary promos by their [Staff] copies (Charizar
 $121.95) and Wizards promo Pikachu #1 by a Clefable. Before changing the matching, run
 `npm run pokemon-source-report` (read-only) and compare. Pokémon's Needs Review is in
 `registry/pokemon-review`, not registry/main (doc size).
+
+### 35. One Piece: every card is one TCGplayer product — and an existing card never changes what it shows
+
+Since 2026-11-08 each One Piece card carries `tcgProductId` (+ `tcgSubType`): the TCGplayer product it
+is, saved once. The old sync paired prices and photos by position and got ~1 in 9 versions wrong;
+since collectors logged those cards by what they showed, existing cards keep their photo, name and
+set and only reprice from that same product — the right versions were added as new `tcg-` cards,
+and the disagreements are in the report (`npm run onepiece-source-report`). Never "correct" an
+existing card's product in bulk; that changes cards people already logged.

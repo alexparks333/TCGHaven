@@ -31,6 +31,7 @@ import {
 } from './price-history.mjs'
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
+import { buildOnePieceCatalog, productsFromRows as opProductsFromRows } from './onepiece-tcgplayer.mjs'
 import { writeCompressedSnapshot } from './snapshot-codec.mjs'
 import { JP_CATEGORY, JP_CATALOG, isSingleRow, jpCard, jpSetMeta, placeholderDates } from './pokemon-jp.mjs'
 
@@ -406,7 +407,7 @@ export async function loadRegistry() {
 // Same shape as a registry side ({ placements, completedReviews }) plus `baseline`: the promo
 // products the first run found, recorded as accepted by id only (6.5k placements would be ~2 MB).
 // Keep in sync with REVIEW_DOCS in lib/api/review.ts.
-export const REVIEW_DOCS = { pokemon: 'pokemon-review' }
+export const REVIEW_DOCS = { pokemon: 'pokemon-review', onepiece: 'onepiece-review' }
 
 // Saves what a sync found for Needs Review onto the LATEST registry, in a transaction. The sync
 // read the registry when it started — minutes ago — and staff may have decided cards, moved sets
@@ -700,6 +701,7 @@ export async function downloadPokemonJapanese() {
   const all = []
   const sets = []
   const failedGroups = []
+  const sealedIds = new Set() // sealed product: never a card (two old listings get hidden below)
   for (let i = 0; i < groups.length; i += 20) {
     await Promise.all(groups.slice(i, i + 20).map(async (g) => {
       let csv = null
@@ -713,7 +715,8 @@ export async function downloadPokemonJapanese() {
       if (csv === null) { failedGroups.push(g); return }
       const byProduct = new Map()
       for (const row of parseCsv(csv)) {
-        if (!row.productId || !isSingleRow(row)) continue
+        if (!row.productId) continue
+        if (!isSingleRow(row)) { sealedIds.add(`jp-${row.productId}`); continue }
         if (!byProduct.has(row.productId)) byProduct.set(row.productId, [])
         byProduct.get(row.productId).push(row)
       }
@@ -733,7 +736,9 @@ export async function downloadPokemonJapanese() {
   all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
   // No per-sync image HEAD checks: a first sync would HEAD ~30k images. TCGplayer's own
   // imageCount column already says which products have no photo (those get no imageUrl).
-  const result = await syncToFirestore(JP_CATALOG, all, { checkImages: false })
+  // A product an earlier sync took for a card that the sealed-product filter now recognises
+  // ("Glory of Team Rocket Gang Briefcase", "Pikachu's New Friends Collection") is hidden
+  const result = await syncToFirestore(JP_CATALOG, all, { checkImages: false, hideIds: [...sealedIds] })
 
   const metaRef = doc(db, 'catalog_meta', JP_CATALOG)
   const previous = (await getDoc(metaRef)).data()?.sets ?? []
@@ -1881,34 +1886,12 @@ export async function downloadRiftbound() {
 }
 
 // ── One Piece ─────────────────────────────────────────────────────────────────
-// Card data: github.com/apitcg/one-piece-tcg-data (community-maintained, MIT-shaped like
-// PokemonTCG/pokemon-tcg-data — one JSON file per set/bucket in cards/en/, no API key, no rate
-// limit beyond plain GitHub raw-content serving). Each file already includes every print
-// variant as its own entry: a base card "OP01-024" and its "Parallel" alt-art reprint(s)
-// "OP01-024_p1", "OP01-024_p2", ... are separate array entries with the same `code`.
-//
-// Prices: tcgcsv.com category 68. Unlike the other three games, price matching needs no
-// per-set group-ID bootstrap and no fuzzy set-name matching at all — tcgcsv's `extNumber`
-// column is *literally* the same card code apitcg uses ("OP01-024"), so cards match across
-// the two sources by an exact string compare, with zero normalization. There's also no
-// external "sets" list to reconcile against (unlike Pokemon's live api.pokemontcg.io): the
-// registry entries for One Piece are themselves derived from whatever `set.name` values show
-// up in the scraped cards — see app/api/sync/onepiece/route.ts, which backfills new registry
-// entries the same way Riftbound's sync route does (Riftbound has no live sets API either).
-//
-// The one genuine approximation here: TCGPlayer doesn't structurally tag which product row is
-// the "regular" print vs which numbered Parallel it is — only the product *name* contains
-// "(Parallel)" (and occasionally more descriptive suffixes like "(Parallel) (Manga) (Alternate
-// Art)"). Rows for a given code are sorted with non-Parallel-named rows first, then
-// Parallel-named ones, and only *within* those two groups by productId ascending (a reasonable
-// proxy for catalog/release order when nothing else distinguishes multiple Parallels of the same
-// card) — matched positionally to apitcg's own base/_p1/_p2/... ordering. productId ascending
-// alone is NOT reliable as the sole signal: it briefly shipped that way and mispriced OP01-003
-// (Romance Dawn's Leader Luffy) by roughly $950, because its Parallel product happened to get a
-// *lower* productId than its own Normal product on TCGPlayer. The "(Parallel)" text match fixes
-// that specific failure mode; ordering multiple Parallels of the same card among each other still
-// has no better signal than productId — if you ever see a *2nd/3rd* Parallel's price on the
-// wrong print variant, that remaining approximation is the place to look.
+// Primary:   tcgcsv.com category 68 (TCGplayer) — every card is one TCGplayer product (+ finish),
+//            linked by `tcgProductId` saved on the card
+// Secondary: github.com/apitcg/one-piece-tcg-data — names, rarities and set names for its cards,
+//            and the version descriptions the secondary check compares against
+// How the two are put together: scripts/lib/onepiece-tcgplayer.mjs. Existing cards never change
+// what they show (photo, name, set); only prices refresh, from the product they show.
 
 const ONEPIECE_TCGCSV_HEADERS = {
   // tcgcsv blocks disguised browser User-Agents ("Please identify your application") — name the app.
@@ -1917,285 +1900,95 @@ const ONEPIECE_TCGCSV_HEADERS = {
   'Accept': 'text/csv,*/*',
 }
 
-// Shared by parseOnePieceSetName() below and downloadOnePiece()'s Phase 3 (synthesizing cards
-// for sets apitcg hasn't scraped yet, whose only name source is tcgcsv's own group name).
-const titleCase = (s) => s.replace(/\w\S*/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase())
-
-// "-ROMANCE DAWN- [OP01]" -> { code: "OP01", name: "Romance Dawn" } — bracket present, use it.
-// "DODGERS ONE PIECE NIGHT" (a one-off promo "set", no official bracketed code on the official
-// site) -> { code: null, name: "Dodgers One Piece Night" } — caller falls back to the card's own
-// print-numbering prefix in that case (see downloadOnePiece() below), so `set` is never actually
-// empty on a synced card even though this helper can return a null code.
-function parseOnePieceSetName(raw) {
-  const bracketMatch = raw.match(/\[([^\]]+)\]\s*$/)
-  if (!bracketMatch) return { code: null, name: titleCase(raw.trim()) }
-  const code = bracketMatch[1].replace(/[\s-]/g, '').toUpperCase()
-  // Strip runs of dashes AND whitespace together (not whitespace-then-dashes in two separate
-  // passes) — "-ROMANCE DAWN- [OP01]" leaves a trailing "- " (dash, then the space that was
-  // between it and the bracket) after the bracket itself is removed below; stripping dashes
-  // before trimming would miss it, since `-+$` doesn't match with that space still in the way.
-  const name = titleCase(raw.replace(/\[[^\]]+\]\s*$/, '').replace(/^[-\s]+|[-\s]+$/g, '') || raw)
-  return { code, name }
-}
-
-export async function downloadOnePiece() {
-  console.log('\n🏴‍☠️  One Piece...')
-
-  // ── Phase 1: Card data from GitHub ──────────────────────────────────────────
+// apitcg's cards, deduped by id. apitcg repeats cards across files (general.json re-lists all of
+// EB-01), so files are processed in name order and the first copy wins — download order varied.
+async function fetchApitcgOnePiece() {
   const files = await fetchJSON(
     'https://api.github.com/repos/apitcg/one-piece-tcg-data/contents/cards/en',
     githubApiHeaders({ Accept: 'application/vnd.github.v3+json' })
   )
-
-  const all = []
-  // setName -> official bracketed code, or null if this "set" never had one (a promo/event
-  // grouping, not a real product). Kept separate from each card's own `set` field (which DOES
-  // fall back to a print-numbering prefix — see below) because the registry/Cardex grouping
-  // needs to tell "genuinely OP09" apart from "a Treasure Cup promo whose cards just happen to
-  // be numbered from OP09's print run" — conflating the two put dozens of one-off tournament
-  // "sets" in the Cardex's Main Sets group alongside the real numbered boosters. See
-  // app/api/sync/onepiece/route.ts, which reads this map for the registry's `code` field.
-  const setBracketCodes = new Map()
-  // Downloaded in parallel, but processed in file-name order below: apitcg repeats cards across
-  // files (general.json re-lists all of EB-01, 140 ids at once), and a code's variants span files
-  // (EB01-006_p3 is a Treasure Cup promo, _p5 is in prb01.json). Processing in download-finish
-  // order made which duplicate won — and the base/_p1/_p2 price pairing below — change from run
-  // to run, flipping hundreds of prices between syncs.
-  const fileResults = await Promise.all(
-    files.filter((f) => f.name.endsWith('.json')).map(async (file) => {
-      try {
-        return [file.name, await fetchJSON(file.download_url)]
-      } catch (err) {
-        console.warn(`   ⚠️  Skipped ${file.name}: ${err.message}`)
-        return [file.name, []]
+  const results = await Promise.all(files.filter((f) => f.name.endsWith('.json')).map(async (file) => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return [file.name, await fetchJSON(file.download_url)] } catch (err) {
+        if (attempt === 2) { console.warn(`   ⚠️  Skipped ${file.name}: ${err.message}`); return [file.name, []] }
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
       }
-    })
-  )
-  fileResults.sort((a, b) => a[0].localeCompare(b[0]))
-  const seenIds = new Set()
-  for (const [, cards] of fileResults) {
-    for (const c of cards) {
-      if (seenIds.has(c?.id)) continue // same card listed in another file — keep the first
-      if (!c?.name || !c?.code || !c?.images?.large && !c?.images?.small) continue
-      const numMatch = c.code.match(/-(\d+)$/)
-      if (!numMatch) continue // every real card code ends "-<digits>"; skip anything malformed
-      const { code: bracketCode, name: setName } = parseOnePieceSetName(c.set?.name ?? '')
-      if (!setBracketCodes.has(setName)) setBracketCodes.set(setName, bracketCode)
-      all.push({
-        id: c.id,
-        name: c.name,
-        // Prefer the official bracketed set code; a promo "set" with no bracket (e.g. a
-        // one-off tournament giveaway) falls back to the card's own print-numbering prefix,
-        // e.g. "EB02" — that's still meaningful for an individual card (it says which real
-        // print run the card belongs to) and keeps this field non-empty always, no
-        // nullability to thread through the rest of the app the way Riftbound's setCode
-        // never is either. It is NOT what the registry's set-level `code` uses, precisely
-        // because it conflates real sets and promo fallbacks — see setBracketCodes above.
-        set: bracketCode ?? c.code.split('-')[0],
-        setName,
-        number: numMatch[1],
-        rarity: c.rarity ?? '',
-        imageUrl: c.images.large ?? c.images.small,
-        marketPrice: 0,
-        _code: c.code, // scratch field for the price-merge pass below — stripped before sync
-      })
-      seenIds.add(c.id)
+    }
+  }))
+  results.sort((a, b) => a[0].localeCompare(b[0]))
+  const seen = new Set()
+  const cards = []
+  for (const [, list] of results) {
+    for (const c of Array.isArray(list) ? list : []) {
+      if (!c?.id || !c?.code || !c?.name || seen.has(c.id)) continue
+      seen.add(c.id)
+      cards.push(c)
     }
   }
-  console.log(`   ${all.length} cards from GitHub (every print variant counted separately)`)
+  return cards
+}
 
-  // ── Phase 2: Prices from tcgcsv.com (category 68) ──────────────────────────
-  console.log('   Fetching prices from tcgcsv.com...')
-  try {
-    const groupData = await fetchJSON('https://tcgcsv.com/tcgplayer/68/groups', ONEPIECE_TCGCSV_HEADERS)
-    const groups = groupData.results ?? []
-
-    // rowsByCode: code -> [{ productId, marketPrice, imageUrl }], ordered by productId ascending
-    // as they arrive (each group's CSV is already in a stable order; a final sort below is what
-    // matters)
-    const rowsByCode = new Map()
-    const BATCH = 20
-    for (let i = 0; i < groups.length; i += BATCH) {
-      const batch = groups.slice(i, i + BATCH)
-      await Promise.all(
-        batch.map(async (g) => {
-          try {
-            const csv = await fetchText(`https://tcgcsv.com/tcgplayer/68/${g.groupId}/ProductsAndPrices.csv`, ONEPIECE_TCGCSV_HEADERS)
-            const rows = parseCsv(csv)
-            for (const row of rows) {
-              const code = row.extNumber ?? ''
-              if (!code || !/^[A-Z0-9]+-\d+$/.test(code)) continue // skip sealed product (booster boxes etc — no extNumber)
-              const price = parseFloat(row.marketPrice) || parseFloat(row.midPrice) || parseFloat(row.lowPrice) || 0
-              if (price === 0) continue // no listing data at all — would otherwise occupy a
-                                         // positional slot in the base/_p1/_p2/... pairing below
-                                         // and silently zero out a real variant's price
-              const productId = parseInt(row.productId, 10) || 0
-              // Whether TCGPlayer's own product name marks this as the Parallel print — used as
-              // the *primary* sort key below (see the comment there for why productId alone
-              // isn't reliable enough on its own).
-              const isParallel = /\(Parallel\)/i.test(row.name ?? '')
-              if (!rowsByCode.has(code)) rowsByCode.set(code, [])
-              rowsByCode.get(code).push({
-                productId, marketPrice: price, imageUrl: row.imageUrl ?? '', isParallel, groupName: g.name,
-                name: row.name ?? '', rarity: row.extRarity ?? '', // only used by Phase 3 below,
-                                                                    // for codes apitcg never scraped
-              })
-            }
-          } catch {
-            // silently skip groups that fail — cards in them still appear with $0 price
-          }
-        })
-      )
-      process.stdout.write(`   Prices: ${Math.min(i + BATCH, groups.length)}/${groups.length} groups...\r`)
-    }
-    // Primary sort key: whether the product name says "(Parallel)" — a non-Parallel row always
-    // sorts before every Parallel row for the same code, matching apitcg's own base-before-_p1
-    // ordering. productId ascending is only the *secondary* key (to order multiple Parallels
-    // among themselves, where no better signal exists) — it is NOT reliable as the sole signal:
-    // OP01-003 (Romance Dawn's Leader Luffy) had its "(Parallel)" product created on TCGPlayer
-    // with a *lower* productId than its plain "Normal" product, so productId-only sorting paired
-    // the base card with the Parallel's ~$955 price and the Parallel with the base's ~$7 price —
-    // exactly backwards. Caught because it swapped prices on one of the game's most recognizable
-    // chase cards; if you see another price that looks implausibly swapped for a code with
-    // multiple variants, this is the place to check first.
-    for (const rows of rowsByCode.values()) {
-      rows.sort((a, b) => (Number(a.isParallel) - Number(b.isParallel)) || (a.productId - b.productId))
-    }
-
-    // ── Phase 3: synthesize cards for sets tcgcsv has priced but apitcg hasn't scraped yet ────
-    // apitcg's GitHub dataset can lag real TCGPlayer releases by weeks — OP13 through OP17 (five
-    // whole sets, hundreds of cards) were already selling with real tcgcsv prices while apitcg's
-    // cards/en/ directory still topped out at op12.json. Rather than have those sets be entirely
-    // invisible to the catalog until apitcg catches up, build minimal card entries straight from
-    // tcgcsv's own CSV columns (name, extRarity, imageUrl — everything a catalog card needs
-    // except apitcg's flavor-text `ability` field, which nothing in this app reads anyway) for
-    // any code with priced rows but no matching apitcg card at all. Same "build catalog cards
-    // directly from TCGPlayer data when the primary source doesn't have them" pattern
-    // downloadLorcana()'s Phase 3 already uses for its TCGPlayer-only promo groups.
-    const scrapedCodes = new Set(all.map((c) => c._code))
-    // groupId abbreviations are inconsistent about what "-" means: "ST-31" is one prefix split
-    // across two segments ("ST" + "31" -> "ST31"), "OP15-EB04" is two *different*, already-whole
-    // prefixes sharing one combined product/group ("OP15" and "EB04" both -> "Adventure On
-    // Kami's Island"), and "EB-03-04" is one letter-prefix shared across two number segments
-    // ("EB" + "03" -> "EB03", "EB" + "04" -> "EB04"). All three read left-to-right as: a
-    // pure-letters segment sets the "current" letter prefix for any pure-digits segment that
-    // follows it; a segment that's already letters+digits (a whole prefix on its own) registers
-    // immediately AND becomes the new current letter prefix for anything after it.
-    const groupNameByPrefix = new Map()
-    for (const g of groups) {
-      const segments = (g.abbreviation ?? '').split('-').map((s) => s.replace(/\s/g, '').toUpperCase()).filter(Boolean)
-      let currentLetters = ''
-      for (const seg of segments) {
-        if (/^\d+$/.test(seg)) {
-          if (currentLetters && !groupNameByPrefix.has(currentLetters + seg)) {
-            groupNameByPrefix.set(currentLetters + seg, g.name)
-          }
-        } else if (/^[A-Z]+\d+$/.test(seg)) {
-          if (!groupNameByPrefix.has(seg)) groupNameByPrefix.set(seg, g.name)
-          currentLetters = seg.match(/^[A-Z]+/)[0]
-        } else if (/^[A-Z]+$/.test(seg)) {
-          currentLetters = seg
+async function fetchTcgplayerOnePiece() {
+  const groups = (await fetchJSON('https://tcgcsv.com/tcgplayer/68/groups', ONEPIECE_TCGCSV_HEADERS)).results ?? []
+  if (groups.length < 50) throw new Error(`TCGplayer returned ${groups.length} One Piece groups — not syncing against a partial list`)
+  const productsByGroup = new Map()
+  const failedGroupIds = new Set()
+  for (let i = 0; i < groups.length; i += 20) {
+    await Promise.all(groups.slice(i, i + 20).map(async (g) => {
+      let csv = null
+      for (let attempt = 0; attempt < 3 && csv === null; attempt++) {
+        try { csv = await fetchText(`https://tcgcsv.com/tcgplayer/68/${g.groupId}/ProductsAndPrices.csv`, ONEPIECE_TCGCSV_HEADERS) } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
         }
       }
-    }
-    let synthesized = 0
-    for (const [code, rows] of rowsByCode) {
-      if (scrapedCodes.has(code)) continue // apitcg already has this exact card — don't duplicate
-      const prefixMatch = code.match(/^([A-Z0-9]+)-(\d+)$/)
-      if (!prefixMatch) continue
-      const [, prefix, num] = prefixMatch
-      const setName = titleCase(groupNameByPrefix.get(prefix) ?? prefix)
-      // Every synthesized card exists only because tcgcsv has a real numbered TCGPlayer product
-      // group for it — that's the equivalent of apitcg's official bracket (see
-      // parseOnePieceSetName()'s comment above), so it's fair to register it as this setName's
-      // "official" code the same way, letting a genuine OP13-17 set land in Cardex's Main Sets
-      // group once app/api/sync/onepiece/route.ts reads this map for the registry.
-      if (!setBracketCodes.has(setName)) setBracketCodes.set(setName, prefix)
-      rows.forEach((row, i) => {
-        if (!row.name) return
-        // Mirrors apitcg's own id scheme (base "OP13-001", parallels "OP13-001_p1", "_p2", ...)
-        // so this synthesized card is indistinguishable from a real apitcg one to the rest of the
-        // app (search-result "(Parallel)" labeling keys off this exact suffix — see search.ts).
-        // `rows` is already sorted non-Parallel-first, so index 0 is always the base print here,
-        // same as apitcg's own convention, regardless of what TCGPlayer happens to call it.
-        const id = i === 0 ? code : `${code}_p${i}`
-        const cleanName = row.name.replace(/\s*\(\d+\)\s*/g, ' ').replace(/\s*\(Parallel\)\s*/i, ' ').replace(/\s+/g, ' ').trim()
-        all.push({
-          id, name: cleanName || row.name, set: prefix, setName, number: num,
-          rarity: row.rarity, imageUrl: row.imageUrl, marketPrice: row.marketPrice,
-          _code: code,
-        })
-        synthesized++
-      })
-    }
-    if (synthesized > 0) console.log(`   Synthesized ${synthesized} cards from TCGCSV for sets apitcg hasn't scraped yet`)
-
-    // Merge prices: within each code, apitcg's own file-order (base, then _p1, _p2, ...) is
-    // matched positionally against tcgcsv's productId-ascending rows for that same code.
-    //
-    // Also swaps `imageUrl` from the official gallery (en.onepiece-cardgame.com) to TCGPlayer's
-    // own product photo wherever one exists. This isn't a quality preference — the official
-    // site's images always fail to load from any other origin (its CDN sends
-    // `Cross-Origin-Resource-Policy: same-site`, which every browser enforces regardless of a
-    // plain `curl`/server-side fetch succeeding, so a raw HTTP 200 check on that URL is not
-    // evidence it'll render in an `<img>` tag). TCGPlayer's CDN sends no such header. Same
-    // "prefer a TCGPlayer product photo" pattern `downloadRiftbound()` already uses for its
-    // Star/Signature stubs (`imageUrl: p.img || baseCard.imageUrl`) — just applied to every card
-    // here instead of only synthesized ones, since the underlying problem (official-site images
-    // never render for us) applies to all of them, not just the stubs.
-    const byCode = new Map()
-    for (const card of all) {
-      if (!byCode.has(card._code)) byCode.set(card._code, [])
-      byCode.get(card._code).push(card)
-    }
-    // apitcg's own variant order — base, then _p1, _p2, ... by number — never list order.
-    const variantNo = (id) => { const m = String(id).match(/_p(\d+)$/); return m ? parseInt(m[1], 10) : 0 }
-    for (const variants of byCode.values()) variants.sort((a, b) => variantNo(a.id) - variantNo(b.id))
-    // Which TCGplayer row goes to which apitcg variant (scraped codes only — synthesized cards
-    // already took their ids from `rows`' own order in Phase 3, so they keep it). Pure productId
-    // order over every row broke once reprints were parsed correctly — OP01-003's "One Piece Demo
-    // Deck Cards" reprint ($8.89) took the Parallel's slot ($1,023) — and was already wrong
-    // whenever TCGplayer created a Manga product before the Alt Art (OP05-119: _p1 is the Alt Art,
-    // _p2 the Manga, but the Manga has the lower productId). Order instead, the way apitcg numbers
-    // variants: the plain card, then the card's own set's group before reprints elsewhere, and
-    // within that Parallel/Alt Art → Manga → SP/Gold/other specials, then productId.
-    const variantTier = (name) =>
-      /\((SP|Gold|Serial|Pre-?Release|Championship|Winner|Judge|Wanted Poster)\b/i.test(name) ? 3
-      : /Manga/i.test(name) ? 2
-      : /\((Parallel|Alternate Art)\)/i.test(name) ? 1
-      : 0
-    const pairingRows = (code, rows) => {
-      if (!scrapedCodes.has(code)) return rows
-      const home = groupNameByPrefix.get(code.split('-')[0])
-      const order = (a, b) => (Number(a.groupName !== home) - Number(b.groupName !== home))
-        || (variantTier(a.name) - variantTier(b.name)) || (a.productId - b.productId)
-      const sorted = [...rows].sort(order)
-      const base = sorted.find((r) => variantTier(r.name) === 0) ?? sorted[0]
-      return [base, ...sorted.filter((r) => r !== base)]
-    }
-    let priced = 0
-    for (const [code, variants] of byCode) {
-      const rows = rowsByCode.get(code) && pairingRows(code, rowsByCode.get(code))
-      if (!rows) continue
-      variants.forEach((card, i) => {
-        const row = rows[i] ?? rows[rows.length - 1] // more tcgcsv rows than known variants
-                                                       // (e.g. an extra listing style) -> reuse
-                                                       // the last one rather than drop the price
-        if (!row) return
-        if (row.marketPrice > 0) { card.marketPrice = row.marketPrice; priced++ }
-        if (row.imageUrl) card.imageUrl = row.imageUrl
-      })
-    }
-    console.log(`   Prices found for ${priced}/${all.length} cards`)
-  } catch (err) {
-    console.warn(`   ⚠️  Price fetch failed: ${err.message} — catalog saved without prices`)
+      if (csv === null) { failedGroupIds.add(g.groupId); return }
+      productsByGroup.set(g.groupId, opProductsFromRows(parseCsv(csv)))
+    }))
   }
+  if (failedGroupIds.size > groups.length * 0.1) {
+    throw new Error(`${failedGroupIds.size}/${groups.length} TCGplayer One Piece groups failed to download — not syncing a partial catalog`)
+  }
+  return { groups, productsByGroup, failedGroupIds }
+}
 
-  for (const card of all) delete card._code
+/** What a One Piece sync would write, without writing (scripts/onepiece-source-report.mjs uses it too). */
+export async function planOnePieceCatalog() {
+  const [apiCards, tcg, snap] = await Promise.all([
+    fetchApitcgOnePiece(),
+    fetchTcgplayerOnePiece(),
+    getDocs(collection(db, 'catalog', 'onepiece', 'cards')),
+  ])
+  const existing = new Map(snap.docs.map((d) => [d.id, d.data()]))
+  const built = buildOnePieceCatalog({ apiCards, groups: tcg.groups, productsByGroup: tcg.productsByGroup, existing, failedGroupIds: tcg.failedGroupIds })
+  const r = built.report
+  console.log(`   apitcg: ${apiCards.length} versions · TCGplayer: ${tcg.groups.length} groups${tcg.failedGroupIds.size ? ` (${tcg.failedGroupIds.size} failed)` : ''} · ${existing.size} existing cards kept as they are · ${r.newCards} new · ${r.reviewCards} for review · ${r.mismatches.length} set text ≠ photo (reported)`)
+  return { ...built, existing, apiCards, tcg }
+}
 
-  all.sort((a, b) => a.set.localeCompare(b.set) || (parseInt(a.number, 10) - parseInt(b.number, 10)))
-  const result = await syncToFirestore('onepiece', all)
-  return { ...result, setCodesBySetName: Object.fromEntries(setBracketCodes) }
+export async function downloadOnePiece() {
+  console.log('\n🏴‍☠️  One Piece...')
+  const plan = await planOnePieceCatalog()
+
+  // Cards from TCGplayer's promo buckets go through Needs Review (accept / ignore / deny / move)
+  const promoById = new Map()
+  for (const card of plan.cards) {
+    if (!card._review) continue
+    delete card._review
+    promoById.set(card.id, card)
+  }
+  const groupNames = plan.tcg.groups.map((g) => ({ groupId: g.groupId, setName: g.name }))
+  const review = await reviewTcgplayerPromos('onepiece', promoById, groupNames)
+  const reviewed = new Map(review.cards.map((c) => [c.id, { ...c, fromReview: true }]))
+  const cards = plan.cards
+    .filter((c) => !promoById.has(c.id) || reviewed.has(c.id))
+    .map((c) => { const out = reviewed.get(c.id) ?? c; delete out._groupId; return out })
+
+  cards.sort((a, b) => String(a.set ?? '').localeCompare(String(b.set ?? '')) || (parseInt(a.number, 10) - parseInt(b.number, 10)))
+  const result = await syncToFirestore('onepiece', cards, { hideIds: review.hideIds, unhideIds: review.unhideIds })
+  return {
+    ...result, setCodesBySetName: plan.setCodesBySetName, newPlacements: review.newPlacements,
+    sourceReport: { at: new Date().toISOString(), newCards: plan.report.newCards, reviewCards: plan.report.reviewCards, mismatches: plan.report.mismatches.length, lostProducts: plan.report.lostProducts.length },
+  }
 }
 
 // ── Magic: The Gathering ────────────────────────────────────────────────────────
@@ -2233,6 +2026,12 @@ const SCRYFALL_HEADERS = { 'User-Agent': 'TCGHaven/1.0', Accept: 'application/js
 
 export async function downloadMTG() {
   console.log('\n🔮 Magic: The Gathering...')
+  const all = await planMtgCatalog()
+  return syncToFirestore('mtg', all)
+}
+
+/** Scryfall's cards as catalog cards — what an MTG sync writes (scripts/mtg-source-report.mjs uses it too). */
+export async function planMtgCatalog() {
 
   // ── Find and stream-parse the "default_cards" bulk data file ───────────────
   const bulkList = await fetchJSON('https://api.scryfall.com/bulk-data', SCRYFALL_HEADERS)
@@ -2302,5 +2101,5 @@ export async function downloadMTG() {
   console.log(`   ${total} total printings from Scryfall, ${all.length} kept after filtering (excluded digital-only/token/art/memorabilia)${skipped ? `, ${skipped} unparseable line(s) skipped` : ''}`)
 
   all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
-  return syncToFirestore('mtg', all)
+  return all
 }
