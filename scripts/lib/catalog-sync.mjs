@@ -53,6 +53,18 @@ const firebaseApp = getApps().length === 0
 const auth = getAuth(firebaseApp)
 const db = getFirestore(firebaseApp)
 
+// The command-line syncs (npm run download-cards, and the daily MTG job in .github/workflows/
+// sync-mtg.yml) record their result on sync_status/{game} like the website's sync routes do
+// (lib/api/syncStatus.ts recordSyncStatus — same doc, merged), so the staff portal's Sync panel
+// shows a failed nightly run, not just the last good one.
+export async function recordCliSyncStatus(game, status) {
+  try {
+    await setDoc(doc(db, 'sync_status', game), { ...status, at: new Date().toISOString(), via: 'cli' }, { merge: true })
+  } catch (err) {
+    console.warn(`   ⚠️  Couldn't record ${game}'s sync status: ${err.message}`)
+  }
+}
+
 export async function ensureSignedIn() {
   if (auth.currentUser) return
   if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {

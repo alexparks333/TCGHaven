@@ -1,0 +1,55 @@
+name: Sync Magic prices
+
+# Magic's catalog (~102k printings from Scryfall) once a day. It isn't in the 4x/day sync-prices
+# job: a full run takes ~4.5 minutes (Scryfall's ~77MB bulk file + comparing every card), too close
+# to the website's 5-minute function limit, so it runs here instead, as the same command an admin
+# runs locally (`npm run download-cards -- --only mtg`). Only cards whose data changed are written.
+# Cost (2026-11-08 estimate): ~102k Firestore reads + ~40–70k writes a day ≈ $3–6/month on Blaze;
+# GitHub Actions minutes are free at this size. Scryfall asks for its bulk file at most once a day.
+#
+# Setup (one-time): repository secrets ADMIN_EMAIL and ADMIN_PASSWORD (Settings → Secrets and
+# variables → Actions → Secrets) — the staff sync account in .env.local. Store the password as it
+# really is: .env.local escapes a `$` as `\$` (CLAUDE.md quirk 23), a GitHub secret must not. The six
+# NEXT_PUBLIC_FIREBASE_* repository variables the Checks workflow uses are reused.
+#
+# A failed run fails this job (GitHub emails the repo owner) and shows on the staff portal's Sync
+# panel (sync_status/mtg).
+
+on:
+  schedule:
+    # 09:00 UTC — between the 06:00 and 12:00 sync-prices runs
+    - cron: '0 9 * * *'
+  workflow_dispatch: {} # a "Run workflow" button in the Actions tab
+
+concurrency:
+  group: sync-mtg
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the secrets are set
+        run: |
+          if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "::error::Add the ADMIN_EMAIL and ADMIN_PASSWORD repository secrets (see the comment at the top of this file)"
+            exit 1
+          fi
+      - name: Sync Magic
+        run: npm run download-cards -- --only mtg

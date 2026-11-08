@@ -54,7 +54,7 @@ loadEnvLocal()
 // Imported dynamically, AFTER env vars are loaded above — scripts/lib/catalog-sync.mjs reads
 // process.env.NEXT_PUBLIC_FIREBASE_* at module-load time (initializeApp() runs at import time),
 // so a static top-level `import` here would run before loadEnvLocal() ever executed.
-const { ensureSignedIn, downloadPokemon, downloadPokemonJapanese, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG } =
+const { ensureSignedIn, recordCliSyncStatus, downloadPokemon, downloadPokemonJapanese, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG } =
   await import('./lib/catalog-sync.mjs')
 
 const includeMtg = process.argv.includes('--include-mtg')
@@ -74,7 +74,19 @@ const selected = Object.keys(JOBS).filter((g) => (only ? only.has(g) : g !== 'mt
 console.log(`📦 Downloading card catalogs: ${selected.join(', ')}`)
 if (!only && !includeMtg) console.log('   (skipping MTG — pass --include-mtg to include it; see "MTG Integration.md")')
 await ensureSignedIn()
-const results = await Promise.all(selected.map((g) => JOBS[g]()))
-
-console.log(`\n✅ Done. ${selected.map((g, i) => `${results[i].setNames.length} ${g} sets`).join(', ')}.`)
-process.exit(0)
+// Each game's result (or error) is recorded on its sync_status doc; any failure fails the run
+const results = await Promise.allSettled(selected.map(async (g) => {
+  try {
+    const r = await JOBS[g]()
+    await recordCliSyncStatus(g, { ok: true, setCount: r.setNames.length, totalBrokenImages: r.totalBrokenImages, newlyBrokenImages: r.newlyBrokenImages, newlyFixedImages: r.newlyFixedImages })
+    return r
+  } catch (err) {
+    await recordCliSyncStatus(g, { ok: false, error: err.message })
+    throw err
+  }
+}))
+const failed = selected.filter((g, i) => results[i].status === 'rejected')
+for (const g of failed) console.error(`\n❌ ${g} failed: ${results[selected.indexOf(g)].reason?.message}`)
+const done = selected.filter((g, i) => results[i].status === 'fulfilled')
+if (done.length) console.log(`\n✅ Done. ${done.map((g) => `${results[selected.indexOf(g)].value.setNames.length} ${g} sets`).join(', ')}.`)
+process.exit(failed.length ? 1 : 0)

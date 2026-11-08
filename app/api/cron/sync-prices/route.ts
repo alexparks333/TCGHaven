@@ -25,6 +25,8 @@ export const dynamic = 'force-dynamic'
 // fresh as its last successful run, same as if the cron hadn't fired for it at all.
 export const maxDuration = 300
 
+// MTG's daily price sync runs in its own GitHub Actions job (.github/workflows/sync-mtg.yml, since
+// 2026-11-08 — a full run takes ~4.5 minutes, too close to this route's 5-minute budget). History:
 // MTG's full catalog sync is deliberately NOT wired into this automatic cron — its first sync
 // alone writes ~99,000 Firestore documents (its "default_cards" catalog is far bigger than any
 // other game here), which can blow through a Firebase Spark (free) plan's 20k writes/day quota

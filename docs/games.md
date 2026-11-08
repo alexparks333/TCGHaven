@@ -881,6 +881,18 @@ fallback (no `apiId`, i.e. a manually-typed card) uses the same safe `set === se
 === number` shape Pokemon/Lorcana already use — see quirk #9's reasoning, which applies here for
 the same reason.
 
+### Daily price sync (2026-11-08)
+
+Magic syncs once a day in its own GitHub Actions job, `.github/workflows/sync-mtg.yml` (09:00 UTC),
+running `npm run download-cards -- --only mtg` — not in the 4×/day sync-prices cron: a full run takes
+~4.5 minutes (Scryfall's ~77MB bulk file + comparing ~102k cards), too close to the website's
+5-minute limit. Needs the ADMIN_EMAIL / ADMIN_PASSWORD repository secrets. Cost estimate: ~102k
+Firestore reads + ~40–70k writes a day ≈ $3–6/month. Before it, prices only updated when someone
+clicked Sync (on 2026-11-08 they were 10 days old: 68,811 of 101,518 cards had moved).
+`node scripts/mtg-source-report.mjs` shows what a run would write, read-only. Command-line syncs
+record their result on `sync_status/{game}` (`recordCliSyncStatus()`), so a failed night shows on
+the staff portal's Sync panel.
+
 ### How New MTG Sets Are Added
 
 New sets appear on Scryfall's live `/sets` endpoint automatically, same day Wizards spoils them —

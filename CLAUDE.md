@@ -31,7 +31,7 @@ npm run dev            # port 3000, hot reload (scripts/dev.mjs — works on Mac
 npm run build && npm run start   # production on 3000; rebuild after any CODE change
 npm run typecheck      # tsc --noEmit — run before trusting a change
 npm run lint
-npm run download-cards # re-sync catalogs into Firestore (MTG only with -- --include-mtg)
+npm run download-cards # re-sync catalogs into Firestore (MTG only with -- --include-mtg; MTG also syncs daily via .github/workflows/sync-mtg.yml)
 npm run check-images -- <game>|all
 npm run test:search / test:snapshot / test:variants / test:pokemon-source / test:onepiece-source
 ```
