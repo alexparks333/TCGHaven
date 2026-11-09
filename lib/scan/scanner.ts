@@ -29,7 +29,7 @@ interface CardScannerPlugin {
   open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string }> }>
   searchResults(opts: { requestId: string; options: TrayOption[] }): Promise<void>
   compare(opts: { scanId: string; imageUrls: string[] }): Promise<{ distances: Array<number | null> }>
-  update(opts: { scanId: string; status: ScanStatus | 'error'; options: TrayOption[]; choice: number; note?: string }): Promise<void>
+  update(opts: { scanId: string; status: ScanStatus | 'error'; options: TrayOption[]; choice: number; note?: string; slab?: ScanSlab | null }): Promise<void>
   addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[] }) => void): Promise<PluginListenerHandle>
   addListener(event: 'searchCards', fn: (e: { requestId: string; query: string }) => void): Promise<PluginListenerHandle>
 }
@@ -159,6 +159,8 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
           options: tray,
           choice: 0,
           note: card.status === 'none' ? 'Not found — try again, flatter and out of the glare' : undefined,
+          // a graded slab: the tray and card sheet draw the card in its slab, grade showing
+          slab: card.slab?.grade ? card.slab : null,
         })
       })
       .catch(() => CardScanner.update({ scanId, status: 'error', options: [], choice: 0, note: 'Couldn’t reach TCGHaven — check your connection' }).catch(() => {}))

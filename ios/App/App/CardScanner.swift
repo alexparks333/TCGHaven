@@ -124,8 +124,13 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         let options = Self.options(call)
         let choice = call.getInt("choice") ?? 0
         let note = call.getString("note")
+        let slabObj = call.getObject("slab")
+        let slab = slabObj.flatMap { o -> SlabGrade? in
+            guard let grade = o["grade"] as? String, !grade.isEmpty else { return nil }
+            return SlabGrade(company: (o["company"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "PSA", grade: grade)
+        }
         DispatchQueue.main.async {
-            self.scanner?.applyResult(scanId: scanId, status: status, options: options, choice: choice, note: note)
+            self.scanner?.applyResult(scanId: scanId, status: status, options: options, choice: choice, note: note, slab: slab)
             call.resolve()
         }
     }
@@ -146,6 +151,7 @@ final class ScanItem {
     let id: String
     let thumbnail: UIImage           // the scanned card, small — shown until the catalog photo loads
     var fromSwap = false             // scanned without the last card leaving: dropped if it's the same card
+    var slab: SlabGrade?             // a graded slab: drawn in its slab, grade showing
     var photo: UIImage?              // the scanned card, bigger — "Your scan" in the card sheet
     var signature: PictureMatcher.Signature?
     var status = "matching"          // matching | matched | pick | none | error
@@ -1341,9 +1347,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         items.first { $0.id == scanId }?.signature
     }
 
-    func applyResult(scanId: String, status: String, options: [TrayOption], choice: Int, note: String?) {
+    func applyResult(scanId: String, status: String, options: [TrayOption], choice: Int, note: String?, slab: SlabGrade?) {
         guard let index = items.firstIndex(where: { $0.id == scanId }) else { return }
         let item = items[index]
+        item.slab = slab
         // A "swap" that turned out to be the card already scanned: not a second copy
         if item.fromSwap, let key = options.first?.key, !key.isEmpty, items.count > index + 1 {
             let previous = items[index + 1]
@@ -1501,6 +1508,224 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     }
 }
 
+// MARK: - Graded slabs (the same look as the Cardex — CardexPage.tsx SlabTileOverlay / FullSlab)
+
+struct SlabGrade {
+    let company: String
+    let grade: String
+}
+
+/// Label colours roughly matching each grader's real label (CardexPage.tsx SLAB_LABEL)
+enum SlabStyle {
+    static func colors(_ company: String) -> (bg: UIColor, fg: UIColor, accent: UIColor) {
+        func hex(_ h: UInt32) -> UIColor { UIColor(red: CGFloat((h >> 16) & 255) / 255, green: CGFloat((h >> 8) & 255) / 255, blue: CGFloat(h & 255) / 255, alpha: 1) }
+        switch company.uppercased() {
+        case "PSA": return (hex(0xffffff), hex(0x1a1a1a), hex(0xc8102e))
+        case "BGS": return (hex(0xd9dce1), hex(0x111827), hex(0x9a7b2f))
+        case "CGC": return (hex(0x1f3a68), hex(0xffffff), hex(0x8fb3e8))
+        case "SGC": return (hex(0x141414), hex(0xffffff), hex(0xd4af37))
+        case "TAG": return (hex(0x0b0b0b), hex(0xe5e5e5), hex(0x9ca3af))
+        default: return (hex(0x374151), hex(0xffffff), hex(0x9ca3af))
+        }
+    }
+
+    /// The word each grader prints next to the number ("MINT 9", "GEM MT 10") — CardexPage.tsx gradeWord
+    static func word(_ company: String, _ grade: String) -> String {
+        guard let n = Double(grade) else { return grade.uppercased() }
+        if company.uppercased() == "PSA" {
+            let psa: [Double: String] = [10: "GEM MT", 9: "MINT", 8: "NM-MT", 7: "NM", 6: "EX-MT", 5: "EX", 4: "VG-EX", 3: "VG", 2: "GOOD", 1.5: "FR", 1: "PR"]
+            return psa[n] ?? ""
+        }
+        if n >= 10 { return "PRISTINE" }
+        if n >= 9.5 { return "GEM MINT" }
+        if n >= 9 { return "MINT" }
+        if n >= 8 { return "NM-MT" }
+        if n >= 7 { return "NM" }
+        return ""
+    }
+}
+
+/// The tray tile's slab: a clear acrylic rim, and the grade band across the top
+final class SlabTileOverlay: UIView {
+    private let band = UIView()
+    private let company = UILabel()
+    private let grade = UILabel()
+    private let rim = CAShapeLayer()
+    private let sheen = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        sheen.colors = [UIColor(white: 1, alpha: 0.28).cgColor, UIColor(white: 1, alpha: 0).cgColor, UIColor(white: 1, alpha: 0).cgColor, UIColor(white: 1, alpha: 0.14).cgColor]
+        sheen.locations = [0, 0.32, 0.68, 1]
+        sheen.startPoint = CGPoint(x: 0, y: 0); sheen.endPoint = CGPoint(x: 1, y: 1)
+        layer.addSublayer(sheen)
+        rim.fillColor = UIColor.clear.cgColor
+        rim.strokeColor = UIColor(white: 1, alpha: 0.8).cgColor
+        rim.lineWidth = 2
+        layer.addSublayer(rim)
+        company.font = .systemFont(ofSize: 10, weight: .black)
+        grade.font = .systemFont(ofSize: 11, weight: .black)
+        band.layer.cornerRadius = 4
+        band.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        for v in [company, grade] { v.translatesAutoresizingMaskIntoConstraints = false; band.addSubview(v) }
+        band.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(band)
+        NSLayoutConstraint.activate([
+            band.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            band.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            band.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            band.heightAnchor.constraint(equalTo: heightAnchor, multiplier: 0.15),
+            company.leadingAnchor.constraint(equalTo: band.leadingAnchor, constant: 5),
+            company.centerYAnchor.constraint(equalTo: band.centerYAnchor),
+            grade.trailingAnchor.constraint(equalTo: band.trailingAnchor, constant: -5),
+            grade.centerYAnchor.constraint(equalTo: band.centerYAnchor),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        sheen.frame = bounds
+        rim.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), cornerRadius: 5).cgPath
+        band.layoutIfNeeded()
+        band.layer.sublayers?.first { $0.name == "accent" }?.frame = CGRect(x: 0, y: band.bounds.height - 2, width: band.bounds.width, height: 2)
+    }
+
+    func show(_ slab: SlabGrade) {
+        let c = SlabStyle.colors(slab.company)
+        band.backgroundColor = c.bg.withAlphaComponent(0.92)
+        band.layer.borderColor = c.accent.cgColor
+        band.layer.borderWidth = 0
+        company.text = slab.company.uppercased()
+        company.textColor = c.accent
+        grade.text = slab.grade
+        grade.textColor = c.fg
+        let bottom = band.layer.sublayers?.first { $0.name == "accent" } ?? {
+            let l = CALayer(); l.name = "accent"; band.layer.addSublayer(l); return l
+        }()
+        bottom.backgroundColor = c.accent.cgColor
+        bottom.frame = CGRect(x: 0, y: band.bounds.height - 2, width: band.bounds.width, height: 2)
+        setNeedsLayout()
+    }
+}
+
+/// The card sheet's slab: the whole graded case — clear acrylic shell, the grader's label with the
+/// big grade number, and the card in its window below
+final class FullSlabView: UIView {
+    let cardWindow = UIView()
+    private let label = UIView()
+    private let setLine = UILabel()
+    private let nameLine = UILabel()
+    private let badge = PaddedLabel()
+    private let numberLine = UILabel()
+    private let word = UILabel()
+    private let grade = UILabel()
+    private let barcode = UIStackView()
+    private let shell = CAGradientLayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        layer.cornerRadius = 18
+        clipsToBounds = true
+        shell.colors = [UIColor(red: 0.92, green: 0.96, blue: 1, alpha: 0.20).cgColor, UIColor(red: 0.86, green: 0.91, blue: 0.96, alpha: 0.07).cgColor,
+                        UIColor(red: 0.86, green: 0.91, blue: 0.96, alpha: 0.04).cgColor, UIColor(red: 0.92, green: 0.96, blue: 1, alpha: 0.15).cgColor]
+        shell.locations = [0, 0.32, 0.68, 1]
+        shell.startPoint = CGPoint(x: 0.2, y: 0); shell.endPoint = CGPoint(x: 0.8, y: 1)
+        layer.addSublayer(shell)
+        layer.borderWidth = 2
+        layer.borderColor = UIColor(white: 1, alpha: 0.75).cgColor
+
+        label.layer.cornerRadius = 6
+        label.clipsToBounds = true
+        label.layer.borderWidth = 2
+        setLine.font = .systemFont(ofSize: 10, weight: .semibold)
+        nameLine.font = .systemFont(ofSize: 14, weight: .heavy)
+        nameLine.adjustsFontSizeToFitWidth = true
+        nameLine.minimumScaleFactor = 0.6
+        badge.font = .italicSystemFont(ofSize: 11)
+        badge.font = UIFont(descriptor: UIFont.systemFont(ofSize: 11, weight: .black).fontDescriptor.withSymbolicTraits(.traitItalic) ?? UIFont.systemFont(ofSize: 11).fontDescriptor, size: 11)
+        badge.insets = UIEdgeInsets(top: 1, left: 4, bottom: 1, right: 4)
+        badge.layer.cornerRadius = 2
+        badge.clipsToBounds = true
+        numberLine.font = .systemFont(ofSize: 10, weight: .semibold)
+        word.font = .systemFont(ofSize: 11, weight: .heavy)
+        word.textAlignment = .right
+        grade.font = .systemFont(ofSize: 40, weight: .black)
+        grade.textAlignment = .right
+        barcode.axis = .horizontal
+        barcode.spacing = 1
+        barcode.alignment = .fill
+
+        let badgeRow = UIStackView(arrangedSubviews: [badge, numberLine])
+        badgeRow.spacing = 6
+        badgeRow.alignment = .center
+        let left = UIStackView(arrangedSubviews: [setLine, nameLine, badgeRow])
+        left.axis = .vertical
+        left.spacing = 2
+        left.alignment = .leading
+        let right = UIStackView(arrangedSubviews: [word, grade, barcode])
+        right.axis = .vertical
+        right.alignment = .trailing
+        right.spacing = 0
+        for v in [left, right] { v.translatesAutoresizingMaskIntoConstraints = false; label.addSubview(v) }
+
+        cardWindow.layer.cornerRadius = 8
+        cardWindow.layer.borderWidth = 1
+        cardWindow.layer.borderColor = UIColor(white: 1, alpha: 0.45).cgColor
+        cardWindow.backgroundColor = UIColor(red: 0.78, green: 0.84, blue: 0.91, alpha: 0.05)
+        for v in [label, cardWindow] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            label.heightAnchor.constraint(equalTo: heightAnchor, multiplier: 0.17),
+            left.leadingAnchor.constraint(equalTo: label.leadingAnchor, constant: 10),
+            left.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+            left.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -6),
+            right.trailingAnchor.constraint(equalTo: label.trailingAnchor, constant: -10),
+            right.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+            barcode.heightAnchor.constraint(equalToConstant: 7),
+            cardWindow.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 10),
+            cardWindow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            cardWindow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            cardWindow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
+        ])
+        right.setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        shell.frame = bounds
+    }
+
+    func show(_ slab: SlabGrade, name: String, number: String, setName: String) {
+        let c = SlabStyle.colors(slab.company)
+        label.backgroundColor = c.bg
+        label.layer.borderColor = c.accent.cgColor
+        for l in [setLine, nameLine, numberLine, word, grade] { l.textColor = c.fg }
+        setLine.alpha = 0.7; numberLine.alpha = 0.7
+        setLine.text = setName.uppercased()
+        nameLine.text = name.uppercased()
+        badge.text = slab.company.uppercased()
+        badge.backgroundColor = c.accent
+        badge.textColor = c.bg
+        numberLine.text = number.isEmpty ? nil : "#\(number)"
+        let w = SlabStyle.word(slab.company, slab.grade)
+        word.text = w.isEmpty ? nil : w
+        word.isHidden = w.isEmpty
+        grade.text = slab.grade
+        barcode.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for bw in [2, 1, 1, 3, 1, 2, 1, 1, 2, 3, 1, 1, 2, 1, 3, 1, 2] {
+            let bar = UIView()
+            bar.backgroundColor = c.fg.withAlphaComponent(0.7)
+            bar.widthAnchor.constraint(equalToConstant: CGFloat(bw)).isActive = true
+            barcode.addArrangedSubview(bar)
+        }
+    }
+}
+
 // MARK: - Card sheet (tap a card in the tray)
 //
 // The card big, like the Cardex shows it, with the scan itself one tap away; the other cards it
@@ -1519,6 +1744,8 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     private let scroll = UIScrollView()
     private let stack = UIStackView()
     private let cardImage = UIImageView()
+    private let slabView = FullSlabView()
+    private let slabCardImage = UIImageView()
     private let viewToggle = UISegmentedControl(items: ["Match", "Your scan"])
     private let statusPill = PaddedLabel()
     private let nameLabel = UILabel()
@@ -1584,8 +1811,19 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         cardImage.layer.cornerRadius = 12
         cardImage.layer.shadowColor = UIColor.black.cgColor
         let imageWrap = UIView()
-        imageWrap.addSubview(cardImage)
+        let host = UIView()   // room for a slab (taller than the card); the plain card sits centred in it
+        host.translatesAutoresizingMaskIntoConstraints = false
+        imageWrap.addSubview(host)
+        host.addSubview(cardImage)
+        host.addSubview(slabView)
         cardImage.translatesAutoresizingMaskIntoConstraints = false
+        slabView.translatesAutoresizingMaskIntoConstraints = false
+        slabCardImage.contentMode = .scaleAspectFit
+        slabCardImage.clipsToBounds = true
+        slabCardImage.layer.cornerRadius = 6
+        slabCardImage.translatesAutoresizingMaskIntoConstraints = false
+        slabView.cardWindow.addSubview(slabCardImage)
+        slabView.isHidden = true
         viewToggle.selectedSegmentIndex = 0
         viewToggle.selectedSegmentTintColor = sheetGold
         viewToggle.setTitleTextAttributes([.foregroundColor: UIColor.black, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)], for: .selected)
@@ -1594,11 +1832,23 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         viewToggle.translatesAutoresizingMaskIntoConstraints = false
         imageWrap.addSubview(viewToggle)
         NSLayoutConstraint.activate([
-            cardImage.topAnchor.constraint(equalTo: imageWrap.topAnchor, constant: 8),
-            cardImage.centerXAnchor.constraint(equalTo: imageWrap.centerXAnchor),
-            cardImage.widthAnchor.constraint(equalTo: imageWrap.widthAnchor, multiplier: 0.62),
+            host.topAnchor.constraint(equalTo: imageWrap.topAnchor, constant: 8),
+            host.centerXAnchor.constraint(equalTo: imageWrap.centerXAnchor),
+            host.widthAnchor.constraint(equalTo: imageWrap.widthAnchor, multiplier: 0.72),
+            host.heightAnchor.constraint(equalTo: host.widthAnchor, multiplier: 1.62),
+            cardImage.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+            cardImage.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+            cardImage.widthAnchor.constraint(equalTo: host.widthAnchor, multiplier: 0.86),
             cardImage.heightAnchor.constraint(equalTo: cardImage.widthAnchor, multiplier: 88.0 / 63.0),
-            viewToggle.topAnchor.constraint(equalTo: cardImage.bottomAnchor, constant: 12),
+            slabView.topAnchor.constraint(equalTo: host.topAnchor),
+            slabView.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            slabView.centerXAnchor.constraint(equalTo: host.centerXAnchor),
+            slabView.widthAnchor.constraint(equalTo: host.widthAnchor),
+            slabCardImage.topAnchor.constraint(equalTo: slabView.cardWindow.topAnchor, constant: 6),
+            slabCardImage.bottomAnchor.constraint(equalTo: slabView.cardWindow.bottomAnchor, constant: -6),
+            slabCardImage.leadingAnchor.constraint(equalTo: slabView.cardWindow.leadingAnchor, constant: 6),
+            slabCardImage.trailingAnchor.constraint(equalTo: slabView.cardWindow.trailingAnchor, constant: -6),
+            viewToggle.topAnchor.constraint(equalTo: host.bottomAnchor, constant: 12),
             viewToggle.centerXAnchor.constraint(equalTo: imageWrap.centerXAnchor),
             viewToggle.widthAnchor.constraint(equalToConstant: 210),
             viewToggle.bottomAnchor.constraint(equalTo: imageWrap.bottomAnchor),
@@ -1755,16 +2005,28 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     }
 
     private func showImage() {
+        let inSlab = item.slab != nil && current != nil && viewToggle.selectedSegmentIndex == 0
+        slabView.isHidden = !inSlab
+        cardImage.isHidden = inSlab
         if viewToggle.selectedSegmentIndex == 1 || current == nil {
             showing = "scan"
             cardImage.image = item.photo ?? item.thumbnail
             if current == nil { viewToggle.selectedSegmentIndex = 1 }
             return
         }
-        guard let url = current?.imageUrl, showing != url else { return }
-        showing = url
-        cardImage.image = item.photo ?? item.thumbnail
-        PictureMatcher.loadImage(url, into: cardImage) { [weak self] in self?.showing == url && self?.viewToggle.selectedSegmentIndex == 0 }
+        guard let o = current else { return }
+        // A graded card: shown in its slab — label, company, and the grade big
+        if let slab = item.slab {
+            let parts = o.subtitle.components(separatedBy: " · ")
+            let number = parts.first { $0.hasPrefix("#") }.map { String($0.dropFirst()) } ?? ""
+            slabView.show(slab, name: o.title, number: number, setName: parts.first ?? "")
+        }
+        let target = inSlab ? slabCardImage : cardImage
+        guard showing != o.imageUrl + (inSlab ? "|slab" : "") else { return }
+        showing = o.imageUrl + (inSlab ? "|slab" : "")
+        let key = showing
+        target.image = item.photo ?? item.thumbnail
+        PictureMatcher.loadImage(o.imageUrl, into: target) { [weak self] in self?.showing == key && self?.viewToggle.selectedSegmentIndex == 0 }
     }
 
     @objc private func toggleView() { showing = ""; showImage() }
@@ -1884,6 +2146,7 @@ final class TrayCell: UICollectionViewCell {
     private let badge = UILabel()
     private let spinner = UIActivityIndicatorView(style: .medium)
     private var showing: String?
+    private let slabOverlay = SlabTileOverlay()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1901,10 +2164,17 @@ final class TrayCell: UICollectionViewCell {
         badge.layer.cornerRadius = 11
         badge.clipsToBounds = true
         spinner.color = .white
-        for v in [image, name, price, badge, spinner] as [UIView] {
+        for v in [image, slabOverlay, name, price, badge, spinner] as [UIView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(v)
         }
+        slabOverlay.isHidden = true
+        NSLayoutConstraint.activate([
+            slabOverlay.topAnchor.constraint(equalTo: image.topAnchor),
+            slabOverlay.leadingAnchor.constraint(equalTo: image.leadingAnchor),
+            slabOverlay.trailingAnchor.constraint(equalTo: image.trailingAnchor),
+            slabOverlay.bottomAnchor.constraint(equalTo: image.bottomAnchor),
+        ])
         NSLayoutConstraint.activate([
             image.topAnchor.constraint(equalTo: contentView.topAnchor),
             image.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -1915,7 +2185,7 @@ final class TrayCell: UICollectionViewCell {
             name.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             price.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 1),
             price.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            badge.topAnchor.constraint(equalTo: image.topAnchor, constant: 4),
+            badge.bottomAnchor.constraint(equalTo: image.bottomAnchor, constant: -4),
             badge.trailingAnchor.constraint(equalTo: image.trailingAnchor, constant: -4),
             badge.widthAnchor.constraint(equalToConstant: 22),
             badge.heightAnchor.constraint(equalToConstant: 22),
@@ -1935,6 +2205,13 @@ final class TrayCell: UICollectionViewCell {
             if let url = option?.imageUrl, !url.isEmpty {
                 PictureMatcher.loadImage(url, into: image) { [weak self] in self?.showing == key }
             }
+        }
+        // A graded slab: the card in its slab, grade on top (the status badge moves out of the way)
+        if let slab = item.slab {
+            slabOverlay.isHidden = false
+            slabOverlay.show(slab)
+        } else {
+            slabOverlay.isHidden = true
         }
         name.text = option?.title ?? (item.status == "matching" ? "Matching…" : "Not found")
         price.text = option?.price
