@@ -45,3 +45,18 @@ jobs:
             echo "::error::sync-prices returned $http_code"
             exit 1
           fi
+      # The staff portal's Statistics totals (lib/stats/aggregate.ts): finishes yesterday, refreshes
+      # today. Runs even if the price sync failed — the two don't depend on each other.
+      - name: Call stats endpoint
+        if: always()
+        run: |
+          http_code=$(curl -sS -o stats.json -w "%{http_code}" \
+            -X POST "$PROD_URL/api/cron/stats" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            --max-time 280)
+          echo "HTTP status: $http_code"
+          cat stats.json
+          if [ "$http_code" != "200" ]; then
+            echo "::error::stats returned $http_code"
+            exit 1
+          fi

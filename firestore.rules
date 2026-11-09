@@ -70,6 +70,45 @@ service cloud.firestore {
       }
     }
 
+    // ── Usage statistics (lib/usage.ts, lib/stats/aggregate.ts) ──────────────────────────────
+    // The sync bot account that runs the server jobs, including the nightly Statistics totals.
+    function isBot() { return signedIn() && request.auth.uid == 'yahGroB7ebaSebrsnAIRhooKVdk1'; }
+
+    // One doc per account per day, written by that account's own app (increments only). NOBODY
+    // reads them but the totals job — not staff, not the Owner: staff see daily totals only.
+    match /usage_days/{id} {
+      allow create, update: if signedIn() && notBanned()
+        && id == request.resource.data.day + '_' + request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.day is string && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['uid', 'day', 'seconds', 'sessions', 'app', 'web', 'pages', 'visits', 'updatedAt']);
+      allow read, delete: if isBot();
+      // Deleting your account removes your own days (by id — you still can't read them)
+      allow delete: if signedIn() && id.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}_' + request.auth.uid + '$');
+    }
+
+    // Each account's counts-only summary (cards per game, graded counts, friends, badges, first and
+    // last day used) — worked out on the device; never card names, prices or what was paid. Written
+    // by its own account; read only by the totals job.
+    match /user_stats/{uid} {
+      allow create, update: if signedIn() && request.auth.uid == uid && notBanned()
+        && request.resource.data.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'cards', 'sold', 'friends', 'badgesEarned', 'firstDay', 'lastDay', 'platform', 'updatedAt']);
+      allow delete: if signedIn() && request.auth.uid == uid;
+      allow read: if isBot();
+    }
+
+    // The daily totals the staff portal's Statistics page reads. Written by the totals job.
+    match /stats_daily/{day} {
+      allow read: if isAdmin();
+      allow write: if isBot();
+    }
+
+    // Finances — the Owner only (the staff portal's Finances page: costs, and later revenue).
+    match /finance/{doc} {
+      allow read, write: if isOwner();
+    }
+
     // Who's in the staff portal right now (lib/firebase/staff.ts): { lastSeen, page }, written by
     // each staff member's own portal while it's open. Staff can see the team's; the Owner clears
     // a removed member's.

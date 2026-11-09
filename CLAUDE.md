@@ -17,6 +17,7 @@ in that area:**
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
 | The iPhone app (Capacitor: `capacitor.config.ts`, `ios/`), the site↔app bridge (`lib/nativeApp.ts`) — status and plan in `IOSAppDev.md` | `docs/ios-app.md` |
 | The card scanner (`ios/App/App/CardScanner.swift`, `lib/scan/`, `/api/cards/scan`) | `CardScanner.md` |
+| Staff portal Statistics & Finances, usage tracking (`usage_days`, `user_stats`, `stats_daily`) | `docs/insights.md` |
 | Where a file lives | `docs/file-map.md` |
 | The full story behind any gotcha below | `docs/quirks.md` |
 

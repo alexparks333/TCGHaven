@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award, UserCog } from 'lucide-react'
+import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award, UserCog, BarChart3, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { friendlyAuthError } from '@/lib/auth-errors'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -21,7 +21,10 @@ const NAV = [
   { href: '/admin/badges', label: 'Badges', icon: Award, ownerOnly: false },
   { href: '/admin/accounts', label: 'Accounts', icon: UserCog, ownerOnly: false },
   { href: '/admin/team', label: 'Team', icon: Users, ownerOnly: true },
-]
+  // Insights — set apart under a line: what's happening across TCGHaven
+  { href: '/admin/statistics', label: 'Statistics', icon: BarChart3, ownerOnly: false, insights: true },
+  { href: '/admin/finances', label: 'Finances', icon: Wallet, ownerOnly: true, insights: true },
+] as { href: string; label: string; icon: typeof Library; ownerOnly: boolean; insights?: boolean }[]
 
 export function StaffPortal({ children }: { children: React.ReactNode }) {
   return (
@@ -72,19 +75,24 @@ function Shell({ children }: { children: React.ReactNode }) {
           <img src="/logo-text.png" alt="TCGHaven" className="h-7 w-auto object-contain brightness-150" />
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70">Staff Portal</div>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1">
-          {nav.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                isActive(href) ? 'bg-white/15 text-white' : 'text-[#d6c49f] hover:bg-white/10 hover:text-white',
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {nav.map(({ href, label, icon: Icon, insights, ownerOnly }, i) => (
+            <div key={href}>
+              {insights && !nav[i - 1]?.insights && (
+                <div className="mt-4 mb-2 pt-4 border-t border-white/15 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#d6c49f]/60">Insights</div>
               )}
-            >
-              <Icon size={17} />
-              {label}
-            </Link>
+              <Link
+                href={href}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  isActive(href) ? 'bg-white/15 text-white' : 'text-[#d6c49f] hover:bg-white/10 hover:text-white',
+                )}
+              >
+                <Icon size={17} />
+                {label}
+                {insights && ownerOnly && <Lock size={11} className="ml-auto opacity-60" />}
+              </Link>
+            </div>
           ))}
         </nav>
         <div className="px-4 py-4 border-t border-white/10 space-y-3">
@@ -92,7 +100,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             <div className="text-sm font-semibold text-white truncate">{member?.name}</div>
             <div className="text-xs text-[#d6c49f]/70 truncate">{member?.email}</div>
             <div className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-[#ede1c6]">
-              {member?.role === 'owner' ? 'Owner' : 'Staff'}
+              {member?.title ?? (member?.role === 'owner' ? 'Owner' : 'Staff')}
             </div>
           </div>
           <Link href="/" className="flex items-center gap-2 text-xs text-[#d6c49f] hover:text-white">

@@ -9,6 +9,7 @@ import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
 import { CardUnlockToast } from '@/components/CardUnlockToast'
 import { PriceAutoUpdater } from '@/components/PriceAutoUpdater'
+import { UsageTracker } from '@/components/UsageTracker'
 import { FriendsProvider } from '@/components/friends/FriendsProvider'
 import { FriendsDialog } from '@/components/friends/FriendsDialog'
 import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
@@ -66,6 +67,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         </div>
         <CardUnlockToast />
         <PriceAutoUpdater />
+        <UsageTracker />
         <FriendsDialog />
         <FriendRequestToast />
         {/* Local dev server only — compiled out of production builds (NODE_ENV is fixed at build time) */}

@@ -8,7 +8,7 @@ import Link from 'next/link'
 export const metadata: Metadata = { title: 'Privacy Policy · TCGHaven' }
 
 const CONTACT_EMAIL = 'support@tcghaven.org'
-const UPDATED = 'November 4, 2026'
+const UPDATED = 'November 9, 2026'
 
 export default function Page() {
   return (
@@ -49,16 +49,31 @@ export default function Page() {
           Links to stores such as eBay open their own sites, under their own privacy policies.
         </Section>
 
+        <Section title="Usage statistics">
+          To understand how TCGHaven is used and make it better, the app records a little about how
+          it’s used — never what’s in your collection:
+          <ul className="list-disc pl-5 space-y-1.5 mt-2">
+            <li><b className="text-ink">Activity:</b> for each day you use TCGHaven, how long it was open and in use, how many times you opened it, which parts you used (such as Portfolio or Cardex), and whether it was the iPhone app or the website. Kept for 90 days, then deleted.</li>
+            <li><b className="text-ink">Account summary:</b> counts worked out on your device — how many cards you have per game, how many are graded (and by which company), Japanese or foil, how many you’ve sold, your number of friends and badges, and the first and last day you used the app. No card names, prices or what you paid.</li>
+          </ul>
+          <p className="mt-2">
+            These are only ever combined into totals across everyone (for example “12,000 Pokémon cards
+            were added this week”). Our team sees those totals — not your activity or your summary on
+            their own. This isn’t used for advertising, isn’t sold, and isn’t shared with anyone else.
+            Deleting your account deletes it.
+          </p>
+        </Section>
+
         <Section title="On your device">
           The app keeps a copy of your collection and some settings in your browser or the app’s
           storage, so it opens quickly. This is cleared when you sign out or delete your account.
-          We don’t use advertising or analytics cookies.
+          We don’t use advertising or third-party analytics cookies.
         </Section>
 
         <Section title="Deleting your account">
           Open your profile, tap the ⚙️ Settings, then <b className="text-ink">Delete account</b>. This
           permanently deletes your collection, sold cards, collections, profile, username, badges,
-          friends and sign-in. It can’t be undone.
+          friends, usage statistics and sign-in. It can’t be undone.
         </Section>
 
         <Section title="Children">

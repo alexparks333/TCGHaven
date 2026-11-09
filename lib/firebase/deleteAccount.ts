@@ -109,7 +109,13 @@ export async function deleteAccount(user: User, onStep: (s: DeleteStep) => void)
   onStep('account')
   // The shared copies again, right before the sign-in goes: the app keeps them up to date in the
   // background, and one written in the last moments would otherwise be left behind for good.
-  await deleteRefs([doc(db, 'shared_cardex', uid), doc(db, 'shared_badges', uid)])
+  // Also the usage summary and the last 91 days of activity (lib/usage.ts — the app can't list
+  // its own activity docs, so each day's id is deleted; a day with none is simply a no-op).
+  const days = Array.from({ length: 92 }, (_, i) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10))
+  await deleteRefs([
+    doc(db, 'shared_cardex', uid), doc(db, 'shared_badges', uid), doc(db, 'user_stats', uid),
+    ...days.map((d) => doc(db, 'usage_days', `${d}_${uid}`)),
+  ])
   await deleteUser(auth.currentUser ?? user)
   // This device's copies kept per account (badges, prices, seen requests — keys carry the uid).
   // The inventory copy is cleared by AuthProvider when the sign-in ends.
