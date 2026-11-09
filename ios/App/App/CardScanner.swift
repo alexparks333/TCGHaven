@@ -389,6 +389,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private var readingLines: [[[String: Any]]] = []
     private var readingImage: CGImage?
     private var readingStarted: CFTimeInterval = 0
+    private var readingQuad: [CGPoint]?       // where the card was found for this read
     // waiting for the next card
     private var lastScanCenter = CGPoint.zero
     private var lastScanSignature: PictureMatcher.Signature?
@@ -972,10 +973,15 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
         switch phase {
         case .reading:
-            // More frames of text for the card being read (only while it's still in place)
-            if let q = found, motion < Self.steadyMotion * 2 {
+            // More frames of text for the card being read, while the hands stay still (the motion
+            // sensor — the outline's own jitter made it wait ~1.3 s and give up). Without an
+            // outline, the same part of the frame as the first read.
+            let still = self.motion.deviceMotion.map { m in
+                sqrt(m.rotationRate.x * m.rotationRate.x + m.rotationRate.y * m.rotationRate.y + m.rotationRate.z * m.rotationRate.z) < 0.3
+            } ?? true
+            if still, let q = found ?? readingQuad {
                 readMore(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: q, now: now)
-            } else if now - readingStarted > 1.2 {
+            } else if now - readingStarted > 0.8 {
                 finishReading()
             }
             showOutline(present ? smoothQuad : nil, imageSize: imageSize, ring: 1, locked: true)
@@ -1066,14 +1072,27 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
     private func beginReading(_ frame: CIImage, quad: [CGPoint]?, imageSize: CGSize, now: CFTimeInterval) {
         let flat: CGImage?
+        var usedQuad: [CGPoint]?
         if let q = quad {
             flat = refined(frame, around: q) ?? flatten(frame, quad: q)
         } else {
-            let e = frame.extent
-            let h = e.height * 0.6, w = h * 63 / 88
-            let crop = frame.cropped(to: CGRect(x: e.midX - w / 2, y: e.midY - h / 2, width: w, height: h))
-            flat = ciContext.createCGImage(crop, from: crop.extent)
+            // The shutter with no outline: look for the card (or slab) in the middle of the frame,
+            // and only fall back to a fixed card-shaped crop when nothing is found
+            let found = centerCard(frame)
+            usedQuad = found
+            if let q = found {
+                flat = flatten(frame, quad: q)
+            } else {
+                let e = frame.extent
+                let h = e.height * 0.6, w = h * 63 / 88
+                var crop = frame.cropped(to: CGRect(x: e.midX - w / 2, y: e.midY - h / 2, width: w, height: h))
+                crop = crop.transformed(by: CGAffineTransform(translationX: -crop.extent.minX, y: -crop.extent.minY))
+                let k = min(1, 1400 / crop.extent.height)
+                if k < 1 { crop = crop.transformed(by: CGAffineTransform(scaleX: k, y: k)) }
+                flat = ciContext.createCGImage(crop, from: crop.extent)
+            }
         }
+        readingQuad = quad ?? usedQuad
         guard let card = flat else { return }
         busy = true
         phase = .reading
@@ -1280,6 +1299,25 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let scale = min(1, 1400 / out.extent.height)
         if scale < 1 { out = out.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) }
         return ciContext.createCGImage(out, from: out.extent)
+    }
+
+    /// The shutter with no outline: the biggest card- or slab-shaped outline around the middle of
+    /// the frame (looser than the live detector — the person has told us a card is there)
+    private func centerCard(_ frame: CIImage) -> [CGPoint]? {
+        guard let cg = ciContext.createCGImage(frame.transformed(by: CGAffineTransform(scaleX: 0.4, y: 0.4)), from: frame.transformed(by: CGAffineTransform(scaleX: 0.4, y: 0.4)).extent) else { return nil }
+        let request = VNDetectRectanglesRequest()
+        request.minimumAspectRatio = 0.5
+        request.maximumAspectRatio = 0.9
+        request.minimumSize = 0.15
+        request.quadratureTolerance = 25
+        request.minimumConfidence = 0.3
+        request.maximumObservations = 8
+        try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
+        let best = (request.results ?? []).filter { r in
+            let b = r.boundingBox
+            return b.contains(CGPoint(x: 0.5, y: 0.5)) && b.width * b.height > 0.06
+        }.max { area($0) < area($1) }
+        return best.map { Self.corners($0) }
     }
 
     /// The card inside a crop that has extra around it: the largest card-shaped outline filling

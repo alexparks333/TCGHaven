@@ -124,7 +124,7 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promis
       distances = undefined // no picture check — the text decides, and ties become a pick
     }
   }
-  const { ranked, status } = decide(close, distances)
+  const { ranked, status } = decide(close.map((c) => ({ ...c, trusted: c.why.includes(' label ') })), distances)
   const rest = candidates.filter((c) => !close.includes(c))
   const ordered: Array<ScanMatch & { final?: number; distance?: number | null }> = [...ranked, ...rest]
   return {

@@ -193,11 +193,15 @@ assert.equal(printedName('Mr.3(Galdino) (Alternate Art)'), 'Mr.3(Galdino)', "a n
   assert.equal(r[0].id, 'sfd-193-221')
   assert.ok(r[1].id === 'mtl-684988' && r[0].score - r[1].score < 10, 'the reprint stays close enough that a matching picture means asking')
 }
-// Found by a name many printings share → never added without asking
+// Found by a name many printings share: only the picture can settle it — a near-exact match
+// clearly ahead of the other printings is added; printings that look alike are asked about
 {
   const r = top([L('Forest', 0.04, 0.04)], [mtg])
   assert.ok(r.length === 2 && r.every((c) => !c.exact))
-  assert.equal(decide(r.map((c) => ({ key: c.id, score: c.score, exact: c.exact })), [0.05, 0.6]).status, 'pick')
+  const cands = r.map((c) => ({ key: c.id, score: c.score, exact: c.exact }))
+  assert.equal(decide(cands, [0.05, 0.6]).status, 'matched')
+  assert.equal(decide(cands, [0.05, 0.07]).status, 'pick')
+  assert.equal(decide(cands).status, 'pick')
 }
 // Japanese promo: number against its promo series
 {
@@ -251,6 +255,13 @@ assert.equal(printedName('Mr.3(Galdino) (Alternate Art)'), 'Mr.3(Galdino)', "a n
 assert.equal(decide([{ key: 'a', score: 100, exact: true }, { key: 'b', score: 48, exact: true }], [0.52, 0.8]).status, 'matched')
 // …but a picture that looks like nothing still sends it to the person
 assert.equal(decide([{ key: 'a', score: 100, exact: true }, { key: 'b', score: 48, exact: true }], [0.85, 0.9]).status, 'pick')
+
+// Name only + a near-exact picture, clearly ahead: accepted (a real Squirtle with its number unread)
+assert.equal(decide([{ key: 'a', score: 65, exact: false }, { key: 'b', score: 65, exact: false }], [0.084, 0.6]).status, 'matched')
+// …but name only with an ordinary picture stays a question
+assert.equal(decide([{ key: 'a', score: 65, exact: false }, { key: 'b', score: 65, exact: false }], [0.3, 0.6]).status, 'pick')
+// A grading label isn't overruled by a poor picture (the card cut from the slab can be off)
+assert.equal(decide([{ key: 'a', score: 99, exact: true, trusted: true }], [0.889]).status, 'matched')
 
 // ── Nothing readable → nothing guessed ──
 assert.deepEqual(top([L('the', 0.5)]), [])

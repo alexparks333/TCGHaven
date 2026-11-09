@@ -12,6 +12,7 @@ export interface Scored {
   key: string     // "catalog:id"
   score: number   // text score, 0–100
   exact?: boolean // false = found only by a name several printings share
+  trusted?: boolean // read off a grading label: the picture can't overrule it
 }
 
 export type ScanStatus = 'matched' | 'pick' | 'none'
@@ -51,7 +52,7 @@ export function decide<T extends Scored>(candidates: T[], distances?: Array<numb
   const ranked = candidates.map((c, i) => {
     const d = ds[i]
     let bonus = 0
-    if (d !== null && dmin !== null) {
+    if (d !== null && dmin !== null && !(c.trusted && d > CONFIRMS)) {
       if (known.length === 1) bonus = d <= CONFIRMS ? PICTURE_POINTS / 2 : d >= LOOKS_LIKE_NOTHING ? -15 : 0
       else bonus = trust * PICTURE_POINTS * Math.max(0, 1 - (d - dmin) / PICTURE_GAP)
     }
@@ -64,8 +65,12 @@ export function decide<T extends Scored>(candidates: T[], distances?: Array<numb
   // (2026-11-09) right cards read by number + name scored 0.4–0.67 through toploaders and foil
   const textDecisive = !!first && first.exact !== false && first.score >= 90 && (!second || first.score - second.score >= 15)
   const pictureOk = known.length === 0 || (first?.distance ?? Infinity) <= PICTURE_CONFIRMS
-    || (textDecisive && (first?.distance ?? Infinity) < LOOKS_LIKE_NOTHING + 0.1)
-  if (first && first.exact !== false && pictureOk && first.final >= AUTO_ACCEPT && (!second || first.final - second.final >= MIN_LEAD)) status = 'matched'
+    || (textDecisive && (first?.distance ?? Infinity) < LOOKS_LIKE_NOTHING + 0.1) || !!first?.trusted
+  // Found by name only, but the picture is a near-exact match and clearly the closest: the name
+  // and the picture together name the card (a real Squirtle scored 0.084)
+  const pictureNamesIt = !!first && first.exact === false && (first.distance ?? Infinity) <= 0.2
+    && (!second || first.final - second.final >= MIN_LEAD + 5)
+  if (first && (first.exact !== false || pictureNamesIt) && pictureOk && first.final >= AUTO_ACCEPT && (!second || first.final - second.final >= MIN_LEAD)) status = 'matched'
   else if (first && first.final >= 30) status = 'pick'
   return { ranked, status }
 }
