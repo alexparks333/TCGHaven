@@ -189,16 +189,44 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         )}
       </div>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
-      <div className="px-5 md:px-6 pb-5 flex flex-col md:flex-row gap-5">
+      {/* Phone: identity and the privacy box side by side, the bio full width under them.
+          Desktop: identity above the bio, the right-hand column beside both. */}
+      <div className="px-5 md:px-6 pb-5 grid grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_1fr]">
         {/* Identity */}
-        <div className="min-w-0 flex-1 -mt-12">
+        <div className="min-w-0 -mt-12">
           <div className="flex items-end justify-between gap-3">
             <Avatar seed={profile.uid} name={profile.displayName} photoURL={profile.photoURL} size={96} className="ring-4 ring-slate-900 shadow-lg" />
             {action && <div className="mb-1 md:hidden">{action}</div>}
           </div>
-          <h1 className="text-2xl font-bold text-ink mt-3 leading-tight">{profile.displayName}</h1>
-          <div className="text-sm text-slate-500">@{profile.username}</div>
+          <h1 className="text-xl md:text-2xl font-bold text-ink mt-3 leading-tight break-words">{profile.displayName}</h1>
+          <div className="text-sm text-slate-500 truncate">@{profile.username}</div>
+          {/* On desktop this is the tile beside the privacy box */}
+          {isMe && (
+            <Link href="/friends" className="md:hidden inline-block mt-1 text-sm font-semibold text-slate-400 hover:text-ink">
+              <span className="text-ink font-bold">{friends.length}</span> {friends.length === 1 ? 'Friend' : 'Friends'}
+            </Link>
+          )}
+        </div>
 
+        {/* Right side: your privacy switches, or the friend action */}
+        {isMe ? (
+          <div className="flex gap-3 items-start pl-3 md:pl-5 pt-3 md:pt-4 md:row-span-2">
+            {/* Friend count, in the Friends page's stat-tile style */}
+            <Link
+              href="/friends"
+              className="hidden md:block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 px-3 py-2.5 text-center transition-colors"
+            >
+              <div className="text-xl font-bold leading-none text-ink">{friends.length}</div>
+              <div className="text-[11px] font-semibold text-slate-500 mt-1">{friends.length === 1 ? 'Friend' : 'Friends'}</div>
+            </Link>
+            <PrivacyBox profile={profile} onSaved={onSaved} />
+          </div>
+        ) : action ? (
+          <div className="hidden md:flex items-start pl-5 pt-4 md:row-span-2">{action}</div>
+        ) : null}
+
+        {/* Bio */}
+        <div className="min-w-0 col-span-2 md:col-span-1 md:col-start-1">
           {editing ? (
             <div className="mt-3 max-w-md">
               <textarea
@@ -237,23 +265,6 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           )}
           {error && <div className="text-xs text-red-600 mt-2">{error}</div>}
         </div>
-
-        {/* Right side: your privacy switches, or the friend action */}
-        {isMe ? (
-          <div className="flex gap-3 items-start md:mt-4 shrink-0">
-            {/* Friend count, in the Friends page's stat-tile style */}
-            <Link
-              href="/friends"
-              className="w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 px-3 py-2.5 text-center transition-colors"
-            >
-              <div className="text-xl font-bold leading-none text-ink">{friends.length}</div>
-              <div className="text-[11px] font-semibold text-slate-500 mt-1">{friends.length === 1 ? 'Friend' : 'Friends'}</div>
-            </Link>
-            <PrivacyBox profile={profile} onSaved={onSaved} />
-          </div>
-        ) : action ? (
-          <div className="hidden md:flex items-start pt-4">{action}</div>
-        ) : null}
       </div>
     </section>
   )
@@ -282,12 +293,12 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
   ]
 
   return (
-    <div className="flex-1 md:flex-none md:w-[290px] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
-      <div className="flex items-center gap-1.5 px-1 mb-2">
-        <Eye size={13} className="text-slate-500" />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Public on your Haven</span>
+    <div className="w-[176px] md:w-[290px] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-2 md:p-3">
+      <div className="flex items-center gap-1.5 px-1 mb-1 md:mb-2">
+        <Eye size={13} className="text-slate-500 shrink-0" />
+        <span className="text-[10px] md:text-[11px] font-bold uppercase md:tracking-wider leading-tight text-slate-500">Public on your Haven</span>
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col md:gap-1">
         {rows.map(({ key, icon: Icon, label, hint }) => {
           const on = profile.privacy[key]
           return (
@@ -298,7 +309,7 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
               role="switch"
               aria-checked={on}
               title={hint}
-              className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-slate-800/60 transition-colors text-left"
+              className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5 hover:bg-slate-800/60 transition-colors text-left"
             >
               <Icon size={15} className={on ? 'text-violet-700' : 'text-slate-500'} />
               <span className="text-sm font-semibold text-ink flex-1">{label}</span>
@@ -306,10 +317,10 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
             </button>
           )
         })}
-        <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5" title="Your values and P&L are only ever for you">
+        <div className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5" title="Your values and P&L are only ever for you">
           <TrendingUp size={15} className="text-slate-500" />
           <span className="text-sm font-semibold text-ink flex-1">Portfolio</span>
-          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500"><Lock size={11} />Private</span>
+          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500" aria-label="Private"><Lock size={11} /><span className="hidden md:inline">Private</span></span>
         </div>
       </div>
       {error && <div className="text-[11px] text-red-600 mt-1.5 px-1">{error}</div>}

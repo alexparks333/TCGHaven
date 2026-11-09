@@ -8,6 +8,7 @@ import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RARITY_LABELS_BY_GAME } from '@/lib/utils'
 import { conditionLabel, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
+import { GamePicker } from '@/components/GamePicker'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { ScanReviewDialog } from '@/components/inventory/ScanReviewDialog'
 import { inApp } from '@/lib/nativeApp'
@@ -428,72 +429,48 @@ export default function InventoryPage() {
             <button onClick={() => setSaveError(null)} className="ml-auto text-red-500 hover:text-red-700">✕</button>
           </div>
         )}
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <div>
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
-            <p className="text-slate-400 text-sm mt-0.5">
-              {displayCount} cards
-              {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {canScan && (
-              <button onClick={startScan} className="btn-secondary whitespace-nowrap">
-                <ScanLine size={16} />
-                Scan
+            <div className="flex items-center gap-2 shrink-0">
+              {canScan && (
+                <button onClick={startScan} className="btn-secondary whitespace-nowrap">
+                  <ScanLine size={16} />
+                  Scan
+                </button>
+              )}
+              <button onClick={() => setShowAdd(true)} className="btn-primary whitespace-nowrap">
+                <Plus size={16} />
+                Add Card
               </button>
-            )}
-            <button onClick={() => setShowAdd(true)} className="btn-primary whitespace-nowrap">
-              <Plus size={16} />
-              Add Card
-            </button>
+            </div>
           </div>
+          {/* Its own line under the buttons, so it never gets squeezed into two */}
+          <p className="text-slate-400 text-sm mt-1 whitespace-nowrap">
+            {displayCount} cards
+            {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
+          </p>
         </div>
 
-        {/* Game Tabs — only the games this user tracks, plus a "+" to start tracking another */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {trackedGames.map((game) => {
-            const count = gameCounts[game]
-            const active = activeGame === game
-            return (
-              <div key={game} className="relative group">
-                <button
-                  onClick={() => setActiveGame(game)}
-                  className={cn(
-                    'px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2',
-                    active
-                      ? 'text-ink shadow-lg'
-                      : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
-                  )}
-                  style={
-                    active
-                      ? { backgroundColor: GAME_COLORS[game] + '33', color: GAME_COLORS[game], borderColor: GAME_COLORS[game] + '55', border: '1px solid' }
-                      : {}
-                  }
-                >
-                  {GAME_LABELS[game]}
-                  <span className="text-xs opacity-60">{count}</span>
-                </button>
-                {trackedGames.length > 1 && (
-                  <button
-                    onClick={() => untrackGame(game)}
-                    title={`Stop tracking ${GAME_LABELS[game]} — your cards are kept, just hidden`}
-                    className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-700 text-slate-300 hover:bg-red-500 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X size={10} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-
-          {untrackedGames.length > 0 && (
-            <div className="relative" ref={gamePickerRef}>
+        {/* Game bubbles — only the games this user tracks; the "+" menu adds and removes them */}
+        <GamePicker
+          options={trackedGames.map((game) => ({
+            id: game,
+            label: game === 'mtg' ? 'Magic' : GAME_LABELS[game],
+            color: GAME_COLORS[game],
+            count: gameCounts[game],
+          }))}
+          active={activeGame}
+          onSelect={setActiveGame}
+          trailing={
+            <div className="relative shrink-0" ref={gamePickerRef}>
               <button
                 onClick={() => setShowGamePicker((v) => !v)}
-                title="Track another game"
+                title="Manage games"
+                aria-label="Manage games"
+                aria-expanded={showGamePicker}
                 className={cn(
-                  'h-full min-h-[38px] aspect-square rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
+                  'w-9 h-9 rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
                   showGamePicker
                     ? 'border-slate-400 text-ink'
                     : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'
@@ -502,26 +479,50 @@ export default function InventoryPage() {
                 <Plus size={16} />
               </button>
               {showGamePicker && (
-                <div className="absolute left-0 top-full mt-2 z-30 w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5">
-                  <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
-                  {untrackedGames.map((game) => (
-                    <button
-                      key={game}
-                      onClick={() => trackGame(game)}
-                      className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-ink transition-colors"
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GAME_COLORS[game] }} />
-                        {GAME_LABELS[game]}
+                <div className="absolute right-0 top-full mt-2 z-30 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5">
+                  <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Your games</div>
+                  {trackedGames.map((game) => (
+                    <div key={game} className="flex items-center justify-between gap-2 pl-2.5 pr-1 py-1 text-sm text-slate-300">
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: GAME_COLORS[game] }} />
+                        <span className="truncate">{GAME_LABELS[game]}</span>
                       </span>
-                      {gameCounts[game] > 0 && <span className="text-xs text-slate-500">{gameCounts[game]} cards</span>}
-                    </button>
+                      {trackedGames.length > 1 && (
+                        <button
+                          onClick={() => untrackGame(game)}
+                          title={`Stop tracking ${GAME_LABELS[game]} — your cards are kept, just hidden`}
+                          aria-label={`Stop tracking ${GAME_LABELS[game]}`}
+                          className="shrink-0 p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-100/30 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
                   ))}
+                  {untrackedGames.length > 0 && (
+                    <>
+                      <div className="px-2.5 pt-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
+                      {untrackedGames.map((game) => (
+                        <button
+                          key={game}
+                          onClick={() => trackGame(game)}
+                          className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-800 hover:text-ink transition-colors"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GAME_COLORS[game] }} />
+                            {GAME_LABELS[game]}
+                          </span>
+                          {gameCounts[game] > 0 && <span className="text-xs text-slate-500">{gameCounts[game]} cards</span>}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                  <div className="px-2.5 pt-2 pb-1.5 text-[11px] text-slate-500">Removing a game keeps its cards, just hidden.</div>
                 </div>
               )}
             </div>
-          )}
-        </div>
+          }
+        />
 
         {/* Search + Date filter — search gets its own full-width row on phones */}
         <div className="flex flex-wrap md:flex-nowrap gap-2 mb-4">

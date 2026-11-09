@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { GamePicker } from '@/components/GamePicker'
 import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -47,7 +48,7 @@ type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
 type CatalogGame = BaseGame | 'pokemon-jp'
 const baseGameOf = (g: CatalogGame): BaseGame => (g === 'pokemon-jp' ? 'pokemon' : g)
 const CARDEX_TAB_LABELS: Record<CatalogGame, string> = {
-  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic',
+  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon JP', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic',
 }
 
 interface SetMeta {
@@ -1119,28 +1120,17 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
           </div>
         )}
 
-        {/* Game tabs */}
-        <div className="flex gap-2 mb-6 flex-wrap">
-          {/* Only the games this user tracks (added from Inventory's "+" game picker) */}
-          {[...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const).filter((g) => trackedGames.includes(baseGameOf(g))), ...(readOnly ? [] : ['personal' as const])].map((game) => (
-            <button
-              key={game}
-              onClick={() => switchGame(game)}
-              className={cn(
-                'flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all',
-                activeGame === game
-                  ? 'text-ink shadow-lg'
-                  : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800',
-              )}
-              style={activeGame === game
-                ? { backgroundColor: (game === 'personal' ? '#7a5230' : GAME_COLORS[baseGameOf(game)]) + '33', color: game === 'personal' ? '#7a5230' : GAME_COLORS[baseGameOf(game)], border: `1px solid ${(game === 'personal' ? '#7a5230' : GAME_COLORS[baseGameOf(game)])}55` }
-                : {}}
-            >
-              {game === 'personal' && <FolderHeart size={14} />}
-              {game === 'personal' ? 'Personalized Collections' : CARDEX_TAB_LABELS[game]}
-            </button>
-          ))}
-        </div>
+        {/* Game bubbles — only the games this user tracks (added from Inventory's "+" menu) */}
+        <GamePicker<CatalogGame | 'personal'>
+          options={[
+            ...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const)
+              .filter((g) => trackedGames.includes(baseGameOf(g)))
+              .map((g) => ({ id: g, label: CARDEX_TAB_LABELS[g], color: GAME_COLORS[baseGameOf(g)] })),
+            ...(readOnly ? [] : [{ id: 'personal' as const, label: 'Collections', color: '#7a5230', icon: <FolderHeart size={14} /> }]),
+          ]}
+          active={activeGame}
+          onSelect={switchGame}
+        />
 
         {activeGame === 'personal' ? (
           <PersonalCollectionsView onZoom={openZoom} />
