@@ -1500,21 +1500,38 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         return cell
     }
 
+    /// Tapping a card in the tray: View Card (the card sheet) or Remove Card
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let item = items[indexPath.item]
+        let o = item.options.indices.contains(item.choice) ? item.options[item.choice] : nil
+        let menu = UIAlertController(title: o?.title ?? "Scanned card", message: o?.subtitle, preferredStyle: .actionSheet)
+        menu.addAction(UIAlertAction(title: "View Card", style: .default) { _ in self.openSheet(for: item) })
+        menu.addAction(UIAlertAction(title: "Remove Card", style: .destructive) { _ in self.remove(item) })
+        menu.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let pop = menu.popoverPresentationController, let cell = collectionView.cellForItem(at: indexPath) {
+            pop.sourceView = cell
+            pop.sourceRect = cell.bounds
+        }
+        present(menu, animated: true)
+    }
+
+    private func remove(_ item: ScanItem) {
+        guard let i = items.firstIndex(where: { $0 === item }) else { return }
+        items.remove(at: i)
+        tray.deleteItems(at: [IndexPath(item: i, section: 0)])
+        refreshDone()
+        updateTrayFade()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    private func openSheet(for item: ScanItem) {
         let sheet = CardSheetViewController(item: item, scanner: self)
         sheet.onChange = { [weak self] in
             guard let self = self, let i = self.items.firstIndex(where: { $0 === item }) else { return }
             self.tray.reloadItems(at: [IndexPath(item: i, section: 0)])
             self.refreshDone()
         }
-        sheet.onRemove = { [weak self] in
-            guard let self = self, let i = self.items.firstIndex(where: { $0 === item }) else { return }
-            self.items.remove(at: i)
-            self.tray.deleteItems(at: [IndexPath(item: i, section: 0)])
-            self.refreshDone()
-            self.updateTrayFade()
-        }
+        sheet.onRemove = { [weak self] in self?.remove(item) }
         if let pres = sheet.sheetPresentationController {
             pres.detents = [.large()]
             pres.prefersGrabberVisible = true
