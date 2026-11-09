@@ -10,7 +10,6 @@ import type { PortfolioSort } from '@/lib/firebase/preferences'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
-import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
@@ -430,12 +429,6 @@ export default function PortfolioPage() {
                 </div>
               </div>
             ))}
-          </div>
-          <div className="card-glass p-6 mt-4">
-            {byGame.some((g) => g.value > 0)
-              ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} />
-              : <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>
-            }
           </div>
         </div>
 

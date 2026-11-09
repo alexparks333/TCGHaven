@@ -222,7 +222,6 @@ TCGHaven/
     │                                 Settings (components/friends/SettingsDialog.tsx)
     └── portfolio/
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
-        ├── PortfolioPieChart.tsx   ← Recharts pie chart for portfolio breakdown by game
         └── PortfolioAnalyticsPage.tsx ← app/portfolio/analytics/page.tsx's real component,
                                       dynamic-imported with ssr:false — linked from every
                                       Portfolio stat tile
