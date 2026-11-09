@@ -48,7 +48,7 @@ type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
 type CatalogGame = BaseGame | 'pokemon-jp'
 const baseGameOf = (g: CatalogGame): BaseGame => (g === 'pokemon-jp' ? 'pokemon' : g)
 const CARDEX_TAB_LABELS: Record<CatalogGame, string> = {
-  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon JP', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic',
+  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic',
 }
 
 interface SetMeta {
@@ -1125,8 +1125,8 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
           options={[
             ...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const)
               .filter((g) => trackedGames.includes(baseGameOf(g)))
-              .map((g) => ({ id: g, label: CARDEX_TAB_LABELS[g], color: GAME_COLORS[baseGameOf(g)] })),
-            ...(readOnly ? [] : [{ id: 'personal' as const, label: 'Collections', color: '#7a5230', icon: <FolderHeart size={14} /> }]),
+              .map((g) => ({ id: g, label: CARDEX_TAB_LABELS[g], shortLabel: g === 'pokemon-jp' ? 'Pokémon JP' : undefined, color: GAME_COLORS[baseGameOf(g)] })),
+            ...(readOnly ? [] : [{ id: 'personal' as const, label: 'Personalized Collections', shortLabel: 'Collections', color: '#7a5230', icon: <FolderHeart size={14} /> }]),
           ]}
           active={activeGame}
           onSelect={switchGame}

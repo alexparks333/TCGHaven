@@ -188,7 +188,7 @@ TCGHaven/
 │                                     (same shape as lorcana/route.ts — §11)
 │
 └── components/
-    ├── GamePicker.tsx             ← The one-line, swipeable game bubbles on Inventory and the Cardex
+    ├── GamePicker.tsx             ← The game bubbles on Inventory and the Cardex: one swipeable line on phones, spread out on desktop
     ├── CardUnlockToast.tsx        ← "Card Unlocked" celebration toast, mounted once in
     │                                 ClientWrapper.tsx — see §20's note
     ├── auth/

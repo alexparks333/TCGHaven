@@ -452,25 +452,30 @@ export default function InventoryPage() {
           </p>
         </div>
 
-        {/* Game bubbles — only the games this user tracks; the "+" menu adds and removes them */}
+        {/* Game bubbles — only the games this user tracks. Phone: the "+" menu adds and removes them.
+            Desktop: the "+" adds (shown only while there's a game left to add), a hover × removes. */}
         <GamePicker
           options={trackedGames.map((game) => ({
             id: game,
-            label: game === 'mtg' ? 'Magic' : GAME_LABELS[game],
+            label: GAME_LABELS[game],
+            shortLabel: game === 'mtg' ? 'Magic' : undefined,
             color: GAME_COLORS[game],
             count: gameCounts[game],
+            remove: trackedGames.length > 1
+              ? { title: `Stop tracking ${GAME_LABELS[game]} — your cards are kept, just hidden`, onClick: () => untrackGame(game) }
+              : undefined,
           }))}
           active={activeGame}
           onSelect={setActiveGame}
           trailing={
-            <div className="relative shrink-0" ref={gamePickerRef}>
+            <div className={cn('relative shrink-0', untrackedGames.length === 0 && 'md:hidden')} ref={gamePickerRef}>
               <button
                 onClick={() => setShowGamePicker((v) => !v)}
                 title="Manage games"
                 aria-label="Manage games"
                 aria-expanded={showGamePicker}
                 className={cn(
-                  'w-9 h-9 rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
+                  'w-9 h-9 md:w-[38px] md:h-[38px] rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
                   showGamePicker
                     ? 'border-slate-400 text-ink'
                     : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'
@@ -479,10 +484,10 @@ export default function InventoryPage() {
                 <Plus size={16} />
               </button>
               {showGamePicker && (
-                <div className="absolute right-0 top-full mt-2 z-30 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5">
-                  <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Your games</div>
+                <div className="absolute right-0 md:right-auto md:left-0 top-full mt-2 z-30 w-64 md:w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5">
+                  <div className="md:hidden px-2.5 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Your games</div>
                   {trackedGames.map((game) => (
-                    <div key={game} className="flex items-center justify-between gap-2 pl-2.5 pr-1 py-1 text-sm text-slate-300">
+                    <div key={game} className="md:hidden flex items-center justify-between gap-2 pl-2.5 pr-1 py-1 text-sm text-slate-300">
                       <span className="flex items-center gap-2 min-w-0">
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: GAME_COLORS[game] }} />
                         <span className="truncate">{GAME_LABELS[game]}</span>
@@ -501,7 +506,7 @@ export default function InventoryPage() {
                   ))}
                   {untrackedGames.length > 0 && (
                     <>
-                      <div className="px-2.5 pt-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
+                      <div className="px-2.5 pt-3 md:pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
                       {untrackedGames.map((game) => (
                         <button
                           key={game}
@@ -517,7 +522,7 @@ export default function InventoryPage() {
                       ))}
                     </>
                   )}
-                  <div className="px-2.5 pt-2 pb-1.5 text-[11px] text-slate-500">Removing a game keeps its cards, just hidden.</div>
+                  <div className="md:hidden px-2.5 pt-2 pb-1.5 text-[11px] text-slate-500">Removing a game keeps its cards, just hidden.</div>
                 </div>
               )}
             </div>
