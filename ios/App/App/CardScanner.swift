@@ -145,6 +145,7 @@ struct TrayOption {
 final class ScanItem {
     let id: String
     let thumbnail: UIImage           // the scanned card, small — shown until the catalog photo loads
+    var fromSwap = false             // scanned without the last card leaving: dropped if it's the same card
     var photo: UIImage?              // the scanned card, bigger — "Your scan" in the card sheet
     var signature: PictureMatcher.Signature?
     var status = "matching"          // matching | matched | pick | none | error
@@ -387,6 +388,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private var lastScanSignature: PictureMatcher.Signature?
     private var lastSwapCheckAt: CFTimeInterval = 0
     private var steadySince: CFTimeInterval = 0
+    private var nextIsSwap = false            // the next scan came from a swap in place (no removal)
     // once-a-second numbers for the debug log
     private var statFrames = 0, statFound = 0, statFocusing = 0, statAt: CFTimeInterval = 0
     private var statMotion: [CGFloat] = []
@@ -403,6 +405,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private let torchButton = UIButton(type: .system)
     private let shutterButton = UIButton(type: .custom)
     private let titleLabel = UILabel()
+    private let modeButton = UIButton(type: .system)
+    // Auto scans a card once it's held still; Manual waits for the shutter. Remembered on this phone.
+    private var autoScan = UserDefaults.standard.object(forKey: "scanner.autoScan") as? Bool ?? true
+    private var autoScanOnFrames = true      // the frame queue's copy
     private var tray: UICollectionView!
     private let trayFade = CAGradientLayer()
     private var items: [ScanItem] = []
@@ -527,6 +533,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         roundButton(torchButton, symbol: "flashlight.off.fill", label: "Light")
         torchButton.addTarget(self, action: #selector(torchTapped), for: .touchUpInside)
 
+        modeButton.addTarget(self, action: #selector(modeTapped), for: .touchUpInside)
+        modeButton.accessibilityLabel = "Auto scan"
+        styleModeButton()
+        frameQueue.async { self.autoScanOnFrames = self.autoScanSnapshot }
         titleLabel.text = screenTitle
         titleLabel.textColor = .white
         titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
@@ -602,7 +612,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let trayBackground = UIView()
         trayBackground.backgroundColor = UIColor(white: 0, alpha: 0.6)
 
-        for v in [trayBackground, closeButton, torchButton, titleLabel, hintLabel, activeCard, shutterButton, doneButton, tray!] as [UIView] {
+        for v in [trayBackground, closeButton, torchButton, titleLabel, modeButton, hintLabel, activeCard, shutterButton, doneButton, tray!] as [UIView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
@@ -618,6 +628,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             torchButton.heightAnchor.constraint(equalToConstant: 40),
             titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             titleLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            modeButton.trailingAnchor.constraint(equalTo: torchButton.leadingAnchor, constant: -10),
+            modeButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            modeButton.heightAnchor.constraint(equalToConstant: 34),
             hintLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             hintLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 14),
             hintLabel.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48),
@@ -693,6 +706,33 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         guard !finished else { return }
         finished = true
         dismiss(animated: true) { self.onFinish?(picks) }
+    }
+
+    private var autoScanSnapshot: Bool { autoScan }
+
+    private func styleModeButton() {
+        var c = UIButton.Configuration.filled()
+        c.title = autoScan ? "Auto" : "Manual"
+        c.image = UIImage(systemName: autoScan ? "bolt.fill" : "hand.tap.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold))
+        c.imagePadding = 5
+        c.cornerStyle = .capsule
+        c.baseBackgroundColor = autoScan ? Self.gold : UIColor(white: 0, alpha: 0.45)
+        c.baseForegroundColor = autoScan ? .black : .white
+        c.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
+        c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { a in
+            var b = a; b.font = .systemFont(ofSize: 13, weight: .bold); return b
+        }
+        modeButton.configuration = c
+    }
+
+    @objc private func modeTapped() {
+        autoScan.toggle()
+        UserDefaults.standard.set(autoScan, forKey: "scanner.autoScan")
+        UISelectionFeedbackGenerator().selectionChanged()
+        styleModeButton()
+        let on = autoScan
+        frameQueue.async { self.autoScanOnFrames = on; self.steadiness = 0 }
+        wantHint(on ? "Auto: hold a card still to scan it" : "Manual: press the button to scan", now: true)
     }
 
     @objc private func torchTapped() {
@@ -936,6 +976,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         case .waitingForNext:
             // Ready for the next card once this one is gone — or swapped in place for a different one
             if !present && now - lastSeenAt > Self.goneAfter {
+                nextIsSwap = false
                 phase = .searching
             } else if let q = found {
                 let c = Self.center(q)
@@ -946,8 +987,12 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                     if now - steadySince > 0.7, now - lastSwapCheckAt > 0.6, let last = lastScanSignature {
                         lastSwapCheckAt = now
                         if let flat = flatten(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: q),
-                           let sig = PictureMatcher.signature(of: flat), PictureMatcher.distance(sig, last) > 0.35 {
+                           let sig = PictureMatcher.signature(of: flat), PictureMatcher.distance(sig, last) > 0.65 {
+                            // Same card under different glare measured 0.4–0.6 on the phone — a swap
+                            // has to be clearly different, and is still dropped if it turns out to be
+                            // the same card (applyResult)
                             DebugScans.log("different card in place — scanning it")
+                            nextIsSwap = true
                             phase = .searching
                         }
                     }
@@ -985,9 +1030,11 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         } else if !handsStill {
             steadiness = max(0, steadiness - dt / 0.35)
         }
-        let ready = manualCapture || steadiness >= 1
+        if !autoScanOnFrames { steadiness = 0 }
+        let ready = manualCapture || (autoScanOnFrames && steadiness >= 1)
         showOutline(quad, imageSize: imageSize, ring: steadiness, locked: ready)
-        DispatchQueue.main.async { self.wantHint(focusing ? "Focusing…" : "Hold steady") }
+        let auto = autoScanOnFrames
+        DispatchQueue.main.async { self.wantHint(focusing ? "Focusing…" : auto ? "Hold steady" : "Press the button to scan") }
         guard ready else { return }
 
         manualCapture = false
@@ -1085,6 +1132,8 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let slab = Self.isSlab(merged)
         let cardOnly = slab ? (cardInsideSlab(image) ?? image) : image
         let signature = PictureMatcher.signature(of: cardOnly)
+        let swap = nextIsSwap
+        nextIsSwap = false
         let thumb = Self.thumbnail(image)
         let photo = Self.resized(image, height: 760)
         if slab { DebugScans.log("graded slab — comparing the card inside it (\(cardOnly.width)×\(cardOnly.height))") }
@@ -1097,7 +1146,16 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         ])
 
         DispatchQueue.main.async {
+            // Almost no text: not a card (a bed, a table, a sleeve on its own) — nothing to add
+            let words = merged.reduce(0) { $0 + (($1["text"] as? String)?.count ?? 0) }
+            if merged.count < 3 || words < 15 {
+                DebugScans.log("not a card (\(merged.count) lines, \(words) characters) — ignored")
+                self.endActive(id: id, result: "No card there")
+                self.notify.notificationOccurred(.warning)
+                return
+            }
             let item = ScanItem(id: id, thumbnail: thumb)
+            item.fromSwap = swap
             item.signature = signature
             item.photo = photo
             if merged.isEmpty {
@@ -1274,6 +1332,18 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     func applyResult(scanId: String, status: String, options: [TrayOption], choice: Int, note: String?) {
         guard let index = items.firstIndex(where: { $0.id == scanId }) else { return }
         let item = items[index]
+        // A "swap" that turned out to be the card already scanned: not a second copy
+        if item.fromSwap, let key = options.first?.key, !key.isEmpty, items.count > index + 1 {
+            let previous = items[index + 1]
+            if previous.options.indices.contains(previous.choice), previous.options[previous.choice].key == key {
+                DebugScans.log("same card as the last scan — dropped")
+                items.remove(at: index)
+                tray.deleteItems(at: [IndexPath(item: index, section: 0)])
+                endActive(id: scanId, result: "Same card — take it away to scan another copy")
+                refreshDone()
+                return
+            }
+        }
         item.status = options.isEmpty && status != "error" ? "none" : status
         item.options = options
         item.choice = max(0, min(choice, max(0, options.count - 1)))
