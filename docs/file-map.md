@@ -56,6 +56,10 @@ TCGHaven/
 ├── lib/
 │   ├── accountRoles.ts             ← Account titles (Regular / Premium / Creator / Staff), useAccountRole();
 │   │                                 staff writes in firebase/accountRolesStaff.ts (community-and-badges.md)
+│   ├── usage.ts                    ← Counts-only usage tracking written by each app (docs/insights.md)
+│   ├── stats/aggregate.ts          ← The Statistics totals job (stats_daily); types in stats/types.ts
+│   ├── finance.ts                  ← Finances: the Owner's cost tracker (finance/costs)
+│   ├── premium.ts                  ← Haven Premium prices (premium/config) and promo codes (promo_codes)
 │   ├── scan/                       ← The card scanner's site side (CardScanner.md):
 │   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
 │   │   ├── decide.ts               ←   text score + picture distance → matched / pick / none
@@ -121,6 +125,8 @@ TCGHaven/
 │   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
 │   ├── admin/accounts/page.tsx    ← Staff portal Accounts: give accounts their title (AccountsPage.tsx)
 │   ├── creator/page.tsx           ← Creator Studio (CreatorPage.tsx) — Creators only
+│   ├── admin/statistics, admin/finances, admin/premium ← Insights pages (docs/insights.md)
+│   ├── api/cron/stats, api/admin/stats ← The Statistics totals job (cron secret / staff "Refresh now")
 │   ├── settings/page.tsx          ← Redirects to /profile?settings=1 (Settings is a panel on the
 │   │                                 profile now — see the staff-portal note in §5)
 │   ├── portfolio/
@@ -193,6 +199,8 @@ TCGHaven/
 │
 └── components/
     ├── GamePicker.tsx             ← The game bubbles on Inventory and the Cardex: one swipeable line on phones, spread out on desktop
+    ├── UsageTracker.tsx           ← Feeds Statistics: time, sessions, pages used + a counts-only account summary
+    ├── admin/insights/            ← Staff portal Insights: StatisticsPage, FinancesPage, PremiumPage, charts.tsx
     ├── CardUnlockToast.tsx        ← "Card Unlocked" celebration toast, mounted once in
     │                                 ClientWrapper.tsx — see §20's note
     ├── auth/

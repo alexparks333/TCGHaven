@@ -53,7 +53,8 @@ export function StatisticsPage() {
     } finally { setRefreshing(false) }
   }
 
-  const latest = days?.[days.length - 1]
+  // The newest full snapshot (a day finished before tracking began can hold only its activity)
+  const latest = days ? [...days].reverse().find((d) => d.cards && d.accounts?.total !== undefined) : undefined
   const shown = useMemo(() => (days ?? []).slice(-range), [days, range])
 
   return (
@@ -103,7 +104,7 @@ export function StatisticsPage() {
           Accounts start sending their numbers the first time they open the app after this update.
         </Empty>
       ) : section === 'cards' ? (
-        <CardStats days={shown} latest={latest} range={range} />
+        <CardStats days={shown.filter((d) => d.cards)} latest={latest} range={range} />
       ) : (
         <AppStats days={shown} latest={latest} range={range} />
       )}
