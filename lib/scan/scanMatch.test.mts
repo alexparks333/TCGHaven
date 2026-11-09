@@ -234,6 +234,24 @@ assert.equal(printedName('Mr.3(Galdino) (Alternate Art)'), 'Mr.3(Galdino)', "a n
   assert.equal(readSlabLabel([at('Charizard ex', 0.05, 0.04), at('HP 330', 0.8, 0.04), at('199/165', 0.05, 0.93)]), null)
 }
 
+// Riftbound promo mark: "UNL • 156/219 • P" (a real Loyal Poro Nexus promo, read on the phone)
+{
+  const cat: ScanCatalog = {
+    key: 'riftbound',
+    cards: [
+      { id: 'unl-156-219', name: 'Loyal Poro', number: '156', setCode: 'UNL', setName: 'Unleashed', publicCode: 'UNL-156/219' },
+      { id: 'tcg-1', name: 'Loyal Poro (Nexus Promo)', number: '156', setCode: 'UNLN', setName: 'Unleashed Nexus', publicCode: 'UNL-156/219' },
+    ],
+  }
+  const r = top([L('Loyal Poro', 0.5, 0.04), L('UNL • 156/219 • P', 0.95, 0.012)], [cat])
+  assert.equal(r[0].id, 'tcg-1')
+  assert.equal(top([L('Loyal Poro', 0.5, 0.04), L('UNL • 156/219 • U', 0.95, 0.012)], [cat])[0].id, 'unl-156-219')
+}
+// Real phone scans: number + name clearly ahead, picture only fair (toploader glare) → accepted
+assert.equal(decide([{ key: 'a', score: 100, exact: true }, { key: 'b', score: 48, exact: true }], [0.52, 0.8]).status, 'matched')
+// …but a picture that looks like nothing still sends it to the person
+assert.equal(decide([{ key: 'a', score: 100, exact: true }, { key: 'b', score: 48, exact: true }], [0.85, 0.9]).status, 'pick')
+
 // ── Nothing readable → nothing guessed ──
 assert.deepEqual(top([L('the', 0.5)]), [])
 
@@ -258,8 +276,8 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   assert.equal(decide([{ key: 'x', score: 95 }]).status, 'matched')
   assert.equal(decide([{ key: 'x', score: 45 }]).status, 'pick')
   assert.equal(decide([]).status, 'none')
-  // A clear text winner whose picture doesn't convincingly match → asked, not added
-  assert.equal(decide([{ key: 'x', score: 95 }, { key: 'y', score: 40 }], [0.5, 0.9]).status, 'pick')
+  // A clear text winner whose picture looks like nothing at all → asked, not added
+  assert.equal(decide([{ key: 'x', score: 95 }, { key: 'y', score: 40 }], [0.82, 0.9]).status, 'pick')
 }
 
 console.log('scan matching: all tests passed')

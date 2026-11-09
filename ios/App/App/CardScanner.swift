@@ -24,6 +24,7 @@ import AVFoundation
 import Vision
 import CoreImage
 import Capacitor
+import CoreMotion
 
 // MARK: - Registering the plugin
 
@@ -44,6 +45,7 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "open", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "compare", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "searchResults", returnType: CAPPluginReturnPromise),
     ]
 
     private weak var scanner: ScannerViewController?
@@ -59,6 +61,9 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
             vc.screenTitle = call.getString("title") ?? "Scan cards"
             vc.onScanned = { [weak self] scanId, lines in
                 self?.notifyListeners("cardScanned", data: ["scanId": scanId, "lines": lines])
+            }
+            vc.onSearch = { [weak self] requestId, query in
+                self?.notifyListeners("searchCards", data: ["requestId": requestId, "query": query])
             }
             vc.onFinish = { [weak self] items in
                 self?.scanner = nil
@@ -88,13 +93,11 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// The site's answer for one scanned card: what it is (best first) and how sure.
-    @objc func update(_ call: CAPPluginCall) {
-        let scanId = call.getString("scanId") ?? ""
-        let status = call.getString("status") ?? "none"
-        let options: [TrayOption] = (call.getArray("options") ?? []).compactMap { raw in
+    private static func options(_ call: CAPPluginCall) -> [TrayOption] {
+        (call.getArray("options") ?? []).compactMap { raw in
             guard let o = raw as? JSObject else { return nil }
             return TrayOption(
+                key: o["key"] as? String ?? "",
                 title: o["title"] as? String ?? "",
                 subtitle: o["subtitle"] as? String ?? "",
                 price: o["price"] as? String ?? "",
@@ -102,6 +105,23 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
                 detail: o["detail"] as? String ?? ""
             )
         }
+    }
+
+    /// Cards found by the card sheet's search (the site runs Add Card's search)
+    @objc func searchResults(_ call: CAPPluginCall) {
+        let requestId = call.getString("requestId") ?? ""
+        let options = Self.options(call)
+        DispatchQueue.main.async {
+            self.scanner?.deliverSearch(requestId: requestId, options: options)
+            call.resolve()
+        }
+    }
+
+    /// The site's answer for one scanned card: what it is (best first) and how sure.
+    @objc func update(_ call: CAPPluginCall) {
+        let scanId = call.getString("scanId") ?? ""
+        let status = call.getString("status") ?? "none"
+        let options = Self.options(call)
         let choice = call.getInt("choice") ?? 0
         let note = call.getString("note")
         DispatchQueue.main.async {
@@ -114,6 +134,7 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
 // MARK: - Data
 
 struct TrayOption {
+    let key: String
     let title: String
     let subtitle: String
     let price: String
@@ -124,6 +145,7 @@ struct TrayOption {
 final class ScanItem {
     let id: String
     let thumbnail: UIImage           // the scanned card, small — shown until the catalog photo loads
+    var photo: UIImage?              // the scanned card, bigger — "Your scan" in the card sheet
     var signature: PictureMatcher.Signature?
     var status = "matching"          // matching | matched | pick | none | error
     var options: [TrayOption] = []
@@ -330,6 +352,12 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     var screenTitle = "Scan cards"
     var onScanned: ((String, [[String: Any]]) -> Void)?
     var onFinish: (([[String: Any]]) -> Void)?
+    var onSearch: ((String, String) -> Void)?
+    private var searchWaiting: [String: ([TrayOption]) -> Void] = [:]
+
+    // Phone movement — steadiness is the hands being still (the card outline itself jitters by a
+    // few % between frames even when nothing moves, so it can't be the measure)
+    private let motion = CMMotionManager()
 
     // Camera
     private let session = AVCaptureSession()
@@ -376,6 +404,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private let shutterButton = UIButton(type: .custom)
     private let titleLabel = UILabel()
     private var tray: UICollectionView!
+    private let trayFade = CAGradientLayer()
     private var items: [ScanItem] = []
     private var finished = false
     // The card being worked on right now: its real captured picture, a scan line while work is
@@ -394,7 +423,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     // Tuning — CardScanner.md "Tuning"
     private static let cardAspect: (min: Float, max: Float) = (0.55, 0.9)  // 63 × 88 mm, tilted, sleeved
     private static let steadyMotion: CGFloat = 0.018     // corner movement per frame still counted as steady
-    private static let steadyTime: CGFloat = 0.45        // seconds of steadiness to fill the ring
+    private static let steadyTime: CGFloat = 0.4         // seconds of still hands to fill the ring
     private static let holdOver: CFTimeInterval = 0.35   // keep a lost outline this long (missed frames)
     private static let goneAfter: CFTimeInterval = 0.4   // card gone this long → ready for the next
     private static let maxReadFrames = 3
@@ -427,6 +456,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         for l in [outlineLayer, ringLayer, flashLayer] { view.layer.addSublayer(l) }
 
         buildControls()
+        if motion.isDeviceMotionAvailable {
+            motion.deviceMotionUpdateInterval = 1.0 / 30
+            motion.startDeviceMotionUpdates()
+        }
         notify.prepare()
         tap.prepare()
         checkCameraAccess()
@@ -437,11 +470,44 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         previewLayer.frame = view.bounds
         for l in [outlineLayer, ringLayer, flashLayer] { l.frame = view.bounds }
         activeBeam.frame = CGRect(x: 0, y: -24, width: activeImage.bounds.width, height: 24)
+        updateTrayFade()
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if scrollView === tray { updateTrayFade() }
+    }
+
+    /// Edges fade only where there's more to see: the right while more cards are off to the right,
+    /// the left once scrolled
+    private func updateTrayFade() {
+        guard let tray = tray else { return }
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        trayFade.frame = CGRect(origin: CGPoint(x: tray.contentOffset.x, y: 0), size: tray.bounds.size)
+        let w = max(1, tray.bounds.width), fade: CGFloat = 56 / w
+        let moreRight = tray.contentOffset.x + tray.bounds.width < tray.contentSize.width - 2
+        let moreLeft = tray.contentOffset.x > 2
+        trayFade.colors = [(moreLeft ? UIColor.clear : UIColor.black).cgColor, UIColor.black.cgColor,
+                           UIColor.black.cgColor, (moreRight ? UIColor.clear : UIColor.black).cgColor]
+        trayFade.locations = [0, NSNumber(value: Double(fade)), NSNumber(value: Double(1 - fade)), 1]
+        CATransaction.commit()
+    }
+
+    // MARK: Card sheet search (the site runs the search)
+
+    func search(_ query: String, done: @escaping ([TrayOption]) -> Void) {
+        let id = UUID().uuidString
+        searchWaiting[id] = done
+        onSearch?(id, query)
+    }
+
+    func deliverSearch(requestId: String, options: [TrayOption]) {
+        searchWaiting.removeValue(forKey: requestId)?(options)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         setTorch(on: false)
+        motion.stopDeviceMotionUpdates()
         sessionQueue.async { if self.session.isRunning { self.session.stopRunning() } }
     }
 
@@ -527,6 +593,11 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         tray.dataSource = self
         tray.delegate = self
         tray.register(TrayCell.self, forCellWithReuseIdentifier: "card")
+        // Fade the edges when there are more cards to scroll to
+        trayFade.colors = [UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+        trayFade.startPoint = CGPoint(x: 0, y: 0.5)
+        trayFade.endPoint = CGPoint(x: 1, y: 0.5)
+        tray.layer.mask = trayFade
 
         let trayBackground = UIView()
         trayBackground.backgroundColor = UIColor(white: 0, alpha: 0.6)
@@ -612,7 +683,8 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
     @objc private func doneTapped() {
         let picks = items.filter { $0.status == "matched" || $0.status == "pick" }.reversed().map {
-            ["scanId": $0.id, "choice": $0.choice, "confirmed": $0.confirmed] as [String: Any]
+            ["scanId": $0.id, "choice": $0.choice, "confirmed": $0.confirmed,
+             "key": $0.options.indices.contains($0.choice) ? $0.options[$0.choice].key : ""] as [String: Any]
         }
         finish(with: Array(picks))
     }
@@ -902,10 +974,15 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             return
         }
         let focusing = device?.isAdjustingFocus ?? false
-        if DebugScans.enabled { recordStats(found: found != nil, motion: motion, focusing: focusing, now: now) }
-        if found != nil && motion < Self.steadyMotion && !focusing {
+        // How fast the phone is turning (rad/s); a still hand is well under 0.1
+        let turning = self.motion.deviceMotion.map { m in
+            CGFloat(sqrt(m.rotationRate.x * m.rotationRate.x + m.rotationRate.y * m.rotationRate.y + m.rotationRate.z * m.rotationRate.z))
+        }
+        let handsStill = turning.map { $0 < 0.22 } ?? (motion < Self.steadyMotion * 2)
+        if DebugScans.enabled { recordStats(found: found != nil, motion: turning ?? motion, focusing: focusing, now: now) }
+        if handsStill && !focusing {
             steadiness = min(1, steadiness + dt / Self.steadyTime)
-        } else if found != nil && motion >= Self.steadyMotion * 2 {
+        } else if !handsStill {
             steadiness = max(0, steadiness - dt / 0.35)
         }
         let ready = manualCapture || steadiness >= 1
@@ -925,7 +1002,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         guard now - statAt >= 1 else { return }
         let m = statMotion.sorted()
         let med = m.isEmpty ? -1 : m[m.count / 2]
-        DebugScans.log(String(format: "frames %d, card found %d, focusing %d, motion median %.4f max %.4f, steadiness %.2f, phase %@, tracking %@, zoom %.2f",
+        DebugScans.log(String(format: "frames %d, card found %d, focusing %d, turning median %.4f max %.4f, steadiness %.2f, phase %@, tracking %@, zoom %.2f",
                               statFrames, statFound, statFocusing, med, m.last ?? -1, steadiness, "\(phase)", tracker == nil ? "no" : "yes", device?.videoZoomFactor ?? 0))
         statFrames = 0; statFound = 0; statFocusing = 0; statMotion = []; statAt = now
     }
@@ -935,7 +1012,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private func beginReading(_ frame: CIImage, quad: [CGPoint]?, imageSize: CGSize, now: CFTimeInterval) {
         let flat: CGImage?
         if let q = quad {
-            flat = flatten(frame, quad: q)
+            flat = refined(frame, around: q) ?? flatten(frame, quad: q)
         } else {
             let e = frame.extent
             let h = e.height * 0.6, w = h * 63 / 88
@@ -1009,6 +1086,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let cardOnly = slab ? (cardInsideSlab(image) ?? image) : image
         let signature = PictureMatcher.signature(of: cardOnly)
         let thumb = Self.thumbnail(image)
+        let photo = Self.resized(image, height: 760)
         if slab { DebugScans.log("graded slab — comparing the card inside it (\(cardOnly.width)×\(cardOnly.height))") }
         lastScanSignature = signature
         lastSwapCheckAt = CACurrentMediaTime()
@@ -1021,6 +1099,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         DispatchQueue.main.async {
             let item = ScanItem(id: id, thumbnail: thumb)
             item.signature = signature
+            item.photo = photo
             if merged.isEmpty {
                 item.status = "none"
                 item.note = "No text read — hold it flatter, out of the glare"
@@ -1029,6 +1108,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             self.items.insert(item, at: 0)
             self.tray.insertItems(at: [IndexPath(item: 0, section: 0)])
             self.tray.scrollToItem(at: IndexPath(item: 0, section: 0), at: .left, animated: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self.updateTrayFade() }
             if merged.isEmpty {
                 self.endActive(id: id, result: "Couldn’t read that card — try again")
             } else {
@@ -1036,6 +1116,44 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                 self.onScanned?(id, merged)
             }
         }
+    }
+
+    /// At capture, find the card's exact edges again in a slightly bigger crop around the tracked
+    /// outline: the tracker drifts (real scans came out with the top cut off and table showing), and
+    /// a toploader's edge can stand in for the card's. Nil if nothing better is found.
+    private func refined(_ frame: CIImage, around quad: [CGPoint]) -> CGImage? {
+        let c = Self.center(quad)
+        let wide = quad.map { CGPoint(x: c.x + ($0.x - c.x) * 1.18, y: c.y + ($0.y - c.y) * 1.18) }
+        guard let region = flattenExact(frame, quad: wide) else { return nil }
+        let request = VNDetectRectanglesRequest()
+        request.minimumAspectRatio = Self.cardAspect.min
+        request.maximumAspectRatio = Self.cardAspect.max
+        request.minimumSize = 0.5
+        request.quadratureTolerance = 15
+        request.maximumObservations = 6
+        try? VNImageRequestHandler(cgImage: region, options: [:]).perform([request])
+        // The card fills most of the enlarged crop: between ~55% and 95% of it
+        let best = (request.results ?? []).filter { r in
+            let b = r.boundingBox
+            let share = b.width * b.height
+            return share > 0.5 && share < 0.95
+        }.max { area($0) < area($1) }
+        guard let r = best else { return nil }
+        return flatten(CIImage(cgImage: region), quad: Self.corners(r))
+    }
+
+    /// Perspective-corrects exactly the given outline (no margin, no rotation, no scaling)
+    private func flattenExact(_ image: CIImage, quad: [CGPoint]) -> CGImage? {
+        let size = image.extent.size
+        let p = quad.map { CIVector(x: $0.x * size.width + image.extent.minX, y: $0.y * size.height + image.extent.minY) }
+        guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
+        filter.setValue(image, forKey: kCIInputImageKey)
+        filter.setValue(p[0], forKey: "inputTopLeft")
+        filter.setValue(p[1], forKey: "inputTopRight")
+        filter.setValue(p[2], forKey: "inputBottomRight")
+        filter.setValue(p[3], forKey: "inputBottomLeft")
+        guard let out = filter.outputImage else { return nil }
+        return ciContext.createCGImage(out, from: out.extent)
     }
 
     /// The card, straight on and upright, ~1400 px tall. The outline is pushed out 1.5% so a
@@ -1133,6 +1251,12 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private func rotate180(_ image: CGImage) -> CGImage? {
         let ci = CIImage(cgImage: image).oriented(.down)
         return ciContext.createCGImage(ci, from: ci.extent)
+    }
+
+    private static func resized(_ image: CGImage, height: CGFloat) -> UIImage {
+        let full = UIImage(cgImage: image)
+        let h = min(height, CGFloat(image.height)), w = h * CGFloat(image.width) / CGFloat(image.height)
+        return UIGraphicsImageRenderer(size: CGSize(width: w, height: h)).image { _ in full.draw(in: CGRect(x: 0, y: 0, width: w, height: h)) }
     }
 
     private static func thumbnail(_ image: CGImage) -> UIImage {
@@ -1273,33 +1397,399 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let item = items[indexPath.item]
-        let title = item.options.isEmpty ? "Not found" : "Which card is it?"
-        var message = item.note
-        if DebugScans.enabled, let d = item.options.first?.detail, !d.isEmpty { message = [message, "Test build: \(d)"].compactMap { $0 }.joined(separator: "\n") }
-        let sheet = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
-        for (i, o) in item.options.prefix(8).enumerated() {
-            let mark = i == item.choice ? "✓ " : ""
-            let price = o.price.isEmpty ? "" : " · \(o.price)"
-            sheet.addAction(UIAlertAction(title: "\(mark)\(o.title) — \(o.subtitle)\(price)", style: .default) { _ in
-                item.choice = i
-                item.status = "matched"
-                item.confirmed = true
-                self.tray.reloadItems(at: [IndexPath(item: self.items.firstIndex { $0 === item } ?? 0, section: 0)])
-                self.refreshDone()
-            })
+        let sheet = CardSheetViewController(item: item, scanner: self)
+        sheet.onChange = { [weak self] in
+            guard let self = self, let i = self.items.firstIndex(where: { $0 === item }) else { return }
+            self.tray.reloadItems(at: [IndexPath(item: i, section: 0)])
+            self.refreshDone()
         }
-        sheet.addAction(UIAlertAction(title: "Remove", style: .destructive) { _ in
-            guard let i = self.items.firstIndex(where: { $0 === item }) else { return }
+        sheet.onRemove = { [weak self] in
+            guard let self = self, let i = self.items.firstIndex(where: { $0 === item }) else { return }
             self.items.remove(at: i)
             self.tray.deleteItems(at: [IndexPath(item: i, section: 0)])
             self.refreshDone()
-        })
-        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        if let pop = sheet.popoverPresentationController, let cell = collectionView.cellForItem(at: indexPath) {
-            pop.sourceView = cell
-            pop.sourceRect = cell.bounds
+            self.updateTrayFade()
+        }
+        if let pres = sheet.sheetPresentationController {
+            pres.detents = [.large()]
+            pres.prefersGrabberVisible = true
+            pres.preferredCornerRadius = 24
         }
         present(sheet, animated: true)
+    }
+}
+
+// MARK: - Card sheet (tap a card in the tray)
+//
+// The card big, like the Cardex shows it, with the scan itself one tap away; the other cards it
+// could be, with their pictures; a search for when it's none of them; and Remove.
+
+private let sheetGold = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
+private let sheetInk = UIColor(red: 0.96, green: 0.93, blue: 0.87, alpha: 1)
+private let sheetMuted = UIColor(white: 1, alpha: 0.55)
+
+final class CardSheetViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate {
+    private let item: ScanItem
+    private weak var scanner: ScannerViewController?
+    var onChange: (() -> Void)?
+    var onRemove: (() -> Void)?
+
+    private let scroll = UIScrollView()
+    private let stack = UIStackView()
+    private let cardImage = UIImageView()
+    private let viewToggle = UISegmentedControl(items: ["Match", "Your scan"])
+    private let statusPill = PaddedLabel()
+    private let nameLabel = UILabel()
+    private let setLabel = UILabel()
+    private let priceLabel = UILabel()
+    private let detailLabel = UILabel()
+    private let otherTitle = UILabel()
+    private var others: UICollectionView!
+    private let searchBar = UISearchBar()
+    private var results: UICollectionView!
+    private let searchSpinner = UIActivityIndicatorView(style: .medium)
+    private let searchNote = UILabel()
+    private var found: [TrayOption] = []
+    private var showing = ""
+
+    init(item: ScanItem, scanner: ScannerViewController) {
+        self.item = item
+        self.scanner = scanner
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .pageSheet
+        overrideUserInterfaceStyle = .dark
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private func optionStrip() -> UICollectionView {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.itemSize = CGSize(width: 104, height: 196)
+        layout.minimumLineSpacing = 12
+        layout.sectionInset = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
+        let c = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        c.backgroundColor = .clear
+        c.showsHorizontalScrollIndicator = false
+        c.dataSource = self
+        c.delegate = self
+        c.register(OptionCell.self, forCellWithReuseIdentifier: "option")
+        c.heightAnchor.constraint(equalToConstant: 196).isActive = true
+        return c
+    }
+
+    private func sectionTitle(_ l: UILabel, _ text: String) {
+        l.text = text.uppercased()
+        l.font = .systemFont(ofSize: 12, weight: .bold)
+        l.textColor = sheetMuted
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = UIColor(red: 0.08, green: 0.07, blue: 0.06, alpha: 1)
+
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.alwaysBounceVertical = true
+        scroll.keyboardDismissMode = .interactive
+        view.addSubview(scroll)
+        stack.axis = .vertical
+        stack.spacing = 14
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(stack)
+
+        // The card, big
+        cardImage.contentMode = .scaleAspectFit
+        cardImage.clipsToBounds = true
+        cardImage.layer.cornerRadius = 12
+        cardImage.layer.shadowColor = UIColor.black.cgColor
+        let imageWrap = UIView()
+        imageWrap.addSubview(cardImage)
+        cardImage.translatesAutoresizingMaskIntoConstraints = false
+        viewToggle.selectedSegmentIndex = 0
+        viewToggle.selectedSegmentTintColor = sheetGold
+        viewToggle.setTitleTextAttributes([.foregroundColor: UIColor.black, .font: UIFont.systemFont(ofSize: 13, weight: .semibold)], for: .selected)
+        viewToggle.setTitleTextAttributes([.foregroundColor: sheetInk, .font: UIFont.systemFont(ofSize: 13, weight: .medium)], for: .normal)
+        viewToggle.addTarget(self, action: #selector(toggleView), for: .valueChanged)
+        viewToggle.translatesAutoresizingMaskIntoConstraints = false
+        imageWrap.addSubview(viewToggle)
+        NSLayoutConstraint.activate([
+            cardImage.topAnchor.constraint(equalTo: imageWrap.topAnchor, constant: 8),
+            cardImage.centerXAnchor.constraint(equalTo: imageWrap.centerXAnchor),
+            cardImage.widthAnchor.constraint(equalTo: imageWrap.widthAnchor, multiplier: 0.62),
+            cardImage.heightAnchor.constraint(equalTo: cardImage.widthAnchor, multiplier: 88.0 / 63.0),
+            viewToggle.topAnchor.constraint(equalTo: cardImage.bottomAnchor, constant: 12),
+            viewToggle.centerXAnchor.constraint(equalTo: imageWrap.centerXAnchor),
+            viewToggle.widthAnchor.constraint(equalToConstant: 210),
+            viewToggle.bottomAnchor.constraint(equalTo: imageWrap.bottomAnchor),
+        ])
+        stack.addArrangedSubview(imageWrap)
+
+        // What it is
+        let info = UIStackView()
+        info.axis = .vertical
+        info.spacing = 4
+        info.alignment = .leading
+        info.isLayoutMarginsRelativeArrangement = true
+        info.layoutMargins = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
+        statusPill.font = .systemFont(ofSize: 12, weight: .bold)
+        statusPill.layer.cornerRadius = 11
+        statusPill.clipsToBounds = true
+        statusPill.insets = UIEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
+        nameLabel.font = .systemFont(ofSize: 24, weight: .bold)
+        nameLabel.textColor = sheetInk
+        nameLabel.numberOfLines = 2
+        setLabel.font = .systemFont(ofSize: 15, weight: .medium)
+        setLabel.textColor = sheetMuted
+        setLabel.numberOfLines = 2
+        priceLabel.font = .systemFont(ofSize: 20, weight: .bold)
+        priceLabel.textColor = sheetGold
+        detailLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        detailLabel.textColor = UIColor(white: 1, alpha: 0.35)
+        detailLabel.numberOfLines = 0
+        for v in [statusPill, nameLabel, setLabel, priceLabel] { info.addArrangedSubview(v) }
+        info.setCustomSpacing(10, after: statusPill)
+        info.setCustomSpacing(8, after: setLabel)
+        if DebugScans.enabled { info.addArrangedSubview(detailLabel) }
+        stack.addArrangedSubview(info)
+
+        // The other cards it could be
+        let otherHeader = UIView()
+        sectionTitle(otherTitle, "Other matches — tap to switch")
+        otherTitle.translatesAutoresizingMaskIntoConstraints = false
+        otherHeader.addSubview(otherTitle)
+        NSLayoutConstraint.activate([
+            otherTitle.leadingAnchor.constraint(equalTo: otherHeader.leadingAnchor, constant: 20),
+            otherTitle.topAnchor.constraint(equalTo: otherHeader.topAnchor, constant: 10),
+            otherTitle.bottomAnchor.constraint(equalTo: otherHeader.bottomAnchor),
+        ])
+        others = optionStrip()
+        stack.addArrangedSubview(otherHeader)
+        stack.addArrangedSubview(others)
+
+        // Not any of them: search
+        let searchHeader = UIView()
+        let searchTitle = UILabel()
+        sectionTitle(searchTitle, "Not right? Find the card")
+        searchTitle.translatesAutoresizingMaskIntoConstraints = false
+        searchHeader.addSubview(searchTitle)
+        NSLayoutConstraint.activate([
+            searchTitle.leadingAnchor.constraint(equalTo: searchHeader.leadingAnchor, constant: 20),
+            searchTitle.topAnchor.constraint(equalTo: searchHeader.topAnchor, constant: 10),
+            searchTitle.bottomAnchor.constraint(equalTo: searchHeader.bottomAnchor),
+        ])
+        stack.addArrangedSubview(searchHeader)
+        searchBar.placeholder = "Card name, or name and number"
+        searchBar.searchBarStyle = .minimal
+        searchBar.delegate = self
+        searchBar.returnKeyType = .search
+        searchBar.tintColor = sheetGold
+        let searchWrap = UIView()
+        searchBar.translatesAutoresizingMaskIntoConstraints = false
+        searchSpinner.translatesAutoresizingMaskIntoConstraints = false
+        searchSpinner.color = sheetGold
+        searchWrap.addSubview(searchBar)
+        searchWrap.addSubview(searchSpinner)
+        NSLayoutConstraint.activate([
+            searchBar.leadingAnchor.constraint(equalTo: searchWrap.leadingAnchor, constant: 12),
+            searchBar.trailingAnchor.constraint(equalTo: searchWrap.trailingAnchor, constant: -12),
+            searchBar.topAnchor.constraint(equalTo: searchWrap.topAnchor),
+            searchBar.bottomAnchor.constraint(equalTo: searchWrap.bottomAnchor),
+            searchSpinner.trailingAnchor.constraint(equalTo: searchBar.trailingAnchor, constant: -44),
+            searchSpinner.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
+        ])
+        stack.addArrangedSubview(searchWrap)
+        searchNote.font = .systemFont(ofSize: 13)
+        searchNote.textColor = sheetMuted
+        searchNote.textAlignment = .center
+        searchNote.isHidden = true
+        stack.addArrangedSubview(searchNote)
+        results = optionStrip()
+        results.isHidden = true
+        stack.addArrangedSubview(results)
+
+        // Done / Remove
+        let buttons = UIStackView()
+        buttons.axis = .vertical
+        buttons.spacing = 10
+        buttons.isLayoutMarginsRelativeArrangement = true
+        buttons.layoutMargins = UIEdgeInsets(top: 12, left: 20, bottom: 24, right: 20)
+        var done = UIButton.Configuration.filled()
+        done.title = "Done"
+        done.baseBackgroundColor = sheetGold
+        done.baseForegroundColor = .black
+        done.cornerStyle = .large
+        done.buttonSize = .large
+        let doneButton = UIButton(configuration: done, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+        var remove = UIButton.Configuration.plain()
+        remove.title = "Remove from this scan"
+        remove.baseForegroundColor = .systemRed
+        let removeButton = UIButton(configuration: remove, primaryAction: UIAction { [weak self] _ in
+            self?.dismiss(animated: true) { self?.onRemove?() }
+        })
+        buttons.addArrangedSubview(doneButton)
+        buttons.addArrangedSubview(removeButton)
+        stack.addArrangedSubview(buttons)
+
+        NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: view.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
+            stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+        ])
+        refresh()
+    }
+
+    private var current: TrayOption? { item.options.indices.contains(item.choice) ? item.options[item.choice] : nil }
+
+    private func refresh() {
+        let o = current
+        nameLabel.text = o?.title ?? (item.status == "matching" ? "Still matching…" : "Not found")
+        setLabel.text = o?.subtitle ?? (item.note ?? "Search for it below")
+        priceLabel.text = o?.price.isEmpty == false ? o?.price : nil
+        priceLabel.isHidden = priceLabel.text == nil
+        detailLabel.text = o.map { "Test build — why: \($0.detail)" }
+        switch item.status {
+        case "matched":
+            statusPill.text = item.confirmed ? "✓ You picked this" : "✓ Matched"
+            statusPill.backgroundColor = sheetGold; statusPill.textColor = .black
+        case "pick":
+            statusPill.text = "? Not sure — check the other matches"
+            statusPill.backgroundColor = .systemYellow; statusPill.textColor = .black
+        case "matching":
+            statusPill.text = "Matching…"
+            statusPill.backgroundColor = UIColor(white: 1, alpha: 0.15); statusPill.textColor = sheetInk
+        default:
+            statusPill.text = "! Not found — search below"
+            statusPill.backgroundColor = .systemRed; statusPill.textColor = .white
+        }
+        let multiple = item.options.count > 1
+        otherTitle.superview?.isHidden = !multiple
+        others.isHidden = !multiple
+        others.reloadData()
+        showImage()
+    }
+
+    private func showImage() {
+        if viewToggle.selectedSegmentIndex == 1 || current == nil {
+            showing = "scan"
+            cardImage.image = item.photo ?? item.thumbnail
+            if current == nil { viewToggle.selectedSegmentIndex = 1 }
+            return
+        }
+        guard let url = current?.imageUrl, showing != url else { return }
+        showing = url
+        cardImage.image = item.photo ?? item.thumbnail
+        PictureMatcher.loadImage(url, into: cardImage) { [weak self] in self?.showing == url && self?.viewToggle.selectedSegmentIndex == 0 }
+    }
+
+    @objc private func toggleView() { showing = ""; showImage() }
+
+    private func choose(_ option: TrayOption) {
+        if let i = item.options.firstIndex(where: { $0.key == option.key && !option.key.isEmpty }) {
+            item.choice = i
+        } else {
+            item.options.insert(option, at: 0)
+            item.choice = 0
+        }
+        item.status = "matched"
+        item.confirmed = true
+        UISelectionFeedbackGenerator().selectionChanged()
+        showing = ""
+        viewToggle.selectedSegmentIndex = 0
+        refresh()
+        onChange?()
+        scroll.setContentOffset(.zero, animated: true)
+    }
+
+    // Search
+    func searchBarSearchButtonClicked(_ bar: UISearchBar) {
+        let q = (bar.text ?? "").trimmingCharacters(in: .whitespaces)
+        guard q.count >= 2 else { return }
+        bar.resignFirstResponder()
+        searchSpinner.startAnimating()
+        searchNote.isHidden = true
+        scanner?.search(q) { [weak self] options in
+            guard let self = self else { return }
+            self.searchSpinner.stopAnimating()
+            self.found = options
+            self.results.isHidden = options.isEmpty
+            self.searchNote.isHidden = !options.isEmpty
+            self.searchNote.text = "No cards found for “\(q)”"
+            self.results.reloadData()
+            self.results.setContentOffset(.zero, animated: false)
+        }
+    }
+
+    // Strips
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        collectionView === others ? min(item.options.count, 12) : found.count
+    }
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "option", for: indexPath) as! OptionCell
+        if collectionView === others {
+            cell.show(item.options[indexPath.item], selected: indexPath.item == item.choice)
+        } else {
+            let o = found[indexPath.item]
+            cell.show(o, selected: o.key == current?.key)
+        }
+        return cell
+    }
+    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        choose(collectionView === others ? item.options[indexPath.item] : found[indexPath.item])
+    }
+}
+
+final class OptionCell: UICollectionViewCell {
+    private let image = UIImageView()
+    private let name = UILabel()
+    private let set = UILabel()
+    private let price = UILabel()
+    private var url = ""
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        image.contentMode = .scaleAspectFill
+        image.clipsToBounds = true
+        image.layer.cornerRadius = 7
+        image.backgroundColor = UIColor(white: 1, alpha: 0.06)
+        image.layer.borderColor = sheetGold.cgColor
+        name.font = .systemFont(ofSize: 12, weight: .semibold)
+        name.textColor = sheetInk
+        name.numberOfLines = 2
+        set.font = .systemFont(ofSize: 11)
+        set.textColor = sheetMuted
+        set.numberOfLines = 1
+        price.font = .systemFont(ofSize: 12, weight: .bold)
+        price.textColor = sheetGold
+        let col = UIStackView(arrangedSubviews: [image, name, set, price])
+        col.axis = .vertical
+        col.spacing = 3
+        col.setCustomSpacing(6, after: image)
+        col.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(col)
+        NSLayoutConstraint.activate([
+            col.topAnchor.constraint(equalTo: contentView.topAnchor),
+            col.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            col.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            image.heightAnchor.constraint(equalTo: image.widthAnchor, multiplier: 88.0 / 63.0),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func show(_ o: TrayOption, selected: Bool) {
+        name.text = o.title
+        set.text = o.subtitle
+        price.text = o.price
+        image.layer.borderWidth = selected ? 3 : 0
+        if url != o.imageUrl {
+            url = o.imageUrl
+            image.image = nil
+            let want = o.imageUrl
+            PictureMatcher.loadImage(want, into: image) { [weak self] in self?.url == want }
+        }
     }
 }
 

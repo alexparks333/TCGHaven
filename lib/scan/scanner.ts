@@ -14,8 +14,10 @@ import { formatCurrency } from '../utils'
 import { decide, type ScanStatus } from './decide'
 import type { OcrLine } from './scanMatch'
 import type { ScanMatch, ScanSlab } from './server'
+import type { CardSearchResult } from '../api/search'
 
 interface TrayOption {
+  key: string      // "catalog:id" — how a pick comes back
   title: string
   subtitle: string
   price: string
@@ -24,10 +26,12 @@ interface TrayOption {
 }
 
 interface CardScannerPlugin {
-  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean }> }>
+  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string }> }>
+  searchResults(opts: { requestId: string; options: TrayOption[] }): Promise<void>
   compare(opts: { scanId: string; imageUrls: string[] }): Promise<{ distances: Array<number | null> }>
   update(opts: { scanId: string; status: ScanStatus | 'error'; options: TrayOption[]; choice: number; note?: string }): Promise<void>
   addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[] }) => void): Promise<PluginListenerHandle>
+  addListener(event: 'searchCards', fn: (e: { requestId: string; query: string }) => void): Promise<PluginListenerHandle>
 }
 
 const CardScanner = registerPlugin<CardScannerPlugin>('CardScanner')
@@ -47,12 +51,41 @@ const MATCH_TIMEOUT_MS = 12000
 
 function trayOption(m: ScanMatch & { final?: number; distance?: number | null }, slab: ScanSlab | null): TrayOption {
   return {
+    key: m.key,
     title: m.name,
     subtitle: [m.setName, m.number ? `#${m.number}` : '', m.language === 'ja' ? 'Japanese' : '', slab?.grade ? `${slab.company} ${slab.grade}` : ''].filter(Boolean).join(' · '),
     price: m.price > 0 ? formatCurrency(m.price) : '',
     imageUrl: cardImage(m.imageUrl, 'grid') ?? m.imageUrl,
     detail: `text ${m.score}${m.final !== undefined ? ` → ${m.final}` : ''}${typeof m.distance === 'number' ? ` · picture ${m.distance.toFixed(3)}` : ''} · ${m.why}${m.exact ? '' : ' · name only'}`,
   }
+}
+
+// The card sheet's "Search for another card": Add Card's own search, in every game being scanned
+async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]> {
+  const perGame = await Promise.all(games.flatMap((game) => {
+    const langs: Array<'ja' | undefined> = game === 'pokemon' ? [undefined, 'ja'] : [undefined]
+    return langs.map(async (lang) => {
+      const params = new URLSearchParams({ game, q: query })
+      if (lang) params.set('lang', lang)
+      const res = await fetch(`/api/cards/search?${params}`).catch(() => null)
+      const rows = res?.ok ? ((await res.json()) as CardSearchResult[]) : []
+      const seen = new Set<string>()
+      return rows.flatMap((r): ScanMatch[] => {
+        if (seen.has(r.id)) return []
+        seen.add(r.id)
+        const catalog = lang === 'ja' ? 'pokemon-jp' : game
+        return [{
+          key: `${catalog}:${r.id}`, game, ...(lang && { language: lang }), id: r.id,
+          name: r.name.replace(/ ✦ (Foil|Holo)$/, ''), setName: r.setName, number: r.number, imageUrl: r.imageUrl,
+          price: r.marketPrice > 0 ? r.marketPrice : r.marketPriceFoil, score: 0, why: 'searched', exact: true,
+        }]
+      }).slice(0, 8)
+    })
+  }))
+  // Best of each game first, then the rest
+  const out: ScanMatch[] = []
+  for (let i = 0; i < 8; i++) for (const list of perGame) if (list[i]) out.push(list[i])
+  return out.slice(0, 24)
 }
 
 async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
@@ -107,6 +140,15 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`).catch(() => {})
 
   const found = new Map<string, ScannedCard>()
+  const searched = new Map<string, ScanMatch>()
+  const searchListener = await CardScanner.addListener('searchCards', ({ requestId, query }) => {
+    searchCatalog(query, games)
+      .then((matches) => {
+        for (const m of matches) searched.set(m.key, m)
+        return CardScanner.searchResults({ requestId, options: matches.map((m) => trayOption(m, null)) })
+      })
+      .catch(() => CardScanner.searchResults({ requestId, options: [] }).catch(() => {}))
+  })
   const listener = await CardScanner.addListener('cardScanned', ({ scanId, lines }) => {
     identify(scanId, lines, games)
       .then(({ card, tray }) => {
@@ -123,14 +165,19 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   })
   try {
     const { items } = await CardScanner.open({ title: 'Scan cards' })
-    return items.flatMap(({ scanId, choice, confirmed }) => {
-      const card = found.get(scanId)
-      if (!card || card.options.length === 0) return []
-      // Picked by hand in the tray → no need to ask again
+    return items.flatMap(({ scanId, choice, confirmed, key }) => {
+      const card = found.get(scanId) ?? { scanId, options: [], choice: 0, status: 'none' as ScanStatus, slab: null }
+      // Picked by hand in the tray (one of the matches, or a card found with Search) → no need to ask again
       const status: ScanStatus = confirmed ? 'matched' : card.status
+      const i = key ? card.options.findIndex((o) => o.key === key) : -1
+      if (i >= 0) return [{ ...card, status, choice: i }]
+      const extra = key ? searched.get(key) : undefined
+      if (extra) return [{ ...card, status: 'matched' as ScanStatus, options: [extra, ...card.options], choice: 0 }]
+      if (card.options.length === 0) return []
       return [{ ...card, status, choice: Math.max(0, Math.min(card.options.length - 1, choice)) }]
     })
   } finally {
     await listener.remove()
+    await searchListener.remove()
   }
 }

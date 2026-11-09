@@ -73,6 +73,7 @@ export interface ScanClues {
   japanese: boolean
   pokemonWords: boolean       // "HP", "Weakness", "Retreat" — printed on every Pokémon card
   slab: SlabLabel | null      // a graded card's label (PSA / CGC / BGS / SGC), when one was read
+  riftboundPromo: boolean     // "156/219 • P" — the promo mark after a Riftbound number
 }
 
 /** What a grading company's label says. PSA's, for example:
@@ -178,7 +179,7 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
     fractions: [], promos: [], starPromo: [], opCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [],
-    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null,
+    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
 
@@ -198,6 +199,7 @@ export function readClues(lines: OcrLine[]): ScanClues {
       // A single letter in front is usually the regulation mark, not part of the number
       if (pre.length === 1) add(clues.fractions, { pre: '', num, suf, den }, (o) => o.pre === '' && o.num === num && o.suf === suf && o.den === den)
     }
+    if (/\d{2,3}\s?\/\s?\d{2,3}\s?[•·]\s?P\b/.test(text)) clues.riftboundPromo = true
     // Japanese promos: "388/SM-P", "010/PCG-P", "004/BW-P"
     for (const m of Array.from(text.matchAll(/(\d{3})\s?\/\s?([A-Za-z]{1,4}-?P)\b/g))) {
       const jp = { num: String(parseInt(m[1], 10)), mark: m[2].toLowerCase() }
@@ -500,7 +502,9 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
           const reprint = !setHit && group.some((o) => o.p.set !== p.set && tokens.has(o.p.set))
           // "226*/219": the star marks the Signature printing — when it's read, it decides
           const star = f.suf === '*' ? (p.num.endsWith('*') ? 10 : -10) : 0
-          offer('riftbound', c, (setHit ? 65 : reprint ? 59 : 40) + star, `${setHit ? p.set + ' ' : reprint ? 'reprint of ' : ''}${f.num}${f.suf}/${f.den}`)
+          // "UNL • 156/219 • P": the P marks a promo printing
+          const promo = clues.riftboundPromo ? (/promo/i.test(c.name) || /promo|nexus|judge/i.test(String(c.setName ?? '')) ? 8 : -8) : 0
+          offer('riftbound', c, (setHit ? 65 : reprint ? 59 : 40) + star + promo, `${setHit ? p.set + ' ' : reprint ? 'reprint of ' : ''}${f.num}${f.suf}/${f.den}`)
         }
       }
     }

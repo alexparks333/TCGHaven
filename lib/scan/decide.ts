@@ -60,7 +60,11 @@ export function decide<T extends Scored>(candidates: T[], distances?: Array<numb
 
   const [first, second] = ranked
   let status: ScanStatus = 'none'
+  // The picture can veto a clear text answer only when it clearly disagrees: on real phone scans
+  // (2026-11-09) right cards read by number + name scored 0.4–0.67 through toploaders and foil
+  const textDecisive = !!first && first.exact !== false && first.score >= 90 && (!second || first.score - second.score >= 15)
   const pictureOk = known.length === 0 || (first?.distance ?? Infinity) <= PICTURE_CONFIRMS
+    || (textDecisive && (first?.distance ?? Infinity) < LOOKS_LIKE_NOTHING + 0.1)
   if (first && first.exact !== false && pictureOk && first.final >= AUTO_ACCEPT && (!second || first.final - second.final >= MIN_LEAD)) status = 'matched'
   else if (first && first.final >= 30) status = 'pick'
   return { ranked, status }
