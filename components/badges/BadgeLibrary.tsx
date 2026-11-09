@@ -1,9 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeft, BookOpen } from 'lucide-react'
+import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, pinSize, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { preloadTrimmedArt } from './trimmedArt'
@@ -48,6 +48,12 @@ type View =
 // An upright phone (portrait, narrow): a two-page spread there makes every pin tiny
 const PHONE_QUERY = '(max-width: 767px) and (orientation: portrait)'
 
+// The shelf's collection, remembered on this device (a convenience — Haven Badges when unset)
+const COLLECTION_KEY = 'tcghaven-badge-collection'
+function readCollection(): string {
+  try { return localStorage.getItem(COLLECTION_KEY) || HAVEN_COLLECTION } catch { return HAVEN_COLLECTION }
+}
+
 // Dev server only: the Dev panel's "Preview badge progress" — every badge as if that % of it were
 // collected (so each tier's look can be checked in the books). Stored as the % ('' = off; the old
 // "show all as earned" '1' reads as 100).
@@ -89,6 +95,16 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
       }
     : realBadges
   const [view, setView] = useState<View>({ mode: 'shelf' })
+  // Which collection the shelf shows (remembered on this device; one that no longer exists falls
+  // back to Haven Badges)
+  const collections = badgeCollections(catalog.sets)
+  const [pickedCollection, setPickedCollection] = useState(readCollection)
+  const collection = collections.includes(pickedCollection) ? pickedCollection : HAVEN_COLLECTION
+  const pickCollection = (name: string) => {
+    setPickedCollection(name)
+    try { localStorage.setItem(COLLECTION_KEY, name) } catch {}
+  }
+  const shelf = { collection, collections, onCollection: pickCollection }
   // The shelf fades in when the page first shows it — not when a book is put back on it
   const [shelfIntro, setShelfIntro] = useState(true)
   const closePhone = useCallback(() => { setShelfIntro(false); setView({ mode: 'shelf' }) }, [])
@@ -179,7 +195,7 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   if (view.mode === 'shelf' || view.mode === 'phone') {
     return (
       <div ref={rootRef} className="relative scroll-mt-4">
-        <Shelf badges={badges} full={full} onOpen={open} intro={shelfIntro} away={view.mode === 'phone' ? view.set.id : undefined} />
+        <Shelf {...shelf} badges={badges} full={full} onOpen={open} intro={shelfIntro} away={view.mode === 'phone' ? view.set.id : undefined} />
         {view.mode === 'phone' && (
           <PhoneBook set={view.set} badges={badges} isMe={isMe} from={view.from} getShelfSpot={phoneSpot} onClose={closePhone} />
         )}
@@ -246,7 +262,7 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
           className="absolute inset-x-0 top-0"
           style={{ visibility: closing.phase === 'home' || closing.phase === 'settle' ? 'visible' : 'hidden', opacity: closing.phase === 'home' || closing.phase === 'settle' ? 1 : 0, transition: 'opacity 320ms ease' }}
         >
-          <Shelf badges={badges} full={full} onOpen={() => {}} intro={false} away={closing.set.id} />
+          <Shelf {...shelf} badges={badges} full={full} onOpen={() => {}} intro={false} away={closing.set.id} />
         </div>
       )}
       {closing?.spot && (
@@ -355,17 +371,25 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
 // ── The shelf ───────────────────────────────────────────────────────────────────────────────
 
 // `away`: the book that's out (open, or flying) — its spot is left empty until it's put back
-function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBadges | null; full: boolean; onOpen: (set: BadgeSet, el: HTMLElement) => void; intro?: boolean; away?: string }) {
+// `collection`: only that collection's books are on the shelf; the dropdown above it switches.
+function Shelf({ badges, full, onOpen, intro = true, away, collection, collections, onCollection }: {
+  badges: SharedBadges | null; full: boolean; onOpen: (set: BadgeSet, el: HTMLElement) => void; intro?: boolean; away?: string
+  collection: string; collections: string[]; onCollection: (name: string) => void
+}) {
   const { catalog } = useBadgeCatalog()
   // Every book's pin art starts loading while the shelf shows, so a book's holes and pins are
   // ready when it opens; pointing at a book moves its art to the front of the line.
   useEffect(() => { preloadTrimmedArt(catalog.badges.map((b) => b.imageUrl)) }, [catalog])
   const preloadSet = (set: BadgeSet) => { preloadTrimmedArt(badgesInSet(catalog, set.id).map((b) => b.imageUrl), true); preloadPinInspector() }
+  const books = catalog.sets.filter((s) => bookCollection(s) === collection)
   return (
     <div className={cn(intro && 'badge-shelf-in')}>
-      <div className="text-sm text-slate-500 mb-4 flex items-center gap-1.5"><BookOpen size={15} />Pick a pin book to open it.</div>
+      <div className="mb-4 flex items-center gap-3">
+        <CollectionPicker value={collection} options={collections} onChange={onCollection} />
+        <span className="text-xs font-semibold text-slate-500">{books.length} {books.length === 1 ? 'book' : 'books'}</span>
+      </div>
       <div className={cn('grid gap-6 sm:gap-8', full ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')}>
-        {catalog.sets.map((set) => {
+        {books.map((set) => {
           const inSet = badgesInSet(catalog, set.id)
           const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
           return (
@@ -392,6 +416,25 @@ function Shelf({ badges, full, onOpen, intro = true, away }: { badges: SharedBad
         })}
       </div>
     </div>
+  )
+}
+
+// The collection dropdown: the collection's name as the shelf's title, with a chevron. A native
+// <select> laid invisibly over it does the picking, so phones get their own picker wheel/list.
+function CollectionPicker({ value, options, onChange }: { value: string; options: string[]; onChange: (name: string) => void }) {
+  return (
+    <label className="relative inline-flex items-center gap-2 min-w-0 pl-3.5 pr-3 h-10 rounded-xl border border-slate-700 bg-slate-950/60 hover:border-slate-600 transition-colors cursor-pointer">
+      <span className="pinbook-serif text-base font-bold text-ink truncate">{value}</span>
+      <ChevronDown size={16} className="shrink-0 text-slate-500" />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Badge collection"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      >
+        {options.map((name) => <option key={name} value={name}>{name}</option>)}
+      </select>
+    </label>
   )
 }
 

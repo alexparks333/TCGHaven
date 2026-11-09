@@ -11,7 +11,7 @@ import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
 import { sameValue, mergeEdit } from '@/lib/rebase'
-import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierPercents, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
+import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierPercents, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, badgeCollections, bookCollection, HAVEN_COLLECTION, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
@@ -116,7 +116,7 @@ export function BadgesAdmin() {
               <button onClick={() => setEditSet(selected)} className="btn-secondary !px-3 !py-1.5 !text-xs"><Pencil size={13} />Edit book</button>
               <button onClick={() => deleteSet(selected)} className="btn-secondary !px-3 !py-1.5 !text-xs hover:!text-red-600"><Trash2 size={13} />Delete</button>
             </div>
-            <div className="text-[11px] text-slate-500 text-center">{GAME_LABELS[selected.game]} · id <code>{selected.id}</code></div>
+            <div className="text-[11px] text-slate-500 text-center">{bookCollection(selected)} · {GAME_LABELS[selected.game]} · id <code>{selected.id}</code></div>
           </div>
 
           {/* Its chapters, each with its pages of pins */}
@@ -808,6 +808,18 @@ function SetEditor({ catalog, initial, onClose, onSave }: {
             <Field label="Small line above the name"><input className="input-field" value={s.subtitle} onChange={(e) => patch({ subtitle: e.target.value })} /></Field>
             {!s.coverImage && <Field label="Monogram" hint="Shown on the cover until it has badges."><input className="input-field" maxLength={3} value={s.monogram} onChange={(e) => patch({ monogram: e.target.value })} placeholder="R" /></Field>}
           </div>
+          <Field label="Collection" hint="Which shelf the book is on (the Badges page's dropdown). Leave empty for Haven Badges.">
+            <input
+              className="input-field"
+              list="badge-collections"
+              value={s.collection ?? ''}
+              onChange={(e) => patch({ collection: e.target.value || undefined })}
+              placeholder={HAVEN_COLLECTION}
+            />
+            <datalist id="badge-collections">
+              {badgeCollections(catalog.sets).map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </Field>
           <Field label="Game" hint="Card searches for this book's badges use this game.">
             <select className="input-field" value={s.game} onChange={(e) => patch({ game: e.target.value as Game })}>
               {GAMES.map((g) => <option key={g} value={g}>{GAME_LABELS[g]}</option>)}

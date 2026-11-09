@@ -44,6 +44,20 @@ export interface BadgeSet {
   // a fresh page with its own tab on the book's edge, and grows extra pages as it fills (6 pins a
   // page) without moving the chapters after it. A badge's `page` is the chapter it's in.
   chapters?: string[]
+  // Which collection the book is in — the Badges shelf's dropdown (BadgeLibrary.tsx) shows one
+  // collection at a time. Unset = HAVEN_COLLECTION, TCG Haven's own books. Later, creators' books
+  // (e.g. "PewDiePie Badges") get their own collection name. Read through bookCollection().
+  collection?: string
+}
+
+/** The collection every TCG Haven-made book is in */
+export const HAVEN_COLLECTION = 'Haven Badges'
+export const bookCollection = (set: Pick<BadgeSet, 'collection'>) => set.collection?.trim() || HAVEN_COLLECTION
+/** Every collection that has a book, Haven Badges first, then in book order */
+export function badgeCollections(sets: BadgeSet[]): string[] {
+  const names = new Set([HAVEN_COLLECTION])
+  for (const s of sets) names.add(bookCollection(s))
+  return Array.from(names)
 }
 
 export const DEFAULT_BADGE_SETS: BadgeSet[] = [
