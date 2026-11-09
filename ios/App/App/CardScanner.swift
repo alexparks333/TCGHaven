@@ -127,7 +127,7 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         let slabObj = call.getObject("slab")
         let slab = slabObj.flatMap { o -> SlabGrade? in
             guard let grade = o["grade"] as? String, !grade.isEmpty else { return nil }
-            return SlabGrade(company: (o["company"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "PSA", grade: grade)
+            return SlabGrade(company: (o["company"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "PSA", grade: grade, cert: o["cert"] as? String ?? "")
         }
         DispatchQueue.main.async {
             self.scanner?.applyResult(scanId: scanId, status: status, options: options, choice: choice, note: note, slab: slab)
@@ -703,7 +703,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     @objc private func doneTapped() {
         let picks = items.filter { $0.status == "matched" || $0.status == "pick" }.reversed().map {
             ["scanId": $0.id, "choice": $0.choice, "confirmed": $0.confirmed,
-             "key": $0.options.indices.contains($0.choice) ? $0.options[$0.choice].key : ""] as [String: Any]
+             "key": $0.options.indices.contains($0.choice) ? $0.options[$0.choice].key : "",
+             // the grading as left in the card sheet (null = ungraded)
+             "slab": $0.slab.map { ["company": $0.company, "grade": $0.grade, "cert": $0.cert] as Any } ?? NSNull()] as [String: Any]
         }
         finish(with: Array(picks))
     }
@@ -1350,6 +1352,20 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     func applyResult(scanId: String, status: String, options: [TrayOption], choice: Int, note: String?, slab: SlabGrade?) {
         guard let index = items.firstIndex(where: { $0.id == scanId }) else { return }
         let item = items[index]
+        // Not sure enough to show — not added; ask for another scan
+        if status == "reject" {
+            DebugScans.saveResult(scanId: scanId, info: ["status": "reject", "options": options.prefix(5).map { ["title": $0.title, "detail": $0.detail] }])
+            DebugScans.log("not sure — rejected: \(options.first.map { "\($0.title) [\($0.detail)]" } ?? "nothing")")
+            items.remove(at: index)
+            tray.deleteItems(at: [IndexPath(item: index, section: 0)])
+            refreshDone()
+            updateTrayFade()
+            notify.notificationOccurred(.warning)
+            endActive(id: scanId, result: "Not sure — scan again")
+            wantHint("Not sure — scan again", now: true)
+            frameQueue.async { if self.phase == .waitingForNext { self.phase = .searching } }
+            return
+        }
         item.slab = slab
         // A "swap" that turned out to be the card already scanned: not a second copy
         if item.fromSwap, let key = options.first?.key, !key.isEmpty, items.count > index + 1 {
@@ -1511,8 +1527,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 // MARK: - Graded slabs (the same look as the Cardex — CardexPage.tsx SlabTileOverlay / FullSlab)
 
 struct SlabGrade {
-    let company: String
-    let grade: String
+    var company: String
+    var grade: String
+    var cert: String = ""
 }
 
 /// Label colours roughly matching each grader's real label (CardexPage.tsx SLAB_LABEL)
@@ -1758,6 +1775,10 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     private var results: UICollectionView!
     private let searchSpinner = UIActivityIndicatorView(style: .medium)
     private let searchNote = UILabel()
+    private let companyPicker = UISegmentedControl(items: ["Raw", "PSA", "CGC", "BGS", "SGC", "TAG"])
+    private let gradeField = UITextField()
+    private let certField = UITextField()
+    private var gradeFields: UIView?
     private var found: [TrayOption] = []
     private var showing = ""
 
@@ -1897,6 +1918,51 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         stack.addArrangedSubview(otherHeader)
         stack.addArrangedSubview(others)
 
+        // Grading — what was read off the label, or set by hand (a raw card can be marked graded too)
+        let gradeHeader = UIView()
+        let gradeTitle = UILabel()
+        sectionTitle(gradeTitle, "Grading")
+        gradeTitle.translatesAutoresizingMaskIntoConstraints = false
+        gradeHeader.addSubview(gradeTitle)
+        NSLayoutConstraint.activate([
+            gradeTitle.leadingAnchor.constraint(equalTo: gradeHeader.leadingAnchor, constant: 20),
+            gradeTitle.topAnchor.constraint(equalTo: gradeHeader.topAnchor, constant: 10),
+            gradeTitle.bottomAnchor.constraint(equalTo: gradeHeader.bottomAnchor),
+        ])
+        stack.addArrangedSubview(gradeHeader)
+        companyPicker.selectedSegmentTintColor = sheetGold
+        companyPicker.setTitleTextAttributes([.foregroundColor: UIColor.black, .font: UIFont.systemFont(ofSize: 13, weight: .bold)], for: .selected)
+        companyPicker.setTitleTextAttributes([.foregroundColor: sheetInk, .font: UIFont.systemFont(ofSize: 13, weight: .medium)], for: .normal)
+        companyPicker.addTarget(self, action: #selector(gradingChanged), for: .valueChanged)
+        for (f, placeholder, kb) in [(gradeField, "Grade (e.g. 10, 9.5)", UIKeyboardType.decimalPad), (certField, "Cert number", UIKeyboardType.numberPad)] {
+            f.placeholder = placeholder
+            f.keyboardType = kb
+            f.textColor = sheetInk
+            f.tintColor = sheetGold
+            f.font = .systemFont(ofSize: 16, weight: .semibold)
+            f.backgroundColor = UIColor(white: 1, alpha: 0.07)
+            f.layer.cornerRadius = 10
+            f.leftView = UIView(frame: CGRect(x: 0, y: 0, width: 12, height: 1)); f.leftViewMode = .always
+            f.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            f.addTarget(self, action: #selector(gradingChanged), for: .editingChanged)
+        }
+        let fields = UIStackView(arrangedSubviews: [gradeField, certField])
+        fields.spacing = 10
+        fields.distribution = .fillProportionally
+        gradeField.widthAnchor.constraint(equalTo: certField.widthAnchor, multiplier: 0.7).isActive = true
+        let gradeBox = UIStackView(arrangedSubviews: [companyPicker, fields])
+        gradeBox.axis = .vertical
+        gradeBox.spacing = 10
+        gradeBox.isLayoutMarginsRelativeArrangement = true
+        gradeBox.layoutMargins = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
+        stack.addArrangedSubview(gradeBox)
+        gradeFields = fields
+        let companies = ["Raw", "PSA", "CGC", "BGS", "SGC", "TAG"]
+        companyPicker.selectedSegmentIndex = item.slab.flatMap { s in companies.firstIndex(of: s.company.uppercased()) } ?? 0
+        gradeField.text = item.slab?.grade
+        certField.text = item.slab?.cert
+        fields.isHidden = item.slab == nil
+
         // Not any of them: search
         let searchHeader = UIView()
         let searchTitle = UILabel()
@@ -2005,7 +2071,7 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     }
 
     private func showImage() {
-        let inSlab = item.slab != nil && current != nil && viewToggle.selectedSegmentIndex == 0
+        let inSlab = (item.slab.map { !$0.grade.isEmpty } ?? false) && current != nil && viewToggle.selectedSegmentIndex == 0
         slabView.isHidden = !inSlab
         cardImage.isHidden = inSlab
         if viewToggle.selectedSegmentIndex == 1 || current == nil {
@@ -2030,6 +2096,25 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     }
 
     @objc private func toggleView() { showing = ""; showImage() }
+
+    /// The person changed the grading: Raw clears it; a company + grade makes it a slab
+    @objc private func gradingChanged() {
+        let companies = ["Raw", "PSA", "CGC", "BGS", "SGC", "TAG"]
+        let company = companies[max(0, companyPicker.selectedSegmentIndex)]
+        gradeFields?.isHidden = company == "Raw"
+        let grade = (gradeField.text ?? "").trimmingCharacters(in: .whitespaces)
+        if company == "Raw" {
+            item.slab = nil
+        } else {
+            item.slab = SlabGrade(company: company, grade: grade.isEmpty ? (item.slab?.grade ?? "") : grade,
+                                  cert: (certField.text ?? "").trimmingCharacters(in: .whitespaces))
+            if grade.isEmpty && gradeField.text?.isEmpty == true { item.slab?.grade = "" }
+        }
+        if item.slab?.grade.isEmpty == true { /* shown as a slab once it has a grade */ }
+        showing = ""
+        showImage()
+        onChange?()
+    }
 
     private func choose(_ option: TrayOption) {
         if let i = item.options.firstIndex(where: { $0.key == option.key && !option.key.isEmpty }) {
@@ -2207,7 +2292,7 @@ final class TrayCell: UICollectionViewCell {
             }
         }
         // A graded slab: the card in its slab, grade on top (the status badge moves out of the way)
-        if let slab = item.slab {
+        if let slab = item.slab, !slab.grade.isEmpty {
             slabOverlay.isHidden = false
             slabOverlay.show(slab)
         } else {

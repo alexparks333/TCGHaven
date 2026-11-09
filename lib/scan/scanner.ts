@@ -26,10 +26,10 @@ interface TrayOption {
 }
 
 interface CardScannerPlugin {
-  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string }> }>
+  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string; slab?: ScanSlab | null }> }>
   searchResults(opts: { requestId: string; options: TrayOption[] }): Promise<void>
   compare(opts: { scanId: string; imageUrls: string[] }): Promise<{ distances: Array<number | null> }>
-  update(opts: { scanId: string; status: ScanStatus | 'error'; options: TrayOption[]; choice: number; note?: string; slab?: ScanSlab | null }): Promise<void>
+  update(opts: { scanId: string; status: ScanStatus | 'error' | 'reject'; options: TrayOption[]; choice: number; note?: string; slab?: ScanSlab | null }): Promise<void>
   addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[] }) => void): Promise<PluginListenerHandle>
   addListener(event: 'searchCards', fn: (e: { requestId: string; query: string }) => void): Promise<PluginListenerHandle>
 }
@@ -153,9 +153,13 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
     identify(scanId, lines, games)
       .then(({ card, tray }) => {
         found.set(scanId, card)
+        // Not sure enough to show: nothing found, or only a loose guess (a word on a screen that
+        // happens to be a card name) — the tray drops it and asks for another scan
+        const top = card.options[0]
+        const loose = !top || card.status === 'none' || (card.status === 'pick' && (!top.exact || top.score < 55))
         return CardScanner.update({
           scanId,
-          status: card.status,
+          status: loose ? 'reject' : card.status,
           options: tray,
           choice: 0,
           note: card.status === 'none' ? 'Not found — try again, flatter and out of the glare' : undefined,
@@ -167,8 +171,10 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   })
   try {
     const { items } = await CardScanner.open({ title: 'Scan cards' })
-    return items.flatMap(({ scanId, choice, confirmed, key }) => {
-      const card = found.get(scanId) ?? { scanId, options: [], choice: 0, status: 'none' as ScanStatus, slab: null }
+    return items.flatMap(({ scanId, choice, confirmed, key, slab }) => {
+      const scanned = found.get(scanId) ?? { scanId, options: [], choice: 0, status: 'none' as ScanStatus, slab: null }
+      // The grading as the person left it in the card sheet (they can change or clear what was read)
+      const card = slab !== undefined ? { ...scanned, slab: slab?.grade ? slab : null } : scanned
       // Picked by hand in the tray (one of the matches, or a card found with Search) → no need to ask again
       const status: ScanStatus = confirmed ? 'matched' : card.status
       const i = key ? card.options.findIndex((o) => o.key === key) : -1
