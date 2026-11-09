@@ -22,8 +22,8 @@ export function FilterPanel() {
     hiddenGroups, toggleHiddenGroup,
   } = useStore()
 
-  // The closed-panel summary bar only belongs on the Portfolio (and its sub-pages), where these
-  // filters change what the page shows — everywhere else it's just clutter.
+  // The panel and its closed-panel summary bar only belong on the Portfolio (and its sub-pages),
+  // where these filters change what the page shows — everywhere else they're just clutter.
   const pathname = usePathname() ?? ''
   const onPortfolio = pathname === '/' || pathname.startsWith('/portfolio')
 
@@ -79,6 +79,8 @@ export function FilterPanel() {
         className={cn(
           'overflow-hidden transition-all duration-300 ease-in-out',
           showFilters ? 'max-h-[40rem]' : 'max-h-0',
+          // Opened from the Portfolio page, so it doesn't follow you to other pages
+          !onPortfolio && 'hidden',
         )}
       >
         <div className="bg-slate-900 border-b border-slate-700/60 px-4 sm:px-6 lg:px-8 py-5">

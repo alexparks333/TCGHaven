@@ -2,7 +2,7 @@
 
 import { PrintingTags } from '@/components/PrintingTags'
 import { useState, useMemo } from 'react'
-import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle } from 'lucide-react'
+import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle, SlidersHorizontal } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore, portfolioGames } from '@/lib/store'
 import type { PriceStatus } from '@/lib/api/priceStatus'
@@ -17,12 +17,13 @@ import { CardName } from '@/components/CardName'
 
 
 const TIME_LABELS: Record<string, string> = { 'entry': 'Since Entry', '1d': '24H', '7d': '7D', '30d': '30D', '365d': '1Y' }
-const TIME_FRAME_OPTIONS: { value: 'entry' | '1d' | '7d' | '30d' | '365d'; label: string }[] = [
-  { value: 'entry', label: 'Since Entry' },
-  { value: '1d', label: '24 Hours' },
-  { value: '7d', label: '1 Week' },
-  { value: '30d', label: '1 Month' },
-  { value: '365d', label: '1 Year' },
+// `short` is what fits one line on a phone; `label` is shown once there's room for it.
+const TIME_FRAME_OPTIONS: { value: 'entry' | '1d' | '7d' | '30d' | '365d'; label: string; short: string }[] = [
+  { value: 'entry', label: 'Since Entry', short: 'Entry' },
+  { value: '1d', label: '24 Hours', short: '24H' },
+  { value: '7d', label: '1 Week', short: '1W' },
+  { value: '30d', label: '1 Month', short: '1M' },
+  { value: '365d', label: '1 Year', short: '1Y' },
 ]
 
 // Which shared-history baseline (store.priceBaselines, from /api/price-history) each window uses.
@@ -33,6 +34,7 @@ export default function PortfolioPage() {
     cards, priceBaselines, priceStatus, priceLoad,
     soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     hiddenGroups, portfolioSort: sort, setPortfolioSort: setSort, includeSold, setIncludeSold,
+    showFilters, setShowFilters,
   } = useStore()
   // Only games the user tracks (Inventory's game tabs) count toward anything on this page — see
   // portfolioGames() in lib/store.ts.
@@ -224,12 +226,27 @@ export default function PortfolioPage() {
       <div>
 
         {/* Header — stacks on phones so the update status doesn't crush the title */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
-            <p className="text-slate-500 text-xs mt-0.5">
-              TCGplayer market prices · updated automatically twice a day
-            </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+          {/* On desktop this row dissolves (md:contents) so Filters lands far right, after the status */}
+          <div className="flex items-start justify-between gap-3 md:contents">
+            <div className="min-w-0 md:mr-auto">
+              <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
+              <p className="text-slate-500 text-xs mt-0.5">
+                TCGplayer market prices · updated automatically twice a day
+              </p>
+            </div>
+            {/* Opens the FilterPanel above the page (ClientWrapper) */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`md:order-last shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[13px] font-semibold transition-colors ${
+                showFilters ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800 text-slate-300'
+              }`}
+              aria-expanded={showFilters}
+            >
+              <SlidersHorizontal size={15} />
+              Filters
+              {calcFloor > 0 && <span className="text-[9px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">ON</span>}
+            </button>
           </div>
           <div className="flex items-center gap-2">
             <PriceUpdateStatus status={priceStatus} />
@@ -310,6 +327,85 @@ export default function PortfolioPage() {
           </div>
         </div>
 
+        {/* Time frame — drives Top Performers' per-card P&L below; Collection Value above is
+            never affected, since that's just current market value with no time dimension. */}
+        <div className="flex items-center gap-1.5 lg:gap-2 mb-4">
+          <span className="shrink-0 whitespace-nowrap text-xs text-slate-500 uppercase tracking-wide font-semibold mr-1">Time Frame</span>
+          {TIME_FRAME_OPTIONS.map(({ value, label, short }) => (
+            <button
+              key={value}
+              onClick={() => setTimeFrame(value)}
+              aria-label={label}
+              className={`flex-1 min-w-0 lg:flex-none whitespace-nowrap text-xs px-1 lg:px-3 py-1.5 rounded-full border font-medium transition-all ${
+                timeFrame === value
+                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-700'
+                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              <span className="lg:hidden">{short}</span>
+              <span className="hidden lg:inline">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="card-glass p-6 mb-8">
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
+            Top Performers
+            {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
+            {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
+          </h3>
+          <div className="flex flex-col gap-3">
+            {groupedRows.filter((c) => c.hasPeriodData).slice(0, 5).map((c) => (
+              <div key={c.id}
+                onClick={(e) => {
+                  if (e.ctrlKey || e.metaKey) { openEbaySearch(c); return }
+                  router.push(`/portfolio/${c.id}`)
+                }}
+                title="Click to view card · ⌘/Ctrl+Click to search eBay sold listings"
+                className="flex items-center gap-3 hover:bg-slate-800/40 rounded-xl p-2 -mx-2 transition-colors group cursor-pointer"
+              >
+                {c.imageUrl ? (
+                  <img src={cardImage(c.imageUrl, 'thumb')} alt={c.name} className="w-8 h-11 object-contain rounded" />
+                ) : (
+                  <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">#{c.number}</div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium text-ink text-sm truncate"><CardName name={c.name} /></span>
+                    {c.quantity > 1 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 shrink-0">
+                        ×{c.quantity}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">
+                    {GAME_LABELS[c.game]} · {c.set} · {formatCurrency(c.currentPrice)} ea
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="text-sm font-medium text-ink">{formatCurrency(c.currentVal)}</div>
+                  <div className={`text-xs font-medium ${c.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {c.pnl >= 0 ? '+' : ''}{formatCurrency(c.pnl)}
+                  </div>
+                </div>
+                <ArrowUpRight size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
+              </div>
+            ))}
+            {groupedRows.length === 0 && (
+              <div className="text-center text-slate-600 py-8 text-sm">
+                {calcFloor > 0
+                  ? `No cards above ${formatCurrency(calcFloor)}. Lower your calculation floor.`
+                  : 'Add cards to your inventory to see them here.'}
+              </div>
+            )}
+            {showHistoryNote && groupedRows.filter((c) => c.hasPeriodData).length === 0 && groupedRows.length > 0 && (
+              <div className="text-center text-slate-600 py-8 text-sm">
+                No price history for this window yet — it builds up as prices update automatically each day.
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Per-game value cards */}
         <div className="mb-8">
           <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">By Game</h2>
@@ -335,92 +431,11 @@ export default function PortfolioPage() {
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Time frame — drives Top Performers' per-card P&L below; Collection Value above is
-            never affected, since that's just current market value with no time dimension. */}
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold mr-1">Time Frame</span>
-          {TIME_FRAME_OPTIONS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setTimeFrame(value)}
-              className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
-                timeFrame === value
-                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-700'
-                  : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="card-glass p-6 lg:col-span-1">
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">By Game</h3>
+          <div className="card-glass p-6 mt-4">
             {byGame.some((g) => g.value > 0)
               ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} />
               : <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>
             }
-          </div>
-
-          <div className="card-glass p-6 lg:col-span-2">
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-              Top Performers
-              {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
-              {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
-            </h3>
-            <div className="flex flex-col gap-3">
-              {groupedRows.filter((c) => c.hasPeriodData).slice(0, 5).map((c) => (
-                <div key={c.id}
-                  onClick={(e) => {
-                    if (e.ctrlKey || e.metaKey) { openEbaySearch(c); return }
-                    router.push(`/portfolio/${c.id}`)
-                  }}
-                  title="Click to view card · ⌘/Ctrl+Click to search eBay sold listings"
-                  className="flex items-center gap-3 hover:bg-slate-800/40 rounded-xl p-2 -mx-2 transition-colors group cursor-pointer"
-                >
-                  {c.imageUrl ? (
-                    <img src={cardImage(c.imageUrl, 'thumb')} alt={c.name} className="w-8 h-11 object-contain rounded" />
-                  ) : (
-                    <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">#{c.number}</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-ink text-sm truncate"><CardName name={c.name} /></span>
-                      {c.quantity > 1 && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 shrink-0">
-                          ×{c.quantity}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-slate-500 truncate">
-                      {GAME_LABELS[c.game]} · {c.set} · {formatCurrency(c.currentPrice)} ea
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-sm font-medium text-ink">{formatCurrency(c.currentVal)}</div>
-                    <div className={`text-xs font-medium ${c.pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {c.pnl >= 0 ? '+' : ''}{formatCurrency(c.pnl)}
-                    </div>
-                  </div>
-                  <ArrowUpRight size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
-                </div>
-              ))}
-              {groupedRows.length === 0 && (
-                <div className="text-center text-slate-600 py-8 text-sm">
-                  {calcFloor > 0
-                    ? `No cards above ${formatCurrency(calcFloor)}. Lower your calculation floor.`
-                    : 'Add cards to your inventory to see them here.'}
-                </div>
-              )}
-              {showHistoryNote && groupedRows.filter((c) => c.hasPeriodData).length === 0 && groupedRows.length > 0 && (
-                <div className="text-center text-slate-600 py-8 text-sm">
-                  No price history for this window yet — it builds up as prices update automatically each day.
-                </div>
-              )}
-            </div>
           </div>
         </div>
 

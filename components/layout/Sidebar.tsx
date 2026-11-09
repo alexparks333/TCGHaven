@@ -2,10 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Package, TrendingUp, BookOpen, SlidersHorizontal, Banknote, Users, ChevronRight, CircleUserRound, Award } from 'lucide-react'
+import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
-import { useStore } from '@/lib/store'
 import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
@@ -18,7 +17,7 @@ const BASE_NAV = [
   { href: '/badges', label: 'Badges', icon: Award },
 ]
 // Phone bottom bar, in display order. Profile holds Settings (the ⚙️ on its banner — account,
-// username, Sign out); Filters is a button in the phone top bar (MobileHeader).
+// username, Sign out); Filters is a button on the Portfolio page itself (PortfolioPage.tsx).
 const MOBILE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
   { href: '/inventory', label: 'Inventory', icon: Package },
@@ -31,7 +30,6 @@ const MOBILE_NAV = [
 export function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
-  const { calcFloor, showFilters, setShowFilters } = useStore()
   const { me } = useFriends()
 
   const isAuthPage = pathname === '/login' || pathname === '/signup'
@@ -66,23 +64,6 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Filters trigger */}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={cn(
-            'mt-3 nav-link w-full text-left',
-            showFilters && 'active',
-          )}
-        >
-          <SlidersHorizontal size={16} />
-          Filters
-          {calcFloor > 0 && (
-            <span className="ml-auto text-[10px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">
-              ON
-            </span>
-          )}
-        </button>
-
         {/* User section */}
         <div className="mt-auto">
           {user && <FriendsSidebarSection />}
@@ -110,8 +91,8 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Nav — the five everyday pages. Settings and Sign out live behind the ⚙️ on
-          the Profile banner (ProfilePage.tsx) and Filters in the top bar, rather than each taking a
-          bottom-bar slot; nine-plus equal slots left every label colliding. */}
+          the Profile banner (ProfilePage.tsx) and Filters on the Portfolio page, rather than each
+          taking a bottom-bar slot; nine-plus equal slots left every label colliding. */}
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950 border-t border-slate-700 shadow-[0_-4px_16px_rgba(60,40,20,0.08)] flex"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -152,7 +133,6 @@ export function Sidebar() {
 // status bar when installed to the home screen — see appleWebApp in app/layout.tsx).
 export function MobileHeader() {
   const pathname = usePathname()
-  const { calcFloor, showFilters, setShowFilters } = useStore()
   const { incoming } = useFriends()
   if (pathname === '/login' || pathname === '/signup') return null
   return (
@@ -177,20 +157,6 @@ export function MobileHeader() {
           <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">{incoming.length}</span>
         )}
       </Link>
-      {/* Portfolio Filters dropdown toggle — opens the same FilterPanel the desktop sidebar's
-          Filters button does, right under this bar */}
-      <button
-        onClick={() => setShowFilters(!showFilters)}
-        className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[13px] font-semibold transition-colors',
-          showFilters ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800 text-slate-300',
-        )}
-        aria-expanded={showFilters}
-      >
-        <SlidersHorizontal size={15} />
-        Filters
-        {calcFloor > 0 && <span className="text-[9px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">ON</span>}
-      </button>
     </header>
   )
 }
