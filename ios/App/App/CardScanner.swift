@@ -2031,8 +2031,7 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
             scroll.topAnchor.constraint(equalTo: view.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            // Ends where the keyboard begins, so what's being typed is never hidden behind it
-            scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
             stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
@@ -2052,7 +2051,38 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         let tapAway = UITapGestureRecognizer(target: self, action: #selector(endTyping))
         tapAway.cancelsTouchesInView = false
         view.addGestureRecognizer(tapAway)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
         refresh()
+    }
+
+    private weak var typingIn: UIView?
+
+    /// The keyboard came up, moved or went away: leave exactly that much room at the bottom of the
+    /// sheet, and keep the field being typed in just above it
+    @objc private func keyboardMoved(_ note: Notification) {
+        guard let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else { return }
+        let hiding = note.name == UIResponder.keyboardWillHideNotification
+        // The keyboard's frame is in screen coordinates; the sheet sits lower than the screen top
+        let inView = view.convert(end, from: nil)
+        let covered = hiding ? 0 : max(0, view.bounds.maxY - inView.minY)
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.25
+        UIView.animate(withDuration: duration) {
+            self.scroll.contentInset.bottom = covered
+            self.scroll.verticalScrollIndicatorInsets.bottom = covered
+            if !hiding, let v = self.typingIn { self.scrollIntoView(v, keyboardTop: self.view.bounds.maxY - covered) }
+        }
+    }
+
+    private func scrollIntoView(_ v: UIView, keyboardTop: CGFloat) {
+        // Where the field is in the sheet right now, and how far it must rise to sit 24 pt above the keyboard
+        let r = v.convert(v.bounds, to: view)
+        let overlap = r.maxY + 24 - keyboardTop
+        let viewTopGap = r.minY - 60
+        guard overlap > 0 else { return }
+        let rise = min(overlap, max(0, viewTopGap) + overlap)
+        let maxY = max(0, scroll.contentSize.height + scroll.contentInset.bottom - scroll.bounds.height)
+        scroll.contentOffset.y = min(maxY, scroll.contentOffset.y + rise)
     }
 
     @objc private func endTyping() { view.endEditing(true) }
@@ -2061,11 +2091,11 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     func textFieldShouldReturn(_ field: UITextField) -> Bool { field.resignFirstResponder(); return true }
     func searchBarTextDidBeginEditing(_ bar: UISearchBar) { reveal(bar) }
 
-    /// Scroll so the field being typed in sits just above the keyboard (after it has slid up)
+    /// Remember the field being typed in; if the keyboard is already up (switching fields), move now
     private func reveal(_ v: UIView) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            let r = v.convert(v.bounds, to: self.scroll).insetBy(dx: 0, dy: -24)
-            self.scroll.scrollRectToVisible(r, animated: true)
+        typingIn = v
+        if scroll.contentInset.bottom > 0 {
+            UIView.animate(withDuration: 0.25) { self.scrollIntoView(v, keyboardTop: self.view.bounds.maxY - self.scroll.contentInset.bottom) }
         }
     }
 
