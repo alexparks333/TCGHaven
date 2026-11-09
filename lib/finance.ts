@@ -1,12 +1,12 @@
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { staffDb } from './firebase/staff'
 
+// Haven Premium's price lives in premium/config (lib/premium.ts — the Haven Premium page).
 // Finances (staff portal, Owner only — firestore.rules `finance/{doc}`). For now: the running costs
 // the Owner tracks by hand, in finance/costs. Revenue joins this when Haven Premium payments are
 // built (Apple in-app purchase on iPhone, Stripe on the web): subscriptions, how long people stay,
 // why they cancel.
 
-export const PREMIUM_PRICE = 3.99      // Haven Premium, per month (USD)
 export const APPLE_CUT = 0.15          // Apple Small Business Program rate (30% above $1M a year)
 
 export const COST_CATEGORIES = ['Hosting', 'Database & storage', 'Apple & app stores', 'Domain & email', 'AI & tools', 'Marketing', 'Contractors', 'Other'] as const

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award, UserCog, BarChart3, Wallet } from 'lucide-react'
+import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award, UserCog, BarChart3, Wallet, Gem } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { friendlyAuthError } from '@/lib/auth-errors'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -24,6 +24,7 @@ const NAV = [
   // Insights — set apart under a line: what's happening across TCGHaven
   { href: '/admin/statistics', label: 'Statistics', icon: BarChart3, ownerOnly: false, insights: true },
   { href: '/admin/finances', label: 'Finances', icon: Wallet, ownerOnly: true, insights: true },
+  { href: '/admin/premium', label: 'Haven Premium', icon: Gem, ownerOnly: true, insights: true },
 ] as { href: string; label: string; icon: typeof Library; ownerOnly: boolean; insights?: boolean }[]
 
 export function StaffPortal({ children }: { children: React.ReactNode }) {

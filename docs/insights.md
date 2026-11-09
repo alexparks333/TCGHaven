@@ -1,8 +1,7 @@
 # Staff portal Insights: Statistics & Finances (2026-11-09)
 
-Under a line in the staff portal's left bar ("Insights"): **Statistics** (all staff) and **Finances**
-(Owner only — hidden from the menu and refused by `firestore.rules` for everyone else). A third tab
-is planned.
+Under a line in the staff portal's left bar ("Insights"): **Statistics** (all staff), **Finances** and
+**Haven Premium** (Owner only — hidden from the menu and refused by `firestore.rules` for everyone else).
 
 ## How the numbers are made — cheap by design
 
@@ -69,7 +68,7 @@ palette validator on the portal surface `#efe4cc` — `GAME_COLORS` itself reads
 
 ## Finances (`components/admin/insights/FinancesPage.tsx`, `lib/finance.ts`)
 
-- **Haven Premium** is `PREMIUM_PRICE` ($3.99/month). Paying users today = Premium titles in Accounts
+- **Haven Premium**'s price comes from `premium/config` (the Haven Premium page). Paying users today = Premium titles in Accounts
   (Creators and Staff get it free, counted separately); revenue is an estimate (× price, minus
   `APPLE_CUT` 15% — the Small Business Program rate).
 - **Not built yet** (shown as "Connects with payments"): real revenue by month, how long people stay
@@ -78,3 +77,14 @@ palette validator on the portal surface `#efe4cc` — `GAME_COLORS` itself reads
 - **Cost tracker** (working): `finance/costs` = `{ items: CostItem[] }` — name, category, amount,
   monthly / yearly / one-off, first and last month, note. Totals by month (yearly bills spread over 12
   months, or in the month charged), by category, year to date, per account, and estimated profit.
+
+## Haven Premium (`components/admin/insights/PremiumPage.tsx`, `lib/premium.ts`)
+
+- **Pricing:** `premium/config` = `{ monthly, yearly, yearlyOn, history[] }` (public read — the app's
+  upgrade screen shows it; Owner write). Every save is logged in `history` (who, when, the prices).
+  These are the website's prices; Apple charges iPhone subscribers the App Store Connect price — keep
+  them in step by hand. Finances' revenue estimate uses the monthly price.
+- **Promo codes:** `promo_codes/{CODE}` = `{ months, maxUses|null, uses, expires 'YYYY-MM-DD'|null,
+  active, note, createdBy, createdAt }` — free months of Premium. Owner only; status = active / off /
+  expired / used up (`promoStatus()`). Not redeemable yet: redemption must be checked and counted on
+  the server when Premium entitlements are built (with Permanent Premium).

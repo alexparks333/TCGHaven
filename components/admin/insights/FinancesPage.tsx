@@ -7,9 +7,10 @@ import { cn } from '@/lib/utils'
 import { staffDb } from '@/lib/firebase/staff'
 import type { DailyStats } from '@/lib/stats/types'
 import {
-  APPLE_CUT, COST_CATEGORIES, PREMIUM_PRICE, addMonths, costIn, loadCosts, monthKey, monthLabel, saveCosts,
+  APPLE_CUT, COST_CATEGORIES, addMonths, costIn, loadCosts, monthKey, monthLabel, saveCosts,
   type Cadence, type CostCategory, type CostItem,
 } from '@/lib/finance'
+import { DEFAULT_PREMIUM, loadPremiumConfig } from '@/lib/premium'
 import { useStaff } from '../StaffAuthProvider'
 import { StaffModal } from '../StaffModal'
 import { Empty, Panel, RankBars, Tile, TimeBars, fmtInt, fmtMoney, fmtPct } from './charts'
@@ -34,11 +35,13 @@ export function FinancesPage() {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState<CostItem | null>(null)
   const [spread, setSpread] = useState(true)
+  const [price, setPrice] = useState(DEFAULT_PREMIUM.monthly)
 
   useEffect(() => {
     if (member?.role !== 'owner') return
     getDocs(query(collection(staffDb, 'stats_daily'), orderBy(documentId(), 'desc'), limit(1)))
       .then((s) => setStats((s.docs[0]?.data() as DailyStats) ?? null)).catch(() => setStats(null))
+    loadPremiumConfig(staffDb).then((c) => setPrice(c.monthly))
     loadCosts().then(setCosts).catch((e) => setError(`Couldn’t load costs: ${(e as Error).message}`))
   }, [member?.role])
 
@@ -55,7 +58,7 @@ export function FinancesPage() {
   const paid = stats?.roles?.premium ?? 0
   const freePremium = (stats?.roles?.creator ?? 0) + (stats?.roles?.staff ?? 0)
   const accounts = stats?.accounts?.total ?? 0
-  const grossMonthly = paid * PREMIUM_PRICE
+  const grossMonthly = paid * price
   const netMonthly = grossMonthly * (1 - APPLE_CUT)
   const costNow = monthTotal(thisMonth)
 
@@ -70,7 +73,7 @@ export function FinancesPage() {
       <div className="flex flex-wrap items-end gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-ink flex items-center gap-2">Finances <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 inline-flex items-center gap-1"><Crown size={10} />Owner only</span></h1>
-          <p className="text-sm text-slate-500 mt-0.5">Haven Premium is {fmtMoney(PREMIUM_PRICE)} a month. Revenue numbers here are estimates until payments are connected.</p>
+          <p className="text-sm text-slate-500 mt-0.5">Haven Premium is {fmtMoney(price)} a month (set on the Haven Premium page). Revenue numbers here are estimates until payments are connected.</p>
         </div>
       </div>
       {error && <div className="mb-4 rounded-xl border border-red-600/40 bg-red-100/20 px-3 py-2 text-sm text-red-600">{error}</div>}

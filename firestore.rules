@@ -104,6 +104,19 @@ service cloud.firestore {
       allow write: if isBot();
     }
 
+    // Haven Premium's prices (lib/premium.ts) — everyone can read them (the app shows them on the
+    // upgrade screen); only the Owner changes them.
+    match /premium/{doc} {
+      allow read: if true;
+      allow write: if isOwner();
+    }
+
+    // Promo codes for free months of Premium — the Owner only. Redeeming one will be checked and
+    // counted on the server, never by the app writing here.
+    match /promo_codes/{code} {
+      allow read, write: if isOwner();
+    }
+
     // Finances — the Owner only (the staff portal's Finances page: costs, and later revenue).
     match /finance/{doc} {
       allow read, write: if isOwner();
