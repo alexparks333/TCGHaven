@@ -23,10 +23,11 @@ interface TrayOption {
   price: string
   imageUrl: string
   detail: string   // why it matched — kept with the scan in test builds (CardScanner.md "Debug scans")
+  printings: Array<{ key: string; label: string; price: string }>  // the card sheet's Finish row
 }
 
 interface CardScannerPlugin {
-  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string; slab?: ScanSlab | null }> }>
+  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string; slab?: ScanSlab | null; printing?: string }> }>
   searchResults(opts: { requestId: string; options: TrayOption[] }): Promise<void>
   compare(opts: { scanId: string; imageUrls: string[] }): Promise<{ distances: Array<number | null> }>
   update(opts: { scanId: string; status: ScanStatus | 'error' | 'reject'; options: TrayOption[]; choice: number; note?: string; slab?: ScanSlab | null }): Promise<void>
@@ -42,6 +43,7 @@ export interface ScannedCard {
   choice: number         // which option the person kept
   status: ScanStatus
   slab: ScanSlab | null  // a graded slab: its company, grade and cert, read off the label
+  printing?: string      // the finish picked in the card sheet ("unlimited:reverse", "foil")
 }
 
 // How many look-alikes the phone compares by picture — small thumbnails (~10 KB each); the
@@ -56,6 +58,7 @@ function trayOption(m: ScanMatch & { final?: number; distance?: number | null },
     subtitle: [m.setName, m.number ? `#${m.number}` : '', m.language === 'ja' ? 'Japanese' : '', slab?.grade ? `${slab.company} ${slab.grade}` : ''].filter(Boolean).join(' · '),
     price: m.price > 0 ? formatCurrency(m.price) : '',
     imageUrl: cardImage(m.imageUrl, 'grid') ?? m.imageUrl,
+    printings: (m.printings ?? []).map((p) => ({ key: p.key, label: p.label, price: p.price > 0 ? formatCurrency(p.price) : '' })),
     detail: `text ${m.score}${m.final !== undefined ? ` → ${m.final}` : ''}${typeof m.distance === 'number' ? ` · picture ${m.distance.toFixed(3)}` : ''} · ${m.why}${m.exact ? '' : ' · name only'}`,
   }
 }
@@ -78,6 +81,9 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
           key: `${catalog}:${r.id}`, game, ...(lang && { language: lang }), id: r.id,
           name: r.name.replace(/ ✦ (Foil|Holo)$/, ''), setName: r.setName, number: r.number, imageUrl: r.imageUrl,
           price: r.marketPrice > 0 ? r.marketPrice : r.marketPriceFoil, score: 0, why: 'searched', exact: true,
+          printings: r.variantPrices && Object.keys(r.variantPrices).length
+            ? Object.entries(r.variantPrices).map(([k, v]) => ({ key: k, label: k.replace('unlimited:', '').replace('1st:', '1st Edition ').replace('shadowless:', 'Shadowless ').replace('normal', 'Normal').replace('holofoil', 'Holo').replace('reverse', 'Reverse Holo'), price: v }))
+            : [],
         }]
       }).slice(0, 8)
     })
@@ -171,8 +177,9 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   })
   try {
     const { items } = await CardScanner.open({ title: 'Scan cards' })
-    return items.flatMap(({ scanId, choice, confirmed, key, slab }) => {
-      const scanned = found.get(scanId) ?? { scanId, options: [], choice: 0, status: 'none' as ScanStatus, slab: null }
+    return items.flatMap(({ scanId, choice, confirmed, key, slab, printing }) => {
+      const found0 = found.get(scanId) ?? { scanId, options: [], choice: 0, status: 'none' as ScanStatus, slab: null }
+      const scanned = printing ? { ...found0, printing } : found0
       // The grading as the person left it in the card sheet (they can change or clear what was read)
       const card = slab !== undefined ? { ...scanned, slab: slab?.grade ? slab : null } : scanned
       // Picked by hand in the tray (one of the matches, or a card found with Search) → no need to ask again

@@ -102,7 +102,11 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
                 subtitle: o["subtitle"] as? String ?? "",
                 price: o["price"] as? String ?? "",
                 imageUrl: o["imageUrl"] as? String ?? "",
-                detail: o["detail"] as? String ?? ""
+                detail: o["detail"] as? String ?? "",
+                printings: (o["printings"] as? JSArray ?? []).compactMap { raw in
+                    guard let p = raw as? JSObject, let key = p["key"] as? String else { return nil }
+                    return Printing(key: key, label: p["label"] as? String ?? key, price: p["price"] as? String ?? "")
+                }
             )
         }
     }
@@ -138,6 +142,12 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
 
 // MARK: - Data
 
+struct Printing {
+    let key: String     // "unlimited:reverse", "foil"
+    let label: String   // "Reverse Holo", "1st Edition Holo", "Foil"
+    let price: String
+}
+
 struct TrayOption {
     let key: String
     let title: String
@@ -145,6 +155,7 @@ struct TrayOption {
     let price: String
     let imageUrl: String
     let detail: String
+    var printings: [Printing] = []
 }
 
 final class ScanItem {
@@ -152,6 +163,7 @@ final class ScanItem {
     let thumbnail: UIImage           // the scanned card, small — shown until the catalog photo loads
     var fromSwap = false             // scanned without the last card leaving: dropped if it's the same card
     var slab: SlabGrade?             // a graded slab: drawn in its slab, grade showing
+    var printing: String?            // the finish picked in the card sheet (reset when the card changes)
     var photo: UIImage?              // the scanned card, bigger — "Your scan" in the card sheet
     var signature: PictureMatcher.Signature?
     var status = "matching"          // matching | matched | pick | none | error
@@ -706,7 +718,8 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             ["scanId": $0.id, "choice": $0.choice, "confirmed": $0.confirmed,
              "key": $0.options.indices.contains($0.choice) ? $0.options[$0.choice].key : "",
              // the grading as left in the card sheet (null = ungraded)
-             "slab": $0.slab.map { ["company": $0.company, "grade": $0.grade, "cert": $0.cert] as Any } ?? NSNull()] as [String: Any]
+             "slab": $0.slab.map { ["company": $0.company, "grade": $0.grade, "cert": $0.cert] as Any } ?? NSNull(),
+             "printing": $0.printing ?? ""] as [String: Any]
         }
         finish(with: Array(picks))
     }
@@ -1868,6 +1881,9 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     private let setLabel = UILabel()
     private let priceLabel = UILabel()
     private let detailLabel = UILabel()
+    private let finishScroll = UIScrollView()
+    private let finishRow = UIStackView()
+    private var finishSection: [UIView] = []
     private let otherTitle = UILabel()
     private var others: UICollectionView!
     private let searchBar = UISearchBar()
@@ -2002,6 +2018,36 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         info.setCustomSpacing(8, after: setLabel)
         if DebugScans.enabled { info.addArrangedSubview(detailLabel) }
         stack.addArrangedSubview(info)
+
+        // Finish: every printing this card comes in (Normal / Holo / Reverse Holo / 1st Edition, or
+        // Normal / Foil), each with its price — the scanner can't tell them apart yet, so it's picked here
+        let finishHeader = UIView()
+        let finishTitle = UILabel()
+        sectionTitle(finishTitle, "Finish")
+        finishTitle.translatesAutoresizingMaskIntoConstraints = false
+        finishHeader.addSubview(finishTitle)
+        NSLayoutConstraint.activate([
+            finishTitle.leadingAnchor.constraint(equalTo: finishHeader.leadingAnchor, constant: 20),
+            finishTitle.topAnchor.constraint(equalTo: finishHeader.topAnchor, constant: 6),
+            finishTitle.bottomAnchor.constraint(equalTo: finishHeader.bottomAnchor),
+        ])
+        finishScroll.showsHorizontalScrollIndicator = false
+        finishScroll.translatesAutoresizingMaskIntoConstraints = false
+        finishRow.axis = .horizontal
+        finishRow.spacing = 8
+        finishRow.translatesAutoresizingMaskIntoConstraints = false
+        finishScroll.addSubview(finishRow)
+        NSLayoutConstraint.activate([
+            finishRow.leadingAnchor.constraint(equalTo: finishScroll.contentLayoutGuide.leadingAnchor, constant: 20),
+            finishRow.trailingAnchor.constraint(equalTo: finishScroll.contentLayoutGuide.trailingAnchor, constant: -20),
+            finishRow.topAnchor.constraint(equalTo: finishScroll.contentLayoutGuide.topAnchor),
+            finishRow.bottomAnchor.constraint(equalTo: finishScroll.contentLayoutGuide.bottomAnchor),
+            finishRow.heightAnchor.constraint(equalTo: finishScroll.frameLayoutGuide.heightAnchor),
+            finishScroll.heightAnchor.constraint(equalToConstant: 54),
+        ])
+        stack.addArrangedSubview(finishHeader)
+        stack.addArrangedSubview(finishScroll)
+        finishSection = [finishHeader, finishScroll]
 
         // The other cards it could be
         let otherHeader = UIView()
@@ -2221,6 +2267,7 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
             statusPill.text = "! Not found — search below"
             statusPill.backgroundColor = .systemRed; statusPill.textColor = .white
         }
+        showFinishes()
         let multiple = item.options.count > 1
         otherTitle.superview?.isHidden = !multiple
         others.isHidden = !multiple
@@ -2255,6 +2302,36 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
 
     @objc private func toggleView() { showing = ""; showImage() }
 
+    /// The Finish row: one pill per printing, the picked one in gold (the first is the default)
+    private func showFinishes() {
+        let printings = current?.printings ?? []
+        finishSection.forEach { $0.isHidden = printings.count < 2 }
+        finishRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        let picked = item.printing ?? printings.first?.key
+        for p in printings {
+            var c = UIButton.Configuration.filled()
+            c.title = p.label
+            c.subtitle = p.price.isEmpty ? nil : p.price
+            c.titleAlignment = .center
+            c.cornerStyle = .large
+            let on = p.key == picked
+            c.baseBackgroundColor = on ? sheetGold : UIColor(white: 1, alpha: 0.08)
+            c.baseForegroundColor = on ? .black : sheetInk
+            c.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 14, bottom: 6, trailing: 14)
+            c.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { a in var b = a; b.font = .systemFont(ofSize: 14, weight: .bold); return b }
+            c.subtitleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { a in var b = a; b.font = .systemFont(ofSize: 12, weight: .semibold); return b }
+            let key = p.key
+            let b = UIButton(configuration: c, primaryAction: UIAction { [weak self] _ in
+                guard let self = self else { return }
+                self.item.printing = key
+                UISelectionFeedbackGenerator().selectionChanged()
+                self.showFinishes()
+                self.onChange?()
+            })
+            finishRow.addArrangedSubview(b)
+        }
+    }
+
     /// The person changed the grading: Raw clears it; a company + grade makes it a slab
     @objc private func gradingChanged() {
         let companies = ["Raw", "PSA", "CGC", "BGS", "SGC", "TAG"]
@@ -2283,6 +2360,7 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         }
         item.status = "matched"
         item.confirmed = true
+        item.printing = nil
         UISelectionFeedbackGenerator().selectionChanged()
         showing = ""
         viewToggle.selectedSegmentIndex = 0

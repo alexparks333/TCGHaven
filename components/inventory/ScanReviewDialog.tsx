@@ -84,9 +84,15 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
     for (const s of scanned) {
       const key = s.options[s.choice].key
       // (graded cards stay one row each — each slab is its own grade)
-      const same = s.status === 'matched' && !s.slab && out.find((r) => !r.needsPick && !r.slab && r.options[r.choice].key === key)
+      const same = s.status === 'matched' && !s.slab && !s.printing && out.find((r) => !r.needsPick && !r.slab && r.foil === undefined && r.edition === undefined && r.options[r.choice].key === key)
       if (same) { same.quantity += 1; continue }
-      out.push({ rowId: s.scanId, options: s.options, choice: s.choice, needsPick: s.status !== 'matched', condition: 'near_mint', quantity: 1, slab: s.slab })
+      // The finish picked in the scanner's card sheet, when one was
+      const picked = s.printing
+        ? s.printing.includes(':')
+          ? { edition: s.printing.split(':')[0] as Edition, finish: s.printing.split(':')[1] as Finish }
+          : { foil: s.printing === 'foil' }
+        : {}
+      out.push({ rowId: s.scanId, options: s.options, choice: s.choice, needsPick: s.status !== 'matched', condition: 'near_mint', quantity: 1, slab: s.slab, ...picked })
     }
     return out
   })
