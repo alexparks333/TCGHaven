@@ -2,7 +2,7 @@
 // Fixtures are real catalog cards (trimmed); the OCR lines are what each card prints, laid out
 // where it prints it. lib/scan/scanMatch.ts reads them, lib/scan/decide.ts makes the final call.
 import assert from 'node:assert/strict'
-import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, type OcrLine, type ScanCatalog } from './scanMatch.ts'
+import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, readSlabLabel, type OcrLine, type ScanCatalog } from './scanMatch.ts'
 import { decide } from './decide.ts'
 
 const L = (text: string, y: number, h = 0.03): OcrLine => ({ text, x: 0.05, y, w: 0.6, h })
@@ -207,6 +207,31 @@ assert.equal(printedName('Mr.3(Galdino) (Alternate Art)'), 'Mr.3(Galdino)', "a n
     sets: [{ id: 'jp-23881', name: 'SM-P: Sun & Moon Promos', total: 413 }, { id: 'jp-1', name: 'S1: Sword', total: 400 }],
   }
   assert.equal(top([L('レインボーフラワー', 0.04, 0.05), L('C) 388/SM-P', 0.93, 0.015)], [cat])[0].id, 'jp-598465')
+}
+
+// ── Graded slabs: the label names the card (a real PSA 9 Mew VMAX, read on an iPhone 17 Pro Max) ──
+{
+  const at = (text: string, x: number, y: number): OcrLine => ({ text, x, y, w: 0.3, h: 0.025 })
+  const slabLines = [
+    at('2022 POKEMON SWSH', 0.05, 0.02), at('FA/MEW VMAX', 0.05, 0.05), at('LOST ORIGIN', 0.05, 0.08),
+    at('#TG30', 0.8, 0.02), at('MINT', 0.82, 0.05), at('9', 0.86, 0.08), at('140713476', 0.72, 0.11),
+    at('Gross Fusion Strike', 0.3, 0.7), at('E TGЗОЛTGВО *', 0.1, 0.95),  // the card's own number, garbled by the plastic
+  ]
+  const label = readSlabLabel(slabLines)
+  assert.deepEqual({ ...label, text: undefined }, { company: 'PSA', grade: '9', cert: '140713476', number: 'TG30', game: 'pokemon', text: undefined })
+  const cat: ScanCatalog = {
+    key: 'pokemon',
+    cards: [
+      { id: 'swsh11tg-TG30', name: 'Mew VMAX', number: 'TG30', set: 'swsh11tg', setName: 'Lost Origin Trainer Gallery' },
+      { id: 'swsh12tg-TG30', name: 'Duraludon VMAX', number: 'TG30', set: 'swsh12tg', setName: 'Silver Tempest Trainer Gallery' },
+    ],
+    sets: [{ id: 'swsh11tg', name: 'Lost Origin Trainer Gallery', total: 30 }, { id: 'swsh12tg', name: 'Silver Tempest Trainer Gallery', total: 30 }],
+  }
+  const r = top(slabLines, [cat])
+  assert.equal(r[0].id, 'swsh11tg-TG30')
+  assert.ok(r[0].score - r[1].score >= 20)
+  // An ordinary card is never mistaken for a slab
+  assert.equal(readSlabLabel([at('Charizard ex', 0.05, 0.04), at('HP 330', 0.8, 0.04), at('199/165', 0.05, 0.93)]), null)
 }
 
 // ── Nothing readable → nothing guessed ──

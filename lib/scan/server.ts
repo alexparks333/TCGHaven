@@ -8,7 +8,7 @@ import type { CatalogKey, Game, Language } from '../types'
 import { loadVisibleCatalog } from '../api/catalog'
 import { getPokemonSets } from '../api/pokemon'
 import { getSetsForGame } from '../api/search'
-import { readClues, matchScan, catalogIndex, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey } from './scanMatch'
+import { readClues, matchScan, catalogIndex, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
 
 export interface ScanMatch {
   key: string                 // "catalog:id"
@@ -68,16 +68,21 @@ export async function warmScanner(games: Game[]): Promise<void> {
   for (const c of catalogs) catalogIndex(c)
 }
 
-export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise<ScanMatch[]> {
+/** A graded slab's label, when the scan was of one — the review screen fills in the grade */
+export type ScanSlab = Pick<SlabLabel, 'company' | 'grade' | 'cert'>
+
+export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   const catalogs = await Promise.all(catalogsFor(games).map(scanCatalog))
   const byId = new Map<string, RawCard>()
-  const candidates = matchScan(readClues(lines), catalogs)
+  const clues = readClues(lines)
+  const slab = clues.slab ? { company: clues.slab.company, grade: clues.slab.grade, cert: clues.slab.cert } : null
+  const candidates = matchScan(clues, catalogs)
   for (const c of candidates) {
     const cat = catalogs.find((x) => x.key === c.catalog)
     const card = cat && (catalogIndex(cat).byId.get(c.id) as RawCard | undefined)
     if (card) byId.set(`${c.catalog}:${c.id}`, card)
   }
-  return candidates.flatMap((c) => {
+  return { slab, candidates: candidates.flatMap((c) => {
     const card = byId.get(`${c.catalog}:${c.id}`)
     if (!card) return []
     const regular = card.marketPrice ?? 0, foil = card.marketPriceFoil ?? 0
@@ -95,5 +100,5 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise
       why: c.why,
       exact: c.exact,
     }]
-  })
+  }) }
 }

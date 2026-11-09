@@ -72,6 +72,21 @@ export interface ScanClues {
   words: Set<string>          // every folded word read, for name matching
   japanese: boolean
   pokemonWords: boolean       // "HP", "Weakness", "Retreat" — printed on every Pokémon card
+  slab: SlabLabel | null      // a graded card's label (PSA / CGC / BGS / SGC), when one was read
+}
+
+/** What a grading company's label says. PSA's, for example:
+ *    2022 POKEMON SWSH        #TG30
+ *    FA/MEW VMAX              MINT
+ *    LOST ORIGIN              9
+ *                             140713476        */
+export interface SlabLabel {
+  company: 'PSA' | 'CGC' | 'BGS' | 'SGC' | ''
+  grade: string        // "9", "10", "8.5", "Authentic"
+  cert: string
+  number: string       // "TG30"
+  game: ScanCatalogKey | null
+  text: string[]       // the label's other lines: name, set, variant ("FA/MEW VMAX", "LOST ORIGIN")
 }
 
 // ── Text helpers ────────────────────────────────────────────────────────────
@@ -103,6 +118,8 @@ const HOMOGLYPHS: Record<string, string> = {
   'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'к': 'k', 'м': 'm', 'т': 't', 'в': 'b', 'н': 'h',
   'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K', 'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X', 'У': 'Y',
   'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I', 'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O', 'Ρ': 'P', 'Τ': 'T', 'Υ': 'Y', 'Χ': 'X',
+  // …and digits: Cyrillic З for 3 ("TGЗ0/TG30" — read off a real Mew VMAX), б for 6, Ч for 4, О for 0
+  'З': '3', 'з': '3', 'б': '6', 'Б': '6', 'Ч': '4', 'І': 'I', 'і': 'i', 'Ѕ': 'S', 'ѕ': 's', 'Ј': 'J', 'ј': 'j', 'Ү': 'Y',
   '•': '•', '・': '•', '／': '/',
 }
 function latin(s: string): string {
@@ -161,7 +178,7 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
     fractions: [], promos: [], starPromo: [], opCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [],
-    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false,
+    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
 
@@ -231,6 +248,7 @@ export function readClues(lines: OcrLine[]): ScanClues {
     }
   }
 
+  clues.slab = readSlabLabel(lines)
   clues.pokemonWords = ['hp', 'weakness', 'resistance', 'retreat', 'trainer', 'pokemon'].some((w) => clues.words.has(w))
     || lines.some((l) => /弱点|抵抗力|にげる/.test(l.text))
   // The name: the biggest text, or anything along the top edge (Pokémon and Magic print it there)
@@ -241,6 +259,49 @@ export function readClues(lines: OcrLine[]): ScanClues {
     .map((l) => latin(l.text).replace(HP_NOISE, ' ').replace(/\s+/g, ' ').trim())
     .filter((t) => t.length >= 2)
   return clues
+}
+
+// ── Graded slabs ────────────────────────────────────────────────────────────
+
+const GRADE_WORDS = /^(GEM\s?MT|GEM\s?MINT|PRISTINE|MINT\+?|NM-MT\+?|NM\+?|EX-MT\+?|EX\+?|VG-EX\+?|VG\+?|GOOD\+?|FAIR|PR|POOR|AUTHENTIC|AUTH)\b/i
+
+/** A grading company's label along the top of a slab: the card number ("#TG30"), the grade and
+ *  the cert number, plus the name/set lines. Null when the lines don't look like a label. */
+export function readSlabLabel(lines: OcrLine[]): SlabLabel | null {
+  const top = lines.filter((l) => l.y < 0.3).map((l) => ({ ...l, text: latin(l.text).trim() }))
+  const numLine = top.find((l) => /^#\s?[A-Z]{0,4}[0-9OIl]{1,4}[a-z]?$/i.test(l.text))
+  const certLine = top.find((l) => /^\d{7,10}$/.test(l.text.replace(/\s/g, '')))
+  const gradeIdx = top.findIndex((l) => GRADE_WORDS.test(l.text))
+  // Two of the three tell-tales — a "#number", a cert, a grade word
+  if ([numLine, certLine, gradeIdx >= 0 ? 1 : undefined].filter(Boolean).length < 2) return null
+
+  let grade = ''
+  if (gradeIdx >= 0) {
+    const inline = top[gradeIdx].text.match(/(\d{1,2}(?:\.5)?)\s*$/)
+    if (inline) grade = inline[1]
+    else {
+      // The number usually sits on its own line just below the grade word
+      const below = top.filter((l) => /^\d{1,2}(\.5)?$/.test(l.text) && Math.abs(l.x - top[gradeIdx].x) < 0.15 && l.y > top[gradeIdx].y)
+        .sort((a, b) => a.y - b.y)[0]
+      if (below) grade = below.text
+    }
+    if (/^AUTH/i.test(top[gradeIdx].text)) grade = 'Authentic'
+  }
+  const all = top.map((l) => l.text).join(' ').toUpperCase()
+  const company: SlabLabel['company'] = /\bCGC\b/.test(all) ? 'CGC' : /\bBGS\b|BECKETT/.test(all) ? 'BGS' : /\bSGC\b/.test(all) ? 'SGC' : 'PSA'
+  const game: ScanCatalogKey | null = /POKEMON JAPANESE|JAPANESE/.test(all) ? 'pokemon-jp' : /POKEMON|POKÉMON/.test(all) ? 'pokemon'
+    : /ONE PIECE/.test(all) ? 'onepiece' : /LORCANA/.test(all) ? 'lorcana' : /MAGIC|MTG/.test(all) ? 'mtg' : /RIFTBOUND/.test(all) ? 'riftbound' : null
+  const number = numLine ? toDigitsAfterPrefix(numLine.text.replace(/^#\s?/, '')) : ''
+  const used = new Set([numLine, certLine, gradeIdx >= 0 ? top[gradeIdx] : undefined].filter(Boolean))
+  const text = top.filter((l) => !used.has(l) && !/^\d{1,2}(\.5)?$/.test(l.text) && /[A-Za-z]{2,}/.test(l.text))
+    .map((l) => l.text.replace(/^\d{4}\s+/, '').replace(/^(FA|SA|AA|RH|HOLO|REV\.? FOIL)\//i, ''))
+  return { company, grade, cert: certLine ? certLine.text.replace(/\s/g, '') : '', number, game, text }
+}
+
+/** "TG3O" → "TG30": the letters in front stay, O / I / l after them are digits */
+function toDigitsAfterPrefix(s: string): string {
+  const m = s.match(/^([A-Za-z]*?)([0-9OIl]+)([a-z]?)$/)
+  return m ? m[1] + m[2].replace(/O/g, '0').replace(/[Il]/g, '1') + m[3] : s
 }
 
 // ── Candidates ──────────────────────────────────────────────────────────────
@@ -356,6 +417,20 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
     const reason = ns >= 0.75 ? `${why} + name` : why
     if (!prev || prev.score < score) best.set(key, { catalog, id: c.id, name: c.name, score, why: reason, exact: exact || !!prev?.exact })
     else if (exact && !prev.exact) prev.exact = true
+  }
+
+  // A graded slab's label names the card outright: number + set (+ name)
+  if (clues.slab?.number) {
+    const label = clues.slab
+    const labelWords = new Set(label.text.flatMap((t) => fold(t).split(' ')).filter(Boolean))
+    for (const cat of catalogs) {
+      if (label.game && cat.key !== label.game && !(label.game === 'pokemon' && cat.key === 'pokemon-jp')) continue
+      for (const c of catalogIndex(cat).byNum.get(numKey(label.number)) ?? []) {
+        // The label's set line ("LOST ORIGIN") against the card's set name
+        const setHit = nameScore(String(c.setName ?? ''), labelWords)
+        offer(cat.key, c, 45 + setHit * 25, `${label.company} label #${label.number}${setHit >= 0.75 ? ' + set' : ''}`)
+      }
+    }
   }
 
   for (const cat of catalogs) {

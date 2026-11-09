@@ -359,6 +359,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private var lastScanSignature: PictureMatcher.Signature?
     private var lastSwapCheckAt: CFTimeInterval = 0
     private var steadySince: CFTimeInterval = 0
+    // once-a-second numbers for the debug log
+    private var statFrames = 0, statFound = 0, statFocusing = 0, statAt: CFTimeInterval = 0
+    private var statMotion: [CGFloat] = []
 
     // UI (main thread)
     private let outlineLayer = CAShapeLayer()
@@ -735,26 +738,75 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     }
 
     // MARK: Finding the card
+    //
+    // Measured on a real iPhone 17 Pro Max (2026-11-08): detecting rectangles afresh in every frame
+    // found the card in only ~1 frame in 3, and jumped between the card, the table edge and
+    // shadows (outline moving 6–30% of the screen per frame) — so it could never be "steady".
+    // Now, like Apple's own document scanner: find the card (Vision's document detector, which is
+    // learned, plus the rectangle detector as a fallback), confirm it on a second frame, then
+    // *track* it (Vision's rectangle tracker) so the outline stays on the card as the hand moves.
 
-    /// The card in this frame: the largest card-shaped outline, so the art box or text box inside a
-    /// card never wins over the card itself
-    private func detectCard(_ pixels: CVPixelBuffer) -> [CGPoint]? {
-        let request = VNDetectRectanglesRequest()
-        request.minimumAspectRatio = Self.cardAspect.min
-        request.maximumAspectRatio = Self.cardAspect.max
-        request.minimumSize = 0.2
-        request.quadratureTolerance = 25
-        request.minimumConfidence = 0.5
-        request.maximumObservations = 6
+    private let sequence = VNSequenceRequestHandler()
+    private var tracker: VNTrackRectangleRequest?
+    private var pendingQuad: [CGPoint]?     // a detection waiting for the next frame to confirm it
+    private var frameSize = CGSize(width: 2160, height: 3840)
+
+    private static func corners(_ r: VNRectangleObservation) -> [CGPoint] { [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft] }
+
+    /// Card-shaped (63 × 88, allowing for tilt and sleeves) and big enough to read, in real pixels
+    private func cardShaped(_ q: [CGPoint]) -> Bool {
+        let px = q.map { CGPoint(x: $0.x * frameSize.width, y: $0.y * frameSize.height) }
+        let d = { (a: CGPoint, b: CGPoint) in hypot(a.x - b.x, a.y - b.y) }
+        let w = (d(px[0], px[1]) + d(px[3], px[2])) / 2, h = (d(px[0], px[3]) + d(px[1], px[2])) / 2
+        guard w > 0, h > 0 else { return false }
+        let aspect = Float(min(w, h) / max(w, h))
+        let areaShare = (w * h) / (frameSize.width * frameSize.height)
+        return aspect >= Self.cardAspect.min && aspect <= Self.cardAspect.max && areaShare >= 0.05 && areaShare <= 0.97
+    }
+
+    private func detect(_ pixels: CVPixelBuffer) -> VNRectangleObservation? {
+        let doc = VNDetectDocumentSegmentationRequest()
+        let rect = VNDetectRectanglesRequest()
+        rect.minimumAspectRatio = Self.cardAspect.min
+        rect.maximumAspectRatio = Self.cardAspect.max
+        rect.minimumSize = 0.2
+        rect.quadratureTolerance = 25
+        rect.minimumConfidence = 0.5
+        rect.maximumObservations = 6
         let handler = VNImageRequestHandler(cvPixelBuffer: pixels, orientation: .right, options: [:])
-        try? handler.perform([request])
-        let best = (request.results ?? []).max { area($0) < area($1) }
-        guard let r = best else { return nil }
-        return [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
+        try? handler.perform([doc, rect])
+        if let d = (doc.results ?? []).first(where: { $0.confidence >= 0.5 && cardShaped(Self.corners($0)) }) { return d }
+        // The largest card-shaped rectangle — never the art box or text box inside a card
+        return (rect.results ?? []).filter { cardShaped(Self.corners($0)) }.max { area($0) < area($1) }
+    }
+
+    /// The card in this frame: followed by the tracker once found
+    private func detectCard(_ pixels: CVPixelBuffer) -> [CGPoint]? {
+        frameSize = CGSize(width: CVPixelBufferGetHeight(pixels), height: CVPixelBufferGetWidth(pixels))
+        if let t = tracker {
+            if (try? sequence.perform([t], on: pixels, orientation: .right)) != nil,
+               let obs = t.results?.first as? VNRectangleObservation, obs.confidence >= 0.3, cardShaped(Self.corners(obs)) {
+                t.inputObservation = obs
+                return Self.corners(obs)
+            }
+            tracker = nil   // lost it — find it again
+        }
+        guard let obs = detect(pixels) else { pendingQuad = nil; return nil }
+        let q = Self.corners(obs)
+        // Confirmed by a second frame in the same place → start following it
+        if let p = pendingQuad, zip(p, q).allSatisfy({ hypot($0.0.x - $0.1.x, $0.0.y - $0.1.y) < 0.04 }) {
+            let t = VNTrackRectangleRequest(rectangleObservation: obs)
+            t.trackingLevel = .accurate
+            tracker = t
+            pendingQuad = nil
+            return q
+        }
+        pendingQuad = q
+        return nil
     }
 
     private func area(_ r: VNRectangleObservation) -> CGFloat {
-        let p = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
+        let p = Self.corners(r)
         var a: CGFloat = 0
         for i in 0..<4 { let j = (i + 1) % 4; a += p[i].x * p[j].y - p[j].x * p[i].y }
         return abs(a) / 2
@@ -850,6 +902,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             return
         }
         let focusing = device?.isAdjustingFocus ?? false
+        if DebugScans.enabled { recordStats(found: found != nil, motion: motion, focusing: focusing, now: now) }
         if found != nil && motion < Self.steadyMotion && !focusing {
             steadiness = min(1, steadiness + dt / Self.steadyTime)
         } else if found != nil && motion >= Self.steadyMotion * 2 {
@@ -863,6 +916,18 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         manualCapture = false
         steadiness = 0
         beginReading(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: rawQuad ?? quad, imageSize: imageSize, now: now)
+    }
+
+    private func recordStats(found: Bool, motion: CGFloat, focusing: Bool, now: CFTimeInterval) {
+        statFrames += 1
+        if found { statFound += 1; statMotion.append(motion) }
+        if focusing { statFocusing += 1 }
+        guard now - statAt >= 1 else { return }
+        let m = statMotion.sorted()
+        let med = m.isEmpty ? -1 : m[m.count / 2]
+        DebugScans.log(String(format: "frames %d, card found %d, focusing %d, motion median %.4f max %.4f, steadiness %.2f, phase %@, tracking %@, zoom %.2f",
+                              statFrames, statFound, statFocusing, med, m.last ?? -1, steadiness, "\(phase)", tracker == nil ? "no" : "yes", device?.videoZoomFactor ?? 0))
+        statFrames = 0; statFound = 0; statFocusing = 0; statMotion = []; statAt = now
     }
 
     // MARK: Reading the card
@@ -939,8 +1004,12 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                 merged.append(l)
             }
         }
-        let signature = PictureMatcher.signature(of: image)
+        // A graded slab: the picture to compare is the card inside it, not the label and plastic
+        let slab = Self.isSlab(merged)
+        let cardOnly = slab ? (cardInsideSlab(image) ?? image) : image
+        let signature = PictureMatcher.signature(of: cardOnly)
         let thumb = Self.thumbnail(image)
+        if slab { DebugScans.log("graded slab — comparing the card inside it (\(cardOnly.width)×\(cardOnly.height))") }
         lastScanSignature = signature
         lastSwapCheckAt = CACurrentMediaTime()
         steadySince = 0
@@ -989,6 +1058,39 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let scale = min(1, 1400 / out.extent.height)
         if scale < 1 { out = out.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) }
         return ciContext.createCGImage(out, from: out.extent)
+    }
+
+    /// A grading company's label along the top: a cert number or a grade word up there
+    private static let slabPattern = try! NSRegularExpression(
+        pattern: "^(\\d{7,10}|#\\s?[A-Z]{0,4}\\d{1,4}[a-z]?|GEM\\s?MT.*|GEM\\s?MINT.*|MINT.*|NM-MT.*|EX-MT.*|PRISTINE.*|AUTHENTIC.*)$", options: [.caseInsensitive])
+    private static func isSlab(_ lines: [[String: Any]]) -> Bool {
+        let hits = lines.filter { l in
+            guard let t = (l["text"] as? String)?.trimmingCharacters(in: .whitespaces), let y = l["y"] as? CGFloat, y < 0.3 else { return false }
+            return slabPattern.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil
+        }
+        return hits.count >= 2
+    }
+
+    /// The card inside a flattened slab: the largest card-shaped outline below the label, or — if
+    /// the plastic hides its edges — the part of the slab a card sits in (PSA / CGC / BGS slabs
+    /// all put the label in the top ~22%)
+    private func cardInsideSlab(_ slab: CGImage) -> CGImage? {
+        let W = CGFloat(slab.width), H = CGFloat(slab.height)
+        let request = VNDetectRectanglesRequest()
+        request.minimumAspectRatio = Self.cardAspect.min
+        request.maximumAspectRatio = Self.cardAspect.max
+        request.minimumSize = 0.5
+        request.quadratureTolerance = 15
+        request.maximumObservations = 6
+        try? VNImageRequestHandler(cgImage: slab, options: [:]).perform([request])
+        let inside = (request.results ?? []).filter { r in
+            let b = r.boundingBox  // bottom-left origin
+            return b.maxY < 0.86 && b.height > 0.55 && b.height < 0.84
+        }.max { $0.boundingBox.width * $0.boundingBox.height < $1.boundingBox.width * $1.boundingBox.height }
+        let ci = CIImage(cgImage: slab)
+        if let r = inside, let flat = flatten(ci, quad: Self.corners(r)) { return flat }
+        let crop = CGRect(x: W * 0.03, y: H * 0.015, width: W * 0.94, height: H * 0.76)  // Core Image: bottom-left origin
+        return ciContext.createCGImage(ci, from: crop)
     }
 
     private func readText(_ image: CGImage) -> [[String: Any]] {

@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
   const lines = cleanLines(body?.lines)
-  if (lines.length === 0) return NextResponse.json({ candidates: [] })
-  const candidates = await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : []))
-  return NextResponse.json({ candidates })
+  if (lines.length === 0) return NextResponse.json({ candidates: [], slab: null })
+  return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : [])))
 }

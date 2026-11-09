@@ -33,6 +33,7 @@ interface Row {
   finish?: Finish
   condition: Condition
   quantity: number
+  slab: ScannedCard['slab']   // graded: company + grade from the slab's label
 }
 
 type Rows = CardSearchResult[] | 'loading' | 'error'
@@ -82,9 +83,10 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
     const out: Row[] = []
     for (const s of scanned) {
       const key = s.options[s.choice].key
-      const same = s.status === 'matched' && out.find((r) => !r.needsPick && r.options[r.choice].key === key)
+      // (graded cards stay one row each — each slab is its own grade)
+      const same = s.status === 'matched' && !s.slab && out.find((r) => !r.needsPick && !r.slab && r.options[r.choice].key === key)
       if (same) { same.quantity += 1; continue }
-      out.push({ rowId: s.scanId, options: s.options, choice: s.choice, needsPick: s.status !== 'matched', condition: 'near_mint', quantity: 1 })
+      out.push({ rowId: s.scanId, options: s.options, choice: s.choice, needsPick: s.status !== 'matched', condition: 'near_mint', quantity: 1, slab: s.slab })
     }
     return out
   })
@@ -146,6 +148,8 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           imageUrl: result.imageUrl || '',
           apiId: result.id,
           ...(result.rarity && { rarity: result.rarity }),
+          // Read off the slab's label (prices stay the raw card's — graded prices aren't tracked yet)
+          ...(row.slab?.company && row.slab.grade && { gradingCompany: row.slab.company, grade: row.slab.grade }),
           ...(match.game === 'riftbound' && { nexus: false }),
           ...(match.game === 'pokemon' && vp && row.edition && { edition: row.edition }),
           ...(match.game === 'pokemon' && vp && row.finish && { finish: row.finish }),
@@ -205,6 +209,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                       <div className="font-semibold text-ink truncate">{match.name}</div>
                       <div className="text-xs text-slate-400 truncate">
                         {match.setName}{match.number ? ` · #${match.number}` : ''}{match.language === 'ja' ? ' · Japanese' : ''}
+                        {row.slab?.grade && <span className="ml-1 font-semibold text-ink"> · {row.slab.company} {row.slab.grade}</span>}
                       </div>
                     </div>
                     <button onClick={() => setRows((rs) => rs.filter((r) => r.rowId !== row.rowId))} disabled={saving} className="p-1 text-slate-500 hover:text-ink shrink-0" aria-label="Remove">

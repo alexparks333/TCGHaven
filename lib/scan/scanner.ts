@@ -13,7 +13,7 @@ import { cardImage } from '../cardImage'
 import { formatCurrency } from '../utils'
 import { decide, type ScanStatus } from './decide'
 import type { OcrLine } from './scanMatch'
-import type { ScanMatch } from './server'
+import type { ScanMatch, ScanSlab } from './server'
 
 interface TrayOption {
   title: string
@@ -37,6 +37,7 @@ export interface ScannedCard {
   options: ScanMatch[]   // best first
   choice: number         // which option the person kept
   status: ScanStatus
+  slab: ScanSlab | null  // a graded slab: its company, grade and cert, read off the label
 }
 
 // How many look-alikes the phone compares by picture — small thumbnails (~10 KB each); the
@@ -44,17 +45,17 @@ export interface ScannedCard {
 const MAX_COMPARE = 40
 const MATCH_TIMEOUT_MS = 12000
 
-function trayOption(m: ScanMatch & { final?: number; distance?: number | null }): TrayOption {
+function trayOption(m: ScanMatch & { final?: number; distance?: number | null }, slab: ScanSlab | null): TrayOption {
   return {
     title: m.name,
-    subtitle: [m.setName, m.number ? `#${m.number}` : '', m.language === 'ja' ? 'Japanese' : ''].filter(Boolean).join(' · '),
+    subtitle: [m.setName, m.number ? `#${m.number}` : '', m.language === 'ja' ? 'Japanese' : '', slab?.grade ? `${slab.company} ${slab.grade}` : ''].filter(Boolean).join(' · '),
     price: m.price > 0 ? formatCurrency(m.price) : '',
     imageUrl: cardImage(m.imageUrl, 'grid') ?? m.imageUrl,
     detail: `text ${m.score}${m.final !== undefined ? ` → ${m.final}` : ''}${typeof m.distance === 'number' ? ` · picture ${m.distance.toFixed(3)}` : ''} · ${m.why}${m.exact ? '' : ' · name only'}`,
   }
 }
 
-async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<ScanMatch[]> {
+async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS)
@@ -66,7 +67,7 @@ async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<ScanMat
         signal: ctrl.signal,
       })
       if (!res.ok) throw new Error(`scan match ${res.status}`)
-      return ((await res.json()) as { candidates: ScanMatch[] }).candidates
+      return (await res.json()) as { candidates: ScanMatch[]; slab: ScanSlab | null }
     } catch (err) {
       if (attempt >= 1) throw err   // one retry — a dropped connection on a phone is common
     } finally {
@@ -76,7 +77,7 @@ async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<ScanMat
 }
 
 async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promise<{ card: ScannedCard; tray: TrayOption[] }> {
-  const candidates = await fetchCandidates(lines, games)
+  const { candidates, slab } = await fetchCandidates(lines, games)
 
   // Only the candidates still in the running get compared by picture
   const best = candidates[0]?.score ?? 0
@@ -94,8 +95,8 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promis
   const rest = candidates.filter((c) => !close.includes(c))
   const ordered: Array<ScanMatch & { final?: number; distance?: number | null }> = [...ranked, ...rest]
   return {
-    card: { scanId, options: ordered.map(({ final: _f, distance: _d, ...m }) => m), choice: 0, status },
-    tray: ordered.map(trayOption),
+    card: { scanId, options: ordered.map(({ final: _f, distance: _d, ...m }) => m), choice: 0, status, slab },
+    tray: ordered.map((m) => trayOption(m, slab)),
   }
 }
 
