@@ -2,8 +2,9 @@
 
 import { PrintingTags } from '@/components/PrintingTags'
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, BookOpen, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch } from '@/lib/utils'
@@ -80,6 +81,10 @@ export default function CardDetailPage() {
   const cost = card.purchasePrice * card.quantity
   const pnl = currentVal - cost
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
+  // Opens this card's set in the Cardex and goes to the card there (CardexPage's ?card= effect).
+  // Japanese Pokémon has its own Cardex tab.
+  const cardexTab = card.game === 'pokemon' && card.language === 'ja' ? 'pokemon-jp' : card.game
+  const cardexHref = `/cardex?game=${cardexTab}&set=${encodeURIComponent(card.set)}&card=${encodeURIComponent(card.id)}`
 
   return (
     <AuthGuard>
@@ -116,6 +121,13 @@ export default function CardDetailPage() {
               <div className="text-xs text-slate-500">{conditionLabel(card)}</div>
               <div className="text-xs text-slate-500">Qty: {card.quantity}</div>
               <div className="text-xs text-slate-500">Bought: {formatDate(card.purchaseDate)}</div>
+              <Link
+                href={cardexHref}
+                onClick={(e) => e.stopPropagation()}
+                className="btn-secondary w-fit mt-1 whitespace-nowrap"
+              >
+                <BookOpen size={14} /> View in Cardex
+              </Link>
             </div>
           </div>
 

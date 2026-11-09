@@ -635,6 +635,9 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   const searchParams = useSearchParams()
   const urlGame = readOnly ? null : searchParams.get('game')
   const urlSet = readOnly ? null : searchParams.get('set')
+  // ?card=<inventory card id> ("View in Cardex" on a card's detail page): go to that card once its
+  // set is on screen. One-shot — cleared when used, and dropped from the URL by the mirror below.
+  const urlCard = useRef(readOnly ? null : searchParams.get('card'))
 
   // Starts on the deep-linked game if there is one, else the first game this user tracks
   // (trackedGames is already hydrated from localStorage by the time this first renders).
@@ -875,6 +878,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     if (!urlSetApplied.current) return
     const params = new URLSearchParams(window.location.search)
     params.set('game', activeGame)
+    params.delete('card')
     if (activeGame === 'personal') params.delete('set')
     else params.set('set', activeSet.name)
     const next = `${window.location.pathname}?${params}`
@@ -1074,6 +1078,31 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     return () => clearTimeout(t)
   }, [artPending, setKey])
 
+  // "View in Cardex": scroll to the linked card and pulse it, once its set is showing. A set the
+  // catalog doesn't know lands in the Special bucket, whose tiles are the inventory cards themselves.
+  useEffect(() => {
+    if (!urlCard.current || !setReady || !urlSetApplied.current) return
+    const owned = cards.find((c) => c.id === urlCard.current)
+    if (!owned) return
+    if (!activeSet.fromInventory && activeSet.name !== owned.set) return // a default set is still showing
+    urlCard.current = null
+    const tileId = activeSet.fromInventory
+      ? owned.id
+      : catalogCards.find((cc) => getOwnedInfo(cc, [owned], baseGame).owned)?.id
+    if (!tileId) return
+    const tile = document.querySelector(`[data-cardex-tile="${CSS.escape(tileId)}"]`)
+    if (!tile) return
+    tile.scrollIntoView({ block: 'center' })
+    tile.animate(
+      [
+        { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 #7c3aed)' },
+        { transform: 'scale(1.08)', filter: 'drop-shadow(0 0 14px #7c3aed)' },
+        { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 #7c3aed)' },
+      ],
+      { duration: 900, iterations: 3 },
+    )
+  }, [setReady, activeSet, cards, catalogCards, baseGame])
+
   // The active game's categories (eras/product groups) and which one is currently selected —
   // drives the two-tier tree picker below (category list, then that category's sets).
   const categories = groupsByGame[catalogGame]
@@ -1087,9 +1116,6 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
         {!readOnly && (
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-ink">Cardex</h1>
-            <p className="text-slate-400 text-sm mt-0.5">
-              Your personal collection tracker — grey means missing, full color means you own it.
-            </p>
           </div>
         )}
 
@@ -1461,6 +1487,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
 
   return (
     <div
+      data-cardex-tile={card.id}
       className="relative group cursor-pointer select-none"
       // No double-tap page zoom on phones — a double tap here means "add this card"
       style={{ touchAction: 'manipulation' }}
@@ -1569,6 +1596,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
 
   return (
     <div
+      data-cardex-tile={card.id}
       className="relative group cursor-pointer"
       // Mouse only: on a phone, a tap that fires a hover handler which changes the page (this
       // shows a tooltip) makes iOS treat that first tap as a hover and wait for a second tap

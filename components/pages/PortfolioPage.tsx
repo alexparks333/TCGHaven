@@ -230,9 +230,6 @@ export default function PortfolioPage() {
           <div className="flex items-start justify-between gap-3 md:contents">
             <div className="min-w-0 md:mr-auto">
               <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
-              <p className="text-slate-500 text-xs mt-0.5">
-                TCGplayer market prices · updated automatically twice a day
-              </p>
             </div>
             {/* Opens the FilterPanel above the page (ClientWrapper) */}
             <button

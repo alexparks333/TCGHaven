@@ -45,10 +45,16 @@
   }
 
   /* iOS gives date inputs an intrinsic minimum width that can push them past their container
-     (the Sell dialog's "Date Sold" field did) — keep them inside their box like other inputs. */
+     (the Sell dialog's "Date Sold" field did) — keep them inside their box like other inputs.
+     Dropping the native appearance is what makes iOS honor the width; tapping still opens the picker. */
   input[type='date'] {
     min-width: 0;
     max-width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: left;
   }
 }
 

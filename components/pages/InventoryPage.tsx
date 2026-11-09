@@ -350,8 +350,7 @@ export default function InventoryPage() {
     return { count: sessionCards.reduce((s, c) => s + c.quantity, 0), paid, market, byGame }
   }, [sessionCards])
 
-  const { totalPaid, totalMarket, displayCount } = useMemo(() => ({
-    totalPaid: filtered.reduce((s, c) => s + c.purchasePrice * c.quantity, 0),
+  const { totalMarket, displayCount } = useMemo(() => ({
     totalMarket: filtered.reduce((s, c) => s + ((c.currentPrice ?? 0) > 0 ? c.currentPrice! * c.quantity : 0), 0),
     displayCount: grouped
       ? grouped.reduce((s, g) => s + g.totalQty, 0)
@@ -433,7 +432,7 @@ export default function InventoryPage() {
           <div>
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <p className="text-slate-400 text-sm mt-0.5">
-              {displayCount} cards · paid {formatCurrency(totalPaid)}
+              {displayCount} cards
               {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
             </p>
           </div>

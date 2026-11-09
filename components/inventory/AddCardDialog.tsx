@@ -80,7 +80,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   const [marketPrices, setMarketPrices] = useState({ regular: existingMarket, foil: existingMarket })
   // Pokémon: the selected catalog card's price for every printing (edition × finish) — drives the
   // Edition / Finish pickers and the shown market price. null = no per-printing prices (other
-  // games, manual entry, a backup-priced card): the classic Foil checkbox applies instead.
+  // games, manual entry, a backup-priced card): the classic regular / foil pair applies instead.
   const [variantPrices, setVariantPrices] = useState<Record<string, number> | null>(null)
   const japanese = form.game === 'pokemon' && form.language === 'ja'
   const langParam = japanese ? '&lang=ja' : ''
@@ -634,8 +634,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             </div>
           </div>
 
-          {/* How Much Paid + Date */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* How Much Paid + Date — one per row on phones, where a date field runs out of room beside another */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="field-label">How Much Paid ($)</label>
               <input
@@ -660,7 +660,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
           {/* Foil toggle — not shown for One Piece: a "Parallel" print is its own catalog entry
               (selected from the search dropdown, e.g. "Shanks (Parallel)"), not a foil toggle of
-              the same card the way Pokemon holo/Lorcana foil/Riftbound foil are. */}
+              the same card the way Lorcana foil/Riftbound foil are. */}
           {/* Pokémon cards picked from the catalog choose an exact printing instead: Edition (only
               for cards TCGplayer prices in more than one — WotC-era sets, early Japanese sets) and
               Finish (Normal / Holo / Reverse Holo — only the ones that card actually comes in). */}
@@ -709,7 +709,9 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             )
           })()}
 
-          {form.game !== 'onepiece' && !(form.game === 'pokemon' && variantPrices) && (
+          {/* No checkbox for Pokémon either: its printings come from the catalog (the pickers above,
+              or a backup-priced card's own "✦ Holo" search row). A saved card's isFoil is kept as is. */}
+          {form.game !== 'onepiece' && form.game !== 'pokemon' && (
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
