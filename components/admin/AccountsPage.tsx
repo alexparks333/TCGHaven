@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { QueryDocumentSnapshot } from 'firebase/firestore'
-import { Search, Loader2, X, ArrowUpRight, History, AlertTriangle, Check, Ban, PauseCircle, PlayCircle, ShieldCheck } from 'lucide-react'
+import { Search, Loader2, X, ArrowUpRight, History, AlertTriangle, Check, Ban, PauseCircle, PlayCircle, ShieldCheck, Crown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/friends/Avatar'
 import { profilePath } from '@/lib/firebase/friends'
-import { ACCOUNT_ROLES, ROLE_COLORS, ROLE_HINTS, ROLE_LABELS, type AccountRole, type AccountRoleRecord } from '@/lib/accountRoles'
+import { ACCOUNT_ROLES, ROLE_COLORS, ROLE_HINTS, ROLE_LABELS, titleColor, titleLabel, type AccountRole, type AccountRoleRecord } from '@/lib/accountRoles'
 import {
-  accountHistory, changeAccount, countAllAccounts, listAccounts, listOf, listRegular, searchAccounts,
+  accountHistory, changeAccount, countAllAccounts, isTeamAccount, listAccounts, listOf, listRegular, searchAccounts,
   type AccountChange, type AccountList, type AccountRow,
 } from '@/lib/firebase/accountRolesStaff'
 import { StaffModal } from './StaffModal'
@@ -19,15 +19,17 @@ import { useStaff } from './StaffAuthProvider'
 // unban an account. Every change asks why (staff-only notes) and lands in the account's history.
 // Nothing an account made is ever deleted from here.
 
-const LISTS: { id: AccountList; label: string; empty: string; danger?: boolean }[] = [
-  { id: 'creator', label: 'Creators', empty: 'No Creators yet — find an account above and make them one.' },
-  { id: 'suspended', label: 'Suspended creators', empty: 'No suspended Creators.' },
-  { id: 'former', label: 'Former creators', empty: 'No one has had Creator taken away.' },
-  { id: 'premium', label: 'Premium', empty: 'No Premium accounts yet.' },
-  { id: 'staff', label: 'Staff', empty: 'No Staff accounts yet.' },
-  { id: 'regular', label: 'Regular', empty: 'No Regular accounts.' },
-  { id: 'banned', label: 'Banned', empty: 'No banned accounts.', danger: true },
+// Two areas, switched at the top: what kind of account, and who's on hold
+type Area = 'type' | 'holds'
+const LISTS: { id: AccountList; area: Area; label: string; empty: string; danger?: boolean }[] = [
+  { id: 'regular', area: 'type', label: 'Regular', empty: 'No Regular accounts.' },
+  { id: 'premium', area: 'type', label: 'Premium', empty: 'No Premium accounts yet.' },
+  { id: 'creator', area: 'type', label: 'Creators', empty: 'No Creators yet — find an account above and make them one.' },
+  { id: 'staff', area: 'type', label: 'Staff', empty: 'No Staff accounts yet.' },
+  { id: 'suspended', area: 'holds', label: 'Suspended creators', empty: 'No suspended creators.' },
+  { id: 'banned', area: 'holds', label: 'Banned', empty: 'No banned accounts.', danger: true },
 ]
+const FIRST: Record<Area, AccountList> = { type: 'creator', holds: 'suspended' }
 type Titled = Exclude<AccountList, 'regular'>
 const TITLED = LISTS.map((l) => l.id).filter((id): id is Titled => id !== 'regular')
 type Sort = 'name' | 'newest' | 'oldest'
@@ -35,6 +37,7 @@ type Sort = 'name' | 'newest' | 'oldest'
 const fmtDate = (ms?: number) => (ms ? new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—')
 
 export function AccountsPage() {
+  const [area, setArea] = useState<Area>('type')
   const [tab, setTab] = useState<AccountList>('creator')
   const [lists, setLists] = useState<Partial<Record<Titled, AccountRow[]>>>({})
   const [regular, setRegular] = useState<{ rows: AccountRow[]; next: QueryDocumentSnapshot | null; loading: boolean } | null>(null)
@@ -88,7 +91,7 @@ export function AccountsPage() {
     const f = filter.trim().replace(/^@/, '').toLowerCase()
     const shown = f ? list.filter((r) => r.profile.displayName.toLowerCase().includes(f) || r.profile.username.includes(f)) : list
     if (sort === 'name') return shown
-    const at = (r: AccountRow) => (tab === 'creator' || tab === 'suspended' || tab === 'former' ? r.record.creatorSince : r.record.updatedAt) ?? 0
+    const at = (r: AccountRow) => (tab === 'creator' ? r.record.creatorSince : r.record.updatedAt) ?? 0
     return [...shown].sort((a, b) => (sort === 'newest' ? at(b) - at(a) : at(a) - at(b)))
   }, [lists, regular, tab, filter, sort])
 
@@ -101,7 +104,8 @@ export function AccountsPage() {
 
   const active = LISTS.find((l) => l.id === tab)!
   const loaded = tab === 'regular' ? !!regular && (!regular.loading || regular.rows.length > 0) : !!lists[tab]
-  const dateLabel = tab === 'creator' || tab === 'suspended' || tab === 'former' ? 'Creator since' : tab === 'regular' ? '' : 'Since'
+  const dateLabel = tab === 'creator' ? 'Creator since' : tab === 'regular' ? '' : tab === 'premium' || tab === 'staff' ? 'Since' : 'Since (last change)'
+  const holdsCount = (count('suspended') ?? 0) + (count('banned') ?? 0)
 
   return (
     <div>
@@ -134,17 +138,36 @@ export function AccountsPage() {
         )}
       </div>
 
-      {/* Every list */}
+      {/* The two areas */}
+      <div className="inline-flex p-1 mb-3 rounded-2xl bg-slate-900/80 border border-slate-800 shadow-inner">
+        {([['type', 'Account Type'], ['holds', 'Bans and Suspensions']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => { setArea(id); setTab(FIRST[id]); setFilter('') }}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all',
+              area === id ? (id === 'holds' ? 'bg-red-600 text-white shadow-md' : 'bg-violet-600 text-white shadow-md') : 'text-slate-500 hover:text-ink',
+            )}
+          >
+            {id === 'holds' && <Ban size={14} />}
+            {label}
+            {id === 'holds' && holdsCount > 0 && (
+              <span className={cn('text-[11px] px-1.5 rounded-full', area === id ? 'bg-white/25' : 'bg-red-600/15 text-red-600')}>{holdsCount}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* The lists in this area */}
       <div className="card-glass overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 px-4 pt-4">
-          {LISTS.map(({ id, label, danger }) => (
+          {LISTS.filter((l) => l.area === area).map(({ id, label, danger }) => (
             <button
               key={id}
               onClick={() => { setTab(id); setFilter('') }}
               className={cn(
                 'flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-sm font-semibold transition-colors',
                 tab === id ? (danger ? 'bg-red-100/40 border-red-500/50 text-red-700' : 'bg-slate-800 border-slate-600 text-ink') : 'border-slate-800 text-slate-400 hover:text-ink',
-                danger && tab !== id && 'ml-auto',
               )}
             >
               {danger && <Ban size={13} />}
@@ -188,14 +211,16 @@ export function AccountsPage() {
 }
 
 export function StatusPills({ record }: { record: AccountRoleRecord }) {
-  const color = ROLE_COLORS[record.role]
+  const color = titleColor(record)
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: color + '22', color }}>
-        {ROLE_LABELS[record.role]}
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: color + '22', color }}>
+        {record.staffTitle === 'Owner' && <Crown size={10} />}
+        {titleLabel(record)}
       </span>
-      {record.suspended && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-700">Suspended</span>}
-      {record.formerCreator && record.role !== 'creator' && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-500">ex-Creator</span>}
+      {(record.suspended || (record.formerCreator && record.role !== 'creator')) && (
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-700">Suspended creator</span>
+      )}
       {record.banned && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-600 text-white">Banned</span>}
     </span>
   )
@@ -290,6 +315,15 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
           </div>
         )}
 
+        {isTeamAccount(record) ? (
+          <div className="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-3 text-sm text-slate-400">
+            <Crown size={16} className="shrink-0 mt-0.5" style={{ color: titleColor(record) }} />
+            <span>
+              On the staff team as <b className="text-ink">{record.staffTitle}</b>, so this account is always Staff.
+              {record.staffTitle === 'Owner' ? ' The Owner can’t be changed or banned.' : ' Change their title or remove them on the Team page.'}
+            </span>
+          </div>
+        ) : (<>
         {/* Note — used by whichever action you take */}
         <label className="field-label">Note — only staff see this (required to suspend or ban)</label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={500} placeholder="Why? e.g. Partnership signed · Under investigation for…" className="input-field resize-none mb-4" />
@@ -317,7 +351,7 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
             {losingCreator && (
               <div className="mb-2 flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-100/30 px-3 py-2 text-xs text-amber-700">
                 <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-                They become a former creator: their Creator tab and everything they made is hidden from them and their followers. Nothing is deleted. (To pause them for a while instead, use Suspend below.)
+                They move to Suspended creators: their Creator tab and everything they made is hidden from them and their followers. Nothing is deleted — making them a Creator again brings it all back. (To keep their Creator title while on hold, use Suspend Creator below.)
               </div>
             )}
             {to === 'creator' && record.formerCreator && <div className="mb-2 text-xs text-emerald-700">They were a Creator before — everything they made comes back as it was.</div>}
@@ -365,6 +399,7 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
           )}
         </div>
         {error && <div className="mt-3 text-xs text-red-600">{error}</div>}
+        </>)}
 
         <div className="mt-6 pt-4 border-t border-slate-800">
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2"><History size={13} />History</div>

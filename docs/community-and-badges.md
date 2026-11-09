@@ -379,10 +379,18 @@ plus two holds that never delete anything: a Creator can be **suspended**, and a
   title|suspend|restore|ban|unban, from?, to?, note }`) is staff-only — notes can be about
   investigations.
 - **Premium** comes free with Creator and Staff (`hasPremium()`); paid Premium isn't built yet.
+- **The staff team's own accounts:** a collector account whose uid is on the staff team (the
+  Owner's — their portal login is the same Google account) is always Staff, shown with its job
+  title (`staffTitle`, e.g. "Owner" in gold — `titleLabel()` / `titleColor()`), and can't be changed
+  or banned on Accounts (Team page instead). Staff side: `onTeam()` in accountRolesStaff.ts. The
+  collector app can't read the staff list, so it knows only the Owner (`withOwner()`, by
+  `NEXT_PUBLIC_ADMIN_UID`).
 - **Staff portal → Accounts** (`components/admin/AccountsPage.tsx`, `/admin/accounts`, any staff
-  member): search any account by name, @username or user id; lists Creators, Suspended creators,
-  Former creators, Premium, Staff, Regular (paged, "Load more") and Banned — each account is in
-  exactly one (`listOf()`). Manage = title cards, Suspend / Restore Creator, Ban / Unban, a note
+  member): search any account by name, @username or user id; two areas switched at the top —
+  **Account Type** (Regular — paged, "Load more" — Premium, Creators, Staff) and **Bans and
+  Suspensions** (Suspended creators, Banned). Each account is in exactly one list (`listOf()`);
+  Suspended creators holds both Creators on hold and anyone whose Creator title was taken away
+  (`formerCreator`) — to staff they're the same. Manage = title cards, Suspend / Restore Creator, Ban / Unban, a note
   (required to suspend, ban or take Creator away) and the history. Writes go through
   `changeAccount()` in `lib/firebase/accountRolesStaff.ts` (the staff session).
 - **Creators:** `isCreator()` = Creator, not suspended, not banned. Rule for everything creators

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { doc, getDoc, onSnapshot, type DocumentData } from 'firebase/firestore'
-import { db } from './firebase/config'
+import { db, ADMIN_UID } from './firebase/config'
 
 // Accounts (2026-11-09) — each collector account's title and standing, set by staff in the staff
 // portal's Accounts page (components/admin/AccountsPage.tsx); nobody can set their own.
@@ -47,6 +47,20 @@ export interface AccountRoleRecord {
   suspended?: boolean     // a Creator on hold: Studio paused, their work hidden
   banned?: boolean        // the whole account is blocked
   updatedAt?: number
+  // Set when this account is also on the staff team (its staff portal login is the same account,
+  // like the Owner's): shown instead of "Staff" (e.g. "Owner", "Developer"). Such accounts are
+  // always Staff and are managed on the Team page, not the Accounts page.
+  staffTitle?: string
+}
+
+/** The title to show for an account: its staff job title if it has one, else its role's name. */
+export const titleLabel = (r: AccountRoleRecord) => r.staffTitle ?? ROLE_LABELS[r.role]
+/** Its colour: the Owner in gold, everyone else by role. */
+export const titleColor = (r: AccountRoleRecord) => (r.staffTitle === 'Owner' ? '#b8862b' : ROLE_COLORS[r.role])
+
+/** The Owner's collector account is the Owner's — always Staff, titled "Owner", never banned. */
+export function withOwner(uid: string, r: AccountRoleRecord): AccountRoleRecord {
+  return ADMIN_UID && uid === ADMIN_UID ? { ...r, role: 'staff', staffTitle: 'Owner', banned: false, suspended: false } : r
 }
 
 export const REGULAR: AccountRoleRecord = { role: 'regular' }
@@ -84,8 +98,8 @@ export function useAccountRole(uid: string | null | undefined): { record: Accoun
     if (!uid) return
     return onSnapshot(
       doc(db, 'account_roles', uid),
-      (snap) => setState({ uid, record: toRoleRecord(snap.data()) }),
-      () => setState({ uid, record: REGULAR }),
+      (snap) => setState({ uid, record: withOwner(uid, toRoleRecord(snap.data())) }),
+      () => setState({ uid, record: withOwner(uid, REGULAR) }),
     )
   }, [uid])
   return uid && state.uid === uid ? { record: state.record, loaded: true } : { record: REGULAR, loaded: !uid }
@@ -93,5 +107,5 @@ export function useAccountRole(uid: string | null | undefined): { record: Accoun
 
 /** Someone else's record, for their profile. */
 export async function getAccountRole(uid: string): Promise<AccountRoleRecord> {
-  try { return toRoleRecord((await getDoc(doc(db, 'account_roles', uid))).data()) } catch { return REGULAR }
+  try { return withOwner(uid, toRoleRecord((await getDoc(doc(db, 'account_roles', uid))).data())) } catch { return withOwner(uid, REGULAR) }
 }

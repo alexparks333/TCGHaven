@@ -15,7 +15,7 @@ import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
-import { useAccountRole, getAccountRole, REGULAR, ROLE_COLORS, ROLE_LABELS, type AccountRoleRecord } from '@/lib/accountRoles'
+import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
 import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
@@ -213,9 +213,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             {(isMe || title.role !== 'regular') && (
               <span
                 className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: ROLE_COLORS[title.role] + '22', color: ROLE_COLORS[title.role] }}
+                style={{ backgroundColor: titleColor(title) + '22', color: titleColor(title) }}
               >
-                {ROLE_LABELS[title.role]}
+                {titleLabel(title)}
               </span>
             )}
           </div>

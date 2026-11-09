@@ -2,7 +2,7 @@ import {
   addDoc, collection, doc, documentId, getCountFromServer, getDoc, getDocs, limit, orderBy, query,
   runTransaction, serverTimestamp, startAfter, startAt, endAt, where, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
-import { staffDb } from './staff'
+import { staffDb, listStaff } from './staff'
 import { toProfile, type Profile } from './friends'
 import { toRoleRecord, type AccountRole, type AccountRoleRecord } from '../accountRoles'
 
@@ -12,8 +12,10 @@ export interface AccountRow { profile: Profile; record: AccountRoleRecord }
 export type AccountAction = 'title' | 'suspend' | 'restore' | 'ban' | 'unban'
 export interface AccountChange { id: string; at: number; byName: string; action: AccountAction; from?: AccountRole; to?: AccountRole; note: string }
 
-/** The Accounts page's lists. `regular` is everyone without a title (paged — there are many). */
-export type AccountList = 'regular' | 'premium' | 'creator' | 'suspended' | 'former' | 'staff' | 'banned'
+/** The Accounts page's lists. `regular` is everyone without a title (paged — there are many).
+ *  `suspended` = Creators on hold AND anyone whose Creator title was taken away (formerCreator) —
+ *  to staff those are the same thing: a creator who's been stopped. */
+export type AccountList = 'regular' | 'premium' | 'creator' | 'suspended' | 'staff' | 'banned'
 
 const roleRef = (uid: string) => doc(staffDb, 'account_roles', uid)
 const DELETED = (uid: string): Profile => ({ uid, username: '', displayName: '(deleted account)', photoURL: '', bio: '', privacy: { cardex: false, badges: false }, pinDisplay: [] })
@@ -27,29 +29,51 @@ async function inChunks<T>(ids: string[], coll: string, read: (id: string, d: Re
   return out
 }
 const profilesFor = (uids: string[]) => inChunks(uids, 'profiles', (id, d) => toProfile(id, d))
-const rolesFor = (uids: string[]) => inChunks(uids, 'account_roles', (_id, d) => toRoleRecord(d))
+
+// The staff team (uid → job title). A collector account whose uid is on the team — the Owner's,
+// whose portal login is the same Google account — is Staff with that title, whatever its
+// account_roles doc says, and is managed on the Team page.
+let teamCache: Promise<Map<string, string>> | null = null
+function team(): Promise<Map<string, string>> {
+  teamCache ??= listStaff().then((list) => new Map(list.map((m) => [m.uid, m.title]))).catch(() => new Map())
+  return teamCache
+}
+function onTeam(uid: string, r: AccountRoleRecord, t: Map<string, string>): AccountRoleRecord {
+  const title = t.get(uid)
+  return title ? { ...r, role: 'staff', staffTitle: title, banned: false, suspended: false } : r
+}
+async function rolesFor(uids: string[]): Promise<Map<string, AccountRoleRecord>> {
+  const [stored, t] = await Promise.all([inChunks(uids, 'account_roles', (_id, d) => toRoleRecord(d)), team()])
+  return new Map(uids.map((uid) => [uid, onTeam(uid, stored.get(uid) ?? { role: 'regular' }, t)]))
+}
+/** True when the account is on the staff team (its title is managed on the Team page). */
+export const isTeamAccount = (r: AccountRoleRecord) => !!r.staffTitle
 
 /** Which list an account belongs in (each account is in exactly one). */
 export function listOf(r: AccountRoleRecord): AccountList {
   if (r.banned) return 'banned'
   if (r.role === 'creator') return r.suspended ? 'suspended' : 'creator'
-  if (r.formerCreator) return 'former'
+  if (r.formerCreator) return 'suspended'
   return r.role
 }
 
 /** Every account in one of the titled lists, A → Z. */
 export async function listAccounts(list: Exclude<AccountList, 'regular'>): Promise<AccountRow[]> {
   const base = collection(staffDb, 'account_roles')
-  const q = list === 'banned' ? query(base, where('banned', '==', true))
-    : list === 'suspended' ? query(base, where('suspended', '==', true))
-    : list === 'former' ? query(base, where('formerCreator', '==', true))
-    : query(base, where('role', '==', list))
-  const snap = await getDocs(q)
+  const queries = list === 'banned' ? [query(base, where('banned', '==', true))]
+    : list === 'suspended' ? [query(base, where('suspended', '==', true)), query(base, where('formerCreator', '==', true))]
+    : [query(base, where('role', '==', list))]
+  const [snaps, t] = await Promise.all([Promise.all(queries.map((q) => getDocs(q))), team()])
   const records = new Map<string, AccountRoleRecord>()
-  for (const d of snap.docs) { const r = toRoleRecord(d.data()); if (listOf(r) === list) records.set(d.id, r) }
+  for (const snap of snaps) for (const d of snap.docs) { const r = onTeam(d.id, toRoleRecord(d.data()), t); if (listOf(r) === list) records.set(d.id, r) }
+  // The team's own collector accounts are Staff (only those that have one — most staff logins are
+  // separate work emails with no collector profile)
+  if (list === 'staff') for (const [uid] of Array.from(t)) if (!records.has(uid)) records.set(uid, onTeam(uid, { role: 'regular' }, t))
   const profiles = await profilesFor(Array.from(records.keys()))
-  return Array.from(records, ([uid, record]) => ({ profile: profiles.get(uid) ?? DELETED(uid), record }))
-    .sort((a, b) => a.profile.displayName.localeCompare(b.profile.displayName))
+  return Array.from(records)
+    .filter(([uid, r]) => profiles.has(uid) || !r.staffTitle)
+    .map(([uid, record]) => ({ profile: profiles.get(uid) ?? DELETED(uid), record }))
+    .sort((a, b) => Number(b.record.staffTitle === 'Owner') - Number(a.record.staffTitle === 'Owner') || a.profile.displayName.localeCompare(b.profile.displayName))
 }
 
 /** Regular accounts, A → Z, a page at a time (pass the last page's cursor for the next). */
