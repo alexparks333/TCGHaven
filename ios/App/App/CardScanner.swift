@@ -1108,7 +1108,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let t0 = CACurrentMediaTime()
         var lines = readText(card)
         var upright = card
-        if !Self.hasCode(lines), let flipped = rotate180(card) {
+        // Upright text reads as plenty of confident lines; only a poor read is worth trying the
+        // other way up (cards are almost always held the right way)
+        let confident = lines.filter { (($0["c"] as? Float) ?? 0) >= 0.5 }.count
+        if !Self.hasCode(lines), confident < 6, let flipped = rotate180(card) {
             let other = readText(flipped)
             if Self.hasCode(other) || Self.chars(other) > Self.chars(lines) * 3 / 2 {
                 lines = other
@@ -1138,7 +1141,17 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         }
         // A graded slab: the picture to compare is the card inside it, not the label and plastic
         let slab = Self.isSlab(merged)
-        let cardOnly = slab ? (cardInsideSlab(image) ?? image) : image
+        // Self-check: the card's number sits along its bottom edge. Read well above it, the crop has
+        // extra below the card (a toploader's end, the table) — find the card's edges again inside
+        // it so the picture comparison sees just the card (the text was read fine either way)
+        let codeY = merged.compactMap { l -> CGFloat? in
+            guard let t = l["text"] as? String, let y = l["y"] as? CGFloat,
+                  Self.codePattern.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil else { return nil }
+            return y
+        }.max()
+        let loose = !slab && (codeY.map { $0 < 0.8 } ?? false)
+        let cardOnly = slab ? (cardInsideSlab(image) ?? image) : loose ? (tighten(image) ?? image) : image
+        if loose { DebugScans.log("number read at \(String(format: "%.2f", codeY ?? 0)) of the height — crop tightened for the picture check") }
         let signature = PictureMatcher.signature(of: cardOnly)
         let swap = nextIsSwap
         nextIsSwap = false
@@ -1149,6 +1162,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         lastSwapCheckAt = CACurrentMediaTime()
         steadySince = 0
         phase = .waitingForNext
+        DebugScans.log("read in \(Int((CACurrentMediaTime() - readingStarted) * 1000)) ms over \(readingLines.count) frame(s)")
         DebugScans.save(scanId: id, image: image, info: [
             "frames": readingLines, "merged": merged, "ms": Int((CACurrentMediaTime() - readingStarted) * 1000),
         ])
@@ -1187,7 +1201,18 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     /// At capture, find the card's exact edges again in a slightly bigger crop around the tracked
     /// outline: the tracker drifts (real scans came out with the top cut off and table showing), and
     /// a toploader's edge can stand in for the card's. Nil if nothing better is found.
+    /// The frame shrunk so the card comes out no taller than it's needed (~1600 px): perspective
+    /// correction on a full 4K frame cost several hundred ms a scan
+    private func shrunk(_ frame: CIImage, quad: [CGPoint]) -> CIImage {
+        let ys = quad.map(\.y), xs = quad.map(\.x)
+        let tall = max((ys.max()! - ys.min()!) * frame.extent.height, (xs.max()! - xs.min()!) * frame.extent.width)
+        let k = min(1, 1600 / max(tall, 1))
+        guard k < 0.98 else { return frame }
+        return frame.transformed(by: CGAffineTransform(scaleX: k, y: k))
+    }
+
     private func refined(_ frame: CIImage, around quad: [CGPoint]) -> CGImage? {
+        let frame = shrunk(frame, quad: quad)
         // A graded slab is taller and thinner than a card (PSA ≈ 0.58 wide-to-tall, a card 0.72):
         // keep it whole — its label names the card and the grade (the card inside is cut out later)
         if quadAspect(quad) < 0.64 { return nil }
@@ -1237,6 +1262,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     /// The card, straight on and upright, ~1400 px tall. The outline is pushed out 1.5% so a
     /// slightly tight detection doesn't clip the number line along the edge.
     private func flatten(_ image: CIImage, quad: [CGPoint]) -> CGImage? {
+        let image = shrunk(image, quad: quad)
         let size = image.extent.size
         let c = Self.center(quad)
         let grown = quad.map { CGPoint(x: c.x + ($0.x - c.x) * 1.015, y: c.y + ($0.y - c.y) * 1.015) }
@@ -1254,6 +1280,24 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let scale = min(1, 1400 / out.extent.height)
         if scale < 1 { out = out.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) }
         return ciContext.createCGImage(out, from: out.extent)
+    }
+
+    /// The card inside a crop that has extra around it: the largest card-shaped outline filling
+    /// 35–92% of it. Nil when nothing better is found.
+    private func tighten(_ image: CGImage) -> CGImage? {
+        let request = VNDetectRectanglesRequest()
+        request.minimumAspectRatio = Self.cardAspect.min
+        request.maximumAspectRatio = Self.cardAspect.max
+        request.minimumSize = 0.45
+        request.quadratureTolerance = 15
+        request.maximumObservations = 6
+        try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+        let best = (request.results ?? []).filter { r in
+            let share = r.boundingBox.width * r.boundingBox.height
+            return share > 0.35 && share < 0.92
+        }.max { area($0) < area($1) }
+        guard let r = best else { return nil }
+        return flatten(CIImage(cgImage: image), quad: Self.corners(r))
     }
 
     /// A grading company's label along the top: a cert number or a grade word up there
