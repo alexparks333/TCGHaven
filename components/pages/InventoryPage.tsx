@@ -2,13 +2,16 @@
 
 import { PrintingTags } from '@/components/PrintingTags'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter, ScanLine } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
 import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RARITY_LABELS_BY_GAME } from '@/lib/utils'
 import { conditionLabel, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
+import { ScanReviewDialog } from '@/components/inventory/ScanReviewDialog'
+import { inApp } from '@/lib/nativeApp'
+import type { ScannedCard } from '@/lib/scan/scanner'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { removeCard, removeCards, editCard as editCardInFirestore, saveSoldCard } from '@/lib/firebase/db'
@@ -60,6 +63,21 @@ export default function InventoryPage() {
   const [showGamePicker, setShowGamePicker] = useState(false)
   const gamePickerRef = useRef<HTMLDivElement>(null)
   const [showAdd, setShowAdd] = useState(false)
+  // The card scanner is iPhone-app only (CardScanner.md) — known after mount, so the server render
+  // and the first client render agree
+  const [canScan, setCanScan] = useState(false)
+  useEffect(() => { setCanScan(inApp()) }, [])
+  const [scanned, setScanned] = useState<ScannedCard[] | null>(null)
+  async function startScan() {
+    try {
+      const { scanCards } = await import('@/lib/scan/scanner')
+      const cards = await scanCards(trackedGames.length ? trackedGames : [activeGame])
+      if (cards.length) setScanned(cards)
+    } catch (err) {
+      console.error('Card scanner failed:', err)
+      setSaveError('The card scanner couldn’t start. Update the TCGHaven app and try again.')
+    }
+  }
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dateFilter, setDateFilter] = useState<string>('')
   const [selectedRarities, setSelectedRarities] = useState<Set<string>>(new Set())
@@ -419,10 +437,18 @@ export default function InventoryPage() {
               {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
             </p>
           </div>
-          <button onClick={() => setShowAdd(true)} className="btn-primary shrink-0 whitespace-nowrap">
-            <Plus size={16} />
-            Add Card
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {canScan && (
+              <button onClick={startScan} className="btn-secondary whitespace-nowrap">
+                <ScanLine size={16} />
+                Scan
+              </button>
+            )}
+            <button onClick={() => setShowAdd(true)} className="btn-primary whitespace-nowrap">
+              <Plus size={16} />
+              Add Card
+            </button>
+          </div>
         </div>
 
         {/* Game Tabs — only the games this user tracks, plus a "+" to start tracking another */}
@@ -929,6 +955,8 @@ export default function InventoryPage() {
             onSaveError={(msg) => setSaveError(msg)}
           />
         )}
+
+        {scanned && <ScanReviewDialog scanned={scanned} onClose={() => setScanned(null)} />}
 
         {/* ── Sell Card Modal ── */}
         {sellCard && (() => {

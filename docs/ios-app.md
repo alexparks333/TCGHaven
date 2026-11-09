@@ -19,6 +19,7 @@ owner prefers plain Xcode; Expo isn't needed for a web app.)
 | `ios/` | The Xcode project Capacitor generated — open **`ios/App/App.xcodeproj`** (Swift packages, no CocoaPods workspace). Ours to edit: `Info.plist`, `AppDelegate.swift` / `SceneDelegate.swift`, `Assets.xcassets` (icon, splash). Generated (git-ignored): `App/App/public`, `App/App/capacitor.config.json` |
 | `ios-shell/` | The only web files bundled in the app: `offline.html` (shown when the site can't be reached — `server.errorPath`) and an `index.html` that just redirects to the site |
 | `lib/nativeApp.ts` | The site's side of the bridge: `inApp()`, `haptic()`, `shareLink()`, `hideLaunchScreen()`, `nativeGoogleIdToken()`, `nativeAppleCredential()` |
+| `ios/App/App/CardScanner.swift` | The card scanner (our own local plugin, `CardScanner`): camera, card finding/flattening, OCR, picture comparison, the tray. Registered by `TCGBridgeViewController` (created in `SceneDelegate`). Site side: `lib/scan/`. Plan, design and test results: `CardScanner.md` |
 
 ## How it works
 
@@ -50,6 +51,12 @@ owner prefers plain Xcode; Expo isn't needed for a web app.)
   Facebook SDK is not linked.
 - **Haptics so far:** a selection tick per phone pin-book page turn / chapter jump, a light tap when
   a pin opens in 3D.
+
+- **Local plugins:** our own native code (the card scanner) is a Capacitor plugin compiled into the
+  app target, registered in `TCGBridgeViewController.capacitorDidLoad()` — not an npm package, so
+  `npx cap sync` doesn't touch it. A new Swift file must be added to the Xcode project
+  (`project.pbxproj`: file reference, group, Sources phase) — the project doesn't auto-include files.
+- **Camera:** `NSCameraUsageDescription` in `Info.plist` is the text of the permission prompt.
 
 ## Commands
 

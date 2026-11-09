@@ -54,6 +54,11 @@ TCGHaven/
 │                                     pokemontcg.io / tcgdex (§13 Pokémon)
 │
 ├── lib/
+│   ├── scan/                       ← The card scanner's site side (CardScanner.md):
+│   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
+│   │   ├── decide.ts               ←   text score + picture distance → matched / pick / none
+│   │   ├── server.ts               ←   loads catalogs, adds Add-Card rows (for the route)
+│   │   └── scanner.ts              ←   talks to the native scanner (CardScanner plugin)
 │   ├── types.ts                   ← Card, SoldCard, Game, Condition, GAME_COLORS, etc. — §19 has
 │   │                                 the full current Card shape
 │   ├── store.ts                   ← Zustand store — mostly in-memory, persists a small
@@ -125,6 +130,8 @@ TCGHaven/
 │   └── api/
 │       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS), capped at 40
 │       │                             results (§12)
+│       ├── cards/scan/route.ts    ← POST — the iPhone card scanner: OCR lines → ranked catalog
+│       │                             candidates (lib/scan/server.ts; CardScanner.md)
 │       ├── cardex/route.ts        ← Cardex grid data (?game=&set=)
 │       ├── sets/route.ts          ← Set list for AddCardDialog autocomplete (?game=)
 │       ├── auth/verify-passcode/route.ts ← POST — checks a submitted signup code against the
@@ -191,8 +198,10 @@ TCGHaven/
     │   ├── Sidebar.tsx             ← Desktop sidebar + mobile bottom nav
     │   └── ClientWrapper.tsx       ← Mounts CardUnlockToast globally
     ├── inventory/
-    │   └── AddCardDialog.tsx       ← Add/edit card modal with live search dropdown; fires the
-    │                                 "Card Unlocked" toast on a genuinely new print (§20)
+    │   ├── AddCardDialog.tsx       ← Add/edit card modal with live search dropdown; fires the
+    │   │                             "Card Unlocked" toast on a genuinely new print (§20)
+    │   └── ScanReviewDialog.tsx    ← After the iPhone scanner: printing, condition, quantity,
+    │                                 then "Add N cards" (saves like AddCardDialog — keep in step)
     ├── pages/
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
     │   ├── PortfolioPage.tsx       ← P&L tracking, price refresh, sort/filter

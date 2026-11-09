@@ -19,6 +19,9 @@
 			</array>
 		</dict>
 	</array>
+	<!-- The card scanner (CardScanner.swift). Shown in the camera permission prompt. -->
+	<key>NSCameraUsageDescription</key>
+	<string>TCGHaven uses the camera to scan your cards and add them to your collection. The pictures stay on your phone.</string>
 	<key>CFBundleDisplayName</key>
         <string>TCGHaven</string>
 	<key>CFBundleExecutable</key>

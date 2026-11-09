@@ -11,7 +11,7 @@ TCGHaven goes in the App Store as a **Capacitor** app: a native iPhone shell (bu
 that shows the live site, `https://www.tcghaven.org`. Fixes pushed to main reach the app as soon as
 Vercel deploys them; only native changes need a new build and App Review. What makes it a real app
 rather than a website in a box (Apple rule 4.2): **native Google + Apple sign-in, haptics, the iOS
-share sheet and push notifications.** Camera card scanning comes in a later version. No Expo — it
+share sheet and push notifications** — and the **card scanner** (native camera + Vision; `CardScanner.md`), built 2026-11-08, waiting for its first run on a phone. No Expo — it
 was tried and dropped on 2026-11-04 (not needed for a web app).
 
 ---
@@ -52,6 +52,8 @@ confirmed on a real iPhone.
 ---
 
 ## ▶️ Day 1 on the new MacBook (in this order)
+
+_2026-11-08: steps 1–2 done on the new Mac (Xcode 27.2; `xcodebuild -runFirstLaunch` was also needed). The app builds for the simulator. Signing team set and Sign in with Apple added (step 3 done). Next: steps 4–5 (Developer Mode, ▶︎ Run). The card scanner is built — see `CardScanner.md` "Trying it"._
 
 1. **Install Xcode** from the Mac App Store (free, ~15 GB+). Open it once, accept the license, and
    let it install the **iOS** platform (Xcode → Settings → Components).

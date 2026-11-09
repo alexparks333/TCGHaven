@@ -53,6 +53,7 @@ jobs:
           npm run test:snapshot
           npm run test:rebase
           npm run test:relief
+          npm run test:scan
       # Catches what tsc can't — e.g. an invalid Next.js route export (CLAUDE.md rule 24)
       - name: Production build
         run: npm run build
