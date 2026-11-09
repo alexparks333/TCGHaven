@@ -1752,7 +1752,7 @@ private let sheetGold = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
 private let sheetInk = UIColor(red: 0.96, green: 0.93, blue: 0.87, alpha: 1)
 private let sheetMuted = UIColor(white: 1, alpha: 0.55)
 
-final class CardSheetViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate {
+final class CardSheetViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate, UITextFieldDelegate {
     private let item: ScanItem
     private weak var scanner: ScannerViewController?
     var onChange: (() -> Void)?
@@ -2031,13 +2031,42 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
             scroll.topAnchor.constraint(equalTo: view.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            // Ends where the keyboard begins, so what's being typed is never hidden behind it
+            scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
             stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 20),
             stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
         ])
+        // Typing: a Done bar on every keyboard (the number pads have no return key), tap elsewhere
+        // to close it, and the field being typed in scrolled into view
+        let bar = UIToolbar(frame: CGRect(x: 0, y: 0, width: 320, height: 44))
+        bar.items = [UIBarButtonItem(systemItem: .flexibleSpace),
+                     UIBarButtonItem(title: "Done", style: .done, target: self, action: #selector(endTyping))]
+        bar.tintColor = sheetGold
+        gradeField.inputAccessoryView = bar
+        certField.inputAccessoryView = bar
+        searchBar.inputAccessoryView = bar
+        gradeField.delegate = self
+        certField.delegate = self
+        let tapAway = UITapGestureRecognizer(target: self, action: #selector(endTyping))
+        tapAway.cancelsTouchesInView = false
+        view.addGestureRecognizer(tapAway)
         refresh()
+    }
+
+    @objc private func endTyping() { view.endEditing(true) }
+
+    func textFieldDidBeginEditing(_ field: UITextField) { reveal(field) }
+    func textFieldShouldReturn(_ field: UITextField) -> Bool { field.resignFirstResponder(); return true }
+    func searchBarTextDidBeginEditing(_ bar: UISearchBar) { reveal(bar) }
+
+    /// Scroll so the field being typed in sits just above the keyboard (after it has slid up)
+    private func reveal(_ v: UIView) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            let r = v.convert(v.bounds, to: self.scroll).insetBy(dx: 0, dy: -24)
+            self.scroll.scrollRectToVisible(r, animated: true)
+        }
     }
 
     private var current: TrayOption? { item.options.indices.contains(item.choice) ? item.options[item.choice] : nil }
