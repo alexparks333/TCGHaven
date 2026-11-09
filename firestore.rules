@@ -28,6 +28,13 @@ service cloud.firestore {
       return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
     }
 
+    // A banned account (Accounts page, lib/accountRoles.ts) can't save anything. Deleting their
+    // own data stays allowed, so they can still delete their account.
+    function notBanned() {
+      return !exists(/databases/$(database)/documents/account_roles/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/account_roles/$(request.auth.uid)).data.get('banned', false) != true;
+    }
+
     function isAdmin() {
       return signedIn() && (
         request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'] ||
@@ -46,6 +53,31 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['mustChangePassword'])
       );
       allow delete: if isOwner() && request.auth.uid != uid;
+    }
+
+    // Account titles (lib/accountRoles.ts): { role, creatorSince?, formerCreator?, updatedAt }; no
+    // doc = Regular. Titles show on profiles, so any signed-in collector can read them; only staff
+    // set them (nobody can make themselves Premium or a Creator). The history — who changed it and
+    // why, possibly about a suspension — is staff only.
+    match /account_roles/{uid} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        && request.resource.data.role in ['regular', 'premium', 'creator', 'staff']
+        && request.resource.data.keys().hasOnly(['role', 'creatorSince', 'formerCreator', 'suspended', 'banned', 'updatedAt']);
+      allow delete: if isAdmin();
+      match /history/{id} {
+        allow read, create: if isAdmin();
+      }
+    }
+
+    // Who's in the staff portal right now (lib/firebase/staff.ts): { lastSeen, page }, written by
+    // each staff member's own portal while it's open. Staff can see the team's; the Owner clears
+    // a removed member's.
+    match /staff_presence/{uid} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lastSeen', 'page']);
+      allow delete: if isOwner();
     }
 
     // Card catalog — the shared source of truth. Content isn't sensitive (names, images,
@@ -107,7 +139,7 @@ service cloud.firestore {
     // must be one you've claimed in /usernames.
     match /profiles/{uid} {
       allow read: if signedIn();
-      allow create, update: if signedIn() && request.auth.uid == uid
+      allow create, update: if signedIn() && request.auth.uid == uid && notBanned()
         && request.resource.data.uid == uid
         && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'pinDisplay', 'createdAt', 'updatedAt'])
         && (!('previousUsernames' in request.resource.data) || (request.resource.data.previousUsernames is list && request.resource.data.previousUsernames.size() <= 3))
@@ -124,7 +156,7 @@ service cloud.firestore {
     // older ones, which frees them for anyone.
     match /usernames/{name} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && notBanned()
         && request.resource.data.keys().hasOnly(['uid'])
         && name.matches('^[a-z0-9_.]{3,20}$');
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
@@ -149,7 +181,8 @@ service cloud.firestore {
         request.auth.uid == uid ||
         get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('cardex', false) == true
       );
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid && notBanned();
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     // The badge catalog — every pin book and badge (lib/badgeCatalog.ts), edited in the staff
@@ -167,7 +200,7 @@ service cloud.firestore {
         request.auth.uid == uid ||
         get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('badges', false) == true
       );
-      allow create, update: if signedIn() && request.auth.uid == uid
+      allow create, update: if signedIn() && request.auth.uid == uid && notBanned()
         && request.resource.data.keys().hasOnly(['earned', 'progress', 'updatedAt'])
         && request.resource.data.earned is map && request.resource.data.progress is map;
       // A delete has no new data to check, so it can't share the rule above (deleting an account)
@@ -191,7 +224,7 @@ service cloud.firestore {
     match /friendships/{id} {
       allow read: if signedIn()
         && (resource.data.requester == request.auth.uid || resource.data.addressee == request.auth.uid);
-      allow create: if signedIn()
+      allow create: if signedIn() && notBanned()
         && request.resource.data.requester == request.auth.uid
         && request.resource.data.addressee is string
         && request.resource.data.addressee != request.auth.uid
@@ -202,7 +235,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['users', 'requester', 'addressee', 'status', 'createdAt', 'respondedAt', 'inviteCode'])
         && exists(/databases/$(database)/documents/profiles/$(request.resource.data.addressee))
         && request.resource.data.status == 'pending';
-      allow update: if signedIn()
+      allow update: if signedIn() && notBanned()
         && resource.data.addressee == request.auth.uid
         && resource.data.status == 'pending'
         && request.resource.data.status == 'accepted'
@@ -214,7 +247,8 @@ service cloud.firestore {
     // Per-user inventory data — unchanged from before this migration. A user may only
     // read/write their own subtree.
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid && notBanned();
     }
   }
 }

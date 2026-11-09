@@ -76,7 +76,7 @@ function toMillis(v: unknown): number {
   return (v as { toMillis?: () => number } | null)?.toMillis?.() ?? 0
 }
 
-function toProfile(uid: string, d: Record<string, unknown> | undefined): Profile | null {
+export function toProfile(uid: string, d: Record<string, unknown> | undefined): Profile | null {
   if (!d) return null
   return {
     uid,

@@ -15,6 +15,7 @@ import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
+import { useAccountRole, getAccountRole, REGULAR, ROLE_COLORS, ROLE_LABELS, type AccountRoleRecord } from '@/lib/accountRoles'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
 import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
@@ -71,7 +72,10 @@ function ProfileBody({ uid, viaUsername }: { uid?: string; viaUsername?: string 
     if (isMe || !uid) return
     let live = true
     setOther(undefined)
-    getProfile(uid).then((p) => { if (live) setOther(p) }).catch(() => { if (live) setOther(null) })
+    // A banned account's profile is hidden from everyone else (lib/accountRoles.ts)
+    Promise.all([getProfile(uid), getAccountRole(uid)])
+      .then(([p, r]) => { if (live) setOther(r.banned ? null : p) })
+      .catch(() => { if (live) setOther(null) })
     return () => { live = false }
   }, [uid, isMe])
 
@@ -116,6 +120,11 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   const [error, setError] = useState('')
   // Settings opens from the ⚙️ here; the old /settings address redirects to /profile?settings=1.
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Their title (Premium / Creator / Staff) beside the name. Regular shows only on your own profile.
+  const mine = useAccountRole(isMe ? profile.uid : null).record
+  const [theirs, setTheirs] = useState<AccountRoleRecord>(REGULAR)
+  useEffect(() => { if (!isMe) getAccountRole(profile.uid).then(setTheirs) }, [isMe, profile.uid])
+  const title = isMe ? mine : theirs
   useEffect(() => {
     if (!isMe) return
     const params = new URLSearchParams(window.location.search)
@@ -199,7 +208,17 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             {action && <div className="mb-1 md:hidden">{action}</div>}
           </div>
           <h1 className="text-xl md:text-2xl font-bold text-ink mt-3 leading-tight break-words">{profile.displayName}</h1>
-          <div className="text-sm text-slate-500 truncate">@{profile.username}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm text-slate-500 truncate">@{profile.username}</span>
+            {(isMe || title.role !== 'regular') && (
+              <span
+                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: ROLE_COLORS[title.role] + '22', color: ROLE_COLORS[title.role] }}
+              >
+                {ROLE_LABELS[title.role]}
+              </span>
+            )}
+          </div>
           {/* On desktop this is the tile beside the privacy box */}
           {isMe && (
             <Link href="/friends" className="md:hidden inline-block mt-1 text-sm font-semibold text-slate-400 hover:text-ink">

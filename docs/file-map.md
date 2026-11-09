@@ -54,6 +54,8 @@ TCGHaven/
 │                                     pokemontcg.io / tcgdex (§13 Pokémon)
 │
 ├── lib/
+│   ├── accountRoles.ts             ← Account titles (Regular / Premium / Creator / Staff), useAccountRole();
+│   │                                 staff writes in firebase/accountRolesStaff.ts (community-and-badges.md)
 │   ├── scan/                       ← The card scanner's site side (CardScanner.md):
 │   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
 │   │   ├── decide.ts               ←   text score + picture distance → matched / pick / none
@@ -117,6 +119,8 @@ TCGHaven/
 │   ├── inventory/page.tsx         ← Inventory page wrapper
 │   ├── cardex/page.tsx            ← Cardex page wrapper (includes Personal Collections tab, §6)
 │   ├── admin/page.tsx             ← Admin Catalog page wrapper (§5)
+│   ├── admin/accounts/page.tsx    ← Staff portal Accounts: give accounts their title (AccountsPage.tsx)
+│   ├── creator/page.tsx           ← Creator Studio (CreatorPage.tsx) — Creators only
 │   ├── settings/page.tsx          ← Redirects to /profile?settings=1 (Settings is a panel on the
 │   │                                 profile now — see the staff-portal note in §5)
 │   ├── portfolio/

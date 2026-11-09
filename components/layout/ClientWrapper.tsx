@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { originalImage, isCardImageUrl, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { AuthProvider } from '@/components/auth/AuthProvider'
+import { BanGate } from '@/components/auth/BanGate'
 import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
 import { CardUnlockToast } from '@/components/CardUnlockToast'
@@ -42,6 +43,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   const fullWidth = pathname === '/badges'
   return (
     <AuthProvider>
+      <BanGate>
       <FriendsProvider>
         {/* 100dvh = the height actually visible right now (h-screen's 100vh is taller on iPhone — see
             the html/body note in globals.css). */}
@@ -69,6 +71,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         {/* Local dev server only — compiled out of production builds (NODE_ENV is fixed at build time) */}
         {process.env.NODE_ENV === 'development' && <DevPanel />}
       </FriendsProvider>
+      </BanGate>
     </AuthProvider>
   )
 }

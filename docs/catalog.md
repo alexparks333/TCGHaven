@@ -277,7 +277,13 @@ the collector shell/session for `/admin/*`, and `app/admin/layout.tsx` renders `
   session (Alex can be signed in to both in one browser). Every portal write goes through
   `staffDb`/`staffStorage` (AdminCatalogPage imports them as `db`/`storage`;
   `regenerateSnapshot(game, staffDb)`), and `adminFetch()` sends the **staff** session's token.
-- **Who's staff:** `staff/{uid}` docs `{ name, email, role: 'owner'|'staff', mustChangePassword }`.
+- **Team page (redone 2026-11-09):** member cards with a job title (`title`: Owner / Senior
+  Developer / Developer / Junior Developer / Staff — `STAFF_TITLES`, a label only; the Owner sets it,
+  only the Owner is "Owner"), joined date + who added them, and live status: each open portal
+  writes `staff_presence/{uid}` = `{ lastSeen, page }` (StaffPortal `Presence`, every minute while in
+  front and on each page change); "Online" = seen in the last 2.5 min, else "Last seen …". Stat tiles:
+  members, in the portal now, haven't signed in yet.
+- **Who's staff:** `staff/{uid}` docs `{ name, email, role: 'owner'|'staff', title, mustChangePassword }`.
   The Owner is `NEXT_PUBLIC_ADMIN_UID`, also hardcoded in `firestore.rules`/`storage.rules` as the
   root of trust (never lockable-out; their record is created on first portal sign-in). Only the
   Owner adds/removes staff (Team page). Adding someone creates a Firebase email/password login with

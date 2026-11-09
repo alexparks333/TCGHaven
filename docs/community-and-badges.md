@@ -148,6 +148,14 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   swings shut while the book glides back to the middle, then flies home; the shelf stays mounted
   and doesn't replay its fade-in (`Shelf intro`). In a profile the
   book is capped by window height so it always fits on screen.
+- **Collections (2026-11-09):** each book has an optional `collection` (a name; unset = "Haven
+  Badges", `HAVEN_COLLECTION` — TCG Haven's own books). The shelf shows one collection at a time,
+  picked from a dropdown above it (`CollectionPicker` in BadgeLibrary — a native `<select>` laid
+  over the title, so phones get their own picker), remembered per device in localStorage
+  (`tcghaven-badge-collection`). Staff set it in the book editor (a text field suggesting the
+  existing names). Always read it through `bookCollection()`; `badgeCollections()` lists them, Haven
+  first. Meant for creators' books later ("PewDiePie Badges") — who can make or earn those isn't
+  built yet.
 - **Phones held upright** (`components/badges/PhoneBook.tsx`, 2026-10-29): a two-page spread made
   every pin tiny, so on `(max-width: 767px) and (orientation: portrait)` BadgeLibrary opens the book
   full screen (a portal over the app) one page at a time. The closed book flies from the shelf to
@@ -360,6 +368,37 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   The tab's top-right switch "Pin Display | Full Badges" (Full = the shelf of books).
 - **Pin art** (`components/badges/BadgePin.tsx`): temporary SVG enamel pins (gold hexagon rim,
   enamel, emblem, ribbon) keyed by `art`; `PIN_SILHOUETTE` is the hole's shape.
+
+### Accounts: titles, Creators, suspensions & bans (2026-11-09)
+
+Every collector account is **Regular**, **Premium**, **Creator** or **Staff** (`lib/accountRoles.ts`),
+plus two holds that never delete anything: a Creator can be **suspended**, and any account **banned**.
+- **Stored** in `account_roles/{uid}` = `{ role, creatorSince?, formerCreator?, suspended?, banned?,
+  updatedAt }` (no doc = Regular, in good standing). Any signed-in collector reads it (titles show
+  on profiles); only staff write it. `account_roles/{uid}/history/*` (`{ at, by, byName, action:
+  title|suspend|restore|ban|unban, from?, to?, note }`) is staff-only — notes can be about
+  investigations.
+- **Premium** comes free with Creator and Staff (`hasPremium()`); paid Premium isn't built yet.
+- **Staff portal → Accounts** (`components/admin/AccountsPage.tsx`, `/admin/accounts`, any staff
+  member): search any account by name, @username or user id; lists Creators, Suspended creators,
+  Former creators, Premium, Staff, Regular (paged, "Load more") and Banned — each account is in
+  exactly one (`listOf()`). Manage = title cards, Suspend / Restore Creator, Ban / Unban, a note
+  (required to suspend, ban or take Creator away) and the history. Writes go through
+  `changeAccount()` in `lib/firebase/accountRolesStaff.ts` (the staff session).
+- **Creators:** `isCreator()` = Creator, not suspended, not banned. Rule for everything creators
+  will make (communities, badge books, follows): show it only while `isCreator()` holds for its
+  maker, so a suspended or former creator's work is hidden from them and their followers and comes
+  back unchanged. `creatorSince` is kept for good.
+- **Bans:** `BanGate` (`components/auth/BanGate.tsx`, in `ClientWrapper`) shows a full-screen
+  "This account has been banned" with Sign out; `firestore.rules` `notBanned()` refuses their
+  writes (profiles, usernames, shared Cardex/badges, friendships, `users/{uid}`) — deletes stay
+  allowed so they can still delete the account. Their profile reads as "not found" to others.
+- **Collector app:** `useAccountRole(uid)` (live). Creators get a **Creator** tab under a line in
+  the desktop sidebar and a wand button in the phone top bar, both to `/creator`
+  (`components/pages/CreatorPage.tsx` — the Creator Studio; tools "coming soon"; suspended /
+  former creators see it paused). Profiles show the title beside the @username (your own always,
+  someone else's unless Regular).
+- Deleting an account leaves its `account_roles` doc (only staff can delete it).
 
 ### Profiles & what friends can see
 

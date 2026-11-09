@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award } from 'lucide-react'
+import { Library, RefreshCw, ClipboardCheck, Users, LogOut, Loader2, Lock, Mail, ArrowUpRight, ShieldAlert, Award, UserCog } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { friendlyAuthError } from '@/lib/auth-errors'
 import { LogoLoader } from '@/components/LogoLoader'
 import { StaffAuthProvider, useStaff } from './StaffAuthProvider'
+import { beatPresence, PRESENCE_BEAT_MS } from '@/lib/firebase/staff'
 
 // The staff portal at /admin — everything admin lives here, behind its own staff sign-in
 // (lib/firebase/staff.ts), with its own layout instead of the collector app's sidebar
@@ -18,6 +19,7 @@ const NAV = [
   { href: '/admin/sync', label: 'Sync', icon: RefreshCw, ownerOnly: false },
   { href: '/admin/review', label: 'Needs Review', icon: ClipboardCheck, ownerOnly: false },
   { href: '/admin/badges', label: 'Badges', icon: Award, ownerOnly: false },
+  { href: '/admin/accounts', label: 'Accounts', icon: UserCog, ownerOnly: false },
   { href: '/admin/team', label: 'Team', icon: Users, ownerOnly: true },
 ]
 
@@ -35,7 +37,22 @@ function StaffGate({ children }: { children: React.ReactNode }) {
   if (!user) return <StaffSignIn />
   if (!member) return <NoAccess />
   if (member.mustChangePassword) return <ChooseOwnPassword />
-  return <Shell>{children}</Shell>
+  return <Shell><Presence uid={member.uid} />{children}</Shell>
+}
+
+// Tells the Team page this person is here (and on which page): a beat on every page change and
+// every minute while the portal is in front. A hidden tab stops beating, so it soon reads as away.
+function Presence({ uid }: { uid: string }) {
+  const pathname = usePathname()
+  const label = NAV.find((n) => (n.href === '/admin' ? pathname === '/admin' : pathname.startsWith(n.href)))?.label ?? 'Portal'
+  useEffect(() => {
+    const beat = () => { if (document.visibilityState === 'visible') beatPresence(uid, label).catch(() => {}) }
+    beat()
+    const t = setInterval(beat, PRESENCE_BEAT_MS)
+    document.addEventListener('visibilitychange', beat)
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', beat) }
+  }, [uid, label])
+  return null
 }
 
 // ── Shell ─────────────────────────────────────────────────────────────────────
