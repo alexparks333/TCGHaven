@@ -1180,6 +1180,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     /// outline: the tracker drifts (real scans came out with the top cut off and table showing), and
     /// a toploader's edge can stand in for the card's. Nil if nothing better is found.
     private func refined(_ frame: CIImage, around quad: [CGPoint]) -> CGImage? {
+        // A graded slab is taller and thinner than a card (PSA ≈ 0.58 wide-to-tall, a card 0.72):
+        // keep it whole — its label names the card and the grade (the card inside is cut out later)
+        if quadAspect(quad) < 0.64 { return nil }
         let c = Self.center(quad)
         let wide = quad.map { CGPoint(x: c.x + ($0.x - c.x) * 1.18, y: c.y + ($0.y - c.y) * 1.18) }
         guard let region = flattenExact(frame, quad: wide) else { return nil }
@@ -1190,14 +1193,23 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         request.quadratureTolerance = 15
         request.maximumObservations = 6
         try? VNImageRequestHandler(cgImage: region, options: [:]).perform([request])
-        // The card fills most of the enlarged crop: between ~55% and 95% of it
+        // The card fills most of the enlarged crop (a card in a toploader ~75% of its height); a
+        // card that fills much less is a card inside a slab — keep the slab
         let best = (request.results ?? []).filter { r in
             let b = r.boundingBox
             let share = b.width * b.height
-            return share > 0.5 && share < 0.95
+            return share > 0.5 && share < 0.95 && b.height > 0.68
         }.max { area($0) < area($1) }
         guard let r = best else { return nil }
         return flatten(CIImage(cgImage: region), quad: Self.corners(r))
+    }
+
+    /// Width ÷ height of an outline in real pixels (≤ 1)
+    private func quadAspect(_ q: [CGPoint]) -> CGFloat {
+        let px = q.map { CGPoint(x: $0.x * frameSize.width, y: $0.y * frameSize.height) }
+        let d = { (a: CGPoint, b: CGPoint) in hypot(a.x - b.x, a.y - b.y) }
+        let w = (d(px[0], px[1]) + d(px[3], px[2])) / 2, h = (d(px[0], px[3]) + d(px[1], px[2])) / 2
+        return min(w, h) / max(max(w, h), 1)
     }
 
     /// Perspective-corrects exactly the given outline (no margin, no rotation, no scaling)
