@@ -1,17 +1,23 @@
-// The TCGHaven card scanner — the native half. Plan and research: CardScanner.md.
+// The TCGHaven card scanner — the native half. Plan, design and test results: CardScanner.md.
 //
 // This screen owns the camera and does everything that needs the phone's hardware:
-//   1. find the card in each video frame (Vision rectangle detection, card-shaped)
-//   2. wait until it's held still, then flatten it to a straight-on picture (perspective correction)
-//   3. read its text (Vision OCR — English + Japanese; upside-down cards are turned the right way)
-//   4. hand the text to the site (the "cardScanned" event) — lib/scan/scanner.ts matches it against
-//      the catalog on the server and sends back the candidates ("update")
+//   1. find the card in each video frame (Vision rectangle detection; the largest card-shaped one,
+//      so the art box inside a card is never mistaken for the card), smoothed from frame to frame
+//   2. fill a progress ring while it's genuinely held steady and in focus, then capture it
+//   3. flatten it to a straight-on picture and read its text (Vision OCR, English + Japanese,
+//      upside-down cards turned round; up to 3 frames when the number didn't read the first time)
+//   4. hand the text to the site ("cardScanned") — lib/scan/scanner.ts matches it against the
+//      catalog on the server and sends back the candidates ("update")
 //   5. compare the scanned card's picture with candidate catalog photos ("compare" — PictureMatcher)
 //      so look-alikes the text can't separate (One Piece parallels, reprints) are told apart
 //   6. a tray of everything scanned; "Add" returns the picks to the site, which saves them through
 //      lib/firebase/db.ts like any other added card (ScanReviewDialog.tsx)
 //
+// Everything on screen reflects real work: the ring is the measured steadiness, the scan line runs
+// only while the card is being read / matched / compared, and the stage label says which.
+//
 // Nothing here writes user data, and no photo leaves the phone — only the text that was read.
+// Test builds (Xcode ▶︎ Run) keep every scan on the phone for tuning: see "Debug scans" below.
 
 import UIKit
 import AVFoundation
@@ -69,10 +75,11 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         let scanId = call.getString("scanId") ?? ""
         let urls = call.getArray("imageUrls", String.self) ?? []
         DispatchQueue.main.async {
-            guard let signature = self.scanner?.signature(for: scanId) else {
+            guard let scanner = self.scanner, let signature = scanner.signature(for: scanId) else {
                 call.resolve(["distances": urls.map { _ in NSNull() }])
                 return
             }
+            scanner.setStage("Comparing \(urls.count) picture\(urls.count == 1 ? "" : "s")…", for: scanId)
             PictureMatcher.distances(from: signature, to: urls) { distances in
                 var out: [Any] = []
                 for d in distances { out.append(d.map { NSNumber(value: $0) as Any } ?? NSNull()) }
@@ -91,7 +98,8 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
                 title: o["title"] as? String ?? "",
                 subtitle: o["subtitle"] as? String ?? "",
                 price: o["price"] as? String ?? "",
-                imageUrl: o["imageUrl"] as? String ?? ""
+                imageUrl: o["imageUrl"] as? String ?? "",
+                detail: o["detail"] as? String ?? ""
             )
         }
         let choice = call.getInt("choice") ?? 0
@@ -110,6 +118,7 @@ struct TrayOption {
     let subtitle: String
     let price: String
     let imageUrl: String
+    let detail: String
 }
 
 final class ScanItem {
@@ -149,6 +158,7 @@ enum PictureMatcher {
         config.requestCachePolicy = .returnCacheDataElseLoad
         config.urlCache = URLCache(memoryCapacity: 20 << 20, diskCapacity: 150 << 20)
         config.timeoutIntervalForRequest = 8
+        config.httpMaximumConnectionsPerHost = 8
         return URLSession(configuration: config)
     }()
     private static let signatureCache = NSCache<NSString, NSArray>()
@@ -265,6 +275,53 @@ enum PictureMatcher {
     }
 }
 
+// MARK: - Debug scans (test builds only)
+//
+// Every scan from an Xcode ▶︎ Run build is kept on the phone: the flattened card (card.jpg), what
+// was read from each frame (ocr.json) and what the site answered (result.json), in the app's
+// Documents/scans/<time>-<id>/. Claude copies them off with
+//   xcrun devicectl device copy from --device <id> --domain-type appDataContainer \
+//     --domain-identifier com.alexhparks.tcghaven --source Documents/scans --destination <dir>
+// and tunes the scanner against real phone scans. App Store builds (Release) never save anything.
+
+enum DebugScans {
+    #if DEBUG
+    static let enabled = true
+    #else
+    static let enabled = false
+    #endif
+    private static let queue = DispatchQueue(label: "tcghaven.scanner.debug", qos: .utility)
+    private static var folders: [String: URL] = [:]
+
+    static func save(scanId: String, image: CGImage, info: [String: Any]) {
+        guard enabled else { return }
+        let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.85)
+        queue.async {
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+            let f = DateFormatter(); f.dateFormat = "yyyyMMdd-HHmmss"
+            let dir = docs.appendingPathComponent("scans/\(f.string(from: Date()))-\(scanId.prefix(8))")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            folders[scanId] = dir
+            try? jpeg?.write(to: dir.appendingPathComponent("card.jpg"))
+            if let data = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]) {
+                try? data.write(to: dir.appendingPathComponent("ocr.json"))
+            }
+        }
+    }
+
+    static func saveResult(scanId: String, info: [String: Any]) {
+        guard enabled else { return }
+        queue.async {
+            guard let dir = folders[scanId], let data = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]) else { return }
+            try? data.write(to: dir.appendingPathComponent("result.json"))
+        }
+    }
+
+    static func log(_ s: @autoclosure () -> String) {
+        if enabled { print("[scanner] \(s())") }
+    }
+}
+
 // MARK: - The scanner screen
 
 final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDelegate,
@@ -282,34 +339,62 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private let previewLayer = AVCaptureVideoPreviewLayer()
     private let ciContext = CIContext()
 
-    // Frame state (frameQueue only)
+    // ── Frame state (frameQueue only) ──
+    private enum Phase { case searching, reading, waitingForNext }
+    private var phase = Phase.searching
     private var busy = false
     private var lastFrameAt: CFTimeInterval = 0
-    private var lastQuad: [CGPoint]?
-    private var stableFrames = 0
-    private var waitingForRemoval = false
-    private var lastCardSeenAt: CFTimeInterval = 0
+    private var smoothQuad: [CGPoint]?        // the outline shown, smoothed between frames
+    private var rawQuad: [CGPoint]?           // the last detection, for measuring movement
+    private var lastSeenAt: CFTimeInterval = 0
+    private var steadiness: CGFloat = 0       // 0…1 — the progress ring
     private var manualCapture = false
+    // reading: several frames of text for one card
+    private var readingId = ""
+    private var readingLines: [[[String: Any]]] = []
+    private var readingImage: CGImage?
+    private var readingStarted: CFTimeInterval = 0
+    // waiting for the next card
+    private var lastScanCenter = CGPoint.zero
+    private var lastScanSignature: PictureMatcher.Signature?
+    private var lastSwapCheckAt: CFTimeInterval = 0
+    private var steadySince: CFTimeInterval = 0
 
     // UI (main thread)
-    private let quadLayer = CAShapeLayer()
+    private let outlineLayer = CAShapeLayer()
+    private let ringLayer = CAShapeLayer()
+    private let flashLayer = CAShapeLayer()
     private let hintLabel = PaddedLabel()
+    private var hintWanted = ""
+    private var hintWantedSince: CFTimeInterval = 0
     private let doneButton = UIButton(type: .system)
     private let closeButton = UIButton(type: .system)
     private let torchButton = UIButton(type: .system)
     private let shutterButton = UIButton(type: .custom)
+    private let titleLabel = UILabel()
     private var tray: UICollectionView!
     private var items: [ScanItem] = []
     private var finished = false
+    // The card being worked on right now: its real captured picture, a scan line while work is
+    // under way, and the stage
+    private let activeCard = UIView()
+    private let activeImage = UIImageView()
+    private let activeBeam = CAGradientLayer()
+    private let activeStage = UILabel()
+    private var activeId: String?
 
-    private let successHaptic = UINotificationFeedbackGenerator()
-    private let tapHaptic = UIImpactFeedbackGenerator(style: .light)
+    private let notify = UINotificationFeedbackGenerator()
+    private let tap = UIImpactFeedbackGenerator(style: .medium)
 
-    // Card proportions: 63 × 88 mm. Allow for tilt and sleeves/toploaders.
-    private static let cardAspect: (min: Float, max: Float) = (0.55, 0.9)
-    private static let stableNeeded = 4            // frames in a row with the card held still
-    private static let stillness: CGFloat = 0.012  // max corner movement between frames (fraction of the frame)
-    private static let goneAfter: CFTimeInterval = 0.5
+    private static let gold = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
+
+    // Tuning — CardScanner.md "Tuning"
+    private static let cardAspect: (min: Float, max: Float) = (0.55, 0.9)  // 63 × 88 mm, tilted, sleeved
+    private static let steadyMotion: CGFloat = 0.018     // corner movement per frame still counted as steady
+    private static let steadyTime: CGFloat = 0.45        // seconds of steadiness to fill the ring
+    private static let holdOver: CFTimeInterval = 0.35   // keep a lost outline this long (missed frames)
+    private static let goneAfter: CFTimeInterval = 0.4   // card gone this long → ready for the next
+    private static let maxReadFrames = 3
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
     override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
@@ -324,21 +409,31 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
 
-        quadLayer.strokeColor = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1).cgColor
-        quadLayer.fillColor = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 0.12).cgColor
-        quadLayer.lineWidth = 3
-        quadLayer.lineJoin = .round
-        view.layer.addSublayer(quadLayer)
+        outlineLayer.strokeColor = UIColor(white: 1, alpha: 0.85).cgColor
+        outlineLayer.fillColor = UIColor(white: 1, alpha: 0.06).cgColor
+        outlineLayer.lineWidth = 2
+        outlineLayer.lineJoin = .round
+        ringLayer.strokeColor = Self.gold.cgColor
+        ringLayer.fillColor = UIColor.clear.cgColor
+        ringLayer.lineWidth = 6
+        ringLayer.lineJoin = .round
+        ringLayer.lineCap = .round
+        ringLayer.strokeEnd = 0
+        flashLayer.fillColor = UIColor.white.cgColor
+        flashLayer.opacity = 0
+        for l in [outlineLayer, ringLayer, flashLayer] { view.layer.addSublayer(l) }
 
         buildControls()
-        successHaptic.prepare()
+        notify.prepare()
+        tap.prepare()
         checkCameraAccess()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer.frame = view.bounds
-        quadLayer.frame = view.bounds
+        for l in [outlineLayer, ringLayer, flashLayer] { l.frame = view.bounds }
+        activeBeam.frame = CGRect(x: 0, y: -24, width: activeImage.bounds.width, height: 24)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -349,27 +444,23 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
     // MARK: Controls
 
+    private func roundButton(_ b: UIButton, symbol: String, label: String) {
+        b.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
+        b.tintColor = .white
+        b.backgroundColor = UIColor(white: 0, alpha: 0.45)
+        b.layer.cornerRadius = 20
+        b.accessibilityLabel = label
+    }
+
     private func buildControls() {
-        let gold = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
-
-        closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
-        closeButton.tintColor = .white
-        closeButton.backgroundColor = UIColor(white: 0, alpha: 0.45)
-        closeButton.layer.cornerRadius = 20
-        closeButton.accessibilityLabel = "Close"
+        roundButton(closeButton, symbol: "xmark", label: "Close")
         closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-
-        torchButton.setImage(UIImage(systemName: "flashlight.off.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
-        torchButton.tintColor = .white
-        torchButton.backgroundColor = UIColor(white: 0, alpha: 0.45)
-        torchButton.layer.cornerRadius = 20
-        torchButton.accessibilityLabel = "Light"
+        roundButton(torchButton, symbol: "flashlight.off.fill", label: "Light")
         torchButton.addTarget(self, action: #selector(torchTapped), for: .touchUpInside)
 
-        let title = UILabel()
-        title.text = screenTitle
-        title.textColor = .white
-        title.font = .systemFont(ofSize: 17, weight: .semibold)
+        titleLabel.text = screenTitle
+        titleLabel.textColor = .white
+        titleLabel.font = .systemFont(ofSize: 17, weight: .semibold)
 
         hintLabel.text = "Point at a card"
         hintLabel.textColor = .white
@@ -380,6 +471,25 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         hintLabel.layer.cornerRadius = 14
         hintLabel.clipsToBounds = true
 
+        // The card being read: the actual captured picture
+        activeCard.isHidden = true
+        activeCard.backgroundColor = UIColor(white: 0, alpha: 0.6)
+        activeCard.layer.cornerRadius = 14
+        activeImage.contentMode = .scaleAspectFill
+        activeImage.clipsToBounds = true
+        activeImage.layer.cornerRadius = 6
+        activeBeam.colors = [Self.gold.withAlphaComponent(0).cgColor, Self.gold.withAlphaComponent(0.9).cgColor, Self.gold.withAlphaComponent(0).cgColor]
+        activeBeam.startPoint = CGPoint(x: 0.5, y: 0)
+        activeBeam.endPoint = CGPoint(x: 0.5, y: 1)
+        activeImage.layer.addSublayer(activeBeam)
+        activeStage.textColor = .white
+        activeStage.font = .systemFont(ofSize: 13, weight: .semibold)
+        activeStage.numberOfLines = 3
+        for v in [activeImage, activeStage] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            activeCard.addSubview(v)
+        }
+
         shutterButton.backgroundColor = UIColor(white: 1, alpha: 0.9)
         shutterButton.layer.cornerRadius = 32
         shutterButton.layer.borderWidth = 4
@@ -389,7 +499,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
         var done = UIButton.Configuration.filled()
         done.title = "Add"
-        done.baseBackgroundColor = gold
+        done.baseBackgroundColor = Self.gold
         done.baseForegroundColor = .black
         done.cornerStyle = .capsule
         done.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 18)
@@ -418,7 +528,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let trayBackground = UIView()
         trayBackground.backgroundColor = UIColor(white: 0, alpha: 0.6)
 
-        for v in [trayBackground, closeButton, torchButton, title, hintLabel, shutterButton, doneButton, tray!] as [UIView] {
+        for v in [trayBackground, closeButton, torchButton, titleLabel, hintLabel, activeCard, shutterButton, doneButton, tray!] as [UIView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
         }
@@ -432,11 +542,24 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             torchButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             torchButton.widthAnchor.constraint(equalToConstant: 40),
             torchButton.heightAnchor.constraint(equalToConstant: 40),
-            title.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            title.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             hintLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             hintLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 14),
             hintLabel.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48),
+
+            activeCard.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activeCard.bottomAnchor.constraint(equalTo: trayBackground.topAnchor, constant: -14),
+            activeCard.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48),
+            activeImage.leadingAnchor.constraint(equalTo: activeCard.leadingAnchor, constant: 10),
+            activeImage.topAnchor.constraint(equalTo: activeCard.topAnchor, constant: 10),
+            activeImage.bottomAnchor.constraint(equalTo: activeCard.bottomAnchor, constant: -10),
+            activeImage.widthAnchor.constraint(equalToConstant: 64),
+            activeImage.heightAnchor.constraint(equalToConstant: 89),
+            activeStage.leadingAnchor.constraint(equalTo: activeImage.trailingAnchor, constant: 12),
+            activeStage.trailingAnchor.constraint(equalTo: activeCard.trailingAnchor, constant: -14),
+            activeStage.centerYAnchor.constraint(equalTo: activeCard.centerYAnchor),
+            activeStage.widthAnchor.constraint(greaterThanOrEqualToConstant: 150),
 
             trayBackground.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             trayBackground.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -456,8 +579,16 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         ])
     }
 
-    private func setHint(_ text: String) {
-        if hintLabel.text != text { hintLabel.text = text }
+    /// The hint changes only once a new state has lasted a moment, so it never flickers between
+    /// two messages; capture-time messages pass `now: true`
+    private func wantHint(_ text: String, now: Bool = false) {
+        let t = CACurrentMediaTime()
+        if text != hintWanted { hintWanted = text; hintWantedSince = t }
+        if now || t - hintWantedSince > 0.3 || hintLabel.text == nil {
+            if hintLabel.text != text {
+                UIView.transition(with: hintLabel, duration: 0.15, options: .transitionCrossDissolve) { self.hintLabel.text = text }
+            }
+        }
     }
 
     private func refreshDone() {
@@ -477,10 +608,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     }
 
     @objc private func doneTapped() {
-        let picks = items.filter { $0.status == "matched" || $0.status == "pick" }.map {
+        let picks = items.filter { $0.status == "matched" || $0.status == "pick" }.reversed().map {
             ["scanId": $0.id, "choice": $0.choice, "confirmed": $0.confirmed] as [String: Any]
         }
-        finish(with: picks)
+        finish(with: Array(picks))
     }
 
     private func finish(with picks: [[String: Any]]) {
@@ -500,14 +631,14 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             device.torchMode = on ? .on : .off
             device.unlockForConfiguration()
             torchButton.setImage(UIImage(systemName: on ? "flashlight.on.fill" : "flashlight.off.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)), for: .normal)
-            torchButton.tintColor = on ? UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1) : .white
+            torchButton.tintColor = on ? Self.gold : .white
         } catch {}
     }
 
     @objc private func shutterTapped() {
-        tapHaptic.impactOccurred()
+        tap.impactOccurred()
         frameQueue.async {
-            self.waitingForRemoval = false
+            if self.phase == .waitingForNext { self.phase = .searching }
             self.manualCapture = true
         }
     }
@@ -528,7 +659,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     }
 
     private func showNoCamera() {
-        setHint("TCGHaven needs the camera to scan cards")
+        wantHint("TCGHaven needs the camera to scan cards", now: true)
         let alert = UIAlertController(title: "Camera is off for TCGHaven",
                                       message: "Turn it on in Settings → TCGHaven → Camera to scan your cards.",
                                       preferredStyle: .alert)
@@ -543,7 +674,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         sessionQueue.async {
             guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
                   let input = try? AVCaptureDeviceInput(device: device) else {
-                DispatchQueue.main.async { self.setHint("No camera found") }
+                DispatchQueue.main.async { self.wantHint("No camera found", now: true) }
                 return
             }
             self.device = device
@@ -598,89 +729,254 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                     device.videoZoomFactor = max(1, zoom)
                 }
             }
+            DebugScans.log("camera \(device.localizedName) min focus \(minFocusMM) mm, zoom \(device.videoZoomFactor), preset \(session.sessionPreset.rawValue)")
             device.unlockForConfiguration()
         } catch {}
+    }
+
+    // MARK: Finding the card
+
+    /// The card in this frame: the largest card-shaped outline, so the art box or text box inside a
+    /// card never wins over the card itself
+    private func detectCard(_ pixels: CVPixelBuffer) -> [CGPoint]? {
+        let request = VNDetectRectanglesRequest()
+        request.minimumAspectRatio = Self.cardAspect.min
+        request.maximumAspectRatio = Self.cardAspect.max
+        request.minimumSize = 0.2
+        request.quadratureTolerance = 25
+        request.minimumConfidence = 0.5
+        request.maximumObservations = 6
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixels, orientation: .right, options: [:])
+        try? handler.perform([request])
+        let best = (request.results ?? []).max { area($0) < area($1) }
+        guard let r = best else { return nil }
+        return [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
+    }
+
+    private func area(_ r: VNRectangleObservation) -> CGFloat {
+        let p = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft]
+        var a: CGFloat = 0
+        for i in 0..<4 { let j = (i + 1) % 4; a += p[i].x * p[j].y - p[j].x * p[i].y }
+        return abs(a) / 2
+    }
+
+    private static func center(_ q: [CGPoint]) -> CGPoint {
+        CGPoint(x: q.map(\.x).reduce(0, +) / 4, y: q.map(\.y).reduce(0, +) / 4)
     }
 
     // MARK: Frames
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         let now = CACurrentMediaTime()
-        guard !busy, !finished, now - lastFrameAt > 0.07, let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard !busy, !finished, now - lastFrameAt > 0.06, let pixels = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let dt = CGFloat(min(0.2, now - lastFrameAt))
         lastFrameAt = now
-
-        // The sensor is landscape; .right is the upright portrait picture the person sees
-        let request = VNDetectRectanglesRequest()
-        request.minimumAspectRatio = Self.cardAspect.min
-        request.maximumAspectRatio = Self.cardAspect.max
-        request.minimumSize = 0.3
-        request.quadratureTolerance = 22
-        request.minimumConfidence = 0.6
-        request.maximumObservations = 1
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixels, orientation: .right, options: [:])
-        try? handler.perform([request])
-        let rect = request.results?.first
-
         let imageSize = CGSize(width: CVPixelBufferGetHeight(pixels), height: CVPixelBufferGetWidth(pixels)) // upright
-        guard let card = rect else {
-            if now - lastCardSeenAt > Self.goneAfter { waitingForRemoval = false }
-            lastQuad = nil
-            stableFrames = 0
-            if manualCapture {
-                manualCapture = false
-                captureWhole(pixels)
-                return
-            }
-            let waiting = waitingForRemoval
-            DispatchQueue.main.async {
-                self.drawQuad(nil, imageSize: imageSize)
-                if !waiting { self.setHint("Point at a card") }
-            }
+
+        // Shutter with no card outline found: read the middle of the picture
+        let found = detectCard(pixels)
+        if found == nil && manualCapture && phase == .searching {
+            manualCapture = false
+            beginReading(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: nil, imageSize: imageSize, now: now)
             return
         }
-        lastCardSeenAt = now
 
-        let quad = [card.topLeft, card.topRight, card.bottomRight, card.bottomLeft]
-        if let last = lastQuad, zip(quad, last).allSatisfy({ hypot($0.0.x - $0.1.x, $0.0.y - $0.1.y) < Self.stillness }) {
-            stableFrames += 1
-        } else {
-            stableFrames = 0
+        // Track: smooth the outline; ride over a few missed frames instead of resetting
+        var motion: CGFloat = 1
+        if let q = found {
+            if let last = rawQuad { motion = zip(q, last).map { hypot($0.0.x - $0.1.x, $0.0.y - $0.1.y) }.max() ?? 1 }
+            rawQuad = q
+            lastSeenAt = now
+            if let s = smoothQuad, motion < 0.08 {
+                smoothQuad = zip(s, q).map { CGPoint(x: $0.0.x * 0.45 + $0.1.x * 0.55, y: $0.0.y * 0.45 + $0.1.y * 0.55) }
+            } else {
+                smoothQuad = q
+            }
+        } else if now - lastSeenAt > Self.holdOver {
+            smoothQuad = nil
+            rawQuad = nil
         }
-        lastQuad = quad
-        let waiting = waitingForRemoval
-        let ready = manualCapture || (!waitingForRemoval && stableFrames >= Self.stableNeeded)
-        DispatchQueue.main.async {
-            self.drawQuad(quad, imageSize: imageSize, locked: ready)
-            if !waiting && !ready { self.setHint("Hold still…") }
+        let present = smoothQuad != nil && now - lastSeenAt <= Self.holdOver
+
+        switch phase {
+        case .reading:
+            // More frames of text for the card being read (only while it's still in place)
+            if let q = found, motion < Self.steadyMotion * 2 {
+                readMore(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: q, now: now)
+            } else if now - readingStarted > 1.2 {
+                finishReading()
+            }
+            showOutline(present ? smoothQuad : nil, imageSize: imageSize, ring: 1, locked: true)
+            return
+
+        case .waitingForNext:
+            // Ready for the next card once this one is gone — or swapped in place for a different one
+            if !present && now - lastSeenAt > Self.goneAfter {
+                phase = .searching
+            } else if let q = found {
+                let c = Self.center(q)
+                if hypot(c.x - lastScanCenter.x, c.y - lastScanCenter.y) > 0.25 {
+                    phase = .searching
+                } else if motion < Self.steadyMotion {
+                    if steadySince == 0 { steadySince = now }
+                    if now - steadySince > 0.7, now - lastSwapCheckAt > 0.6, let last = lastScanSignature {
+                        lastSwapCheckAt = now
+                        if let flat = flatten(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: q),
+                           let sig = PictureMatcher.signature(of: flat), PictureMatcher.distance(sig, last) > 0.35 {
+                            DebugScans.log("different card in place — scanning it")
+                            phase = .searching
+                        }
+                    }
+                } else {
+                    steadySince = 0
+                }
+            }
+            if phase == .waitingForNext {
+                showOutline(present ? smoothQuad : nil, imageSize: imageSize, ring: 0, locked: false)
+                DispatchQueue.main.async { self.wantHint("Next card") }
+                return
+            }
+            steadiness = 0
+
+        case .searching:
+            break
         }
+
+        // Searching: fill the ring while the card is held steady (and the camera has focused)
+        guard present, let quad = smoothQuad else {
+            steadiness = max(0, steadiness - dt / 0.3)
+            showOutline(nil, imageSize: imageSize, ring: 0, locked: false)
+            DispatchQueue.main.async { self.wantHint("Point at a card") }
+            return
+        }
+        let focusing = device?.isAdjustingFocus ?? false
+        if found != nil && motion < Self.steadyMotion && !focusing {
+            steadiness = min(1, steadiness + dt / Self.steadyTime)
+        } else if found != nil && motion >= Self.steadyMotion * 2 {
+            steadiness = max(0, steadiness - dt / 0.35)
+        }
+        let ready = manualCapture || steadiness >= 1
+        showOutline(quad, imageSize: imageSize, ring: steadiness, locked: ready)
+        DispatchQueue.main.async { self.wantHint(focusing ? "Focusing…" : "Hold steady") }
         guard ready else { return }
 
         manualCapture = false
-        waitingForRemoval = true
-        stableFrames = 0
-        busy = true
-        let upright = CIImage(cvPixelBuffer: pixels).oriented(.right)
-        guard let flat = flatten(upright, quad: quad) else { busy = false; return }
-        process(flat)
+        steadiness = 0
+        beginReading(CIImage(cvPixelBuffer: pixels).oriented(.right), quad: rawQuad ?? quad, imageSize: imageSize, now: now)
     }
 
-    /// The shutter with no card outline found: use the middle of the picture
-    private func captureWhole(_ pixels: CVPixelBuffer) {
+    // MARK: Reading the card
+
+    private func beginReading(_ frame: CIImage, quad: [CGPoint]?, imageSize: CGSize, now: CFTimeInterval) {
+        let flat: CGImage?
+        if let q = quad {
+            flat = flatten(frame, quad: q)
+        } else {
+            let e = frame.extent
+            let h = e.height * 0.6, w = h * 63 / 88
+            let crop = frame.cropped(to: CGRect(x: e.midX - w / 2, y: e.midY - h / 2, width: w, height: h))
+            flat = ciContext.createCGImage(crop, from: crop.extent)
+        }
+        guard let card = flat else { return }
         busy = true
-        waitingForRemoval = true
-        let upright = CIImage(cvPixelBuffer: pixels).oriented(.right)
-        let e = upright.extent
-        let h = e.height * 0.6, w = h * 63 / 88
-        let crop = upright.cropped(to: CGRect(x: e.midX - w / 2, y: e.midY - h / 2, width: w, height: h))
-        guard let cg = ciContext.createCGImage(crop, from: crop.extent) else { busy = false; return }
-        process(cg)
+        phase = .reading
+        readingId = UUID().uuidString
+        readingLines = []
+        readingImage = nil
+        readingStarted = now
+        lastScanCenter = quad.map(Self.center) ?? CGPoint(x: 0.5, y: 0.5)
+        let id = readingId
+        let preview = UIImage(cgImage: card)
+        DispatchQueue.main.async {
+            self.tap.impactOccurred()
+            self.flash()
+            self.showActive(id: id, image: preview, stage: "Reading the card…")
+            self.wantHint("Scanning…", now: true)
+        }
+        readFrame(card)
+        busy = false
+        if Self.hasCode(readingLines.last ?? []) || readingLines.count >= Self.maxReadFrames { finishReading() }
     }
 
-    /// The card, straight on and upright, ~1400 px tall
+    private func readMore(_ frame: CIImage, quad: [CGPoint], now: CFTimeInterval) {
+        guard let card = flatten(frame, quad: quad) else { return }
+        busy = true
+        readFrame(card)
+        busy = false
+        if Self.hasCode(readingLines.last ?? []) || readingLines.count >= Self.maxReadFrames { finishReading() }
+    }
+
+    /// OCR one flattened frame (turned the right way up), keeping the best-oriented picture
+    private func readFrame(_ card: CGImage) {
+        let t0 = CACurrentMediaTime()
+        var lines = readText(card)
+        var upright = card
+        if !Self.hasCode(lines), let flipped = rotate180(card) {
+            let other = readText(flipped)
+            if Self.hasCode(other) || Self.chars(other) > Self.chars(lines) * 3 / 2 {
+                lines = other
+                upright = flipped
+            }
+        }
+        if readingImage == nil || Self.hasCode(lines) { readingImage = upright }
+        readingLines.append(lines)
+        DebugScans.log("frame \(readingLines.count): \(lines.count) lines, code \(Self.hasCode(lines)), \(Int((CACurrentMediaTime() - t0) * 1000)) ms")
+    }
+
+    private func finishReading() {
+        guard phase == .reading, let image = readingImage else { return }
+        let id = readingId
+        // Everything read across the frames, once each (lines from the frame that read the number
+        // come first — their positions are the most trustworthy)
+        var seen = Set<String>()
+        var merged: [[String: Any]] = []
+        let ordered = readingLines.sorted { Self.hasCode($0) && !Self.hasCode($1) }
+        for frame in ordered {
+            for l in frame {
+                let t = (l["text"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                if t.isEmpty || seen.contains(t) { continue }
+                seen.insert(t)
+                merged.append(l)
+            }
+        }
+        let signature = PictureMatcher.signature(of: image)
+        let thumb = Self.thumbnail(image)
+        lastScanSignature = signature
+        lastSwapCheckAt = CACurrentMediaTime()
+        steadySince = 0
+        phase = .waitingForNext
+        DebugScans.save(scanId: id, image: image, info: [
+            "frames": readingLines, "merged": merged, "ms": Int((CACurrentMediaTime() - readingStarted) * 1000),
+        ])
+
+        DispatchQueue.main.async {
+            let item = ScanItem(id: id, thumbnail: thumb)
+            item.signature = signature
+            if merged.isEmpty {
+                item.status = "none"
+                item.note = "No text read — hold it flatter, out of the glare"
+                self.notify.notificationOccurred(.error)
+            }
+            self.items.insert(item, at: 0)
+            self.tray.insertItems(at: [IndexPath(item: 0, section: 0)])
+            self.tray.scrollToItem(at: IndexPath(item: 0, section: 0), at: .left, animated: true)
+            if merged.isEmpty {
+                self.endActive(id: id, result: "Couldn’t read that card — try again")
+            } else {
+                self.setStage("Finding the card…", for: id)
+                self.onScanned?(id, merged)
+            }
+        }
+    }
+
+    /// The card, straight on and upright, ~1400 px tall. The outline is pushed out 1.5% so a
+    /// slightly tight detection doesn't clip the number line along the edge.
     private func flatten(_ image: CIImage, quad: [CGPoint]) -> CGImage? {
         let size = image.extent.size
+        let c = Self.center(quad)
+        let grown = quad.map { CGPoint(x: c.x + ($0.x - c.x) * 1.015, y: c.y + ($0.y - c.y) * 1.015) }
         // Vision's points are 0–1 from the bottom-left, the same corner Core Image measures from
-        let p = quad.map { CIVector(x: $0.x * size.width + image.extent.minX, y: $0.y * size.height + image.extent.minY) }
+        let p = grown.map { CIVector(x: $0.x * size.width + image.extent.minX, y: $0.y * size.height + image.extent.minY) }
         guard let filter = CIFilter(name: "CIPerspectiveCorrection") else { return nil }
         filter.setValue(image, forKey: kCIInputImageKey)
         filter.setValue(p[0], forKey: "inputTopLeft")
@@ -693,43 +989,6 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let scale = min(1, 1400 / out.extent.height)
         if scale < 1 { out = out.transformed(by: CGAffineTransform(scaleX: scale, y: scale)) }
         return ciContext.createCGImage(out, from: out.extent)
-    }
-
-    // MARK: Reading the card
-
-    private func process(_ card: CGImage) {
-        DispatchQueue.main.async {
-            self.tapHaptic.impactOccurred()
-            self.setHint("Reading…")
-        }
-        var lines = readText(card)
-        var upright = card
-        if !Self.hasCode(lines), let flipped = rotate180(card) {
-            let other = readText(flipped)
-            if Self.hasCode(other) || Self.chars(other) > Self.chars(lines) * 3 / 2 {
-                lines = other
-                upright = flipped
-            }
-        }
-        let signature = PictureMatcher.signature(of: upright)
-        let thumb = Self.thumbnail(upright)
-        let id = UUID().uuidString
-
-        DispatchQueue.main.async {
-            let item = ScanItem(id: id, thumbnail: thumb)
-            item.signature = signature
-            if lines.isEmpty {
-                item.status = "none"
-                item.note = "No text read — hold it flatter, out of the glare"
-                self.successHaptic.notificationOccurred(.error)
-            }
-            self.items.insert(item, at: 0)
-            self.tray.insertItems(at: [IndexPath(item: 0, section: 0)])
-            self.tray.scrollToItem(at: IndexPath(item: 0, section: 0), at: .left, animated: true)
-            self.setHint(lines.isEmpty ? "Couldn’t read that one — try again" : "Got it — next card")
-            if !lines.isEmpty { self.onScanned?(id, lines) }
-            self.frameQueue.async { self.busy = false }
-        }
     }
 
     private func readText(_ image: CGImage) -> [[String: Any]] {
@@ -758,7 +1017,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     }
 
     private static let codePattern = try! NSRegularExpression(
-        pattern: "\\d{1,3}\\s?/\\s?\\d{2,3}|\\b(OP|ST|EB|PRB)\\d{2}-\\d{3}|\\b[A-Z0-9]{3,4}\\s?[•·]\\s?EN\\b|\\bSWSH\\d|\\bP-\\d{3}")
+        pattern: "\\d{1,3}\\s?/\\s?\\d{2,3}|\\b(OP|ST|EB|PRB)[0-9O]{2}\\s?-\\s?[0-9O]{3}|\\b[A-Z0-9]{3,4}\\s?[•·*]\\s?EN\\b|\\bSWSH\\d|\\bP-\\d{3}|\\d{3}/[A-Za-z]{1,4}-?P")
     private static func hasCode(_ lines: [[String: Any]]) -> Bool {
         lines.contains { l in
             guard let t = l["text"] as? String else { return false }
@@ -795,28 +1054,109 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         item.note = note
         tray.reloadItems(at: [IndexPath(item: index, section: 0)])
         refreshDone()
+        let top = options.first
         switch item.status {
-        case "matched": successHaptic.notificationOccurred(.success)
-        case "pick": successHaptic.notificationOccurred(.warning)
-        default: successHaptic.notificationOccurred(.error)
+        case "matched":
+            notify.notificationOccurred(.success)
+            endActive(id: scanId, result: "✓ \(top?.title ?? "")\n\(top?.subtitle ?? "")")
+        case "pick":
+            notify.notificationOccurred(.warning)
+            endActive(id: scanId, result: "Pick one — tap it in the tray\nBest guess: \(top?.title ?? "")")
+        default:
+            notify.notificationOccurred(.error)
+            endActive(id: scanId, result: note ?? "Not found")
+        }
+        DebugScans.saveResult(scanId: scanId, info: [
+            "status": item.status,
+            "options": options.prefix(12).map { ["title": $0.title, "subtitle": $0.subtitle, "detail": $0.detail] },
+        ])
+        DebugScans.log("result \(item.status): \(top.map { "\($0.title) — \($0.subtitle) [\($0.detail)]" } ?? "nothing")")
+    }
+
+    // MARK: On-screen feedback
+
+    /// The card outline (smoothed) and the steadiness ring around it
+    private func showOutline(_ quad: [CGPoint]?, imageSize: CGSize, ring: CGFloat, locked: Bool) {
+        DispatchQueue.main.async {
+            guard let quad = quad else {
+                self.outlineLayer.path = nil
+                self.ringLayer.path = nil
+                return
+            }
+            let path = self.path(for: quad, imageSize: imageSize)
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.08)
+            CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .linear))
+            self.outlineLayer.path = path
+            self.ringLayer.path = path
+            self.ringLayer.strokeEnd = ring
+            self.outlineLayer.strokeColor = (locked ? Self.gold : UIColor(white: 1, alpha: 0.85)).cgColor
+            CATransaction.commit()
         }
     }
 
-    // MARK: Card outline
-
-    private func drawQuad(_ quad: [CGPoint]?, imageSize: CGSize, locked: Bool = false) {
-        guard let quad = quad else { quadLayer.path = nil; return }
+    private var lastPath: CGPath?
+    private func path(for quad: [CGPoint], imageSize: CGSize) -> CGPath {
         let bounds = view.bounds
         let scale = max(bounds.width / imageSize.width, bounds.height / imageSize.height)
         let dx = (imageSize.width * scale - bounds.width) / 2
         let dy = (imageSize.height * scale - bounds.height) / 2
         let pts = quad.map { CGPoint(x: $0.x * imageSize.width * scale - dx, y: (1 - $0.y) * imageSize.height * scale - dy) }
+        // Start at the top-left corner and go clockwise, so the ring fills like a clock
         let path = UIBezierPath()
         path.move(to: pts[0])
         for p in pts.dropFirst() { path.addLine(to: p) }
         path.close()
-        quadLayer.path = path.cgPath
-        quadLayer.lineWidth = locked ? 5 : 3
+        lastPath = path.cgPath
+        return path.cgPath
+    }
+
+    private func flash() {
+        guard let p = lastPath else { return }
+        flashLayer.path = p
+        let a = CABasicAnimation(keyPath: "opacity")
+        a.fromValue = 0.7
+        a.toValue = 0
+        a.duration = 0.35
+        flashLayer.add(a, forKey: "flash")
+    }
+
+    private func showActive(id: String, image: UIImage, stage: String) {
+        activeId = id
+        activeImage.image = image
+        activeStage.text = stage
+        if activeCard.isHidden {
+            activeCard.alpha = 0
+            activeCard.isHidden = false
+            UIView.animate(withDuration: 0.2) { self.activeCard.alpha = 1 }
+        }
+        activeBeam.frame = CGRect(x: 0, y: -24, width: 64, height: 24)
+        let sweep = CABasicAnimation(keyPath: "position.y")
+        sweep.fromValue = -12
+        sweep.toValue = 89 + 12
+        sweep.duration = 0.9
+        sweep.repeatCount = .infinity
+        activeBeam.isHidden = false
+        activeBeam.add(sweep, forKey: "sweep")
+    }
+
+    func setStage(_ stage: String, for id: String) {
+        guard activeId == id else { return }
+        activeStage.text = stage
+    }
+
+    /// Work on this card is over: stop the scan line, show the answer briefly
+    private func endActive(id: String, result: String) {
+        guard activeId == id else { return }
+        activeBeam.removeAnimation(forKey: "sweep")
+        activeBeam.isHidden = true
+        activeStage.text = result
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            guard self.activeId == id else { return }
+            UIView.animate(withDuration: 0.25, animations: { self.activeCard.alpha = 0 }) { _ in
+                if self.activeId == id { self.activeCard.isHidden = true; self.activeId = nil }
+            }
+        }
     }
 
     // MARK: Tray
@@ -832,7 +1172,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let item = items[indexPath.item]
         let title = item.options.isEmpty ? "Not found" : "Which card is it?"
-        let sheet = UIAlertController(title: title, message: item.note, preferredStyle: .actionSheet)
+        var message = item.note
+        if DebugScans.enabled, let d = item.options.first?.detail, !d.isEmpty { message = [message, "Test build: \(d)"].compactMap { $0 }.joined(separator: "\n") }
+        let sheet = UIAlertController(title: title, message: message, preferredStyle: .actionSheet)
         for (i, o) in item.options.prefix(8).enumerated() {
             let mark = i == item.choice ? "✓ " : ""
             let price = o.price.isEmpty ? "" : " · \(o.price)"

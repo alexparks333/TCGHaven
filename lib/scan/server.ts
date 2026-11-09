@@ -1,12 +1,14 @@
-// Server side of the card scanner: OCR lines from the phone → ranked catalog candidates, each with
-// the same rows Add Card's search shows (prices, foil rows, Pokémon printings), so a scanned card
-// is added exactly like a picked one. Called by app/api/cards/scan/route.ts. Plan: CardScanner.md.
+// Server side of the card scanner: OCR lines from the phone → ranked catalog candidates, with
+// what the scanner's tray shows (name, set, number, photo, price). Kept light on purpose — every
+// scan goes through here; the full Add-Card rows (prices per printing, foil rows) are fetched by
+// the review screen only for the cards actually kept. Called by app/api/cards/scan/route.ts.
+// Plan: CardScanner.md.
 
 import type { CatalogKey, Game, Language } from '../types'
 import { loadVisibleCatalog } from '../api/catalog'
 import { getPokemonSets } from '../api/pokemon'
-import { getSetsForGame, findCardById, type CardSearchResult } from '../api/search'
-import { readClues, matchScan, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey } from './scanMatch'
+import { getSetsForGame } from '../api/search'
+import { readClues, matchScan, catalogIndex, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey } from './scanMatch'
 
 export interface ScanMatch {
   key: string                 // "catalog:id"
@@ -14,10 +16,13 @@ export interface ScanMatch {
   language?: Language
   id: string
   name: string
+  setName: string
+  number: string
+  imageUrl: string
+  price: number               // market price (foil when the card only comes foil)
   score: number
   why: string
   exact: boolean
-  rows: CardSearchResult[]    // first row = the default printing (non-foil where there is one)
 }
 
 const GAME_CATALOGS: Record<Game, ScanCatalogKey[]> = {
@@ -28,8 +33,10 @@ const GAME_CATALOGS: Record<Game, ScanCatalogKey[]> = {
   mtg: ['mtg'],
 }
 
-async function scanCatalog(key: ScanCatalogKey): Promise<ScanCatalog> {
-  const cards = await loadVisibleCatalog<ScanCard & { hidden?: boolean }>(key as CatalogKey)
+type RawCard = ScanCard & { hidden?: boolean; imageUrl?: string; marketPrice?: number; marketPriceFoil?: number }
+
+async function scanCatalog(key: ScanCatalogKey): Promise<ScanCatalog & { cards: RawCard[] }> {
+  const cards = await loadVisibleCatalog<RawCard>(key as CatalogKey)
   if (key === 'pokemon') {
     const sets = await getPokemonSets().catch(() => [])
     return { key, cards, sets: sets.map((s) => ({ id: s.id, name: s.name, total: s.total })) }
@@ -41,26 +48,52 @@ async function scanCatalog(key: ScanCatalogKey): Promise<ScanCatalog> {
   return { key, cards }
 }
 
+function catalogsFor(games: Game[]) {
+  return Array.from(new Set(games.flatMap((g) => GAME_CATALOGS[g] ?? [])))
+}
+
 export function cleanLines(raw: unknown): OcrLine[] {
   if (!Array.isArray(raw)) return []
   const num = (v: unknown) => (typeof v === 'number' && isFinite(v) ? Math.max(0, Math.min(1, v)) : 0)
-  return raw.slice(0, 120).flatMap((l) => {
+  return raw.slice(0, 240).flatMap((l) => {
     const text = typeof l?.text === 'string' ? l.text.slice(0, 200) : ''
     return text.trim() ? [{ text, x: num(l.x), y: num(l.y), w: num(l.w), h: num(l.h) }] : []
   })
 }
 
-export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise<ScanMatch[]> {
-  const keys = Array.from(new Set(games.flatMap((g) => GAME_CATALOGS[g] ?? [])))
-  const catalogs = await Promise.all(keys.map(scanCatalog))
-  const candidates = matchScan(readClues(lines), catalogs)
+/** Loads the catalogs and builds their lookups — the scanner calls this as it opens, so the first
+ *  card doesn't wait for a cold server */
+export async function warmScanner(games: Game[]): Promise<void> {
+  const catalogs = await Promise.all(catalogsFor(games).map(scanCatalog))
+  for (const c of catalogs) catalogIndex(c)
+}
 
-  const out = await Promise.all(candidates.map(async (c): Promise<ScanMatch | null> => {
-    const game: Game = c.catalog === 'pokemon-jp' ? 'pokemon' : c.catalog
-    const language: Language | undefined = c.catalog === 'pokemon-jp' ? 'ja' : undefined
-    const rows = await findCardById(game, c.id, c.name, language).catch(() => [])
-    if (rows.length === 0) return null
-    return { key: `${c.catalog}:${c.id}`, game, language, id: c.id, name: c.name, score: c.score, why: c.why, exact: c.exact, rows }
-  }))
-  return out.filter((m): m is ScanMatch => m !== null)
+export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise<ScanMatch[]> {
+  const catalogs = await Promise.all(catalogsFor(games).map(scanCatalog))
+  const byId = new Map<string, RawCard>()
+  const candidates = matchScan(readClues(lines), catalogs)
+  for (const c of candidates) {
+    const cat = catalogs.find((x) => x.key === c.catalog)
+    const card = cat && (catalogIndex(cat).byId.get(c.id) as RawCard | undefined)
+    if (card) byId.set(`${c.catalog}:${c.id}`, card)
+  }
+  return candidates.flatMap((c) => {
+    const card = byId.get(`${c.catalog}:${c.id}`)
+    if (!card) return []
+    const regular = card.marketPrice ?? 0, foil = card.marketPriceFoil ?? 0
+    return [{
+      key: `${c.catalog}:${c.id}`,
+      game: c.catalog === 'pokemon-jp' ? 'pokemon' as Game : c.catalog,
+      ...(c.catalog === 'pokemon-jp' && { language: 'ja' as Language }),
+      id: c.id,
+      name: c.name,
+      setName: String(card.setName ?? ''),
+      number: String(card.number ?? ''),
+      imageUrl: card.imageUrl ?? '',
+      price: regular > 0 ? regular : foil,
+      score: c.score,
+      why: c.why,
+      exact: c.exact,
+    }]
+  })
 }

@@ -264,24 +264,55 @@ function riftboundParts(publicCode: string | undefined) {
   return m ? { set: m[1], num: String(parseInt(m[2], 10)) + m[3], den: parseInt(m[4], 10) } : null
 }
 
-// Name-only lookups: folded name → cards, per catalog, rebuilt when the catalog changes size
-const nameIndexCache = new Map<string, { size: number; first: string; index: Map<string, ScanCard[]> }>()
-function nameIndex(cat: ScanCatalog): Map<string, ScanCard[]> {
-  const hit = nameIndexCache.get(cat.key)
-  if (hit && hit.size === cat.cards.length && hit.first === cat.cards[0]?.id) return hit.index
-  const index = new Map<string, ScanCard[]>()
+type RbParts = NonNullable<ReturnType<typeof riftboundParts>>
+
+// Lookups built once per catalog and reused: a scan only touches the cards whose number, code or
+// name it read — never the whole catalog (160k cards across the games; looping over all of them
+// took 1.5–2 s per scan on Vercel). Rebuilt when the catalog or its set list changes size, and
+// every 10 minutes so price and photo updates from the syncs come through.
+interface CatIndex {
+  byId: Map<string, ScanCard>
+  byNum: Map<string, ScanCard[]>     // numKey(card.number)
+  byOpCode: Map<string, ScanCard[]>  // One Piece printed code
+  bySet: Map<string, ScanCard[]>
+  rb: Map<string, Array<{ c: ScanCard; p: RbParts }>> // Riftbound "num/den"
+  names: Map<string, ScanCard[]>     // folded name (and printed name) → cards
+  marks: Map<string, Set<string>>    // Japanese set mark → set ids
+  totals: Map<string, number>        // set id → card count
+}
+const indexCache = new Map<string, { sig: string; at: number; index: CatIndex }>()
+const INDEX_TTL_MS = 10 * 60 * 1000
+const push = <K, V>(m: Map<K, V[]>, k: K, v: V) => { const l = m.get(k); if (l) l.push(v); else m.set(k, [v]) }
+
+export function catalogIndex(cat: ScanCatalog): CatIndex {
+  const sig = `${cat.cards.length}|${cat.cards[0]?.id}|${cat.cards[cat.cards.length - 1]?.id}|${cat.sets?.length ?? 0}`
+  const hit = indexCache.get(cat.key)
+  if (hit && hit.sig === sig && Date.now() - hit.at < INDEX_TTL_MS) return hit.index
+  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map() }
   for (const c of cat.cards) {
+    index.byId.set(c.id, c)
+    const k = numKey(c.number)
+    if (k) push(index.byNum, k, c)
+    if (c.set) push(index.bySet, String(c.set), c)
+    if (cat.key === 'onepiece') push(index.byOpCode, onePiecePrintedCode(c), c)
+    if (cat.key === 'riftbound') {
+      const p = riftboundParts(c.publicCode)
+      if (p) push(index.rb, `${numKey(p.num)}/${p.den}`, { c, p })
+    }
     // Lorcana names are "Elsa - Snow Queen"; the card prints the two parts on separate lines, so
     // the first part alone is a key too
-    const keys = Array.from(new Set([fold(c.name), fold(printedName(c.name))]))
-    if (cat.key === 'lorcana' && c.name.includes(' - ')) keys.push(fold(c.name.split(' - ')[0]))
-    for (const k of keys) {
-      if (!k) continue
-      const list = index.get(k)
-      if (list) list.push(c); else index.set(k, [c])
-    }
+    const keys = new Set([fold(c.name), fold(printedName(c.name))])
+    if (cat.key === 'lorcana' && c.name.includes(' - ')) keys.add(fold(c.name.split(' - ')[0]))
+    for (const nk of Array.from(keys)) if (nk) push(index.names, nk, c)
   }
-  nameIndexCache.set(cat.key, { size: cat.cards.length, first: cat.cards[0]?.id ?? '', index })
+  for (const st of cat.sets ?? []) {
+    index.totals.set(st.id, st.total ?? 0)
+    const mk = jpSetMark(st.name)
+    if (!mk) continue
+    if (!index.marks.has(mk)) index.marks.set(mk, new Set())
+    index.marks.get(mk)!.add(st.id)
+  }
+  indexCache.set(cat.key, { sig, at: Date.now(), index })
   return index
 }
 
@@ -298,7 +329,7 @@ function gameHints(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
   // "143/204 • EN • 10" — only Lorcana prints a set number after the language
   if (clues.lorcanaSet.length && clues.fractions.some((f) => !f.pre)) hints.add('lorcana')
   const mtg = catalogs.find((c) => c.key === 'mtg')
-  if (mtg && clues.mtgSets.length && mtg.cards.some((c) => clues.mtgSets.includes(String(c.set)))) hints.add('mtg')
+  if (mtg && clues.mtgSets.some((st) => catalogIndex(mtg).bySet.has(st))) hints.add('mtg')
   return hints
 }
 
@@ -328,49 +359,38 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
   }
 
   for (const cat of catalogs) {
+    const ix = catalogIndex(cat)
+
     if (cat.key === 'pokemon') {
-      const totals = new Map((cat.sets ?? []).map((s) => [s.id, s.total ?? 0]))
-      const fr = clues.fractions.map((f) => ({ ...f, key: numKey(`${f.pre}${f.num}${f.suf}`) }))
-      const promoKeys = new Set(clues.promos.map((p) => numKey(p)))
-      for (const c of cat.cards) {
-        const k = numKey(c.number)
-        if (!k) continue
-        for (const f of fr) {
-          if (f.key !== k) continue
-          let s = 38
-          const total = totals.get(c.set ?? '') ?? 0
+      for (const f of clues.fractions) {
+        for (const c of ix.byNum.get(numKey(`${f.pre}${f.num}${f.suf}`)) ?? []) {
+          let sc = 38
+          const total = ix.totals.get(c.set ?? '') ?? 0
           if (total) {
-            if (f.den <= total) s += f.pre === '' && f.den === total ? 14 : 10
-            else if (f.den > total + 5) s -= 20
+            if (f.den <= total) sc += f.pre === '' && f.den === total ? 14 : 10
+            else if (f.den > total + 5) sc -= 20
           }
-          offer('pokemon', c, s, `number ${f.pre}${f.num}/${f.den}`)
+          offer('pokemon', c, sc, `number ${f.pre}${f.num}/${f.den}`)
         }
-        if (promoKeys.has(k)) offer('pokemon', c, 55, `promo ${c.number}`)
-        for (const p of clues.starPromo) if (c.set === p.set && k === p.num) offer('pokemon', c, 55, `promo ${p.set.toUpperCase()} ${p.num}`)
+      }
+      for (const p of clues.promos) for (const c of ix.byNum.get(numKey(p)) ?? []) offer('pokemon', c, 55, `promo ${c.number}`)
+      for (const p of clues.starPromo) {
+        for (const c of ix.byNum.get(p.num) ?? []) if (c.set === p.set) offer('pokemon', c, 55, `promo ${p.set.toUpperCase()} ${p.num}`)
       }
     }
 
     if (cat.key === 'pokemon-jp') {
-      const marks = new Map<string, Set<string>>()
-      for (const s of cat.sets ?? []) {
-        const mk = jpSetMark(s.name)
-        if (!mk) continue
-        if (!marks.has(mk)) marks.set(mk, new Set())
-        marks.get(mk)!.add(s.id)
-      }
-      const totals = new Map((cat.sets ?? []).map((s) => [s.id, s.total ?? 0]))
       const seenSets = new Set<string>()
-      for (const t of clues.bottomTokens) for (const id of Array.from(marks.get(t.toLowerCase()) ?? [])) seenSets.add(id)
-      for (const c of cat.cards) {
-        const k = numKey(c.number)
-        if (!k) continue
-        for (const p of clues.jpPromos) {
-          if (k === p.num && (marks.get(p.mark)?.has(c.set ?? '') ?? false)) offer('pokemon-jp', c, 60, `promo ${p.num}/${p.mark.toUpperCase()}`)
+      for (const t of clues.bottomTokens) for (const id of Array.from(ix.marks.get(t.toLowerCase()) ?? [])) seenSets.add(id)
+      for (const p of clues.jpPromos) {
+        for (const c of ix.byNum.get(p.num) ?? []) {
+          if (ix.marks.get(p.mark)?.has(c.set ?? '')) offer('pokemon-jp', c, 60, `promo ${p.num}/${p.mark.toUpperCase()}`)
         }
-        for (const f of clues.fractions) {
-          if (numKey(`${f.pre}${f.num}${f.suf}`) !== k) continue
+      }
+      for (const f of clues.fractions) {
+        for (const c of ix.byNum.get(numKey(`${f.pre}${f.num}${f.suf}`)) ?? []) {
           const setHit = seenSets.has(c.set ?? '')
-          const total = totals.get(c.set ?? '') ?? 0
+          const total = ix.totals.get(c.set ?? '') ?? 0
           // Japanese sets count their secret rares in the total too, so the printed number can be
           // lower — but never higher
           const fit = !total ? 0 : f.den === total ? 12 : f.den < total ? 6 : f.den > total + 5 ? -20 : 0
@@ -379,16 +399,14 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
       }
     }
 
-    if (cat.key === 'onepiece' && clues.opCodes.length) {
-      const codes = new Set(clues.opCodes)
-      for (const c of cat.cards) if (codes.has(onePiecePrintedCode(c))) offer('onepiece', c, 60, `code ${onePiecePrintedCode(c)}`)
+    if (cat.key === 'onepiece') {
+      for (const code of clues.opCodes) for (const c of ix.byOpCode.get(code) ?? []) offer('onepiece', c, 60, `code ${code}`)
     }
 
     if (cat.key === 'lorcana') {
-      for (const c of cat.cards) {
-        const k = numKey(c.number)
-        for (const f of clues.fractions) {
-          if (f.pre || numKey(`${f.num}${f.suf}`) !== k) continue
+      for (const f of clues.fractions) {
+        if (f.pre) continue
+        for (const c of ix.byNum.get(numKey(`${f.num}${f.suf}`)) ?? []) {
           const setHit = clues.lorcanaSet.includes(String(c.set ?? ''))
           offer('lorcana', c, setHit ? 62 : 28, setHit ? `number ${f.num}/${f.den} set ${c.set}` : `number ${f.num}/${f.den}`)
         }
@@ -397,16 +415,14 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
 
     if (cat.key === 'riftbound') {
       const tokens = new Set(clues.bottomTokens.map((t) => t.toUpperCase()))
-      for (const c of cat.cards) {
-        const p = riftboundParts(c.publicCode)
-        if (!p) continue
-        for (const f of clues.fractions) {
-          if (numKey(`${f.num}${f.suf}`) !== numKey(p.num) || f.den !== p.den) continue
+      for (const f of clues.fractions) {
+        const group = ix.rb.get(`${numKey(`${f.num}${f.suf}`)}/${f.den}`) ?? []
+        for (const { c, p } of group) {
           const setHit = tokens.has(p.set) || f.pre === p.set
           // Reprints in their own sets (Metal "Best Of", Judge, Nexus promos) still print the
           // original card's code ("SFD • 193/221" on an MTL-193/221 card): a close second to the
           // original, for the picture or the person to decide
-          const reprint = !setHit && tokens.size > 0 && cat.cards.some((o) => o !== c && riftboundParts(o.publicCode)?.set !== p.set && tokens.has(riftboundParts(o.publicCode)?.set ?? '') && numKey(riftboundParts(o.publicCode)?.num) === numKey(p.num) && riftboundParts(o.publicCode)?.den === p.den)
+          const reprint = !setHit && group.some((o) => o.p.set !== p.set && tokens.has(o.p.set))
           // "226*/219": the star marks the Signature printing — when it's read, it decides
           const star = f.suf === '*' ? (p.num.endsWith('*') ? 10 : -10) : 0
           offer('riftbound', c, (setHit ? 65 : reprint ? 59 : 40) + star, `${setHit ? p.set + ' ' : reprint ? 'reprint of ' : ''}${f.num}${f.suf}/${f.den}`)
@@ -420,19 +436,17 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
       // "176a/264" (a double-faced card's front) is collector number 176 in the catalog
       const read = [...clues.bottomNumbers, ...clues.fractions.map((f) => `${f.num}${f.suf}`)]
       const numbers = new Set([...read, ...read.map((n) => n.replace(/[a-z*]$/, ''))].map(numKey))
-      for (const c of cat.cards) {
-        const set = String(c.set ?? '')
+      for (const set of Array.from(new Set([...Array.from(sets), ...Array.from(tokenSets)]))) {
         const strongSet = sets.has(set)
+        for (const c of ix.bySet.get(set) ?? []) {
+          if (numbers.has(numKey(c.number))) offer('mtg', c, strongSet ? 65 : 50, `${set.toUpperCase()} ${c.number}`)
+          else offer('mtg', c, strongSet ? 15 : 5, `set ${set.toUpperCase()}`)
+        }
         // A stamped promo ("MH3" card, collector number "222s", set "pmh3") looks the same as the
         // set's own card except for a small stamp — offered as a close second, for the person to pick
-        const promoOf = set.startsWith('p') && (sets.has(set.slice(1)) || tokenSets.has(set.slice(1))) ? set.slice(1) : null
-        if (promoOf) {
-          if (numbers.has(numKey(c.number).replace(/[sp]$/, ''))) offer('mtg', c, sets.has(promoOf) ? 50 : 38, `${promoOf.toUpperCase()} ${c.number} promo`)
-          continue
+        for (const c of ix.bySet.get(`p${set}`) ?? []) {
+          if (numbers.has(numKey(c.number).replace(/[sp]$/, ''))) offer('mtg', c, strongSet ? 50 : 38, `${set.toUpperCase()} ${c.number} promo`)
         }
-        if (!strongSet && !tokenSets.has(set)) continue
-        if (numbers.has(numKey(c.number))) offer('mtg', c, strongSet ? 65 : 50, `${set.toUpperCase()} ${c.number}`)
-        else offer('mtg', c, strongSet ? 15 : 5, `set ${set.toUpperCase()}`)
       }
     }
   }
@@ -442,7 +456,7 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
   if (codeBest < 55) {
     for (const cat of catalogs) {
       if (cat.key === 'pokemon-jp') continue // the Japanese catalog's names are English
-      const index = nameIndex(cat)
+      const index = catalogIndex(cat).names
       for (const line of clues.nameLines) {
         const tokens = fold(line).split(' ').filter(Boolean)
         for (let n = Math.min(tokens.length, 8); n >= 1; n--) {
