@@ -12,6 +12,7 @@ in that area:**
 |---|---|
 | The card catalog, caching, staff portal / Admin Catalog, syncs, the price cron | `docs/catalog.md` |
 | A game's data source, schema, variants, adding a set | `docs/games.md` |
+| **Adding a whole new game** (e.g. Yu-Gi-Oh!) — every phase and file, step by step | `docs/adding-a-game.md` |
 | Card search ranking, prices / price history, the Cardex | `docs/search-prices-cardex.md` |
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
@@ -88,7 +89,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
 17. Admin Catalog (shared truth) ≠ Personal Collections (a user's own lists).
 18. Riftbound rarities are "Alt Art" and "Overnumbered", not "Showcase".
 19. Prices live only in the shared catalog; inventory is cached per device (IndexedDB + change cursor).
-20. Adding a game means updating every `GAMES` array by hand — grep, don't trust tsc.
+20. Adding a game means updating every `GAMES` array by hand — grep, don't trust tsc (`docs/adding-a-game.md` lists them all).
 21. Every early return in the Cardex fetch effect must reset `loading`.
 22. Merge `registry/main` over `EMPTY_REGISTRY` — stored docs can lag the type.
 23. A `$` in an env value must be escaped `\$`; the download script parses `.env.local` itself.
