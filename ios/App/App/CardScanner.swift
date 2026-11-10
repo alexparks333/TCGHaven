@@ -1453,7 +1453,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     }
 
     private static let codePattern = try! NSRegularExpression(
-        pattern: "\\b[A-Z0-9]{2,5}-[A-Z]{0,2}[0-9O]{3}\\b|\\d{1,3}\\s?/\\s?\\d{2,3}|\\b(OP|ST|EB|PRB)[0-9O]{2}\\s?-\\s?[0-9O]{3}|\\b[A-Z0-9]{3,4}\\s?[•·*]\\s?EN\\b|\\bSWSH\\d|\\bP-\\d{3}|\\d{3}/[A-Za-z]{1,4}-?P")
+        pattern: "\\b[A-Z0-9]{2,5}-[A-Z]{0,2}[0-9O]{3}\\b|\\b[A-Z]{3}[0-9O]{3}\\b|\\b[A-Z]{2,3}[0-9]{1,2}-[0-9O]{2}\\b|\\d{1,3}\\s?/\\s?\\d{2,3}|\\b(OP|ST|EB|PRB)[0-9O]{2}\\s?-\\s?[0-9O]{3}|\\b[A-Z0-9]{3,4}\\s?[•·*]\\s?EN\\b|\\bSWSH\\d|\\bP-\\d{3}|\\d{3}/[A-Za-z]{1,4}-?P")
     private static func hasCode(_ lines: [[String: Any]]) -> Bool {
         lines.contains { l in
             guard let t = l["text"] as? String else { return false }
