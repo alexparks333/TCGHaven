@@ -402,6 +402,11 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private var readingImage: CGImage?
     private var readingStarted: CFTimeInterval = 0
     private var readingQuad: [CGPoint]?       // where the card was found for this read
+    // Finish detection (measuring for now — CardScanner.md "Finish detection"): small copies of
+    // each flattened frame, a few extra frames after the number reads, the way up they were read
+    private var finishGrids: [[Float]] = []
+    private var codeReadAt: CFTimeInterval?
+    private var readFlipped = false
     // waiting for the next card
     private var lastScanCenter = CGPoint.zero
     private var lastScanSignature: PictureMatcher.Signature?
@@ -1112,6 +1117,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         readingId = UUID().uuidString
         readingLines = []
         readingImage = nil
+        finishGrids = []
+        codeReadAt = nil
+        readFlipped = false
         readingStarted = now
         lastScanCenter = quad.map(Self.center) ?? CGPoint(x: 0.5, y: 0.5)
         let id = readingId
@@ -1124,15 +1132,28 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         }
         readFrame(card)
         busy = false
-        if Self.hasCode(readingLines.last ?? []) || readingLines.count >= Self.maxReadFrames { finishReading() }
+        maybeFinish(now)
+    }
+
+    /// Done reading once the number is in (plus a few quick frames for the finish), or after the
+    /// last try
+    private func maybeFinish(_ now: CFTimeInterval) {
+        if codeReadAt == nil, Self.hasCode(readingLines.last ?? []) { codeReadAt = now }
+        if let t = codeReadAt, finishGrids.count >= 3 || now - t > 0.4 { finishReading(); return }
+        if codeReadAt == nil, readingLines.count >= Self.maxReadFrames { finishReading() }
     }
 
     private func readMore(_ frame: CIImage, quad: [CGPoint], now: CFTimeInterval) {
         guard let card = flatten(frame, quad: quad) else { return }
         busy = true
-        readFrame(card)
+        if codeReadAt != nil {
+            // The number's in: just a quick frame for the finish (no reading)
+            if let g = FinishSensor.grid(card) { finishGrids.append(readFlipped ? FinishSensor.flipped(g) : g) }
+        } else {
+            readFrame(card)
+        }
         busy = false
-        if Self.hasCode(readingLines.last ?? []) || readingLines.count >= Self.maxReadFrames { finishReading() }
+        maybeFinish(now)
     }
 
     /// OCR one flattened frame (turned the right way up), keeping the best-oriented picture
@@ -1150,8 +1171,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                 upright = flipped
             }
         }
-        if readingImage == nil || Self.hasCode(lines) { readingImage = upright }
+        if readingImage == nil || Self.hasCode(lines) { readingImage = upright; readFlipped = upright !== card }
         readingLines.append(lines)
+        if let g = FinishSensor.grid(upright) { finishGrids.append(g) }
         DebugScans.log("frame \(readingLines.count): \(lines.count) lines, code \(Self.hasCode(lines)), \(Int((CACurrentMediaTime() - t0) * 1000)) ms")
     }
 
@@ -1194,9 +1216,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         lastSwapCheckAt = CACurrentMediaTime()
         steadySince = 0
         phase = .waitingForNext
-        DebugScans.log("read in \(Int((CACurrentMediaTime() - readingStarted) * 1000)) ms over \(readingLines.count) frame(s)")
+        let finish = FinishSensor.measure(finishGrids)
+        DebugScans.log("read in \(Int((CACurrentMediaTime() - readingStarted) * 1000)) ms over \(readingLines.count) frame(s); finish \(FinishSensor.summary(finish))")
         DebugScans.save(scanId: id, image: image, info: [
-            "frames": readingLines, "merged": merged, "ms": Int((CACurrentMediaTime() - readingStarted) * 1000),
+            "frames": readingLines, "merged": merged, "ms": Int((CACurrentMediaTime() - readingStarted) * 1000), "finish": finish,
         ])
 
         DispatchQueue.main.async {
@@ -1633,6 +1656,107 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             pres.preferredCornerRadius = 24
         }
         present(sheet, animated: true)
+    }
+}
+
+// MARK: - Finish detection (measuring)
+//
+// Foil differs from printed ink in two ways a camera sees: fine rainbow speckle (colour texture,
+// where ink only has light/dark texture) and shimmer — it catches the light differently from frame
+// to frame as the hand moves, while ink stays put. Where the foil is names the finish: the picture
+// (Holo), everywhere but the picture (Reverse Holo), the whole card (Foil). These numbers are
+// measured on every scan and kept with it; the rules come from real scans of cards whose finish is
+// known (CardScanner.md "Finish detection").
+
+enum FinishSensor {
+    static let w = 96, h = 134
+
+    /// RGB planes of a small copy of the flattened card
+    static func grid(_ image: CGImage) -> [Float]? {
+        let n = w * h
+        var px = [UInt8](repeating: 0, count: n * 4)
+        let ok: Bool = px.withUnsafeMutableBytes { buf in
+            guard let c = CGContext(data: buf.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            c.interpolationQuality = .medium
+            c.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard ok else { return nil }
+        var out = [Float](repeating: 0, count: n * 3)
+        for i in 0..<n { out[i] = Float(px[i * 4]); out[n + i] = Float(px[i * 4 + 1]); out[2 * n + i] = Float(px[i * 4 + 2]) }
+        return out
+    }
+
+    /// The same grid turned upside down
+    static func flipped(_ g: [Float]) -> [Float] {
+        let n = w * h
+        var out = g
+        for p in 0..<3 { for i in 0..<n { out[p * n + i] = g[p * n + (n - 1 - i)] } }
+        return out
+    }
+
+    /// Regions of the upright card: the picture window (Pokémon's sits in the top half), the text
+    /// box, and the whole card inside its border — as (x0, y0, x1, y1) fractions, y from the top
+    static let regions: [(String, (Float, Float, Float, Float))] = [
+        ("art", (0.10, 0.12, 0.90, 0.48)),
+        ("text", (0.08, 0.58, 0.92, 0.86)),
+        ("whole", (0.05, 0.05, 0.95, 0.95)),
+    ]
+
+    static func measure(_ grids: [[Float]]) -> [String: Any] {
+        guard let first = grids.first else { return [:] }
+        let n = w * h
+        // luminance and the two colour-difference channels
+        func ycc(_ g: [Float]) -> ([Float], [Float], [Float]) {
+            var y = [Float](repeating: 0, count: n), cb = y, cr = y
+            for i in 0..<n {
+                let r = g[i], gg = g[n + i], b = g[2 * n + i]
+                y[i] = 0.299 * r + 0.587 * gg + 0.114 * b
+                cb[i] = b - y[i]; cr[i] = r - y[i]
+            }
+            return (y, cb, cr)
+        }
+        let planes = grids.map(ycc)
+        let (y0, cb0, cr0) = planes[0]
+        _ = first
+        var out: [String: Any] = ["frames": grids.count]
+        for (name, (fx0, fy0, fx1, fy1)) in regions {
+            let x0 = max(1, Int(fx0 * Float(w))), x1 = min(w - 1, Int(fx1 * Float(w)))
+            let y0r = max(1, Int(fy0 * Float(h))), y1r = min(h - 1, Int(fy1 * Float(h)))
+            var lumTex: Float = 0, chromaTex: Float = 0, sat: Float = 0, shimmer: Float = 0, lumShimmer: Float = 0, cnt: Float = 0
+            for yy in y0r..<y1r {
+                for xx in x0..<x1 {
+                    let i = yy * w + xx
+                    func lap(_ a: [Float]) -> Float { abs(4 * a[i] - a[i - 1] - a[i + 1] - a[i - w] - a[i + w]) }
+                    lumTex += lap(y0); chromaTex += lap(cb0) + lap(cr0)
+                    sat += (cb0[i] * cb0[i] + cr0[i] * cr0[i]).squareRoot()
+                    if planes.count >= 2 {
+                        // frame-to-frame change of colour (and of brightness, to tell shimmer from
+                        // the whole picture shifting)
+                        var mcb: Float = 0, mcr: Float = 0, my: Float = 0
+                        for p in planes { mcb += p.1[i]; mcr += p.2[i]; my += p.0[i] }
+                        let k = Float(planes.count); mcb /= k; mcr /= k; my /= k
+                        var vc: Float = 0, vy: Float = 0
+                        for p in planes { vc += (p.1[i] - mcb) * (p.1[i] - mcb) + (p.2[i] - mcr) * (p.2[i] - mcr); vy += (p.0[i] - my) * (p.0[i] - my) }
+                        shimmer += (vc / k).squareRoot(); lumShimmer += (vy / k).squareRoot()
+                    }
+                    cnt += 1
+                }
+            }
+            out[name] = [
+                "lumTex": lumTex / cnt, "chromaTex": chromaTex / cnt, "sat": sat / cnt,
+                "shimmer": shimmer / cnt, "lumShimmer": lumShimmer / cnt,
+            ]
+        }
+        return out
+    }
+
+    static func summary(_ m: [String: Any]) -> String {
+        func f(_ r: String, _ k: String) -> String {
+            String(format: "%.1f", ((m[r] as? [String: Float])?[k]) ?? -1)
+        }
+        return "frames \(m["frames"] ?? 0) · colour texture art \(f("art", "chromaTex")) text \(f("text", "chromaTex")) · shimmer art \(f("art", "shimmer")) text \(f("text", "shimmer"))"
     }
 }
 
