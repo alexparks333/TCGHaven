@@ -98,6 +98,17 @@
   .input-field option {
     @apply bg-slate-950;
   }
+
+  /* A thin scrollbar in the theme's walnut, instead of the browser's (stark white on hover in
+     some browsers) — dialogs and panels that scroll */
+  .scroll-themed {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(122, 82, 48, 0.35) transparent;
+  }
+  .scroll-themed::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-themed::-webkit-scrollbar-track { background: transparent; }
+  .scroll-themed::-webkit-scrollbar-thumb { background: rgba(122, 82, 48, 0.3); border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
+  .scroll-themed::-webkit-scrollbar-thumb:hover { background: rgba(122, 82, 48, 0.5); background-clip: content-box; }
 }
 
 @keyframes sold-pop {

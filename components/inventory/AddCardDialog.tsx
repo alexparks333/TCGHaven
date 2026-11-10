@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Search, Loader2, ChevronDown, AlertCircle } from 'lucide-react'
+import { X, Search, Loader2, ChevronDown, AlertCircle, Plus, Check } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
-import { CONDITION_LABELS, GAME_LABELS, hasPrintings, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
+import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS, hasPrintings, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
 import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
@@ -62,7 +62,10 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 // Shorter names for the game tabs, so the row fits without scrolling at today's game count.
-const GAME_TAB_LABELS: Partial<Record<Game, string>> = { mtg: 'Magic' }
+// Shorter names where the full one crowds a game chip
+const GAME_TAB_LABELS: Partial<Record<Game, string>> = { mtg: 'Magic', swu: 'Star Wars', fab: 'Flesh & Blood' }
+const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'TAG', 'HGA', 'CSG', 'Other']
+const QUICK_GRADES = ['10', '9.5', '9', '8.5', '8', '7']
 
 export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveError }: Props) {
   const { addCard, updateCard, deleteCard, cards: allCards, pushCardUnlock, trackedGames } = useStore()
@@ -102,12 +105,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   const [setsLoading, setSetsLoading] = useState(false)
 
   const cardResultsRef = useRef<HTMLDivElement>(null)
-  // Keep the selected game's tab in view when the game row scrolls (e.g. editing a card from a
-  // game further along the row).
-  const activeGameRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    activeGameRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [form.game])
+  // Group: typing a new one (the "+ New group" chip, or a saved group that isn't in the list)
+  const [newGroupOpen, setNewGroupOpen] = useState(false)
   const setDropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const cardJustSelectedRef = useRef(false)
@@ -390,7 +389,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
-      <div className="add-card-panel relative w-full max-w-[592px] card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div className="add-card-panel scroll-themed relative w-full max-w-[592px] card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -402,27 +401,34 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-          {/* Game tabs — hidden when there's only one game to pick from. One row that scrolls
-              sideways once there are more games than fit, rather than wrapping or squeezing. */}
+          {/* Game — hidden when there's only one to pick from. A grid of chips that wraps (no
+              sideways scrolling), each with its game's colour. */}
           {gameChoices.length > 1 && <div>
             <label className="field-label">Game</label>
-            <div className="flex gap-2 overflow-x-auto overscroll-x-contain pb-1">
-              {gameChoices.map((g) => (
-                <button
-                  key={g}
-                  ref={form.game === g ? activeGameRef : undefined}
-                  type="button"
-                  onClick={() => changeGame(g)}
-                  className={cn(
-                    'flex-auto shrink-0 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all border',
-                    form.game === g
-                      ? 'bg-violet-600 border-violet-500 text-white'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
-                  )}
-                >
-                  {GAME_TAB_LABELS[g] ?? GAME_LABELS[g]}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 min-[420px]:grid-cols-3 gap-1.5">
+              {gameChoices.map((g) => {
+                const on = form.game === g
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => changeGame(g)}
+                    aria-pressed={on}
+                    className={cn(
+                      'flex items-center gap-2 min-w-0 px-2.5 py-2 rounded-xl text-[13px] font-medium transition-all border text-left',
+                      on
+                        ? 'bg-violet-600 border-violet-500 text-white shadow-sm shadow-violet-900/20'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
+                    )}
+                  >
+                    <span
+                      className={cn('w-2.5 h-2.5 rounded-full shrink-0', on && 'ring-2 ring-white/70')}
+                      style={{ backgroundColor: GAME_COLORS[g] }}
+                    />
+                    <span className="truncate">{GAME_TAB_LABELS[g] ?? GAME_LABELS[g]}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>}
 
@@ -597,15 +603,19 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="field-label">Condition</label>
-              <select
-                value={form.condition}
-                onChange={(e) => setField('condition', e.target.value as Condition)}
-                className="input-field"
-              >
-                {CONDITIONS.map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
-                ))}
-              </select>
+              {/* The browser's own arrow hidden, the same chevron as the Set picker beside it */}
+              <div className="relative">
+                <select
+                  value={form.condition}
+                  onChange={(e) => setField('condition', e.target.value as Condition)}
+                  className="input-field appearance-none pr-8 cursor-pointer"
+                >
+                  {CONDITIONS.map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="field-label">Quantity</label>
@@ -714,96 +724,120 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
               its own "✦ Foil" / "✦ Holo" row, or the version's own card (Hyperspace Foil, a parallel) —
               and printing games use the pickers above. A saved card's isFoil is kept as is. */}
 
-          {/* Nexus Night promo variant (Riftbound only) */}
-          {form.game === 'riftbound' && (
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={!!form.nexus}
-                onChange={(e) => setField('nexus', e.target.checked)}
-                className="w-4 h-4 rounded accent-blue-500"
-              />
-              <span className="text-sm text-slate-300">Nexus Night promo variant</span>
-            </label>
-          )}
+          {/* No Nexus Night toggle either: Nexus Night promos are their own catalog cards. A saved
+              card's nexus flag is kept as is. */}
 
-          {/* Group */}
-          <div>
-            <label className="field-label">
-              Group <span className="text-slate-600 font-normal normal-case">(optional — hide from Portfolio)</span>
-            </label>
-            <input
-              list="card-groups-datalist"
-              type="text"
-              value={form.group ?? ''}
-              onChange={(e) => setField('group', e.target.value)}
-              placeholder="e.g. Alex & Brother's Cards"
-              className="input-field"
-            />
-            {existingGroups.length > 0 && (
-              <datalist id="card-groups-datalist">
-                {existingGroups.map((g) => <option key={g} value={g} />)}
-              </datalist>
-            )}
-            {existingGroups.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {existingGroups.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => setField('group', form.group === g ? '' : g)}
-                    className={cn(
-                      'text-[11px] px-2 py-0.5 rounded-full border transition-all',
-                      form.group === g
-                        ? 'bg-violet-600 border-violet-500 text-white'
-                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-                    )}
-                  >
-                    {g}
+          {/* Group — optional; a grouped card can be hidden from Portfolio */}
+          {(() => {
+            const custom = !!form.group && !existingGroups.includes(form.group)
+            const typing = newGroupOpen || custom
+            const chip = (active: boolean) => cn(
+              'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-all',
+              active
+                ? 'bg-violet-600 border-violet-500 text-white'
+                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
+            )
+            return (
+              <div>
+                <label className="field-label">
+                  Group <span className="text-slate-500 font-normal normal-case tracking-normal">· optional, can be hidden from Portfolio</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => { setField('group', ''); setNewGroupOpen(false) }} className={chip(!form.group && !typing)}>
+                    None
                   </button>
-                ))}
+                  {existingGroups.map((g) => (
+                    <button key={g} type="button" onClick={() => { setField('group', g); setNewGroupOpen(false) }} className={chip(form.group === g)}>
+                      {form.group === g && <Check size={12} />}{g}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => { setNewGroupOpen(true); if (!custom) setField('group', '') }} className={chip(typing)}>
+                    <Plus size={12} />New group
+                  </button>
+                </div>
+                {typing && (
+                  <input
+                    type="text"
+                    autoFocus={newGroupOpen}
+                    value={form.group ?? ''}
+                    onChange={(e) => setField('group', e.target.value)}
+                    placeholder="Name the group — e.g. Alex & Brother's Cards"
+                    className="input-field mt-2"
+                  />
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()}
 
-          {/* Graded card toggle + fields */}
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={!!form.gradingCompany}
-                onChange={(e) => {
-                  if (e.target.checked) setForm((f) => ({ ...f, gradingCompany: 'PSA', grade: '' }))
-                  else setForm((f) => ({ ...f, gradingCompany: '', grade: '' }))
-                }}
-                className="w-4 h-4 rounded accent-violet-500"
-              />
-              <span className="text-sm text-slate-300">Professionally graded (PSA, CGC, etc.)</span>
-            </label>
+          {/* Graded — a switch; on, the company and the grade */}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!!form.gradingCompany}
+              onClick={() => setForm((f) => (f.gradingCompany ? { ...f, gradingCompany: '', grade: '' } : { ...f, gradingCompany: 'PSA', grade: '' }))}
+              className="w-full flex items-center justify-between gap-3 text-left"
+            >
+              <span>
+                <span className="block text-sm font-medium text-ink">Graded card</span>
+                <span className="block text-xs text-slate-500">Slabbed by PSA, CGC, BGS and others</span>
+              </span>
+              <span className={cn('relative w-10 h-6 rounded-full transition-colors shrink-0', form.gradingCompany ? 'bg-violet-600' : 'bg-slate-700')}>
+                <span className={cn('absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform', form.gradingCompany && 'translate-x-4')} />
+              </span>
+            </button>
 
             {!!form.gradingCompany && (
-              <div className="grid grid-cols-2 gap-3 pl-6">
+              <div className="mt-3 pt-3 border-t border-slate-800 space-y-3">
                 <div>
-                  <label className="field-label">Grading Company</label>
-                  <select
-                    value={form.gradingCompany}
-                    onChange={(e) => setField('gradingCompany', e.target.value)}
-                    className="input-field"
-                  >
-                    {['PSA', 'CGC', 'BGS', 'SGC', 'HGA', 'CSG', 'Other'].map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                  <label className="field-label">Company</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {GRADING_COMPANIES.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setField('gradingCompany', c)}
+                        className={cn(
+                          'py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                          form.gradingCompany === c
+                            ? 'bg-violet-600 border-violet-500 text-white'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
+                        )}
+                      >
+                        {c}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
                 <div>
                   <label className="field-label">Grade</label>
-                  <input
-                    type="text"
-                    value={form.grade ?? ''}
-                    onChange={(e) => setField('grade', e.target.value)}
-                    placeholder="e.g. 10, 9.5"
-                    className="input-field"
-                  />
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={form.grade ?? ''}
+                      onChange={(e) => setField('grade', e.target.value)}
+                      placeholder="e.g. 10"
+                      className="input-field w-24 shrink-0 text-center font-semibold"
+                    />
+                    <div className="flex flex-wrap gap-1">
+                      {QUICK_GRADES.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setField('grade', g)}
+                          className={cn(
+                            'min-w-[2.25rem] px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                            form.grade === g
+                              ? 'bg-violet-600 border-violet-500 text-white'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
+                          )}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
