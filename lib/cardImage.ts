@@ -57,14 +57,38 @@ export function originalImage(src: string): string | null {
 
 // Shown in place of a card image that's missing or won't load (TCGplayer hasn't photographed a
 // new product yet, say) instead of the browser's broken-image icon. Card-shaped, so a grid keeps
-// its layout. ClientWrapper's image error handler swaps it in for any card-CDN image that fails.
+// its layout; drawn as a parchment card back in the site's colours (walnut double rule, dotted
+// field, two-card emblem, serif "NO IMAGE") so it blends in. ClientWrapper's image error handler
+// swaps it in for any card-CDN image that fails.
 export const NO_CARD_IMAGE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 350">' +
-  '<rect x="3" y="3" width="244" height="344" rx="14" fill="#efe4cc" stroke="#d6c49f" stroke-width="4"/>' +
-  '<g fill="none" stroke="#b3a27c" stroke-width="7" stroke-linejoin="round">' +
-  '<rect x="85" y="125" width="80" height="62" rx="8"/><path d="M93 179l22-24 16 16 10-10 16 18"/></g>' +
-  '<circle cx="146" cy="143" r="7" fill="#b3a27c"/>' +
-  '<text x="125" y="226" text-anchor="middle" font-family="system-ui,sans-serif" font-size="24" font-weight="600" fill="#9a8a66">No Image</text>' +
+  '<defs>' +
+  '<linearGradient id="g" x1="0" y1="0" x2="0" y2="1">' +
+  '<stop offset="0" stop-color="#f3eada"/>' +
+  '<stop offset="1" stop-color="#e7d9bb"/>' +
+  '</linearGradient>' +
+  '<pattern id="p" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+  '<rect width="14" height="14" fill="none"/>' +
+  '<circle cx="7" cy="7" r="1.1" fill="#d8c7a2"/>' +
+  '</pattern>' +
+  '</defs>' +
+  '<rect x="2" y="2" width="246" height="346" rx="14" fill="url(#g)" stroke="#d6c49f" stroke-width="3"/>' +
+  '<rect x="14" y="14" width="222" height="322" rx="8" fill="url(#p)" stroke="#c9b48a" stroke-width="1.5"/>' +
+  '<rect x="19" y="19" width="212" height="312" rx="6" fill="none" stroke="#c9b48a" stroke-width="0.75" stroke-opacity="0.7"/>' +
+  '<circle cx="125" cy="150" r="44" fill="#efe4cc" stroke="#c9b48a" stroke-width="2"/>' +
+  '<circle cx="125" cy="150" r="38" fill="none" stroke="#d6c49f" stroke-width="1"/>' +
+  '<g fill="#efe4cc" stroke="#a8916a" stroke-width="3" stroke-linejoin="round">' +
+  '<rect x="104" y="128" width="30" height="42" rx="4" transform="rotate(-12 119 149)"/>' +
+  '<rect x="116" y="130" width="30" height="42" rx="4" transform="rotate(10 131 151)"/>' +
+  '</g>' +
+  '<path d="M131 141l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z" fill="#b39c72" transform="rotate(10 131 151)"/>' +
+  '<text x="125" y="228" text-anchor="middle" font-family="Georgia,\'Times New Roman\',serif" font-size="16" letter-spacing="3.5" fill="#8c7a58">NO IMAGE' +
+  '</text>' +
+  '<g stroke="#c9b48a" stroke-width="1.25">' +
+  '<line x1="72" y1="246" x2="113" y2="246"/>' +
+  '<line x1="137" y1="246" x2="178" y2="246"/>' +
+  '</g>' +
+  '<path d="M125 241l5 5-5 5-5-5z" fill="#c9b48a"/>' +
   '</svg>',
 )}`
 
