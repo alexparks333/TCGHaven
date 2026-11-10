@@ -2636,7 +2636,9 @@ final class TrayCell: UICollectionViewCell {
         image.backgroundColor = UIColor(white: 1, alpha: 0.08)
         name.font = .systemFont(ofSize: 11, weight: .semibold)
         name.textColor = .white
-        name.numberOfLines = 2
+        // One line, "…" when long — the finish and price line under it must always show
+        name.numberOfLines = 1
+        name.lineBreakMode = .byTruncatingTail
         price.font = .systemFont(ofSize: 11, weight: .regular)
         price.textColor = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
         price.adjustsFontSizeToFitWidth = true
