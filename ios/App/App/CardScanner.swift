@@ -24,6 +24,7 @@ import AVFoundation
 import Vision
 import CoreImage
 import Capacitor
+import WebKit
 import CoreMotion
 
 // MARK: - Registering the plugin
@@ -32,6 +33,15 @@ import CoreMotion
 class TCGBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(CardScannerPlugin())
+    }
+
+    /// The card scanner's matching runs in the page while the scanner covers it. iOS slows an
+    /// inactive page right down — results then waited for the next capture to wake it (seen on the
+    /// phone 2026-11-09: old cards matched the instant a new one was captured). Keep it running.
+    override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        let config = super.webViewConfiguration(for: instanceConfiguration)
+        if #available(iOS 17.0, *) { config.preferences.inactiveSchedulingPolicy = .none }
+        return config
     }
 }
 
@@ -69,7 +79,10 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
                 self?.scanner = nil
                 call.resolve(["items": items])
             }
-            vc.modalPresentationStyle = .fullScreen
+            // Over the page, not replacing it: the page stays on screen underneath, so iOS keeps it
+            // running at full speed while it matches the scans
+            vc.modalPresentationStyle = .overFullScreen
+            vc.modalPresentationCapturesStatusBarAppearance = true
             self.scanner = vc
             presenter.present(vc, animated: true)
         }
