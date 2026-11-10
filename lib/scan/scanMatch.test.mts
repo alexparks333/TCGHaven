@@ -280,6 +280,30 @@ assert.equal(decide([{ key: 'a', score: 99, exact: true, trusted: true }], [0.88
   assert.ok(r.every((c) => c.exact && c.score === r[0].score))
 }
 
+// A clearly read name is a requirement: a misread number ("43/101" on a FireRed & LeafGreen
+// Jigglypuff, 65/112) must not land on another card (it matched Baltoy on the phone)
+{
+  const cat: ScanCatalog = {
+    key: 'pokemon',
+    cards: [
+      { id: 'ex4-43', name: 'Baltoy', number: '43', set: 'ex4' },
+      { id: 'ex6-65', name: 'Jigglypuff', number: '65', set: 'ex6' },
+      { id: 'base2-54', name: 'Jigglypuff', number: '54', set: 'base2' },
+      { id: 'tcg-x', name: 'Genesect EX (Andrew Estrada)', number: '11', set: 'tcg-1' },
+    ],
+    sets: [{ id: 'ex4', name: 'Team Magma vs Team Aqua', total: 97 }, { id: 'ex6', name: 'FireRed & LeafGreen', total: 116 }, { id: 'base2', name: 'Jungle', total: 64 }],
+  }
+  const r = top([L('Jigglypuff', 0.04, 0.05), L('50 HP', 0.04, 0.036), L('Sleepy Song', 0.5), L('43/101', 0.93, 0.015)], [cat])
+  assert.ok(r.slice(0, 2).every((c) => c.name === 'Jigglypuff'), 'the Jigglypuffs come first')
+  const baltoy = r.find((c) => c.id === 'ex4-43')
+  assert.ok(!baltoy || (!baltoy.exact && baltoy.score < r[0].score), 'the wrong name never wins or auto-adds')
+  // A name read with letters wrong still counts, when one name is clearly closest
+  assert.ok(top([L('Jggypulf', 0.0, 0.05), L('43/101', 0.93, 0.015)], [cat]).slice(0, 2).every((c) => c.name === 'Jigglypuff'))
+  // A name inside the card's name is the same card ("Genesect" on Genesect EX); "TRAINER" isn't a name
+  assert.equal(top([L('Genesect', 0.04, 0.05), L('11/101', 0.93, 0.015)], [cat])[0]?.id, 'tcg-x')
+  assert.ok(!readClues([L('TRAINER', 0.03, 0.04)]).topLines.some(() => false))
+}
+
 // ── Nothing readable → nothing guessed ──
 assert.deepEqual(top([L('the', 0.5)]), [])
 

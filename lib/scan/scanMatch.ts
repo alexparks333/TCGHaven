@@ -70,6 +70,7 @@ export interface ScanClues {
   bottomNumbers: string[]     // bare numbers near the bottom (MTG collector numbers)
   loneNumbers: string[]       // a number alone on its line low on the card ("95a" on e-Card era Pokémon)
   nameLines: string[]         // the biggest text — most likely the card name
+  topLines: string[]          // text along the top edge, where Pokémon and Magic print the name
   words: Set<string>          // every folded word read, for name matching
   japanese: boolean
   pokemonWords: boolean       // "HP", "Weakness", "Retreat" — printed on every Pokémon card
@@ -180,7 +181,7 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
     fractions: [], promos: [], starPromo: [], opCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
-    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false,
+    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false, topLines: [],
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
 
@@ -233,8 +234,10 @@ export function readClues(lines: OcrLine[]): ScanClues {
       add(clues.mtgSets, s, (o) => o === s)
     }
     // e-Card era Pokémon print the number on its own ("95a"), no "/total"
+    // (a damage number like "40" can sit alone low on a card too — so only right at the bottom
+    // edge, or with a version letter)
     const lone = text.trim().match(/^(\d{1,3})([a-z]?)$/)
-    if (lone && line.y >= 0.75) {
+    if (lone && (line.y >= 0.9 || lone[2])) {
       const n = `${parseInt(lone[1], 10)}${lone[2] ?? ''}`
       add(clues.loneNumbers, n, (o) => o === n)
     }
@@ -264,6 +267,8 @@ export function readClues(lines: OcrLine[]): ScanClues {
   const named = lines.filter((l) => /[A-Za-z\u3040-\u30ff\u4e00-\u9faf]{2,}/.test(l.text))
   const picks = [...named].sort((a, b) => b.h - a.h).slice(0, 6)
   for (const l of named) if (l.y < 0.12 && !picks.includes(l)) picks.push(l)
+  clues.topLines = named.filter((l) => l.y < 0.15).sort((a, b) => b.h - a.h).slice(0, 4)
+    .map((l) => latin(l.text).replace(HP_NOISE, ' ').replace(/\s+/g, ' ').trim())
   clues.nameLines = picks
     .map((l) => latin(l.text).replace(HP_NOISE, ' ').replace(/\s+/g, ' ').trim())
     .filter((t) => t.length >= 2)
@@ -403,9 +408,58 @@ function gameHints(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
   return hints
 }
 
+// Games whose name is printed along the top edge — where a clearly read name is reliable
+const NAME_ON_TOP = new Set<ScanCatalogKey>(['pokemon', 'mtg'])
+
+/** Card names read clearly along the top of the card: a top line that IS a catalog name (allowing
+ *  trailing HP / stage noise like "Magikarp 22"). Folded. */
+// Words printed along the top of cards that aren't the card's name (and happen to be card names
+// in some catalog — Magic has a card called "Trainer")
+const NOT_A_NAME = new Set(['trainer', 'trainers', 'energy', 'basic', 'item', 'supporter', 'stadium', 'pokemon', 'stage', 'tool',
+  'pokemon tool', 'special energy', 'basic energy', 'technical machine', 'not tournament legal', 'ace spec'])
+
+function strongNames(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
+  const out = new Set<string>()
+  // A Japanese card prints its name in Japanese; the catalog's names are English
+  if (clues.japanese) return out
+  for (const line of clues.topLines) {
+    if (NOT_A_NAME.has(fold(line))) continue
+    const tokens = fold(line).split(' ').filter(Boolean)
+    for (const cat of catalogs) {
+      if (!NAME_ON_TOP.has(cat.key)) continue
+      const names = catalogIndex(cat).names
+      let found = false
+      for (let n = Math.min(tokens.length, 8); n >= 1; n--) {
+        const key = tokens.slice(0, n).join(' ')
+        const rest = tokens.slice(n)
+        if (key.length >= 3 && !NOT_A_NAME.has(key) && names.has(key) && rest.every((t) => /^\d+$/.test(t) || t.length <= 2)) { out.add(key); found = true; break }
+      }
+      // A name with a few letters misread ("Jggypulf" for Jigglypuff): the one catalog name close
+      // enough to the first word(s), and clearly closer than any other
+      if (!found && tokens[0] && tokens[0].length >= 5) {
+        const guess = tokens.filter((t) => !/^\d+$/.test(t) && t !== 'hp').join(' ')
+        const max = Math.round(guess.length * 0.35)
+        let bestName = '', bestD = max + 1, second = max + 1
+        for (const name of Array.from(names.keys())) {
+          if (Math.abs(name.length - guess.length) > max) continue
+          const d = editDistance(guess, name, max)
+          if (d < bestD) { second = bestD; bestD = d; bestName = name } else if (d < second) second = d
+        }
+        if (bestName && bestD <= max && second > bestD && !NOT_A_NAME.has(bestName)) out.add(bestName)
+      }
+    }
+  }
+  return out
+}
+
 export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandidate[] {
   const best = new Map<string, ScanCandidate>()
   const hints = gameHints(clues, catalogs)
+  // The name, when it was read clearly, is a requirement, not a bonus: a card with the right
+  // number and the wrong name (a misread "65/112" landing on another card) must not win. Seen on
+  // the phone: Jigglypuff scans matched to Baltoy / Shuppet / Growlithe by misread numbers.
+  const named = strongNames(clues, catalogs)
+  const nameWords = new Set(Array.from(named).flatMap((n) => n.split(' ')))
   const offer = (catalog: ScanCatalogKey, c: ScanCard, codeScore: number, why: string, exact = true) => {
     // Stamps and variant suffixes aren't printed as words, so they mustn't count against a card:
     // a League-stamped copy ties with the plain one on text, and the picture (or the person) decides
@@ -416,6 +470,20 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
       ? Math.max(nameScore(printed, clues.words), nameScore(printed.split(', ').slice(1).join(', '), clues.words))
       : nameScore(printed, clues.words)
     let score = codeScore + ns * NAME_WEIGHT
+    let wrongName = false
+    // (Japanese cards are listed under English names, so an English name read off a card with no
+    // Japanese on it rules them out too)
+    const checkName = NAME_ON_TOP.has(catalog) || (catalog === 'pokemon-jp' && !clues.japanese)
+    // The same name, or one inside the other ("Genesect" read on "Genesect EX") — else it's another card
+    const own = fold(printed).split(' ')
+    const sameName = Array.from(named).some((n) => {
+      const t = n.split(' ')
+      return t.every((w) => own.includes(w)) || own.every((w) => t.includes(w))
+    })
+    if (named.size && checkName && !sameName && nameScore(printed, nameWords) < 0.75) {
+      score -= 40
+      wrongName = true
+    }
     if (hints.size) score += hints.has(catalog) ? 6 : -12
     // Japanese text on the card → the Japanese catalog; none at all → probably not Japanese
     if (catalog === 'pokemon-jp') score += clues.japanese ? 10 : -15
@@ -424,8 +492,10 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
     const key = `${catalog}:${c.id}`
     const prev = best.get(key)
     const reason = ns >= 0.75 ? `${why} + name` : why
-    if (!prev || prev.score < score) best.set(key, { catalog, id: c.id, name: c.name, score, why: reason, exact: exact || !!prev?.exact })
-    else if (exact && !prev.exact) prev.exact = true
+    const isExact = exact && !wrongName
+    const why2 = wrongName ? `${reason} · name differs` : reason
+    if (!prev || prev.score < score) best.set(key, { catalog, id: c.id, name: c.name, score, why: why2, exact: isExact || (!!prev?.exact && !wrongName) })
+    else if (isExact && !prev.exact) prev.exact = true
   }
 
   // A graded slab's label names the card outright: number + set (+ name)
@@ -546,12 +616,20 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
     }
   }
 
-  // No identifier read (glare over the corner, an old card without one): the name alone
+  // No identifier read (glare over the corner, an old card without one) — or a name read clearly
+  // that the number's cards don't carry: the name brings its own cards in
   const codeBest = Math.max(0, ...Array.from(best.values()).filter((c) => !c.why.startsWith('set ')).map((c) => c.score))
-  if (codeBest < 55) {
+  // (a number can be misread onto another printing — "64/112" for 65/112 — so a clearly read
+  // name always brings in all its cards, and the picture picks among them)
+  if (codeBest < 55 || named.size > 0) {
     for (const cat of catalogs) {
       if (cat.key === 'pokemon-jp') continue // the Japanese catalog's names are English
       const index = catalogIndex(cat).names
+      // A name recognised along the top (possibly from a misread like "Jggypulf"): all its cards
+      for (const n of Array.from(named)) {
+        const hits = index.get(n)
+        if (hits) for (const c of hits.slice(0, 24)) offer(cat.key, c, hits.length === 1 ? 32 : 24, 'name', hits.length === 1)
+      }
       for (const line of clues.nameLines) {
         const tokens = fold(line).split(' ').filter(Boolean)
         for (let n = Math.min(tokens.length, 8); n >= 1; n--) {
