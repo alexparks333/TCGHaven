@@ -2385,8 +2385,7 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         let o = current
         nameLabel.text = o?.title ?? (item.status == "matching" ? "Still matching…" : "Not found")
         setLabel.text = o?.subtitle ?? (item.note ?? "Search for it below")
-        priceLabel.text = o?.price.isEmpty == false ? o?.price : nil
-        priceLabel.isHidden = priceLabel.text == nil
+        showPrice()
         detailLabel.text = o.map { "Test build — why: \($0.detail)" }
         switch item.status {
         case "matched":
@@ -2437,8 +2436,20 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
 
     @objc private func toggleView() { showing = ""; showImage() }
 
+    /// The price under the name: the picked finish's own price, when the card comes in several
+    private func showPrice() {
+        let o = current
+        if let p = item.currentPrinting, (o?.printings.count ?? 0) > 1, !p.price.isEmpty {
+            priceLabel.text = "\(p.price) · \(p.label)"
+        } else {
+            priceLabel.text = o?.price.isEmpty == false ? o?.price : nil
+        }
+        priceLabel.isHidden = priceLabel.text == nil
+    }
+
     /// The Finish row: one pill per printing, the picked one in gold (the first is the default)
     private func showFinishes() {
+        showPrice()
         let printings = current?.printings ?? []
         finishSection.forEach { $0.isHidden = printings.count < 2 }
         finishRow.arrangedSubviews.forEach { $0.removeFromSuperview() }
