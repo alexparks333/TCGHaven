@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Search, Loader2, ChevronDown, AlertCircle, Plus, Check, Award } from 'lucide-react'
+import { X, Search, Loader2, ChevronDown, AlertCircle, Plus, Check, Award, ExternalLink } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
@@ -12,8 +12,9 @@ import {
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
-import { FullSlab, slabStyle, gradeWord } from '@/components/SlabCase'
+import { cardImage } from '@/lib/cardImage'
+import { FullSlab } from '@/components/SlabCase'
+import { GRADER_CHOICES, graderOf, gradeWord, isValidGrade, SUBGRADE_KEYS, type GradeTier, type Subgrades } from '@/lib/grading'
 import { CardName } from '@/components/CardName'
 
 
@@ -65,8 +66,9 @@ function useDebounce<T>(value: T, delay: number): T {
 // Shorter names for the game tabs, so the row fits without scrolling at today's game count.
 // Shorter names where the full one crowds a game chip
 const GAME_TAB_LABELS: Partial<Record<Game, string>> = { mtg: 'Magic' }
-const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'TAG', 'HGA', 'CSG', 'Other']
+// Quick grades for a grader lib/grading.ts doesn't describe (HGA, CSG, Other)
 const QUICK_GRADES = ['10', '9.5', '9', '8.5', '8', '7']
+const quickGradesFor = (company: string) => graderOf(company)?.quick ?? QUICK_GRADES
 
 /** A row that scrolls sideways with no scrollbar: its edges fade out on the side(s) with more to
  *  see, and a mouse wheel scrolls it sideways (no trackpad needed). */
@@ -142,6 +144,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   const cardResultsRef = useRef<HTMLDivElement>(null)
   // Group: typing a new one (the "+ New group" chip, or a saved group that isn't in the list)
   const [newGroupOpen, setNewGroupOpen] = useState(false)
+  // The "Other" grade box keeps exactly what's typed ("9" then "9.2"), even when it matches a chip
+  const [gradeText, setGradeText] = useState(() => (quickGradesFor(editCard?.gradingCompany ?? '').includes(editCard?.grade ?? '') ? '' : editCard?.grade ?? ''))
   // The card preview: is the chosen card's art landscape (Star Wars leaders and bases, Riftbound
   // battlefields)? A slab holds those turned on their side.
   const [artLandscape, setArtLandscape] = useState(false)
@@ -361,8 +365,20 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       imageUrl: form.imageUrl || '',
       apiId: form.apiId || '',
       ...(form.gradingCompany && { gradingCompany: form.gradingCompany }),
-      ...(form.grade && { grade: form.grade }),
+      ...(form.gradingCompany && form.grade && { grade: form.grade }),
+      ...(form.gradingCompany && form.certNumber && { certNumber: form.certNumber }),
+      ...(form.gradingCompany && form.gradeTier && parseFloat(form.grade ?? '') >= 10 && { gradeTier: form.gradeTier }),
+      ...(form.gradingCompany && graderOf(form.gradingCompany)?.subgrades && form.subgrades && Object.values(form.subgrades).some(Boolean) && { subgrades: form.subgrades }),
       ...(form.group && { group: form.group }),
+      // An edit merges into the saved card, so a grade or group taken off has to be sent as cleared
+      ...(editCard && {
+        ...(!form.gradingCompany && { gradingCompany: '', grade: '', certNumber: '', gradeTier: null as never, subgrades: null as never }),
+        ...(form.gradingCompany && !(form.gradeTier && parseFloat(form.grade ?? '') >= 10) && { gradeTier: null as never }),
+        ...(form.gradingCompany && !(graderOf(form.gradingCompany)?.subgrades && form.subgrades && Object.values(form.subgrades).some(Boolean)) && { subgrades: null as never }),
+        ...(form.gradingCompany && !form.grade && { grade: '' }),
+        ...(form.gradingCompany && !form.certNumber && { certNumber: '' }),
+        ...(!form.group && { group: '' }),
+      }),
       ...(form.rarity && { rarity: form.rarity }),
       ...(form.game === 'riftbound' && { nexus: !!form.nexus }),
       // Pokémon printing — only when it was picked from catalog prices (lib/pricing.ts)
@@ -440,7 +456,9 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
-      <div className="relative w-full max-w-[592px] lg:max-w-[924px] flex items-center justify-center gap-7">
+      {/* The dialog stays centred; the chosen card's view slides out to its right (xl screens —
+          the room beside a centred dialog) */}
+      <div className="relative w-full max-w-[592px]">
       <div className="add-card-panel scroll-themed relative w-full max-w-[592px] min-w-0 card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
@@ -814,82 +832,183 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             )
           })()}
 
-          {/* Graded — TCG Haven's framed parchment panel: a brass medallion and engraved title with a
-              switch; on, each grader as its own label colours, the grade as quick-pick coins, and a
-              preview of the slab label */}
-          <div className={cn('haven-panel transition-shadow', form.gradingCompany && 'haven-panel-on')}>
+          {/* Graded — in the dialog's own parchment and walnut: a switch; on, the company and the
+              grade as chips, and the slab label it will carry */}
+          <div className={cn('haven-panel', form.gradingCompany && 'haven-panel-on')}>
             <button
               type="button"
               role="switch"
               aria-checked={!!form.gradingCompany}
-              onClick={() => setForm((f) => (f.gradingCompany ? { ...f, gradingCompany: '', grade: '' } : { ...f, gradingCompany: 'PSA', grade: '' }))}
-              className="w-full flex items-center gap-3 text-left"
+              onClick={() => { setGradeText(''); setForm((f) => (f.gradingCompany ? { ...f, gradingCompany: '', grade: '', certNumber: '', gradeTier: undefined, subgrades: undefined } : { ...f, gradingCompany: 'PSA', grade: '' })) }}
+              className="w-full flex items-center gap-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 rounded-lg"
             >
-              <span className="brass-medallion w-9 h-9 shrink-0"><Award size={17} /></span>
+              <span className="haven-medallion w-8 h-8 shrink-0"><Award size={15} /></span>
               <span className="flex-1 min-w-0">
-                <span className="pinbook-serif block text-[15px] font-bold tracking-wide text-ink">Graded Card</span>
+                <span className="block text-sm font-semibold text-ink">Graded card</span>
                 <span className="block text-xs text-slate-500">Slabbed by PSA, CGC, BGS and others</span>
               </span>
               <span className={cn('haven-switch', form.gradingCompany && 'haven-switch-on')}><span /></span>
             </button>
 
             {!!form.gradingCompany && (
-              <div className="mt-4 space-y-4">
+              <div className="mt-3.5 space-y-3.5">
                 <div className="haven-rule" />
                 <div>
                   <label className="field-label">Grading Company</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {GRADING_COMPANIES.map((c) => {
-                      const st = slabStyle(c === 'Other' ? '' : c)
-                      const on = form.gradingCompany === c
-                      return (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => setField('gradingCompany', c)}
-                          className={cn('grader-chip', on && 'grader-chip-on')}
-                          style={{ backgroundColor: st.bg, color: st.fg, boxShadow: `inset 0 -2px 0 ${st.accent}` }}
-                        >
-                          <span className="italic font-black tracking-wider">{c}</span>
-                          {on && <Check size={11} className="absolute top-1 right-1" />}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-                <div>
-                  <label className="field-label">Grade</label>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {QUICK_GRADES.map((g) => (
-                      <button key={g} type="button" onClick={() => setField('grade', g)} className={cn('grade-coin', form.grade === g && 'grade-coin-on')}>
-                        {g}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {GRADER_CHOICES.map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          // A grade, a 10's label or subgrades the new grader doesn't give are dropped
+                          setForm((f) => {
+                            const g = graderOf(c)
+                            const keepGrade = !f.grade || isValidGrade(c, f.grade)
+                            const tierOk = !!f.gradeTier && !!g?.tens.some((t) => t.tier === f.gradeTier)
+                            return { ...f, gradingCompany: c, grade: keepGrade ? f.grade : '', gradeTier: tierOk ? f.gradeTier : undefined, subgrades: g?.subgrades ? f.subgrades : undefined }
+                          })
+                          if (gradeText && !isValidGrade(c, gradeText)) setGradeText('')
+                        }}
+                        className={cn('haven-chip h-9 text-xs font-semibold tracking-wide', form.gradingCompany === c && 'haven-chip-on')}
+                      >
+                        {c}
                       </button>
                     ))}
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={QUICK_GRADES.includes(form.grade ?? '') ? '' : (form.grade ?? '')}
-                      onChange={(e) => setField('grade', e.target.value)}
-                      placeholder="Other"
-                      aria-label="Another grade"
-                      className="input-field !w-20 !py-1.5 text-center text-xs font-semibold"
-                    />
                   </div>
                 </div>
-                {/* The slab label as the grader prints it */}
                 {(() => {
-                  const st = slabStyle(form.gradingCompany === 'Other' ? '' : form.gradingCompany)
-                  const word = form.grade ? gradeWord(form.gradingCompany, form.grade) : ''
+                  const grader = graderOf(form.gradingCompany)
+                  const quick = quickGradesFor(form.gradingCompany)
+                  const invalid = !!form.grade && !isValidGrade(form.gradingCompany, form.grade)
+                  const isTen = parseFloat(form.grade ?? '') >= 10
+                  const pickTier = (tier: GradeTier | null) => setForm((f) => ({
+                    ...f,
+                    gradeTier: tier ?? undefined,
+                    // A Black Label is all four subgrades at 10
+                    ...(tier === 'black' && { subgrades: { centering: '10', corners: '10', edges: '10', surface: '10' } }),
+                  }))
+                  const setGrade = (g: string) => setForm((f) => ({
+                    ...f, grade: g,
+                    // a 10's label only applies to a 10; BGS 10 is Pristine unless it's a Black Label
+                    gradeTier: parseFloat(g) >= 10 ? (f.gradeTier ?? ((f.gradingCompany ?? '').toUpperCase() === 'BGS' ? 'pristine' : undefined)) : undefined,
+                  }))
                   return (
-                    <div className="rounded-lg flex items-center gap-3 px-3 py-2 overflow-hidden" style={{ backgroundColor: st.bg, color: st.fg, boxShadow: `inset 0 0 0 2px ${st.accent}, 0 2px 6px -2px rgba(60,35,15,0.35)` }}>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70 truncate">{form.set || 'Set'}</div>
-                        <div className="text-[13px] font-extrabold uppercase leading-tight truncate">{form.name || 'Card name'}</div>
-                        <span className="inline-block mt-0.5 text-[10px] font-black italic tracking-wider px-1 rounded-[2px]" style={{ backgroundColor: st.accent, color: st.bg }}>{form.gradingCompany}</span>
+                    <>
+                      <div>
+                        <label className="field-label">Grade</label>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {quick.map((g) => (
+                            <button key={g} type="button" onClick={() => { setGrade(g); setGradeText('') }} className={cn('haven-chip haven-grade', form.grade === g && !gradeText && 'haven-chip-on')}>
+                              {g}
+                            </button>
+                          ))}
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={gradeText}
+                            onChange={(e) => { setGradeText(e.target.value); setGrade(e.target.value.trim()) }}
+                            placeholder="Other"
+                            aria-label="Another grade"
+                            className={cn('input-field !w-20 !py-1.5 text-center text-xs font-semibold', invalid && '!border-red-400')}
+                          />
+                        </div>
+                        {invalid && grader && (
+                          <p className="text-[11px] text-red-600 mt-1.5">
+                            {grader.name} doesn&apos;t give a {form.grade}
+                            {form.gradingCompany.toUpperCase() === 'PSA' || form.gradingCompany.toUpperCase() === 'TAG' ? ' — half grades only go up to 8.5, never 9.5' : ''}.
+                          </p>
+                        )}
+                        {form.grade && !invalid && (
+                          <p className="text-[11px] text-slate-500 mt-1.5 uppercase tracking-wide font-semibold">{gradeWord(form.gradingCompany, form.grade, form.gradeTier)}</p>
+                        )}
                       </div>
-                      <div className="text-right shrink-0">
-                        {word && <div className="text-[10px] font-extrabold tracking-wide leading-none">{word}</div>}
-                        <div className="text-[26px] font-black leading-none mt-0.5">{form.grade || '—'}</div>
+                      {/* A 10's label: Beckett Pristine (gold) or Black Label; CGC / SGC / TAG Gem Mint or Pristine */}
+                      {isTen && grader && grader.tens.length > 0 && (
+                        <div>
+                          <label className="field-label">Label</label>
+                          <div className="flex gap-1.5">
+                            {grader.tens.map((t) => {
+                              const on = (form.gradeTier ?? null) === t.tier
+                              return (
+                                <button key={t.label} type="button" onClick={() => pickTier(t.tier)} className={cn('haven-chip h-9 px-4 text-xs font-semibold flex items-center gap-2', on && 'haven-chip-on')}>
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: t.tier === 'black' ? '#111' : t.tier === 'pristine' ? 'linear-gradient(135deg, #f0d993, #b8923e)' : '#d8dbe0', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.25)' }} />
+                                  {t.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {/* Beckett prints four subgrades on its label */}
+                      {grader?.subgrades && (
+                        <div>
+                          <label className="field-label">Subgrades <span className="text-slate-500 font-normal normal-case tracking-normal">· optional, as printed on the label</span></label>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            {SUBGRADE_KEYS.map((k) => (
+                              <label key={k} className="block">
+                                <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1 text-center">{k}</span>
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={form.subgrades?.[k] ?? ''}
+                                  onChange={(e) => setForm((f) => {
+                                    const subgrades: Subgrades = { ...(f.subgrades ?? {}), [k]: e.target.value.trim() }
+                                    const allTens = SUBGRADE_KEYS.every((x) => subgrades[x] === '10')
+                                    // Four 10s on a 10 is a Black Label; a Black Label with a lower subgrade isn't one
+                                    const gradeTier = parseFloat(f.grade ?? '') >= 10 ? (allTens ? 'black' : f.gradeTier === 'black' ? 'pristine' : f.gradeTier) : f.gradeTier
+                                    return { ...f, subgrades, gradeTier }
+                                  })}
+                                  placeholder="–"
+                                  className="input-field !py-1.5 text-center text-sm font-semibold"
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <label className="field-label">
+                          Slab ID <span className="text-slate-500 font-normal normal-case tracking-normal">· the cert number on the label{grader ? ` (${grader.cert.hint})` : ''}</span>
+                        </label>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            inputMode={grader && !grader.cert.numeric ? 'text' : 'numeric'}
+                            value={form.certNumber ?? ''}
+                            onChange={(e) => setField('certNumber', e.target.value.replace(/\s+/g, '').toUpperCase())}
+                            placeholder={form.gradingCompany.toUpperCase() === 'TAG' ? 'e.g. A1234567' : 'e.g. 81234567'}
+                            className="input-field font-mono tracking-wider"
+                          />
+                          {grader && (grader.cert.lookup || grader.cert.lookupPage) && (
+                            <a
+                              href={form.certNumber && grader.cert.lookup ? grader.cert.lookup(form.certNumber) : grader.cert.lookupPage ?? (grader.cert.lookup ? grader.cert.lookup('') : '#')}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={cn('haven-chip shrink-0 px-3 flex items-center gap-1.5 text-xs font-semibold', !form.certNumber && 'opacity-60')}
+                              title={`Look this slab up on ${grader.name}'s site`}
+                            >
+                              Verify <ExternalLink size={12} />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()}
+                {/* The label it will carry, in the app's own colours */}
+                {(() => {
+                  const word = form.grade ? gradeWord(form.gradingCompany, form.grade, form.gradeTier) : ''
+                  return (
+                    <div className="haven-label">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 truncate">{form.set || 'Set'}</div>
+                        <div className="text-[13px] font-bold uppercase tracking-wide text-ink leading-tight truncate">{form.name || 'Card name'}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mt-0.5 truncate">{form.gradingCompany}{form.gradeTier === 'black' ? ' · Black Label' : ''}{form.number ? ` · #${form.number}` : ''}{form.certNumber ? ` · ${form.certNumber}` : ''}</div>
+                      </div>
+                      <div className="text-right shrink-0 pl-3 border-l border-slate-700/60">
+                        {word && <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{word}</div>}
+                        <div className="text-[26px] font-bold text-ink leading-none mt-1 tabular-nums">{form.grade || '—'}</div>
                       </div>
                     </div>
                   )
@@ -900,7 +1019,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
           {/* Card preview */}
           {form.imageUrl && (
-            <div className="lg:hidden flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
+            <div className="xl:hidden flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
               <img src={cardImage(form.imageUrl, 'thumb')} alt={form.name} className="w-12 h-16 object-contain rounded" />
               <div>
                 <div className="text-sm font-medium text-ink"><CardName name={form.name} /></div>
@@ -948,17 +1067,18 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
       {/* Wide screens: the chosen card on display beside the form — a framed stand with the card
           (in its slab when it's graded) and a brass nameplate */}
-      <aside className="card-stage-wrap hidden lg:block w-[300px] shrink-0">
+      {form.imageUrl && (
+      <aside key={form.imageUrl} className="card-stage-wrap hidden xl:block absolute left-full top-1/2 ml-7 w-[290px]">
         <div className="showcase-frame">
           <div className="showcase-inner px-5 pt-4 pb-5 flex flex-col items-center gap-4">
-            <div className="pinbook-serif flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GAME_COLORS[form.game] }} />
               {GAME_LABELS[form.game]}{japanese ? ' · Japanese' : ''}
             </div>
             <div className="w-full flex justify-center" style={{ perspective: '900px' }}>
               {form.imageUrl && form.gradingCompany ? (
-                <div key={`slab-${form.imageUrl}`} className="card-stage-in w-full" style={{ aspectRatio: '0.66' }}>
-                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '' }} name={form.name} number={form.number} setName={form.set}>
+                <div className="w-full" style={{ aspectRatio: '0.66' }}>
+                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '', cert: form.certNumber, tier: form.gradeTier ?? null, subgrades: form.subgrades }} name={form.name} number={form.number} setName={form.set}>
                     {artLandscape ? (
                       // Turned on its side to fill the portrait window, like a real slab holds it
                       <img src={cardImage(form.imageUrl, 'grid')} alt={form.name} onLoad={noteArt}
@@ -970,26 +1090,23 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                   </FullSlab>
                 </div>
               ) : (
-                <div key={form.imageUrl || 'empty'} className={cn('card-stage-card w-[88%]', form.imageUrl ? 'card-stage-in' : 'opacity-70')}>
-                  <img src={form.imageUrl ? cardImage(form.imageUrl, 'grid') : NO_CARD_IMAGE} alt={form.name || 'No card chosen'} onLoad={form.imageUrl ? noteArt : undefined} className="w-full rounded-[4.5%] block" />
-                  {form.imageUrl && <span className="card-stage-sheen" />}
+                <div className="card-stage-card w-[88%]">
+                  <img src={cardImage(form.imageUrl, 'grid')} alt={form.name} onLoad={noteArt} className="w-full rounded-[4.5%] block" />
+                  <span className="card-stage-sheen" />
                 </div>
               )}
             </div>
             <div className="haven-plate w-full text-center">
-              <div className="pinbook-serif text-[13px] font-bold leading-snug line-clamp-2">
-                {form.name ? <CardName name={form.name} /> : 'Choose a card'}
-              </div>
-              <div className="text-[11px] opacity-75 mt-0.5 truncate">
-                {form.name ? [form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ') : 'Search above to see it here'}
-              </div>
-              {form.name && catalogMarketPrice() > 0 && (
-                <div className="mt-1.5 inline-block text-xs font-bold px-2 py-0.5 rounded-full bg-black/10">${catalogMarketPrice().toFixed(2)}</div>
+              <div className="text-[13px] font-semibold text-ink leading-snug line-clamp-2"><CardName name={form.name} /></div>
+              <div className="text-[11px] text-slate-500 mt-0.5 truncate">{[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}</div>
+              {catalogMarketPrice() > 0 && (
+                <div className="mt-1 text-sm font-semibold text-emerald-600">${catalogMarketPrice().toFixed(2)}</div>
               )}
             </div>
           </div>
         </div>
       </aside>
+      )}
       </div>
     </div>
   )

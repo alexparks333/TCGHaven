@@ -481,7 +481,12 @@ export function bestSlab(cards: Card[]): SlabInfo | undefined {
     if (!c.gradingCompany) continue
     const n = parseFloat(c.grade ?? '')
     const score = Number.isFinite(n) ? n : 0
-    if (!best || score > bestN) { best = { company: c.gradingCompany, grade: c.grade ?? '' }; bestN = score }
+    // A Black Label / Pristine 10 outranks a plain 10
+    const tierBonus = c.gradeTier === 'black' ? 0.2 : c.gradeTier === 'pristine' ? 0.1 : 0
+    if (!best || score + tierBonus > bestN) {
+      best = { company: c.gradingCompany, grade: c.grade ?? '', cert: c.certNumber, tier: c.gradeTier ?? null, subgrades: c.subgrades }
+      bestN = score + tierBonus
+    }
   }
   return best
 }
@@ -490,7 +495,7 @@ export function bestSlab(cards: Card[]): SlabInfo | undefined {
 // sheen, plus a see-through grade banner across the top that fills in when the tile is hovered
 // (the tile's root carries `group`).
 export function SlabTileOverlay({ slab }: { slab: SlabInfo }) {
-  const label = slabStyle(slab.company)
+  const label = slabStyle(slab.company, slab.grade, slab.tier)
   return (
     <>
       <div
@@ -1563,7 +1568,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#7a6a55') : '#7a6a55'
-  const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '' } : undefined
+  const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '', cert: card.certNumber, tier: card.gradeTier ?? null, subgrades: card.subgrades } : undefined
 
   return (
     <div

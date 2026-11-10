@@ -64,7 +64,7 @@ second, redundant verification — see [§18](#cron-driven-price-sync).
   createdAt?: string
   priceAtEntry?: number   // market price snapshotted when the card was first added — baseline
                           // for Portfolio's "Since Entry" P&L timeframe
-  gradingCompany?: string // e.g. "PSA", "CGC", "BGS", "SGC" — see cardIdentityKey() below
+  gradingCompany?: string // e.g. "PSA", "CGC", "BGS", "SGC" — see cardIdentityKey() below; "Graded cards" below
   grade?: string          // e.g. "10", "9.5", "Authentic"
   group?: string          // user-defined group label (e.g. "Alex & Brother's Cards") — drives
                           // Portfolio's hidden-groups filter feature
@@ -135,6 +135,28 @@ privacy policy is `app/privacy/page.tsx` (no app shell — ClientWrapper); keep 
 ---
 
 ---
+
+## Graded cards
+
+A copy is graded when `gradingCompany` is set. Its fields: `grade` ("10", "8.5", "Authentic"),
+`certNumber` (the slab's cert number — the "Slab ID"; a string, leading zeros kept), `gradeTier`
+(which label a 10 carries: BGS `pristine` / `black` = Black Label; CGC, SGC, TAG `pristine`) and
+`subgrades` (BGS only: centering / corners / edges / surface). An edit sends a removed grade, cert,
+tier or subgrades as cleared (an edit merges into the saved card).
+
+The rules — each grader's grades, the words printed beside them, the 10s' labels, cert formats and
+verify links — are `lib/grading.ts` (researched 2026-11-10 from the graders' pages and hobby
+references). Facts that drove it: PSA gives half grades only up to 8.5 (no 9.5) and has no premium
+labels; BGS 9.5 and 10 are gold, a Black Label is a 10 with four 10 subgrades, the rest silver;
+CGC / SGC / TAG have Gem Mint 10 and Pristine 10 (gold label); TAG has no 9.5; SGC's label is black.
+Cert lookups: PSA `psacard.com/cert/{n}`, CGC `cgccards.com/certlookup/{n}/`, TAG
+`my.taggrading.com/card/{cert}`; BGS and SGC are lookup forms.
+
+`components/SlabCase.tsx` draws every slab (Add Card's card view, the Cardex zoom view and grid
+tiles, profile tiles) like the grader's real one — PSA's red-framed white label, Beckett's tier
+colours with subgrades, CGC's silver label and black grade box, SGC's black "tuxedo", TAG's text
+printed in the clear case with a QR code — with the cert number where each prints it. The scanner
+reads company, grade and cert off a slab's label and saves the cert too.
 
 ## Zustand Store
 

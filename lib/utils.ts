@@ -53,7 +53,8 @@ export function cardIdentityKey(card: Card): string {
   // interchangeable with a raw copy for cost-basis/market-value purposes) and must never merge
   // into the same Inventory row — without this, grading info silently got dropped and both
   // landed in one group with a shared "Total Paid"/"Market" sum and only one grade badge shown.
-  const gradePart = card.gradingCompany ? `::${card.gradingCompany}::${card.grade ?? ''}` : ''
+  // (a Black Label / Pristine 10 isn't the same as a plain 10 either)
+  const gradePart = card.gradingCompany ? `::${card.gradingCompany}::${card.grade ?? ''}${card.gradeTier ? `::${card.gradeTier}` : ''}` : ''
   // Same for a Pokémon card's printing: a 1st Edition and an Unlimited copy (or a Holo and a
   // Reverse Holo) are priced differently and never share a row. Cards from before editions
   // existed have neither field and keep their old key.

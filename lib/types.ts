@@ -23,6 +23,9 @@ export interface Card {
   priceAtEntry?: number   // market price snapshotted when card was first added
   gradingCompany?: string // e.g. "PSA", "CGC", "BGS", "SGC"
   grade?: string          // e.g. "10", "9.5", "Authentic"
+  certNumber?: string     // the slab's certification number ("Slab ID") — looks the slab up on the grader's site
+  gradeTier?: 'pristine' | 'black'  // which label a 10 carries — BGS Pristine / Black Label; CGC, SGC, TAG Pristine (lib/grading.ts)
+  subgrades?: { centering?: string; corners?: string; edges?: string; surface?: string } // BGS, printed on its label
   group?: string          // user-defined group label, e.g. "Alex & Brother's Cards"
   priceLocked?: boolean   // retired (2026-10-26): every card is priced from the shared catalog;
                           // old cards may still carry it, nothing reads it
@@ -74,8 +77,13 @@ export const CONDITION_LABELS: Record<Condition, string> = {
 
 // What to show in a "Condition" column: a graded card shows its slab ("PSA 9") instead of a raw
 // condition, since the grade is what actually describes it.
-export function conditionLabel(card: { condition: Condition; gradingCompany?: string; grade?: string }): string {
-  if (card.gradingCompany) return card.grade ? `${card.gradingCompany} ${card.grade}` : card.gradingCompany
+export function conditionLabel(card: { condition: Condition; gradingCompany?: string; grade?: string; gradeTier?: 'pristine' | 'black' | null }): string {
+  if (card.gradingCompany) {
+    // "BGS Black Label 10", "CGC Pristine 10" (a BGS 10 is always Pristine, so it isn't repeated)
+    const tier = card.gradeTier === 'black' ? ' Black Label'
+      : card.gradeTier === 'pristine' && card.gradingCompany.toUpperCase() !== 'BGS' ? ' Pristine' : ''
+    return `${card.gradingCompany}${tier}${card.grade ? ` ${card.grade}` : ''}`
+  }
   return CONDITION_LABELS[card.condition]
 }
 

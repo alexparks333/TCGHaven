@@ -160,6 +160,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           ...(result.rarity && { rarity: result.rarity }),
           // Read off the slab's label (prices stay the raw card's — graded prices aren't tracked yet)
           ...(row.slab?.company && row.slab.grade && { gradingCompany: row.slab.company, grade: row.slab.grade }),
+          ...(row.slab?.company && row.slab.cert && { certNumber: row.slab.cert }),
           ...(match.game === 'riftbound' && { nexus: false }),
           ...(hasPrintings(match.game) && vp && row.edition && { edition: row.edition }),
           ...(hasPrintings(match.game) && vp && row.finish && { finish: row.finish }),
