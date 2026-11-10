@@ -10,7 +10,7 @@ import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
-import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
+import { cn, localDateString, isFirstCopyOfCard, printingText, nameWithPrinting } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
 import { FullSlab } from '@/components/SlabCase'
@@ -1078,7 +1078,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             <div className="w-full flex justify-center" style={{ perspective: '900px' }}>
               {form.imageUrl && form.gradingCompany ? (
                 <div className="w-full" style={{ aspectRatio: '0.66' }}>
-                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '', cert: form.certNumber, tier: form.gradeTier ?? null, subgrades: form.subgrades }} name={form.name} number={form.number} setName={form.set} variety={form.rarity}>
+                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '', cert: form.certNumber, tier: form.gradeTier ?? null, subgrades: form.subgrades, printing: printingText(form) || undefined }} name={form.name} number={form.number} setName={form.set} variety={form.rarity}>
                     {artLandscape ? (
                       // Turned on its side to fill the portrait window, like a real slab holds it
                       <img src={cardImage(form.imageUrl, 'grid')} alt={form.name} onLoad={noteArt}
@@ -1097,7 +1097,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
               )}
             </div>
             <div className="haven-plate w-full text-center">
-              <div className="text-[13px] font-semibold text-ink leading-snug line-clamp-2"><CardName name={form.name} /></div>
+              {/* The name with its printing (Charizard - Reverse Holo) and that printing's price */}
+              <div className="text-[13px] font-semibold text-ink leading-snug line-clamp-2"><CardName name={nameWithPrinting(form.name, form)} /></div>
               <div className="text-[11px] text-slate-500 mt-0.5 truncate">{[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}</div>
               {catalogMarketPrice() > 0 && (
                 <div className="mt-1 text-sm font-semibold text-emerald-600">${catalogMarketPrice().toFixed(2)}</div>

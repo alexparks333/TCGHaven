@@ -272,3 +272,28 @@ export function ebaySearchUrl(card: Parameters<typeof openEbaySearch>[0]): strin
   const query = parts.join(' ')
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1`
 }
+
+// ── A copy's printing, in words ─────────────────────────────────────────────
+
+const PRINTING_EDITION: Record<string, string> = { '1st': '1st Edition', shadowless: 'Shadowless', limited: 'Limited Edition' }
+const PRINTING_FINISH: Record<string, string> = { holofoil: 'Holo', reverse: 'Reverse Holo', rainbow: 'Rainbow Foil', cold: 'Cold Foil' }
+
+/** What makes a copy a particular printing, in words — "1st Edition Holo", "Reverse Holo", "Foil";
+ *  '' for a plain Unlimited / Normal copy. */
+export function printingText(card: { game?: string; edition?: string; finish?: string; isFoil?: boolean }): string {
+  const parts: string[] = []
+  if (card.edition && PRINTING_EDITION[card.edition]) parts.push(PRINTING_EDITION[card.edition])
+  if (card.finish) { if (PRINTING_FINISH[card.finish]) parts.push(PRINTING_FINISH[card.finish]) }
+  else if (card.isFoil) parts.push(card.game === 'pokemon' ? 'Holo' : 'Foil')
+  return parts.join(' ')
+}
+
+/** A name without the "✦ Foil" / "✦ Holo" marker a foil search row adds */
+export const baseCardName = (name: string) => String(name ?? '').replace(/\s+✦ (Holo|Foil)$/, '')
+
+/** A card's name with its printing — "Charizard - Reverse Holo" */
+export function nameWithPrinting(name: string, card: { game?: string; edition?: string; finish?: string; isFoil?: boolean }): string {
+  const p = printingText(card)
+  return p ? `${baseCardName(name)} - ${p}` : baseCardName(name)
+}
+

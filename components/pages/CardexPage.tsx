@@ -7,7 +7,7 @@ import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
-import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -484,7 +484,7 @@ export function bestSlab(cards: Card[]): SlabInfo | undefined {
     // A Black Label / Pristine 10 outranks a plain 10
     const tierBonus = c.gradeTier === 'black' ? 0.2 : c.gradeTier === 'pristine' ? 0.1 : 0
     if (!best || score + tierBonus > bestN) {
-      best = { company: c.gradingCompany, grade: c.grade ?? '', cert: c.certNumber, tier: c.gradeTier ?? null, subgrades: c.subgrades }
+      best = { company: c.gradingCompany, grade: c.grade ?? '', cert: c.certNumber, tier: c.gradeTier ?? null, subgrades: c.subgrades, printing: printingText(c) || undefined }
       bestN = score + tierBonus
     }
   }
@@ -1568,7 +1568,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
   const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#7a6a55') : '#7a6a55'
-  const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '', cert: card.certNumber, tier: card.gradeTier ?? null, subgrades: card.subgrades } : undefined
+  const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '', cert: card.certNumber, tier: card.gradeTier ?? null, subgrades: card.subgrades, printing: printingText(card) || undefined } : undefined
 
   return (
     <div

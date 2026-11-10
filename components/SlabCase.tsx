@@ -5,8 +5,9 @@
 // the card in its window. Used by the Cardex (zoom view + grid tiles), profile tiles and Add Card's
 // card view. The rules (grades, words, tiers) live in lib/grading.ts.
 import { gradeWord as gradeWordFor, labelTone, type GradeTier, type Subgrades } from '@/lib/grading'
+import { baseCardName } from '@/lib/utils'
 
-export type SlabInfo = { company: string; grade: string; cert?: string; tier?: GradeTier | null; subgrades?: Subgrades }
+export type SlabInfo = { company: string; grade: string; cert?: string; tier?: GradeTier | null; subgrades?: Subgrades; printing?: string }
 
 /** The grader's word for a grade — lib/grading.ts (kept here for older imports) */
 export const gradeWord = (company: string, grade: string, tier?: GradeTier | null) => gradeWordFor(company, grade, tier)
@@ -27,14 +28,14 @@ export function slabStyle(company: string, grade = '', tier?: GradeTier | null):
 
 // ── Small drawn parts ───────────────────────────────────────────────────────
 
-function Barcode({ seed, color, className = '' }: { seed: string; color: string; className?: string }) {
+function Barcode({ seed, color, className = '', bars: count = 26, unit = 0.28, gap = 0.35 }: { seed: string; color: string; className?: string; bars?: number; unit?: number; gap?: number }) {
   let h = 0
   for (const ch of seed || 'tcghaven') h = (h * 31 + ch.charCodeAt(0)) >>> 0
   const bars: number[] = []
-  for (let i = 0; i < 26; i++) { h = (h * 1103515245 + 12345) >>> 0; bars.push(1 + (h % 3)) }
+  for (let i = 0; i < count; i++) { h = (h * 1103515245 + 12345) >>> 0; bars.push(1 + (h % 3)) }
   return (
-    <div className={`flex items-stretch gap-[0.35cqw] ${className}`} aria-hidden>
-      {bars.map((w, i) => <span key={i} style={{ width: `${w * 0.28}cqw`, backgroundColor: color }} />)}
+    <div className={`flex items-stretch ${className}`} style={{ gap: `${gap}cqw` }} aria-hidden>
+      {bars.map((w, i) => <span key={i} style={{ width: `${w * unit}cqw`, backgroundColor: color }} />)}
     </div>
   )
 }
@@ -68,40 +69,37 @@ const cq = (n: number) => `${n}cqw`
 
 interface LabelProps { slab: SlabInfo; name: string; number: string; setName?: string; variety?: string }
 
-// PSA's label, as on a current slab: a solid red frame around a white label; one plain uppercase
-// sans at one size throughout — set / name / variety on the left, the card number, grade word,
-// grade and cert number right-aligned on the right; a barcode under the left lines and a small
-// silver hologram sticker at the bottom centre (a made-up emblem — not PSA's logo).
+// PSA's label, as on a current slab (matched to photos): a thick orange-red frame with square
+// corners around a white label; heavy, slightly condensed uppercase type that fills it — set /
+// name / variety on the left, card number / grade word / grade on the right, row for row; a wide
+// barcode on the bottom row with the cert number opposite; and the silver hologram sticker hanging
+// over the bottom edge of the frame (a made-up emblem — not PSA's logo). The label sits in a dark
+// recess in the case.
 function PsaLabel({ slab, name, number, setName, variety }: LabelProps) {
   const word = gradeWordFor('PSA', slab.grade, slab.tier)
-  const line = { fontSize: cq(3.9), lineHeight: 1.2 }
+  const font = { fontFamily: '"Arial Narrow", "Helvetica Neue", Arial, sans-serif', fontWeight: 600, fontSize: cq(4.4), lineHeight: 1, letterSpacing: '0' }
+  const cell = 'flex items-center min-w-0'
   return (
-    <div className="relative h-full overflow-hidden rounded-[0.8cqw]"
-      style={{ background: '#d71f2b', padding: cq(1.5), boxShadow: '0 0.3cqw 0.8cqw rgba(0,0,0,0.25), inset 0 0.2cqw 0 rgba(255,255,255,0.25)' }}>
-      <div className="relative h-full rounded-[0.4cqw] text-[#1b1b1b] uppercase font-medium tracking-[0.01em]"
-        style={{ fontFamily: 'Arial, Helvetica, sans-serif', background: 'linear-gradient(180deg, #ffffff 0%, #f7f7f5 100%)', padding: `${cq(1.4)} ${cq(2.4)}` }}>
-        <div className="flex h-full">
-          <div className="flex-1 min-w-0 flex flex-col justify-between">
-            <div className="truncate" style={line}>{setName || ' '}</div>
-            <div className="truncate" style={line}>{name}</div>
-            <div className="truncate" style={line}>{variety || ' '}</div>
-            <Barcode seed={slab.cert || name} color="#111" className="h-[3.6cqw] w-fit" />
-          </div>
-          <div className="shrink-0 flex flex-col items-end justify-between pl-[2cqw] text-right">
-            <div style={line}>#{number}</div>
-            <div style={line}>{word}</div>
-            <div style={line}>{slab.grade}</div>
-            <div className="tabular-nums" style={line}>{slab.cert || ' '}</div>
-          </div>
+    <div className="relative h-full" style={{ padding: cq(0.9), background: 'linear-gradient(180deg, rgba(40,40,40,0.55), rgba(70,70,70,0.4))', borderRadius: cq(0.6), boxShadow: 'inset 0 0.3cqw 0.6cqw rgba(0,0,0,0.45)' }}>
+      <div className="relative h-full" style={{ background: '#e4432d', padding: cq(2.1) }}>
+        <div className="relative h-full bg-white text-[#141414] uppercase grid grid-rows-4 grid-cols-[1fr_auto] gap-x-[3cqw]" style={{ ...font, padding: `${cq(0.9)} ${cq(2.6)} ${cq(0.9)} ${cq(2.6)}` }}>
+          <div className={cell}><span className="truncate">{setName || ' '}</span></div>
+          <div className={`${cell} justify-end`}>#{number}</div>
+          <div className={cell}><span className="truncate">{name}</span></div>
+          <div className={`${cell} justify-end`}>{word}</div>
+          <div className={cell}><span className="truncate">{variety || ' '}</span></div>
+          <div className={`${cell} justify-end`}>{slab.grade}</div>
+          <div className={cell}><Barcode seed={slab.cert || name} color="#141414" bars={34} unit={0.36} gap={0.32} className="h-[78%] w-fit" /></div>
+          <div className={`${cell} justify-end tabular-nums`}>{slab.cert || ' '}</div>
         </div>
-        {/* Hologram sticker, bottom centre */}
-        <div className="absolute left-1/2 -translate-x-1/2 rounded-[0.4cqw] flex items-center justify-center"
-          style={{ bottom: cq(1.2), width: cq(10), height: cq(4.2), background: 'linear-gradient(120deg, #b9c3cf, #eef1f5 25%, #c7d7ea 45%, #f3e6f0 62%, #d9e7d6 80%, #b9c3cf)', boxShadow: 'inset 0 0 0 0.2cqw rgba(255,255,255,0.8), 0 0.1cqw 0.3cqw rgba(0,0,0,0.25)' }}>
-          <svg viewBox="0 0 24 12" style={{ width: '60%', height: '70%' }} aria-hidden>
-            <path d="M12 1 L15 6 L12 11 L9 6 Z" fill="#c8102e" opacity="0.85" />
-            <path d="M3 6 H8 M16 6 H21" stroke="#1d3f8f" strokeWidth="1.6" strokeLinecap="round" opacity="0.8" />
-          </svg>
-        </div>
+      </div>
+      {/* Hologram sticker hanging over the bottom of the frame */}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center"
+        style={{ bottom: cq(0.9), width: cq(13), height: cq(5.6), background: 'linear-gradient(115deg, #aeb7c2, #eef1f4 22%, #c9d5e4 40%, #f1e8ef 58%, #d6e3d4 76%, #aeb7c2)', boxShadow: 'inset 0 0 0 0.2cqw rgba(255,255,255,0.75), 0 0.1cqw 0.3cqw rgba(0,0,0,0.3)' }}>
+        <svg viewBox="0 0 30 14" style={{ width: '62%', height: '72%' }} aria-hidden>
+          <path d="M15 1.5 L19 7 L15 12.5 L11 7 Z" fill="#d23a2a" opacity="0.9" />
+          <path d="M2.5 7 H9.5 M20.5 7 H27.5" stroke="#244a9a" strokeWidth="2" strokeLinecap="round" opacity="0.85" />
+        </svg>
       </div>
     </div>
   )
@@ -268,7 +266,8 @@ export function FullSlab({ slab, name, number, setName, variety, children }: {
   slab: SlabInfo; name: string; number: string; setName?: string; variety?: string; children: React.ReactNode
 }) {
   const c = String(slab.company ?? '').toUpperCase()
-  const labelH = c === 'BGS' ? '20%' : '19%'
+  // Labels are wide and short; PSA's is the shortest
+  const labelH = c === 'PSA' ? '16.5%' : c === 'BGS' ? '20%' : '19%'
   const sgcInsert = c === 'SGC'
   return (
     <div
@@ -282,7 +281,8 @@ export function FullSlab({ slab, name, number, setName, variety, children }: {
       }}
     >
       <div className="relative shrink-0" style={{ height: labelH }}>
-        <SlabLabel slab={slab} name={name} number={number} setName={setName} variety={variety} />
+        {/* The printing goes with the name, as graders print it: Charizard - Reverse Holo */}
+        <SlabLabel slab={slab} name={slab.printing ? `${baseCardName(name)} - ${slab.printing}` : name} number={number} setName={setName} variety={variety} />
       </div>
       {/* Card window */}
       <div
