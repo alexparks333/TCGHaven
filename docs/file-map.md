@@ -242,6 +242,7 @@ TCGHaven/
     │   └── ProfilePage.tsx         ← Your profile / someone else's (§19 Friends) — banner ⚙️ opens
     │                                 Settings (components/friends/SettingsDialog.tsx)
     └── portfolio/
+        ├── PortfolioPieChart.tsx  ← Portfolio's "Value by Game" circle chart (wide screens only)
         ├── PriceHistoryChart.tsx   ← Recharts line chart for price over time
         └── PortfolioAnalyticsPage.tsx ← app/portfolio/analytics/page.tsx's real component,
                                       dynamic-imported with ssr:false — linked from every

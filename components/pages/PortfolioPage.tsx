@@ -10,6 +10,7 @@ import type { PortfolioSort } from '@/lib/firebase/preferences'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
+import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
@@ -204,6 +205,16 @@ export default function PortfolioPage() {
       })
   }, [cards, calcFloor, activeGames, hiddenGroups])
 
+  // Top Performers' game picker: "All Games" or one game the collection has cards in. Works
+  // together with the time frame (groupedRows already carries the window's P&L).
+  const [performerGame, setPerformerGame] = useState<Game | 'all'>('all')
+  const performerGames = useMemo(() => byGame.filter((g) => g.count > 0), [byGame])
+  const shownGame = performerGame !== 'all' && performerGames.some((g) => g.game === performerGame) ? performerGame : 'all'
+  const performerRows = useMemo(
+    () => (shownGame === 'all' ? groupedRows : groupedRows.filter((c) => c.game === shownGame)),
+    [groupedRows, shownGame],
+  )
+
   const router = useRouter()
   const periodLabel = TIME_LABELS[timeFrame]
   const showHistoryNote = timeFrame !== 'entry'
@@ -344,14 +355,35 @@ export default function PortfolioPage() {
           ))}
         </div>
 
-        <div className="card-glass p-6 mb-8">
-          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
-            Top Performers
-            {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
-            {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
-          </h3>
+        {/* Circle chart (wide screens only — too tall for phones) beside Top Performers */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(240px,1fr)_2fr] gap-4 mb-8">
+        <div className="hidden lg:block card-glass p-6">
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Value by Game</h3>
+          {byGame.some((g) => g.value > 0)
+            ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} />
+            : <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>}
+        </div>
+        <div className="card-glass p-6 min-w-0">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
+              Top Performers
+              {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
+              {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
+            </h3>
+            {performerGames.length > 0 && (
+              <select
+                value={shownGame}
+                onChange={(e) => setPerformerGame(e.target.value as Game | 'all')}
+                aria-label="Show top performers for"
+                className="shrink-0 text-xs font-medium bg-slate-900 border border-slate-700 text-slate-300 rounded-full pl-3 pr-7 py-1.5 focus:outline-none focus:border-violet-500/60"
+              >
+                <option value="all">All Games</option>
+                {performerGames.map((g) => <option key={g.game} value={g.game}>{g.name}</option>)}
+              </select>
+            )}
+          </div>
           <div className="flex flex-col gap-3">
-            {groupedRows.filter((c) => c.hasPeriodData).slice(0, 5).map((c) => (
+            {performerRows.filter((c) => c.hasPeriodData).slice(0, 5).map((c) => (
               <div key={c.id}
                 onClick={(e) => {
                   if (e.ctrlKey || e.metaKey) { openEbaySearch(c); return }
@@ -387,19 +419,21 @@ export default function PortfolioPage() {
                 <ArrowUpRight size={14} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
               </div>
             ))}
-            {groupedRows.length === 0 && (
+            {performerRows.length === 0 && (
               <div className="text-center text-slate-600 py-8 text-sm">
                 {calcFloor > 0
                   ? `No cards above ${formatCurrency(calcFloor)}. Lower your calculation floor.`
                   : 'Add cards to your inventory to see them here.'}
               </div>
             )}
-            {showHistoryNote && groupedRows.filter((c) => c.hasPeriodData).length === 0 && groupedRows.length > 0 && (
+            {showHistoryNote && performerRows.filter((c) => c.hasPeriodData).length === 0 && performerRows.length > 0 && (
               <div className="text-center text-slate-600 py-8 text-sm">
                 No price history for this window yet — it builds up as prices update automatically each day.
               </div>
             )}
           </div>
+        </div>
+
         </div>
 
         {/* Per-game value cards */}
