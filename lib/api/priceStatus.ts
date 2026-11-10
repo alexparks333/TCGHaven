@@ -19,17 +19,17 @@ import type { SyncStatus } from './syncStatus'
 // Flag a game once roughly two of its scheduled runs in a row have gone missing: the price sync runs
 // twice a day (09:00 + 21:00 UTC — .github/workflows/sync-prices.yml; Japanese Pokémon syncs at most
 // once a day of those), MTG once a day (sync-mtg.yml, 09:00 UTC), Yu-Gi-Oh! once a day (sync-yugioh.yml, 21:30 UTC),
-// the five TCGplayer-sourced games once a day (sync-tcgplayer-games.yml, 21:45 UTC).
+// the TCGplayer-sourced games once a day (sync-tcgplayer-games.yml, 21:45 UTC).
 const HOUR = 60 * 60 * 1000
 const STALE_AFTER_MS: Partial<Record<Game, number>> = {
-  mtg: 50 * HOUR, yugioh: 50 * HOUR, swu: 50 * HOUR, gundam: 50 * HOUR, fab: 50 * HOUR, digimon: 50 * HOUR, palworld: 50 * HOUR,
+  mtg: 50 * HOUR, yugioh: 50 * HOUR, swu: 50 * HOUR, gundam: 50 * HOUR, fab: 50 * HOUR, digimon: 50 * HOUR, palworld: 50 * HOUR, cyberpunk: 50 * HOUR,
 }
 const DEFAULT_STALE_AFTER_MS = 27 * HOUR
 const staleAfter = (game: Game) => STALE_AFTER_MS[game] ?? DEFAULT_STALE_AFTER_MS
 
 // MTG syncs once a day on its own schedule, so its time is left out of the shared "prices as of"
 // time (it would drag it back by up to a day) unless it's all that's shown.
-const OWN_SCHEDULE: Game[] = ['mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+const OWN_SCHEDULE: Game[] = ['mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
 export interface PriceStatus {
   // Oldest last-successful-sync time across the games being shown — the honest "prices as of"

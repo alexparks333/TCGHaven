@@ -1,10 +1,10 @@
-name: Sync Star Wars, Gundam, Flesh and Blood, Digimon and Palworld prices
+name: Sync Star Wars, Gundam, Flesh and Blood, Digimon, Palworld and Cyberpunk prices
 
-# The five TCGplayer-sourced catalogs (scripts/lib/tcgplayer-games.mjs — ~32,500 English singles
+# The six TCGplayer-sourced catalogs (scripts/lib/tcgplayer-games.mjs — ~32,500 English singles
 # in ~280 sets, from TCGplayer through tcgcsv) once a day, as their own job like Magic and
 # Yu-Gi-Oh!: ~280 per-set downloads are too long to add to the twice-daily sync-prices run.
 # Runs the same command an admin runs locally (`npm run download-cards -- --only
-# swu,gundam,fab,digimon,palworld`); only cards whose prices changed are written.
+# swu,gundam,fab,digimon,palworld,cyberpunk`); only cards whose prices changed are written.
 # Details: docs/games.md ("TCGplayer-sourced games").
 #
 # Setup: the same ADMIN_EMAIL / ADMIN_PASSWORD repository secrets and NEXT_PUBLIC_FIREBASE_*
@@ -50,4 +50,4 @@ jobs:
             exit 1
           fi
       - name: Sync the five games
-        run: npm run download-cards -- --only swu,gundam,fab,digimon,palworld
+        run: npm run download-cards -- --only swu,gundam,fab,digimon,palworld,cyberpunk

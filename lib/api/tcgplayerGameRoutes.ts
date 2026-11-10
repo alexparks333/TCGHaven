@@ -1,5 +1,5 @@
 // Shared handlers behind each TCGplayer-sourced game's routes (Star Wars: Unlimited, Gundam,
-// Flesh and Blood, Digimon, Palworld): app/api/prices/{game}/route.ts and
+// Flesh and Blood, Digimon, Palworld, Cyberpunk): app/api/prices/{game}/route.ts and
 // app/api/sync/{game}/route.ts are one-liners calling these (a route.ts may only export Next's
 // allowed names — CLAUDE.md rule 24).
 import { NextResponse } from 'next/server'

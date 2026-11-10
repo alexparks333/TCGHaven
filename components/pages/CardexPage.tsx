@@ -51,7 +51,7 @@ type CatalogGame = BaseGame | 'pokemon-jp'
 const baseGameOf = (g: CatalogGame): BaseGame => (g === 'pokemon-jp' ? 'pokemon' : g)
 const CARDEX_TAB_LABELS: Record<CatalogGame, string> = {
   pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic', yugioh: 'Yu-Gi-Oh!',
-  swu: 'Star Wars: Unlimited', gundam: 'Gundam', fab: 'Flesh and Blood', digimon: 'Digimon', palworld: 'Palworld',
+  swu: 'Star Wars: Unlimited', gundam: 'Gundam', fab: 'Flesh and Blood', digimon: 'Digimon', palworld: 'Palworld', cyberpunk: 'Cyberpunk',
 }
 
 interface SetMeta {
@@ -160,7 +160,7 @@ interface MtgSetOption {
 const PLACEHOLDER_SET: SetMeta = { name: '', game: 'lorcana' }
 
 const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], 'pokemon-jp': [], onepiece: [], mtg: [], yugioh: [],
-  swu: [], gundam: [], fab: [], digimon: [], palworld: [] }
+  swu: [], gundam: [], fab: [], digimon: [], palworld: [], cyberpunk: [] }
 
 // Deep-link support (e.g. clicking a "Card Unlocked" toast) — ?game=riftbound&set=Secret+Garden
 function isCatalogGame(v: string | null): v is CatalogGame {
@@ -341,7 +341,7 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
 }
 
 // The games whose set list comes from their sync (catalog_meta/{game}.sets): Yu-Gi-Oh! and the
-// five TCGplayer-sourced games. Each set carries a type (setTypeOf() in yugioh-tcgplayer.mjs /
+// TCGplayer-sourced games. Each set carries a type (setTypeOf() in yugioh-tcgplayer.mjs /
 // tcgplayer-games.mjs — read from the set's name), which picks its Cardex group.
 const META_SET_GAMES = ['yugioh', ...TCGPLAYER_SOURCED_GAMES] as const
 type MetaSetGame = typeof META_SET_GAMES[number]
@@ -418,7 +418,7 @@ export const RARITY_COLORS: Record<string, string> = {
 const FIRST_SCREEN_ART = 40
 const ART_WAIT_LIMIT_MS = 15_000
 
-const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld'])
+const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk'])
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
@@ -1190,7 +1190,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
         {/* Game bubbles — only the games this user tracks (added from Inventory's "+" menu) */}
         <GamePicker<CatalogGame | 'personal'>
           options={[
-            ...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld'] as const)
+            ...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk'] as const)
               .filter((g) => trackedGames.includes(baseGameOf(g)))
               .map((g) => ({ id: g, label: CARDEX_TAB_LABELS[g], shortLabel: g === 'pokemon-jp' ? 'Pokémon JP' : undefined, color: GAME_COLORS[baseGameOf(g)] })),
             ...(readOnly ? [] : [{ id: 'personal' as const, label: 'Personalized Collections', shortLabel: 'Collections', color: '#7a5230', icon: <FolderHeart size={14} /> }]),

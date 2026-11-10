@@ -156,6 +156,7 @@ export interface SetRegistry {
   fab: { sets: MtgRegistrySet[] }
   digimon: { sets: MtgRegistrySet[] }
   palworld: { sets: MtgRegistrySet[] }
+  cyberpunk: { sets: MtgRegistrySet[] }
 }
 
 const EMPTY_REGISTRY: SetRegistry = {
@@ -171,6 +172,7 @@ const EMPTY_REGISTRY: SetRegistry = {
   fab: { sets: [] },
   digimon: { sets: [] },
   palworld: { sets: [] },
+  cyberpunk: { sets: [] },
 }
 
 const REGISTRY_DOC_PATH = ['registry', 'main'] as const

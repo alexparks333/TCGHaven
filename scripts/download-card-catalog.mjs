@@ -55,7 +55,7 @@ loadEnvLocal()
 // process.env.NEXT_PUBLIC_FIREBASE_* at module-load time (initializeApp() runs at import time),
 // so a static top-level `import` here would run before loadEnvLocal() ever executed.
 const { ensureSignedIn, recordCliSyncStatus, downloadPokemon, downloadPokemonJapanese, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG, downloadYugioh,
-  downloadSWU, downloadGundam, downloadFaB, downloadDigimon, downloadPalworld } =
+  downloadSWU, downloadGundam, downloadFaB, downloadDigimon, downloadPalworld, downloadCyberpunk } =
   await import('./lib/catalog-sync.mjs')
 
 const includeMtg = process.argv.includes('--include-mtg')
@@ -72,14 +72,15 @@ const JOBS = {
   // Yu-Gi-Oh! has its own daily job (.github/workflows/sync-yugioh.yml) — like MTG, only with --only yugioh
   yugioh: downloadYugioh,
   // The TCGplayer-sourced games share one daily job (.github/workflows/sync-tcgplayer-games.yml) —
-  // only with --only (e.g. --only swu,gundam,fab,digimon,palworld)
+  // only with --only (e.g. --only swu,gundam,fab,digimon,palworld,cyberpunk)
   swu: downloadSWU,
   gundam: downloadGundam,
   fab: downloadFaB,
   digimon: downloadDigimon,
   palworld: downloadPalworld,
+  cyberpunk: downloadCyberpunk,
 }
-const OWN_JOB = new Set(['yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld'])
+const OWN_JOB = new Set(['yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk'])
 const selected = Object.keys(JOBS).filter((g) => (only ? only.has(g) : !OWN_JOB.has(g) && (g !== 'mtg' || includeMtg)))
 
 console.log(`📦 Downloading card catalogs: ${selected.join(', ')}`)

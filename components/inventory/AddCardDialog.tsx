@@ -16,7 +16,7 @@ import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
 
 interface Props {
@@ -710,24 +710,9 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             )
           })()}
 
-          {/* No checkbox for Pokémon either: its printings come from the catalog (the pickers above,
-              or a backup-priced card's own "✦ Holo" search row). A saved card's isFoil is kept as is. */}
-          {form.game !== 'onepiece' && !hasPrintings(form.game) && (
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={form.isFoil}
-                onChange={(e) => setField('isFoil', e.target.checked)}
-                className="w-4 h-4 rounded accent-violet-500"
-              />
-              <span className="text-sm text-slate-300">
-                Foil / Holo variant
-                {marketPrices.foil > 0 && marketPrices.foil !== marketPrices.regular && (
-                  <span className="ml-1.5 text-slate-500">(foil: ${marketPrices.foil.toFixed(2)})</span>
-                )}
-              </span>
-            </label>
-          )}
+          {/* No Foil checkbox for any game (owner, 2026-11-10): a foil copy is picked from the search —
+              its own "✦ Foil" / "✦ Holo" row, or the version's own card (Hyperspace Foil, a parallel) —
+              and printing games use the pickers above. A saved card's isFoil is kept as is. */}
 
           {/* Nexus Night promo variant (Riftbound only) */}
           {form.game === 'riftbound' && (

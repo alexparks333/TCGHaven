@@ -20,7 +20,7 @@ log against.
 > block to `TCGPLAYER_GAMES` in `scripts/lib/tcgplayer-games.mjs` (category, name/number rules, set
 > types), add its id to `TCGPLAYER_SOURCED_GAMES` in `lib/types.ts`, copy one of the one-line
 > `app/api/prices/{game}` and `app/api/sync/{game}` routes, add it to the `--only` list in
-> `sync-tcgplayer-games.yml`, then do Phase 5's hand-written lists (grep `'palworld'` — every list
+> `sync-tcgplayer-games.yml`, then do Phase 5's hand-written lists (grep `'cyberpunk'` — every list
 > naming the last game added), the scanner's code pattern, and Phase 3's checks with
 > `npm run tcgplayer-games-report -- --only {game}`. See docs/games.md "TCGplayer-sourced games".
 

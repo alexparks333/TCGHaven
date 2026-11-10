@@ -120,7 +120,7 @@ TCGHaven/
 │   │   ├── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()
 │   │   ├── onepiece.ts            ← searchOnePieceCards(), getOnePieceSets() (registry-backed,
 │   │   │                             no live sets API — mirrors riftbound.ts's shape, §10)
-│   │   ├── tcgplayerGames.ts      ← the five TCGplayer-sourced games: sets (catalog_meta/{game}),
+│   │   ├── tcgplayerGames.ts      ← the TCGplayer-sourced games: sets (catalog_meta/{game}),
 │   │   │                             search, display name
 │   │   ├── tcgplayerGameRoutes.ts ← their shared price + sync handlers (app/api/prices|sync/{game})
 │   │   ├── yugioh.ts              ← searchYugiohCards(), getYugiohSets() (catalog_meta/yugioh,

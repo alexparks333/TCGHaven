@@ -39,7 +39,7 @@ export interface ScanCard {
 }
 
 export type ScanCatalogKey = 'pokemon' | 'pokemon-jp' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
-  | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld'
+  | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld' | 'cyberpunk'
 
 export interface ScanCatalog {
   key: ScanCatalogKey

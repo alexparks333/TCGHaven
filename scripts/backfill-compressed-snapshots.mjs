@@ -19,7 +19,7 @@ const { writeCompressedSnapshot, readCompressedSnapshot } = await import('./lib/
 const db = getFirestore(getApps()[0])
 await ensureSignedIn()
 
-for (const game of ['pokemon', 'pokemon-jp', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']) {
+for (const game of ['pokemon', 'pokemon-jp', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']) {
   const chunks = await getDocs(collection(db, 'catalog_snapshot', game, 'chunks'))
   const cards = chunks.docs.sort((x, y) => +x.id - +y.id).flatMap((d) => (d.data().cards ? JSON.parse(d.data().cards) : []))
   if (!cards.length) { console.log(`${game}: no snapshot, skipped`); continue }

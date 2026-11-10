@@ -1,5 +1,5 @@
 // Catalogs built straight from TCGplayer (tcgcsv) for the games that have no other source:
-// Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld. Pure — data in, catalog out,
+// Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld, Cyberpunk. Pure — data in, catalog out,
 // no network or Firestore. catalog-sync.mjs (planTcgplayerGame / downloadTcgplayerGame) fetches
 // and writes; scripts/tcgplayer-games-report.mjs checks; tests: `npm run test:tcgplayer-games`.
 // Design and decisions: docs/games.md ("TCGplayer-sourced games").
@@ -112,6 +112,23 @@ export const TCGPLAYER_GAMES = {
     ],
     fallbackType: 'booster',
     setTypeLabels: { booster: 'Booster Packs', starter: 'Trial Decks', promo: 'Promos & Specials' },
+  },
+  cyberpunk: {
+    label: 'Cyberpunk',
+    category: 92,
+    minGroups: 10,
+    priceModel: 'foil',
+    // The Kickstarter "Beta" printing and the shop "Retail" printing are separate TCGplayer sets
+    // (Beta numbers start with a B: "B098") — separate cards, told apart by set
+    keepInName: null,
+    number: (n) => n,
+    extras: { color: 'Color' },
+    setTypes: [
+      ['promo', /promo|pre-?release|box topper|open season|brawl|judge/i],
+      ['starter', /starter deck/i],
+    ],
+    fallbackType: 'booster',
+    setTypeLabels: { booster: 'Booster Sets', starter: 'Starter Decks', promo: 'Promos, Pre-Release & Events' },
   },
 }
 

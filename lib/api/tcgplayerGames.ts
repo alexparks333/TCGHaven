@@ -1,4 +1,4 @@
-// The TCGplayer-sourced games — Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld:
+// The TCGplayer-sourced games — Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld, Cyberpunk:
 // their catalogs (catalog/{game}, built by scripts/lib/tcgplayer-games.mjs) and set lists
 // (catalog_meta/{game}.sets, written by the sync). Docs: docs/games.md ("TCGplayer-sourced games").
 import { doc, getDoc } from 'firebase/firestore'

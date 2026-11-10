@@ -1,8 +1,8 @@
 # TCGHaven
 
 A collector app (web + iPhone) for tracking TCG cards across Pokémon (EN + Japanese), Lorcana,
-Riftbound, One Piece, Magic, Yu-Gi-Oh!, Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon and
-Palworld, plus a staff portal for the shared card catalog and Haven Badges.
+Riftbound, One Piece, Magic, Yu-Gi-Oh!, Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon,
+Palworld and Cyberpunk, plus a staff portal for the shared card catalog and Haven Badges.
 Next.js 14 App Router · TypeScript · Tailwind v3 · Firebase Auth + Firestore + Storage · Zustand ·
 three.js. Deployed on Vercel.
 
@@ -107,7 +107,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
 33. Shared docs (registry, badge catalog, Text Keys) are saved as a change on the latest copy — `updateSetRegistry()`, `saveBadgeCatalog(db, base, next)` — never `setDoc` of a copy.
 34. Pokémon EN: TCGplayer decides which cards exist, GitHub is the check; a card's id never changes (`pokemon-tcgplayer.mjs`, run `npm run pokemon-source-report` before touching matching).
 36. Yu-Gi-Oh!: every card = one TCGplayer product (`tcg-{productId}`); editions are `variantPrices`; rarity versions are separate cards (`yugioh-tcgplayer.mjs`, `npm run yugioh-source-report`).
-37. Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld: one shared TCGplayer engine, a settings block per game (`tcgplayer-games.mjs` `TCGPLAYER_GAMES`, `npm run tcgplayer-games-report`) — add the next TCGplayer-only game there, don't copy.
+37. Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld / Cyberpunk: one shared TCGplayer engine, a settings block per game (`tcgplayer-games.mjs` `TCGPLAYER_GAMES`, `npm run tcgplayer-games-report`) — add the next TCGplayer-only game there, don't copy.
 35. One Piece: every card = one TCGplayer product (`tcgProductId`); existing cards never change what they show (`onepiece-tcgplayer.mjs`, `npm run onepiece-source-report`).
 
 ## Badges & the Relief Studio — the essentials

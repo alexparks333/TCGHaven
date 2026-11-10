@@ -83,7 +83,7 @@ interface LookupCandidate {
   note?: string
 }
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
 // ── Sync Card Data ──────────────────────────────────────────────────────────
 // Runs directly against Firestore via app/api/sync/{game}/route.ts — one plain, synchronous
@@ -125,6 +125,7 @@ const SYNC_GAMES: { game: SyncJob; label: string }[] = [
   { game: 'fab', label: 'Flesh and Blood' },
   { game: 'digimon', label: 'Digimon' },
   { game: 'palworld', label: 'Palworld' },
+  { game: 'cyberpunk', label: 'Cyberpunk' },
 ]
 
 // Relative "how long ago" for a sync_status timestamp — short-form since it sits inline next to
@@ -144,7 +145,7 @@ export function SyncPanel() {
   const isAdmin = !!useStaff().member
   const [state, setState] = useState<Record<SyncJob, GameSyncState>>({
     pokemon: { status: 'idle' }, 'pokemon-jp': { status: 'idle' }, lorcana: { status: 'idle' }, riftbound: { status: 'idle' }, onepiece: { status: 'idle' }, mtg: { status: 'idle' }, yugioh: { status: 'idle' },
-    swu: { status: 'idle' }, gundam: { status: 'idle' }, fab: { status: 'idle' }, digimon: { status: 'idle' }, palworld: { status: 'idle' },
+    swu: { status: 'idle' }, gundam: { status: 'idle' }, fab: { status: 'idle' }, digimon: { status: 'idle' }, palworld: { status: 'idle' }, cyberpunk: { status: 'idle' },
   })
   // Last-known status per game, including from runs this session never triggered — the
   // automatic twice-daily cron, or an admin syncing from a different browser/device. Without this, a
@@ -1098,7 +1099,7 @@ function SetInfoBar({
 // price is whatever was typed in.
 const PRICE_SOURCE: Record<Game, string> = {
   pokemon: 'TCGplayer', lorcana: 'lorcast', riftbound: 'TCGplayer', onepiece: 'TCGplayer', mtg: 'Scryfall', yugioh: 'TCGplayer',
-  swu: 'TCGplayer', gundam: 'TCGplayer', fab: 'TCGplayer', digimon: 'TCGplayer', palworld: 'TCGplayer',
+  swu: 'TCGplayer', gundam: 'TCGplayer', fab: 'TCGplayer', digimon: 'TCGplayer', palworld: 'TCGplayer', cyberpunk: 'TCGplayer',
 }
 
 function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {

@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 // Structured patch of a single set entry — used by the Settings "Needs Review" editor.
 // Only ever reads/writes the registry/main Firestore doc, never TypeScript source.
-const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
 export async function PUT(request: Request) {
   const unauthorized = await verifyAdminRequest(request)

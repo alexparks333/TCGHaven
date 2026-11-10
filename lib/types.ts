@@ -1,5 +1,5 @@
 export type Game = 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
-  | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld'   // TCGplayer-sourced (scripts/lib/tcgplayer-games.mjs)
+  | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld' | 'cyberpunk'   // TCGplayer-sourced (scripts/lib/tcgplayer-games.mjs)
 
 export type Condition = 'mint' | 'near_mint' | 'lightly_played' | 'moderately_played' | 'heavily_played'
 
@@ -91,6 +91,7 @@ export const GAME_LABELS: Record<Game, string> = {
   fab: 'Flesh and Blood',
   digimon: 'Digimon',
   palworld: 'Palworld',
+  cyberpunk: 'Cyberpunk',
 }
 
 export const GAME_COLORS: Record<Game, string> = {
@@ -106,6 +107,7 @@ export const GAME_COLORS: Record<Game, string> = {
   fab: '#7a5a2b',
   digimon: '#e07b1a',
   palworld: '#2a9d8f',
+  cyberpunk: '#b03a7a',
 }
 
 /** Games whose cards come in priced printings — an edition and/or finish of the one card, kept in
@@ -116,7 +118,7 @@ export const hasPrintings = (game: Game): boolean => PRINTING_GAMES.includes(gam
 
 /** Games whose whole catalog comes from TCGplayer through one shared engine
  *  (scripts/lib/tcgplayer-games.mjs): set list in catalog_meta/{game}, one product = one card. */
-export const TCGPLAYER_SOURCED_GAMES = ['swu', 'gundam', 'fab', 'digimon', 'palworld'] as const
+export const TCGPLAYER_SOURCED_GAMES = ['swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk'] as const
 export type TcgplayerSourcedGame = typeof TCGPLAYER_SOURCED_GAMES[number]
 export const isTcgplayerSourced = (game: string): game is TcgplayerSourcedGame =>
   (TCGPLAYER_SOURCED_GAMES as readonly string[]).includes(game)

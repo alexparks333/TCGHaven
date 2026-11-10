@@ -284,6 +284,9 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   'Special Rare': 190,
   // Palworld
   U: 200, RR: 201, OSR: 202, TSR: 203, SP: 204, TSP: 205, SSP: 206, SSS: 207, TD: 208, TDR: 209,
+  // Cyberpunk (C / UC / R shared with One Piece above): New Rare, Epic, Legend, Secret and their
+  // "I" (alternate-art) versions
+  NR: 210, E: 211, IO: 212, IL: 213, S: 214, IS: 215,
 }
 
 /** Sorts catalog cards by collector number, then rarity, matching Cardex's display order. */

@@ -2178,7 +2178,7 @@ export async function downloadYugioh() {
   return { ...result, sets: allSets.length, sourceReport: { at: new Date().toISOString(), newCards: plan.report.newCards, unpriced: plan.report.unpriced } }
 }
 
-// ── TCGplayer-sourced games: Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld ──
+// ── TCGplayer-sourced games: Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld, Cyberpunk ──
 // One engine, one settings block per game (tcgplayer-games.mjs — tests: npm run test:tcgplayer-games;
 // checks: npm run tcgplayer-games-report). Synced daily by .github/workflows/sync-tcgplayer-games.yml.
 
@@ -2243,4 +2243,5 @@ export const downloadGundam = () => downloadTcgplayerGame('gundam')
 export const downloadFaB = () => downloadTcgplayerGame('fab')
 export const downloadDigimon = () => downloadTcgplayerGame('digimon')
 export const downloadPalworld = () => downloadTcgplayerGame('palworld')
+export const downloadCyberpunk = () => downloadTcgplayerGame('cyberpunk')
 

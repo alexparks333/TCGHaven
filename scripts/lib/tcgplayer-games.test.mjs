@@ -6,7 +6,7 @@ import {
   isFoilSubtype, priceFieldsOf, productsFromRows, isSingle, cardFromProduct, mergePrices, buildTcgplayerCatalog,
 } from './tcgplayer-games.mjs'
 
-assert.deepEqual(TCGPLAYER_GAME_IDS, ['swu', 'gundam', 'fab', 'digimon', 'palworld'])
+assert.deepEqual(TCGPLAYER_GAME_IDS, ['swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk'])
 for (const cfg of Object.values(TCGPLAYER_GAMES)) {
   for (const t of [...cfg.setTypes.map(([t]) => t), cfg.fallbackType]) assert.ok(cfg.setTypeLabels[t], `${cfg.label}: label for ${t}`)
 }
@@ -63,6 +63,12 @@ assert.equal(setTypeOf('digimon', 'Limited Card Pack -Final Crest-'), 'special')
 assert.equal(setTypeOf('digimon', 'Ignition of X'), 'booster')
 assert.equal(setTypeOf('palworld', 'TD01: Dawn of Palpagos Red•Blue'), 'starter')
 assert.equal(setTypeOf('palworld', 'BP02: Legends Awaken'), 'booster')
+assert.equal(setTypeOf('cyberpunk', 'Welcome to Night City - Beta'), 'booster')
+assert.equal(setTypeOf('cyberpunk', 'The Heist - Retail Starter Deck'), 'starter')
+assert.equal(setTypeOf('cyberpunk', 'Box Toppers - Retail'), 'promo')
+assert.equal(setTypeOf('cyberpunk', 'Edgerunner Open Season 1'), 'promo')
+assert.deepEqual(splitName('cyberpunk', 'Jackie Welles - Mama\'s Favorite (ILegend)'), { name: 'Jackie Welles - Mama\'s Favorite', variant: 'ILegend' })
+assert.deepEqual(splitName('cyberpunk', "(Don't Fear) The Reaper"), { name: "(Don't Fear) The Reaper", variant: '' }, 'a leading bracket is the name')
 
 // ── Prices ──
 assert.equal(printingKeyOf('1st Edition Rainbow Foil'), '1st:rainbow')

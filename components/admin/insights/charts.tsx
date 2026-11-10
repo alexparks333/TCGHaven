@@ -14,9 +14,9 @@ import { cn } from '@/lib/utils'
 // (#efe4cc): lightness, chroma, colour-blind and normal-vision separation, 3:1 contrast — all pass.
 export const GAME_CHART: Record<string, string> = {
   pokemon: '#a87600', lorcana: '#8a4fb0', riftbound: '#c94a2c', onepiece: '#16876a', mtg: '#3d6db8', yugioh: '#5b4a8a',
-  swu: '#2f4f6f', gundam: '#b0283c', fab: '#7a5a2b', digimon: '#e07b1a', palworld: '#2a9d8f',
+  swu: '#2f4f6f', gundam: '#b0283c', fab: '#7a5a2b', digimon: '#e07b1a', palworld: '#2a9d8f', cyberpunk: '#b03a7a',
 }
-export const GAME_ORDER = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+export const GAME_ORDER = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 export const ONE = '#7a5230'       // single-series colour (walnut)
 const INK = '#2b2014'
 const MUTED = '#7a6a55'

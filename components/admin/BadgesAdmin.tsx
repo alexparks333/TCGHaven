@@ -26,7 +26,7 @@ const ReliefStudio = dynamic(() => import('./ReliefStudio'), { ssr: false })
 // Firestore badge_catalog/main (one doc — lib/badgeCatalog.ts); changes go live for everyone
 // immediately. Files (pin art, 3D models, normal maps) upload to Storage under badges/{id}/.
 
-const GAMES: Game[] = ['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+const GAMES: Game[] = ['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
 export function BadgesAdmin() {
   const { catalog, loaded } = useBadgeCatalog()

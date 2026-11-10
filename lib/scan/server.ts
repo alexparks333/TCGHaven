@@ -66,6 +66,7 @@ const GAME_CATALOGS: Record<Game, ScanCatalogKey[]> = {
   fab: ['fab'],
   digimon: ['digimon'],
   palworld: ['palworld'],
+  cyberpunk: ['cyberpunk'],
 }
 
 type RawCard = ScanCard & { hidden?: boolean; imageUrl?: string; marketPrice?: number; marketPriceFoil?: number; variantPrices?: Record<string, number> }

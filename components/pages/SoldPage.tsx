@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
 type TimeFilter = 'today' | 'week' | 'month' | 'year' | 'all'
 

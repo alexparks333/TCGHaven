@@ -1028,11 +1028,12 @@ printings — not in TCGplayer's data; YGOPRODeck has it) and TCGplayer's card t
 
 ---
 
-## TCGplayer-sourced games — Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld
+## TCGplayer-sourced games — Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld, Cyberpunk
 
-Added 2026-11-10 (owner: "Star Wars Unlimited… Gundam, flesh and blood, Digimon, Palworld").
+Added 2026-11-10 (owner: "Star Wars Unlimited… Gundam, flesh and blood, Digimon, Palworld"; then
+"add cyberpunk in there as well").
 Unlike the earlier games, none has a free card database of its own, so **TCGplayer (tcgcsv) is the
-whole source** — and since the five share that shape, they share **one engine with a settings block
+whole source** — and since the six share that shape, they share **one engine with a settings block
 per game**: `scripts/lib/tcgplayer-games.mjs` (`TCGPLAYER_GAMES`; tests: `npm run
 test:tcgplayer-games`; checks: `npm run tcgplayer-games-report -- [--only fab] [--sample 30]`).
 Yu-Gi-Oh! has the same shape but its own module (it came first and has extras — YGOPRODeck check,
@@ -1045,8 +1046,9 @@ Speed Duel exclusion); new TCGplayer-only games should be added to `TCGPLAYER_GA
 | `fab` | Flesh and Blood | 62 | 10,955 in 110 sets | **printings**: 1st Edition / Unlimited × Normal / Rainbow Foil / Cold Foil |
 | `digimon` | Digimon | 63 | 9,516 in 103 sets | Normal / Foil |
 | `palworld` | Palworld | 91 | 647 in 7 sets | Normal / Foil |
+| `cyberpunk` | Cyberpunk | 92 | 504 in 14 sets | Normal / Foil — the Kickstarter **Beta** and shop **Retail** printings are separate TCGplayer sets, so separate cards (Beta numbers start with B: "B098") |
 
-### The rules (all five)
+### The rules (all six)
 
 - **One TCGplayer product = one card**, id `tcg-{productId}`, set once. Versions TCGplayer sells as
   their own product — SWU Hyperspace / Showcase / Prestige / prize copies, Gundam parallels (LR+, R+),
@@ -1081,12 +1083,12 @@ Speed Duel exclusion); new TCGplayer-only games should be added to `TCGPLAYER_GA
 (sets, search, display name); `lib/api/tcgplayerGameRoutes.ts` (shared price + sync handlers behind
 `app/api/prices/{game}` and `app/api/sync/{game}`); the Cardex's `META_SET_GAMES` (Yu-Gi-Oh! + these)
 build groups from set types. Colours: SWU `#2f4f6f`, Gundam `#b0283c`, FaB `#7a5a2b`, Digimon
-`#e07b1a`, Palworld `#2a9d8f`.
+`#e07b1a`, Palworld `#2a9d8f`, Cyberpunk `#b03a7a`.
 
 ### Syncing
 
 One daily job, **`.github/workflows/sync-tcgplayer-games.yml` at 21:45 UTC**
-(`npm run download-cards -- --only swu,gundam,fab,digimon,palworld`); each game also has a staff
+(`npm run download-cards -- --only swu,gundam,fab,digimon,palworld,cyberpunk`); each game also has a staff
 portal Sync button (FaB and Digimon, ~110 sets each, may outrun the function limit — the CLI is the
 reliable path). A sync refuses a partial download (fewer sets than `minGroups`, or >10% of sets
 failing). New sets need no code change.
@@ -1096,7 +1098,7 @@ failing). New sets need no code change.
 Gundam "GD01-118", Digimon "BT26-066" / starter "ST1-01", Palworld "EBP01-001" (an "…SP" version is
 found by its base code) are read anywhere on the card; Flesh and Blood "WTR040" (either side of a
 double-sided number); Star Wars: Unlimited needs the set code and number together ("LAW" +
-"017/264"). Versions sharing a code tie — the picture or the person picks. No picture-model
+"017/264"); Cyberpunk by name (its bare numbers are in every set). Versions sharing a code tie — the picture or the person picks. No picture-model
 training on these games yet.
 
 ### Known TCGplayer data quirks (2026-11-10)
