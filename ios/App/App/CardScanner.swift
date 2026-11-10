@@ -164,6 +164,13 @@ final class ScanItem {
     var fromSwap = false             // scanned without the last card leaving: dropped if it's the same card
     var slab: SlabGrade?             // a graded slab: drawn in its slab, grade showing
     var printing: String?            // the finish picked in the card sheet (reset when the card changes)
+
+    /// The card's current finish: the one picked, else the card's first (default) printing
+    var currentPrinting: Printing? {
+        guard options.indices.contains(choice) else { return nil }
+        let ps = options[choice].printings
+        return ps.first { $0.key == printing } ?? ps.first
+    }
     var photo: UIImage?              // the scanned card, bigger — "Your scan" in the card sheet
     var signature: PictureMatcher.Signature?
     var status = "matching"          // matching | matched | pick | none | error
@@ -1622,7 +1629,11 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         let item = items[indexPath.item]
         let o = item.options.indices.contains(item.choice) ? item.options[item.choice] : nil
-        let menu = UIAlertController(title: o?.title ?? "Scanned card", message: o?.subtitle, preferredStyle: .actionSheet)
+        var lines = [o?.subtitle].compactMap { $0 }
+        if let p = item.currentPrinting, (o?.printings.count ?? 0) > 1 {
+            lines.append("Finish: \(p.label)\(p.price.isEmpty ? "" : " · \(p.price)")\(item.printing == nil ? " (default — change it in View Card)" : "")")
+        }
+        let menu = UIAlertController(title: o?.title ?? "Scanned card", message: lines.joined(separator: "\n"), preferredStyle: .actionSheet)
         menu.addAction(UIAlertAction(title: "View Card", style: .default) { _ in self.openSheet(for: item) })
         menu.addAction(UIAlertAction(title: "Remove Card", style: .destructive) { _ in self.remove(item) })
         menu.addAction(UIAlertAction(title: "Cancel", style: .cancel))
@@ -2604,6 +2615,8 @@ final class TrayCell: UICollectionViewCell {
         name.numberOfLines = 2
         price.font = .systemFont(ofSize: 11, weight: .regular)
         price.textColor = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
+        price.adjustsFontSizeToFitWidth = true
+        price.minimumScaleFactor = 0.75
         badge.font = .systemFont(ofSize: 13, weight: .bold)
         badge.textAlignment = .center
         badge.layer.cornerRadius = 11
@@ -2630,6 +2643,7 @@ final class TrayCell: UICollectionViewCell {
             name.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             price.topAnchor.constraint(equalTo: name.bottomAnchor, constant: 1),
             price.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            price.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             badge.bottomAnchor.constraint(equalTo: image.bottomAnchor, constant: -4),
             badge.trailingAnchor.constraint(equalTo: image.trailingAnchor, constant: -4),
             badge.widthAnchor.constraint(equalToConstant: 22),
@@ -2659,7 +2673,12 @@ final class TrayCell: UICollectionViewCell {
             slabOverlay.isHidden = true
         }
         name.text = option?.title ?? (item.status == "matching" ? "Matching…" : "Not found")
-        price.text = option?.price
+        // The finish shown with its own price, when the card comes in more than one
+        if let p = item.currentPrinting, (option?.printings.count ?? 0) > 1 {
+            price.text = [p.label, p.price].filter { !$0.isEmpty }.joined(separator: " · ")
+        } else {
+            price.text = option?.price
+        }
         item.status == "matching" ? spinner.startAnimating() : spinner.stopAnimating()
         switch item.status {
         case "matched":
