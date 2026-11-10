@@ -46,6 +46,9 @@ TCGHaven/
 │       ├── onepiece-tcgplayer.mjs ← One Piece: every card = a TCGplayer product (`tcgProductId`),
 │       │                             apitcg secondary; existing cards never change (games.md One
 │       │                             Piece) — tests: `npm run test:onepiece-source`
+│       ├── tcgplayer-games.mjs    ← Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon /
+│       │                             Palworld: one engine, a settings block per game (games.md
+│       │                             "TCGplayer-sourced games") — tests: `npm run test:tcgplayer-games`
 │       ├── yugioh-tcgplayer.mjs   ← Yu-Gi-Oh!: every English single = a TCGplayer product
 │       │                             (`tcg-{productId}`), editions in variantPrices, set types
 │       │                             (games.md Yu-Gi-Oh!) — tests: `npm run test:yugioh-source`
@@ -117,6 +120,9 @@ TCGHaven/
 │   │   ├── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()
 │   │   ├── onepiece.ts            ← searchOnePieceCards(), getOnePieceSets() (registry-backed,
 │   │   │                             no live sets API — mirrors riftbound.ts's shape, §10)
+│   │   ├── tcgplayerGames.ts      ← the five TCGplayer-sourced games: sets (catalog_meta/{game}),
+│   │   │                             search, display name
+│   │   ├── tcgplayerGameRoutes.ts ← their shared price + sync handlers (app/api/prices|sync/{game})
 │   │   ├── yugioh.ts              ← searchYugiohCards(), getYugiohSets() (catalog_meta/yugioh,
 │   │   │                             written by the sync), yugiohDisplayName()
 │   │   └── mtg.ts                 ← searchMtgCards(), getMtgSets() (live api.scryfall.com/sets +
@@ -187,6 +193,7 @@ TCGHaven/
 │       │                             yet — manual-click-only until Firestore write-quota impact
 │       │                             is confirmed OK (~99k writes on first run). See "MTG
 │       │                             Integration.md" at the repo root.
+│       │   ├── {swu,gundam,fab,digimon,palworld}/route.ts ← one-liners → lib/api/tcgplayerGameRoutes.ts
 │       │   └── yugioh/{route.ts,sync.ts} ← syncs Yu-Gi-Oh! (may outrun the function limit —
 │       │                             the daily job .github/workflows/sync-yugioh.yml runs the CLI)
 │       ├── cron/
@@ -201,6 +208,7 @@ TCGHaven/
 │           ├── riftbound/route.ts ← Batch Riftbound price lookup — catalog-only
 │           ├── onepiece/route.ts  ← Batch One Piece price lookup — catalog-only, no isFoil
 │           │                         branching (no foil/non-foil duality — §10)
+│           ├── {swu,gundam,fab,digimon,palworld}/route.ts ← one-liners → tcgplayerGameRoutes.ts
 │           ├── yugioh/route.ts    ← Batch Yu-Gi-Oh! price lookup — catalog-only, by edition
 │           └── mtg/route.ts       ← Batch MTG price lookup — catalog-only, isFoil-branching
 │                                     (same shape as lorcana/route.ts — §11)

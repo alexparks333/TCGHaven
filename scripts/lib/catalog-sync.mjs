@@ -33,6 +33,7 @@ import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
 import { buildOnePieceCatalog, productsFromRows as opProductsFromRows } from './onepiece-tcgplayer.mjs'
 import { YUGIOH_CATEGORY, buildYugiohCatalog, productsFromRows as ygoProductsFromRows } from './yugioh-tcgplayer.mjs'
+import { TCGPLAYER_GAMES, buildTcgplayerCatalog, productsFromRows as tcgGameProductsFromRows } from './tcgplayer-games.mjs'
 import { writeCompressedSnapshot } from './snapshot-codec.mjs'
 import { JP_CATEGORY, JP_CATALOG, isSingleRow, jpCard, jpSetMeta, placeholderDates } from './pokemon-jp.mjs'
 
@@ -2176,4 +2177,70 @@ export async function downloadYugioh() {
   await setDoc(metaRef, { sets: allSets }, { merge: true })
   return { ...result, sets: allSets.length, sourceReport: { at: new Date().toISOString(), newCards: plan.report.newCards, unpriced: plan.report.unpriced } }
 }
+
+// ── TCGplayer-sourced games: Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld ──
+// One engine, one settings block per game (tcgplayer-games.mjs — tests: npm run test:tcgplayer-games;
+// checks: npm run tcgplayer-games-report). Synced daily by .github/workflows/sync-tcgplayer-games.yml.
+
+/** Every set of one TCGplayer category, as products — refuses a partial download */
+async function fetchTcgplayerCategory(game) {
+  const cfg = TCGPLAYER_GAMES[game]
+  const headers = { 'User-Agent': 'TCGHaven-catalog-sync/1.0', Accept: 'text/csv,application/json' }
+  const groups = (await fetchJSON(`https://tcgcsv.com/tcgplayer/${cfg.category}/groups`, headers)).results ?? []
+  if (groups.length < cfg.minGroups) throw new Error(`TCGplayer returned ${groups.length} ${cfg.label} sets — not syncing against a partial list`)
+  const productsByGroup = new Map()
+  const failedGroupIds = new Set()
+  for (let i = 0; i < groups.length; i += 12) {
+    await Promise.all(groups.slice(i, i + 12).map(async (g) => {
+      let csv = null
+      for (let attempt = 0; attempt < 3 && csv === null; attempt++) {
+        try { csv = await fetchText(`https://tcgcsv.com/tcgplayer/${cfg.category}/${g.groupId}/ProductsAndPrices.csv`, headers) } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+        }
+      }
+      if (csv === null) { failedGroupIds.add(g.groupId); return }
+      productsByGroup.set(g.groupId, tcgGameProductsFromRows(parseCsv(csv)))
+    }))
+    if (process.stdout.isTTY) process.stdout.write(`   TCGplayer: ${Math.min(i + 12, groups.length)}/${groups.length} sets...\r`)
+  }
+  if (failedGroupIds.size > groups.length * 0.1) {
+    throw new Error(`${failedGroupIds.size}/${groups.length} TCGplayer ${cfg.label} sets failed to download — not syncing a partial catalog`)
+  }
+  return { groups, productsByGroup, failedGroupIds }
+}
+
+/** What a sync of one TCGplayer-sourced game would write, without writing (the report uses it too) */
+export async function planTcgplayerGame(game) {
+  const [tcg, snap] = await Promise.all([fetchTcgplayerCategory(game), getDocs(collection(db, 'catalog', game, 'cards'))])
+  const existing = new Map(snap.docs.map((d) => [d.id, d.data()]))
+  const built = buildTcgplayerCatalog(game, { groups: tcg.groups, productsByGroup: tcg.productsByGroup, existing, failedGroupIds: tcg.failedGroupIds })
+  const r = built.report
+  console.log(`   TCGplayer: ${tcg.groups.length} sets${tcg.failedGroupIds.size ? ` (${tcg.failedGroupIds.size} failed)` : ''} · ${built.cards.length} cards in ${built.sets.length} sets · ${r.newCards} new · ${r.existingCards} existing (kept as they are, prices refreshed) · ${r.unpriced} without a price yet · ${r.noPhoto} without a photo yet`)
+  return { ...built, existing, tcg }
+}
+
+/** Sync one TCGplayer-sourced game: cards, price history, and its set list (catalog_meta/{game}) */
+export async function downloadTcgplayerGame(game) {
+  const cfg = TCGPLAYER_GAMES[game]
+  console.log(`\n🃏 ${cfg.label}...`)
+  const plan = await planTcgplayerGame(game)
+  const cards = [...plan.cards].sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
+  // No per-sync image HEAD checks — a card without a photo is stored with none (imageCount 0)
+  const result = await syncToFirestore(game, cards, { checkImages: false })
+  // The set list the Cardex and Add Card read (lib/api/tcgplayerGames.ts) — a set whose download
+  // failed this run keeps its entry from last time
+  const metaRef = doc(db, 'catalog_meta', game)
+  const previous = (await getDoc(metaRef)).data()?.sets ?? []
+  const fresh = new Set(plan.sets.map((s) => s.id))
+  const kept = previous.filter((s) => !fresh.has(s.id) && plan.tcg.failedGroupIds.has(s.tcgplayerGroupId))
+  const allSets = [...plan.sets, ...kept].sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.name.localeCompare(b.name))
+  await setDoc(metaRef, { sets: allSets }, { merge: true })
+  return { ...result, sets: allSets.length, sourceReport: { at: new Date().toISOString(), newCards: plan.report.newCards, unpriced: plan.report.unpriced } }
+}
+
+export const downloadSWU = () => downloadTcgplayerGame('swu')
+export const downloadGundam = () => downloadTcgplayerGame('gundam')
+export const downloadFaB = () => downloadTcgplayerGame('fab')
+export const downloadDigimon = () => downloadTcgplayerGame('digimon')
+export const downloadPalworld = () => downloadTcgplayerGame('palworld')
 

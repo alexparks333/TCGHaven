@@ -1,5 +1,5 @@
 import type { CatalogKey, Game, Language } from '../types'
-import { catalogKeyFor } from '../types'
+import { catalogKeyFor, hasPrintings, isTcgplayerSourced } from '../types'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { searchPokemonCards, getPokemonSets, getPokemonCardMarketPrice, isPokemonSetsCacheReliable } from './pokemon'
@@ -8,6 +8,7 @@ import { searchRiftboundCards, getRiftboundSets } from './riftbound'
 import { searchOnePieceCards, getOnePieceSets } from './onepiece'
 import { searchMtgCards, getMtgSets, isMtgSetsCacheReliable } from './mtg'
 import { searchYugiohCards, getYugiohSets, yugiohDisplayName } from './yugioh'
+import { searchTcgplayerGameCards, getTcgplayerGameSets, tcgplayerGameDisplayName } from './tcgplayerGames'
 import { loadSetRegistry } from './registry'
 import { riftboundDisplayNumber, riftboundVariantFlags } from '../utils'
 import { parseQuery, buildSearchIndex, type SearchableCard } from './cardSearch'
@@ -311,6 +312,45 @@ async function searchCardsUncapped(game: Game, query: string, onlyId?: string, l
     }))
   }
 
+  if (isTcgplayerSourced(game)) {
+    const cards = await searchTcgplayerGameCards(game, query, onlyId)
+    const results: CardSearchResult[] = []
+    for (const c of cards) {
+      const base = {
+        id: c.id,
+        set: c.set,
+        setName: c.setName,
+        number: c.number,
+        imageUrl: c.imageUrl ?? '',
+        game,
+        rarity: c.rarity || undefined,
+      }
+      const name = tcgplayerGameDisplayName(c)
+      // Flesh and Blood: one row; its editions × finishes (1st Edition / Unlimited × Normal /
+      // Rainbow Foil / Cold Foil) are printings picked in Add Card, like a Yu-Gi-Oh! card's
+      if (hasPrintings(game)) {
+        results.push({
+          ...base, name, marketPrice: c.marketPrice ?? 0, marketPriceFoil: c.marketPriceFoil ?? 0, lowPriceNM: c.lowPriceNM ?? 0, isFoil: false,
+          ...(c.variantPrices && Object.keys(c.variantPrices).length ? { variantPrices: c.variantPrices } : {}),
+        })
+        continue
+      }
+      // The others: Normal / Foil, like Magic. Most foil versions are their own TCGplayer product
+      // (and card) with only a foil price — one foil row; a card priced both ways gets both rows.
+      const regular = c.marketPrice ?? 0
+      const foil = c.marketPriceFoil ?? 0
+      if (regular === 0 && foil > 0) {
+        results.push({ ...base, name, marketPrice: foil, marketPriceFoil: foil, lowPriceNM: c.lowPriceNMFoil ?? 0, isFoil: true })
+      } else {
+        results.push({ ...base, name, marketPrice: regular, marketPriceFoil: foil, lowPriceNM: c.lowPriceNM ?? 0, lowPriceNMFoil: c.lowPriceNMFoil ?? 0, isFoil: false })
+        if (foil > 0 && foil !== regular) {
+          results.push({ ...base, name: `${name} ✦ Foil`, marketPrice: foil, marketPriceFoil: foil, lowPriceNM: c.lowPriceNMFoil ?? 0, lowPriceNMFoil: c.lowPriceNMFoil ?? 0, isFoil: true })
+        }
+      }
+    }
+    return results
+  }
+
   return []
 }
 
@@ -406,6 +446,16 @@ export async function getSetsForGame(game: Game, language?: Language): Promise<S
     const custom = (await loadSetRegistry().catch(() => null))?.yugioh?.sets ?? []
     sets = [
       ...(await getYugiohSets()).map((s) => ({ code: s.code, name: s.name, releaseDate: s.releaseDate, cardCount: s.cardCount, setType: s.setType })),
+      ...custom.map((s) => ({ code: s.code ?? '', name: s.setName, releaseDate: s.releaseDate ?? '', isCustom: true })),
+    ]
+  }
+
+  if (isTcgplayerSourced(game)) {
+    // The set list the sync writes (catalog_meta/{game}.sets) — newest first, with each set's
+    // Cardex group; custom sets made with "New Set" come from the registry
+    const custom = (await loadSetRegistry().catch(() => null))?.[game]?.sets ?? []
+    sets = [
+      ...(await getTcgplayerGameSets(game)).map((s) => ({ code: s.code, name: s.name, releaseDate: s.releaseDate, cardCount: s.cardCount, setType: s.setType })),
       ...custom.map((s) => ({ code: s.code ?? '', name: s.setName, releaseDate: s.releaseDate ?? '', isCustom: true })),
     ]
   }

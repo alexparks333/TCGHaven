@@ -67,6 +67,9 @@ tray: ✓ added, ? pick one, ! not found               ◀──  the answer
 | Riftbound | "OGN • 048/298" | Metal / Judge / Nexus reprints print the original code; "★" picks Signature |
 | Magic | "BLB • EN" + "0280" | Stamped promos (`pmh3` 222s) are offered as close seconds; old cards without a code go by name |
 | Yu-Gi-Oh! | "MAMS-EN001" (under the art, right) + name on top | Code read anywhere, O as 0; rarity versions share a code and tie on text — the picture or the person picks; 1st / Unlimited / Limited offered as the Finish row |
+| Gundam / Digimon / Palworld | "GD01-118" / "BT26-066", "ST1-01" / "EBP01-001" | Read anywhere; parallels and alternate arts tie on text — the picture or the person picks |
+| Flesh and Blood | "WTR040" + name on top | Either side of a double-sided number; Rainbow / Cold Foil and 1st Edition offered as the Finish row |
+| Star Wars: Unlimited | "LAW" + "017/264" | Set code and number together (a number alone is in every set) |
 
 Things the camera can't see aren't held against a card. A League stamp, "(Signature)" or
 "[4th Place]" isn't printed as words, so stamped copies tie with the plain card on text. The

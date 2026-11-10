@@ -271,6 +271,19 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   'Duel Terminal Technology Common': 145, 'Duel Terminal Technology Ultra Rare': 146, 'Emblazoned Ultra Rare': 147,
   'Emblazoned Secret Rare': 148, 'Ultra Pharaoh’s Rare': 149, 'Secret Pharaoh’s Rare': 150, 'Grand Master Rare': 151,
   '10000 Secret Rare': 152,
+  // The TCGplayer-sourced games (2026-11-10), roughly by how rare each is to pull. Names shared
+  // with the games above (Common, Rare, Legendary, Promo, Super Rare, Secret Rare, C/R/SR…) keep
+  // their place there.
+  // Star Wars: Unlimited
+  Special: 160,
+  // Gundam: a "+" is that rarity's parallel
+  'C+': 170, 'C++': 171, 'U+': 172, 'R+': 173, 'Legend Rare': 174, 'LR+': 175, 'LR++': 176,
+  // Flesh and Blood
+  Token: 180, Basic: 181, Majestic: 182, Marvel: 183, Fabled: 184, Gold: 185, 'Pirate Booty': 186,
+  // Digimon
+  'Special Rare': 190,
+  // Palworld
+  U: 200, RR: 201, OSR: 202, TSR: 203, SP: 204, TSP: 205, SSP: 206, SSS: 207, TD: 208, TDR: 209,
 }
 
 /** Sorts catalog cards by collector number, then rarity, matching Cardex's display order. */

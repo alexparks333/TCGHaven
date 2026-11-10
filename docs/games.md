@@ -1025,3 +1025,84 @@ printings — not in TCGplayer's data; YGOPRODeck has it) and TCGplayer's card t
 - **TCGplayer sometimes types a letter O for a zero** in a number ("LAVD-ENO09" — 51 cards). Kept as
   TCGplayer has it; search and the scanner compare with O as 0 (`ygoKey()`).
 - `GAME_TAB_LABELS` / `GAME_LABELS`: "Yu-Gi-Oh!"; colour `#5b4a8a`.
+
+---
+
+## TCGplayer-sourced games — Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld
+
+Added 2026-11-10 (owner: "Star Wars Unlimited… Gundam, flesh and blood, Digimon, Palworld").
+Unlike the earlier games, none has a free card database of its own, so **TCGplayer (tcgcsv) is the
+whole source** — and since the five share that shape, they share **one engine with a settings block
+per game**: `scripts/lib/tcgplayer-games.mjs` (`TCGPLAYER_GAMES`; tests: `npm run
+test:tcgplayer-games`; checks: `npm run tcgplayer-games-report -- [--only fab] [--sample 30]`).
+Yu-Gi-Oh! has the same shape but its own module (it came first and has extras — YGOPRODeck check,
+Speed Duel exclusion); new TCGplayer-only games should be added to `TCGPLAYER_GAMES`, not copied.
+
+| id | Game | tcgcsv | Cards (2026-11-10) | Prices |
+|---|---|---|---|---|
+| `swu` | Star Wars: Unlimited | 79 | 9,771 in 33 sets | Normal / Foil |
+| `gundam` | Gundam | 86 | 2,201 in 27 sets | Normal / Foil (TCGplayer: Holofoil) |
+| `fab` | Flesh and Blood | 62 | 10,955 in 110 sets | **printings**: 1st Edition / Unlimited × Normal / Rainbow Foil / Cold Foil |
+| `digimon` | Digimon | 63 | 9,516 in 103 sets | Normal / Foil |
+| `palworld` | Palworld | 91 | 647 in 7 sets | Normal / Foil |
+
+### The rules (all five)
+
+- **One TCGplayer product = one card**, id `tcg-{productId}`, set once. Versions TCGplayer sells as
+  their own product — SWU Hyperspace / Showcase / Prestige / prize copies, Gundam parallels (LR+, R+),
+  Digimon alternate arts, Flesh and Blood Marvels / Extended Arts, Palworld SR / SP / 2nd Edition —
+  are their own cards, the bracketed version in `variant`, shown after the name everywhere.
+- **A single** = a product with a printed number **or** a rarity (catches numberless promos — SWU's
+  Secrets of Power weekly promos, Palworld's "Soul (SSS)"); sealed product has neither.
+- **Brackets that are part of the name stay in it** (`keepInName` / `variantOnly`): Flesh and Blood
+  pitch "(Red)/(Yellow)/(Blue)", Digimon "(X Antibody)", Gundam mobile-suit forms ("(Destroy Mode)",
+  "(EW)", factions). TCGplayer's habit of appending the card number ("Graphene Chelicera - GEM008")
+  is dropped when it is the card's own number (`dropNumberSuffix`); 16 FaB promos whose suffix
+  differs from their number keep TCGplayer's name.
+- **Numbers**: as printed; Digimon's glued-on rarity letter is dropped ("BT26-066 C" → "BT26-066").
+  **Set code**: TCGplayer's abbreviation, else the number's prefix ("SFC001" → SFC — newer FaB sets
+  have none), else the set name (`setCodeOf`).
+- **Photos**: a product TCGplayer hasn't photographed (`imageCount` 0) is stored with no image (the
+  site's No Image card) and picks the photo up on a later sync.
+- **Existing cards never change what they show**; only prices refresh, and a price TCGplayer lacks
+  today keeps its last value (`mergePrices`).
+- **Prices**: the four Normal/Foil games use the classic pair (`marketPrice` / `marketPriceFoil`) and
+  the Foil checkbox like Lorcana — most foil versions are separate products with only a foil price
+  (search shows one foil row). **Flesh and Blood** uses printings (`variantPrices`, Pokémon's
+  scheme, `PRINTING_GAMES`): "1st:rainbow", "unlimited:cold"…; newer sets without editions are
+  "unlimited". Finishes `rainbow` / `cold` were added to `pokemon-variants.mjs` (labels Rainbow Foil /
+  Cold Foil; tags in `PrintingTags`).
+- **Sets**: `catalog_meta/{game}.sets` written by the sync, each with a `setType` from its name →
+  the Cardex groups (`setTypeLabels`). Custom sets ("New Set") in the registry like Magic's.
+
+### App wiring
+
+`lib/types.ts` `TCGPLAYER_SOURCED_GAMES` / `isTcgplayerSourced()`; `lib/api/tcgplayerGames.ts`
+(sets, search, display name); `lib/api/tcgplayerGameRoutes.ts` (shared price + sync handlers behind
+`app/api/prices/{game}` and `app/api/sync/{game}`); the Cardex's `META_SET_GAMES` (Yu-Gi-Oh! + these)
+build groups from set types. Colours: SWU `#2f4f6f`, Gundam `#b0283c`, FaB `#7a5a2b`, Digimon
+`#e07b1a`, Palworld `#2a9d8f`.
+
+### Syncing
+
+One daily job, **`.github/workflows/sync-tcgplayer-games.yml` at 21:45 UTC**
+(`npm run download-cards -- --only swu,gundam,fab,digimon,palworld`); each game also has a staff
+portal Sync button (FaB and Digimon, ~110 sets each, may outrun the function limit — the CLI is the
+reliable path). A sync refuses a partial download (fewer sets than `minGroups`, or >10% of sets
+failing). New sets need no code change.
+
+### Scanner
+
+Gundam "GD01-118", Digimon "BT26-066" / starter "ST1-01", Palworld "EBP01-001" (an "…SP" version is
+found by its base code) are read anywhere on the card; Flesh and Blood "WTR040" (either side of a
+double-sided number); Star Wars: Unlimited needs the set code and number together ("LAW" +
+"017/264"). Versions sharing a code tie — the picture or the person picks. No picture-model
+training on these games yet.
+
+### Known TCGplayer data quirks (2026-11-10)
+
+- Unreleased sets are listed before release with no prices (SWU Icons 2027 Edition, FaB Outbreak,
+  Digimon Ignition of X); old FaB Blitz / Hero decks are thinly priced; Palworld's "(2nd Edition)"
+  reprints were just listed and unpriced.
+- A few market prices look high for the card (Gundam "Wing Gundam (LR+)" $9,999, "Char Aznable
+  (C+)" $2,300) — TCGplayer's own market price, used as-is like every game.

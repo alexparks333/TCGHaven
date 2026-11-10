@@ -1,4 +1,4 @@
-import type { Game } from '../types'
+import { isTcgplayerSourced, type Game } from '../types'
 import { RARITY_LABELS_BY_GAME, YUGIOH_RARITY_CODES } from '../utils'
 import type { SearchableCard, SearchOptions } from './cardSearch'
 
@@ -10,7 +10,7 @@ import type { SearchableCard, SearchOptions } from './cardSearch'
 export function searchOptionsFor(game: Game): SearchOptions {
   const labels = RARITY_LABELS_BY_GAME[game] ?? {}
   return {
-    extraTerms: (card: SearchableCard & { cardType?: string; variant?: string }) => {
+    extraTerms: (card: SearchableCard & { cardType?: string; variant?: string; color?: string; aspect?: string; cardClass?: string }) => {
       const parts: string[] = []
       if (card.rarity && labels[card.rarity]) parts.push(labels[card.rarity])
       if (game === 'riftbound' && card.cardType) parts.push(card.cardType)
@@ -21,6 +21,11 @@ export function searchOptionsFor(game: Game): SearchOptions {
         if (card.variant) parts.push(card.variant)
         if (card.rarity) parts.push(card.rarity, YUGIOH_RARITY_CODES[card.rarity] ?? '')
         if (card.cardType) parts.push(card.cardType)
+      }
+      // Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld: the version
+      // ("hyperspace", "lr+", "marvel", "alternate art"), rarity, card type and colour / aspect / class
+      if (isTcgplayerSourced(game)) {
+        for (const v of [card.variant, card.rarity, card.cardType, card.color, card.aspect, card.cardClass]) if (v) parts.push(v)
       }
       return parts.join(' ') || undefined
     },

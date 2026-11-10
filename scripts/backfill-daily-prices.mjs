@@ -24,7 +24,7 @@ const dryRun = process.argv.includes('--dry-run')
 const db = getFirestore(getApps()[0])
 await ensureSignedIn()
 
-for (const game of ['pokemon', 'pokemon-jp', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']) {
+for (const game of ['pokemon', 'pokemon-jp', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']) {
   const months = await getDocs(collection(db, PRICE_HISTORY_COLLECTION, game, 'months'))
   // 'YYYY-MM-DD' → { t: latest sync time that day, prices: { [id]: tuple } } across every set
   const byDay = new Map()

@@ -5,7 +5,7 @@ import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
 
 // Admin Catalog edits (hide/unhide, edit, add) run client-side and write straight to Firestore
 // via the client SDK, so regenerateSnapshot()'s own invalidateCatalogCache() call only clears

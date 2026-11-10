@@ -16,7 +16,7 @@ import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
 const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
 
 interface Props {

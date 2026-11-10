@@ -39,6 +39,7 @@ export interface ScanCard {
 }
 
 export type ScanCatalogKey = 'pokemon' | 'pokemon-jp' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
+  | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld'
 
 export interface ScanCatalog {
   key: ScanCatalogKey
@@ -63,7 +64,8 @@ export interface ScanClues {
   promos: string[]            // Pokémon black-star numbers: "SWSH123", "SM60"
   starPromo: Array<{ set: string; num: string }> // "SVP 085" → svp / 85
   opCodes: string[]           // "OP05-119", "P-001"
-  ygoCodes: string[]          // Yu-Gi-Oh! set codes, printed under the art: "MAMS-EN001", "LOB-001"
+  ygoCodes: string[]          // dash codes (ygoKey): Yu-Gi-Oh! "MAMS-EN001", Gundam "GD01-118", Digimon "BT26-066" / "ST1-01", Palworld "EBP01-001"
+  fabCodes: string[]          // Flesh and Blood: "WTR040", "MON155"
   jpPromos: Array<{ num: string; mark: string }> // "388/SM-P" → 388 in the "SM-P" promo set
   lorcanaSet: string[]        // "• EN • 10" → "10"
   mtgSets: string[]           // "BLB • EN" → "blb"
@@ -182,7 +184,7 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
-    fractions: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
+    fractions: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], fabCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
     bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
@@ -223,6 +225,18 @@ export function readClues(lines: OcrLine[]): ScanClues {
       if (!/[A-Z]/.test(m[1]) || !/\d/.test(m[3].replace(/O/g, ''))) continue
       const c = ygoKey(`${m[1]}-${m[2]}${m[3]}`)
       add(clues.ygoCodes, c, (o) => o === c)
+    }
+    // Digimon starter decks print a two-digit number: "ST1-01", "ST17-12"
+    for (const m of Array.from(text.toUpperCase().matchAll(/\b([A-Z]{2,3}[0-9]{1,2})\s?-\s?([0-9O]{2})(?![0-9])/g))) {
+      if (!/\d/.test(m[2].replace(/O/g, ''))) continue
+      const c = ygoKey(`${m[1]}-${m[2]}`)
+      add(clues.ygoCodes, c, (o) => o === c)
+    }
+    // Flesh and Blood: three letters + three digits, "WTR040", "MON155" (O read for 0 allowed)
+    for (const m of Array.from(text.toUpperCase().matchAll(/\b([A-Z]{3})\s?([0-9O]{3})\b/g))) {
+      if (!/\d/.test(m[2])) continue
+      const c = `${m[1]}${m[2].replace(/O/g, '0')}`
+      add(clues.fabCodes, c, (o) => o === c)
     }
     if (/\b(ATK|DEF)\s?\//i.test(text) || /\[(spell|trap) card\]/i.test(text)) clues.yugiohWords = true
     // "OP05-119", "OPO4-021" (O for 0), "OP17-042E" (the rarity glued on)
@@ -365,7 +379,8 @@ interface CatIndex {
   byId: Map<string, ScanCard>
   byNum: Map<string, ScanCard[]>     // numKey(card.number)
   byOpCode: Map<string, ScanCard[]>  // One Piece printed code
-  byYgoCode: Map<string, ScanCard[]> // Yu-Gi-Oh! set code (ygoKey)
+  byYgoCode: Map<string, ScanCard[]> // dash code (ygoKey) — Yu-Gi-Oh!, Gundam, Digimon, Palworld
+  byFabCode: Map<string, ScanCard[]> // Flesh and Blood code, each side of a double-sided card
   bySet: Map<string, ScanCard[]>
   rb: Map<string, Array<{ c: ScanCard; p: RbParts }>> // Riftbound "num/den"
   names: Map<string, ScanCard[]>     // folded name (and printed name) → cards
@@ -380,7 +395,7 @@ export function catalogIndex(cat: ScanCatalog): CatIndex {
   const sig = `${cat.cards.length}|${cat.cards[0]?.id}|${cat.cards[cat.cards.length - 1]?.id}|${cat.sets?.length ?? 0}`
   const hit = indexCache.get(cat.key)
   if (hit && hit.sig === sig && Date.now() - hit.at < INDEX_TTL_MS) return hit.index
-  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), byYgoCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map() }
+  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), byYgoCode: new Map(), byFabCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map() }
   for (const c of cat.cards) {
     index.byId.set(c.id, c)
     const k = numKey(c.number)
@@ -388,6 +403,13 @@ export function catalogIndex(cat: ScanCatalog): CatIndex {
     if (c.set) push(index.bySet, String(c.set), c)
     if (cat.key === 'onepiece') push(index.byOpCode, onePiecePrintedCode(c), c)
     if (cat.key === 'yugioh') push(index.byYgoCode, ygoKey(c.number), c)
+    if (DASH_CODE_GAMES.has(cat.key) && c.number) {
+      // Palworld's special versions add letters ("EBP01-095SP") — the base code finds them too
+      for (const k of Array.from(new Set([ygoKey(c.number), ygoKey(c.number.replace(/[A-Z]+$/, ''))]))) push(index.byYgoCode, k, c)
+    }
+    if (cat.key === 'fab' && c.number) {
+      for (const part of c.number.toUpperCase().split(/\s*\/\/\s*/)) if (/^[A-Z]{3}\d{3}$/.test(part)) push(index.byFabCode, part, c)
+    }
     if (cat.key === 'riftbound') {
       const p = riftboundParts(c.publicCode)
       if (p) push(index.rb, `${numKey(p.num)}/${p.den}`, { c, p })
@@ -428,7 +450,10 @@ function gameHints(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
 }
 
 // Games whose name is printed along the top edge — where a clearly read name is reliable
-const NAME_ON_TOP = new Set<ScanCatalogKey>(['pokemon', 'mtg', 'yugioh'])
+const NAME_ON_TOP = new Set<ScanCatalogKey>(['pokemon', 'mtg', 'yugioh', 'fab'])
+
+// Games whose printed number is a dash code read anywhere on the card (clues.ygoCodes)
+const DASH_CODE_GAMES = new Set<ScanCatalogKey>(['gundam', 'digimon', 'palworld'])
 
 /** Card names read clearly along the top of the card: a top line that IS a catalog name (allowing
  *  trailing HP / stage noise like "Magikarp 22"). Folded. */
@@ -594,6 +619,29 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
       // The set code names the card; its rarity versions (Ultra / Starlight / Extended Art…) share
       // it and tie — the picture or the person picks
       for (const code of clues.ygoCodes) for (const c of ix.byYgoCode.get(code) ?? []) offer('yugioh', c, 60, `code ${code}`)
+    }
+
+    // Gundam "GD01-118", Digimon "BT26-066", Palworld "EBP01-001": the code names the card; its
+    // versions (parallels, alternate arts) share it and tie — the picture or the person picks
+    if (DASH_CODE_GAMES.has(cat.key)) {
+      for (const code of clues.ygoCodes) for (const c of ix.byYgoCode.get(code) ?? []) offer(cat.key, c, 60, `code ${code}`)
+    }
+
+    if (cat.key === 'fab') {
+      for (const code of clues.fabCodes) for (const c of ix.byFabCode.get(code) ?? []) offer('fab', c, 60, `code ${code}`)
+    }
+
+    // Star Wars: Unlimited prints its number with the set code ("SOR" … "010/252"): both together
+    // name the card; a number alone is in every set, so it needs the code
+    if (cat.key === 'swu') {
+      const tokens = new Set(clues.bottomTokens.map((t) => t.toUpperCase()))
+      const read = [...clues.bottomNumbers, ...clues.fractions.map((f) => `${f.num}${f.suf}`)].map(numKey)
+      for (const set of Array.from(tokens)) {
+        for (const c of ix.bySet.get(set) ?? []) {
+          const n = numKey(String(c.number).split('/')[0])
+          if (read.includes(n)) offer('swu', c, 60, `${set} ${n}`)
+        }
+      }
     }
 
     if (cat.key === 'onepiece') {

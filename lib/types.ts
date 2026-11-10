@@ -1,4 +1,5 @@
 export type Game = 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
+  | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld'   // TCGplayer-sourced (scripts/lib/tcgplayer-games.mjs)
 
 export type Condition = 'mint' | 'near_mint' | 'lightly_played' | 'moderately_played' | 'heavily_played'
 
@@ -44,7 +45,7 @@ export function catalogKeyFor(game: Game, language?: Language | string): Catalog
 }
 
 export type Edition = 'unlimited' | 'shadowless' | '1st' | 'limited'   // 'limited': Yu-Gi-Oh!'s Limited Edition
-export type Finish = 'normal' | 'holofoil' | 'reverse'
+export type Finish = 'normal' | 'holofoil' | 'reverse' | 'rainbow' | 'cold'   // rainbow / cold: Flesh and Blood
 export type Language = 'en' | 'ja'
 
 export interface SoldCard extends Card {
@@ -85,6 +86,11 @@ export const GAME_LABELS: Record<Game, string> = {
   onepiece: 'One Piece',
   mtg: 'Magic: The Gathering',
   yugioh: 'Yu-Gi-Oh!',
+  swu: 'Star Wars: Unlimited',
+  gundam: 'Gundam',
+  fab: 'Flesh and Blood',
+  digimon: 'Digimon',
+  palworld: 'Palworld',
 }
 
 export const GAME_COLORS: Record<Game, string> = {
@@ -95,13 +101,25 @@ export const GAME_COLORS: Record<Game, string> = {
   onepiece: '#566a5e',
   mtg: '#a8642e',
   yugioh: '#5b4a8a',
+  swu: '#2f4f6f',
+  gundam: '#b0283c',
+  fab: '#7a5a2b',
+  digimon: '#e07b1a',
+  palworld: '#2a9d8f',
 }
 
 /** Games whose cards come in priced printings — an edition and/or finish of the one card, kept in
  *  its `variantPrices` (scripts/lib/pokemon-variants.mjs): Pokémon (Unlimited / Shadowless / 1st
  *  Edition × Normal / Holo / Reverse Holo) and Yu-Gi-Oh! (1st Edition / Unlimited / Limited). */
-export const PRINTING_GAMES: readonly Game[] = ['pokemon', 'yugioh']
+export const PRINTING_GAMES: readonly Game[] = ['pokemon', 'yugioh', 'fab']
 export const hasPrintings = (game: Game): boolean => PRINTING_GAMES.includes(game)
+
+/** Games whose whole catalog comes from TCGplayer through one shared engine
+ *  (scripts/lib/tcgplayer-games.mjs): set list in catalog_meta/{game}, one product = one card. */
+export const TCGPLAYER_SOURCED_GAMES = ['swu', 'gundam', 'fab', 'digimon', 'palworld'] as const
+export type TcgplayerSourcedGame = typeof TCGPLAYER_SOURCED_GAMES[number]
+export const isTcgplayerSourced = (game: string): game is TcgplayerSourcedGame =>
+  (TCGPLAYER_SOURCED_GAMES as readonly string[]).includes(game)
 
 export const CONDITION_MULTIPLIER: Record<Condition, number> = {
   mint: 1.0,

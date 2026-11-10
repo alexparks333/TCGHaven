@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 // Structured patch of a single set entry — used by the Settings "Needs Review" editor.
 // Only ever reads/writes the registry/main Firestore doc, never TypeScript source.
-const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
+const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
 
 export async function PUT(request: Request) {
   const unauthorized = await verifyAdminRequest(request)
@@ -89,7 +89,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Expected { game: "pokemon"|"lorcana"|"riftbound"|"onepiece"|"mtg", setName: string, code?: string, releaseDate?: string, cardexGroup?: string }' }, { status: 400 })
   }
   const game: Game = gameRaw
-  if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && !cardexGroup) {
+  // Only Lorcana and Riftbound group their Cardex by registry categories; every other game's
+  // groups are automatic
+  if ((game === 'lorcana' || game === 'riftbound') && !cardexGroup) {
     return NextResponse.json({ error: 'cardexGroup is required for lorcana/riftbound sets' }, { status: 400 })
   }
 
@@ -97,7 +99,7 @@ export async function POST(request: Request) {
   let newSet: Record<string, unknown>
   try {
     newSet = await updateSetRegistry((registry) => {
-      if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh' && cardexGroup) {
+      if ((game === 'lorcana' || game === 'riftbound') && cardexGroup) {
         const groupOrder = registry[game].groupOrder
         // `newCardexGroup: true` creates the category too (added after the existing ones). A group
         // some set already uses counts as known even if groupOrder doesn't list it (Riftbound's

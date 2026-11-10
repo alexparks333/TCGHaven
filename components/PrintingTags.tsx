@@ -10,6 +10,9 @@ export function PrintingTags({ card, className = '' }: { card: Pick<Card, 'editi
   if (card.edition === 'limited') tags.push({ label: 'Limited Ed', tone: 'bg-amber-500/20 text-amber-700 border-amber-500/40' })
   if (card.edition === 'shadowless') tags.push({ label: 'Shadowless', tone: 'bg-amber-500/20 text-amber-700 border-amber-500/40' })
   if (card.finish === 'reverse') tags.push({ label: 'Reverse Holo', tone: 'bg-violet-500/15 text-violet-600 border-violet-500/30' })
+  // Flesh and Blood's foils (its editions use the 1st Ed tag above)
+  if (card.finish === 'rainbow') tags.push({ label: 'Rainbow Foil', tone: 'bg-violet-500/15 text-violet-600 border-violet-500/30' })
+  if (card.finish === 'cold') tags.push({ label: 'Cold Foil', tone: 'bg-sky-500/15 text-sky-700 border-sky-500/30' })
   if (card.language === 'ja') tags.push({ label: 'Japanese', tone: 'bg-red-500/15 text-red-600 border-red-500/30' })
   if (!tags.length) return null
   return (

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sortCatalogCards, loadVisibleCatalog } from '@/lib/api/catalog'
 import { riftboundDisplayNumber } from '@/lib/utils'
-import { catalogKeyFor, type Game } from '@/lib/types'
+import { catalogKeyFor, isTcgplayerSourced, type Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   const setName = searchParams.get('set')
 
   if (!game || !setName) return NextResponse.json([])
-  if (game !== 'lorcana' && game !== 'riftbound' && game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh') return NextResponse.json([])
+  if (game !== 'lorcana' && game !== 'riftbound' && game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh' && !isTcgplayerSourced(game)) return NextResponse.json([])
 
   // loadVisibleCatalog already excludes hidden cards (via the in-memory cache described in
   // lib/api/catalog.ts) — a hide/unhide shows up here as soon as this instance's cache next

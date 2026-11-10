@@ -380,7 +380,7 @@ re-adding — the other.
 ## Automated Sync — Admin Catalog
 
 `/admin` has a **"Sync Card Data"** panel (admin-gated, same as the rest of the page) with one
-button per game — Pokémon, Lorcana, Riftbound, One Piece, Magic: The Gathering, Yu-Gi-Oh! (its daily job, `sync-yugioh.yml`, runs the same sync from the CLI). Each is a plain, synchronous `POST` to its own API
+button per game — Pokémon, Lorcana, Riftbound, One Piece, Magic: The Gathering, Yu-Gi-Oh! (its daily job, `sync-yugioh.yml`, runs the same sync from the CLI), Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon, Palworld (one daily job for the five, `sync-tcgplayer-games.yml`). Each is a plain, synchronous `POST` to its own API
 route that runs the download/diff/registry-update logic directly against Firestore and returns a
 JSON result when done; there's no build, no server restart, and no local file writes, so this
 works identically whether you're on `npm run dev`, `npm run start`, or the deployed Vercel app.

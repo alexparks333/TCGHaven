@@ -29,12 +29,12 @@ export interface ScanMatch {
 }
 
 const EDITION_LABEL: Record<string, string> = { unlimited: '', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
-const FINISH_LABEL: Record<string, string> = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo' }
+const FINISH_LABEL: Record<string, string> = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo', rainbow: 'Rainbow Foil', cold: 'Cold Foil' }
 
 function printingsOf(card: RawCard, game: Game): ScanMatch['printings'] {
   const vp = card.variantPrices
   if (vp && Object.keys(vp).length) {
-    const order = ['unlimited', 'shadowless', '1st', 'limited'], fin = ['normal', 'holofoil', 'reverse']
+    const order = ['unlimited', 'shadowless', '1st', 'limited'], fin = ['normal', 'holofoil', 'reverse', 'rainbow', 'cold']
     return Object.entries(vp)
       .map(([key, price]) => {
         const [edition, finish] = key.split(':')
@@ -61,6 +61,11 @@ const GAME_CATALOGS: Record<Game, ScanCatalogKey[]> = {
   onepiece: ['onepiece'],
   mtg: ['mtg'],
   yugioh: ['yugioh'],
+  swu: ['swu'],
+  gundam: ['gundam'],
+  fab: ['fab'],
+  digimon: ['digimon'],
+  palworld: ['palworld'],
 }
 
 type RawCard = ScanCard & { hidden?: boolean; imageUrl?: string; marketPrice?: number; marketPriceFoil?: number; variantPrices?: Record<string, number> }

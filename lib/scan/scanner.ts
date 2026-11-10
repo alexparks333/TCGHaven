@@ -67,7 +67,7 @@ function trayOption(m: ScanMatch & { final?: number; distance?: number | null },
 function printingLabel(key: string, game: Game): string {
   const [edition, finish] = key.split(':')
   const ed: Record<string, string> = { unlimited: '', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
-  const fin: Record<string, string> = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo' }
+  const fin: Record<string, string> = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo', rainbow: 'Rainbow Foil', cold: 'Cold Foil' }
   // Yu-Gi-Oh! has editions only — its foil is the rarity
   if (game === 'yugioh') return edition === 'unlimited' ? 'Unlimited' : ed[edition] ?? edition
   return [ed[edition] ?? edition, fin[finish] ?? finish].filter(Boolean).join(' ')

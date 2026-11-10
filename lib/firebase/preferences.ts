@@ -8,7 +8,7 @@ function prefsRef(userId: string) {
   return doc(db, 'users', userId, 'settings', 'preferences')
 }
 
-const VALID_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
+const VALID_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
 
 // null = never saved — the caller falls back to DEFAULT_TRACKED_GAMES (Riftbound only).
 export async function loadTrackedGames(userId: string): Promise<Game[] | null> {

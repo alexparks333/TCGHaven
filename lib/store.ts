@@ -117,7 +117,7 @@ export const useStore = create<TCGStore>()(
   priceStatus: null,
   calcFloor: 0,
   showFilters: false,
-  activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh'] as Game[],
+  activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld'] as Game[],
   trackedGames: DEFAULT_TRACKED_GAMES,
   timeFrame: 'entry' as const,
   hiddenGroups: [] as string[],

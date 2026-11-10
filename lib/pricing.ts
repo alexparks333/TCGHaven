@@ -24,8 +24,8 @@ export interface CatalogPriceFields {
 
 export interface PrintingChoice {
   isFoil?: boolean
-  edition?: Edition   // Pokémon: Unlimited / Shadowless / 1st Edition; Yu-Gi-Oh!: 1st Edition / Unlimited / Limited
-  finish?: Finish     // Pokémon only — Normal / Holo / Reverse Holo
+  edition?: Edition   // Pokémon: Unlimited / Shadowless / 1st Edition; Yu-Gi-Oh!: 1st Edition / Unlimited / Limited; Flesh and Blood: 1st Edition / Unlimited
+  finish?: Finish     // Pokémon: Normal / Holo / Reverse Holo; Flesh and Blood: Normal / Rainbow Foil / Cold Foil
 }
 
 export function catalogPrice(
@@ -47,6 +47,8 @@ export function catalogPrice(
   // One Piece has no foil duality (a Parallel print is its own catalog card) and no
   // lowest-listing field — just the one market price.
   if (game === 'onepiece') return card.marketPrice ?? 0
+  // (Star Wars: Unlimited, Gundam, Digimon and Palworld use the Normal / Foil pair below, like
+  // Lorcana; a Flesh and Blood card without a chosen printing falls through to it too.)
   // Yu-Gi-Oh! has no foil toggle (foil is the rarity, and a rarity version is its own card): the
   // default printing's market price
   if (game === 'yugioh') return card.marketPrice ?? 0

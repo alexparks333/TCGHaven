@@ -13,10 +13,10 @@
 
 // also the default-edition order. 'limited' is Yu-Gi-Oh!'s Limited Edition (yugioh-tcgplayer.mjs)
 export const EDITIONS = ['unlimited', 'shadowless', '1st', 'limited']
-export const FINISHES = ['normal', 'holofoil', 'reverse']
+export const FINISHES = ['normal', 'holofoil', 'reverse', 'rainbow', 'cold']   // rainbow / cold: Flesh and Blood
 
 export const EDITION_LABELS = { unlimited: 'Unlimited', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
-export const FINISH_LABELS = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo' }
+export const FINISH_LABELS = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo', rainbow: 'Rainbow Foil', cold: 'Cold Foil' }
 
 export function variantKey(edition, finish) {
   return `${edition}:${finish}`
@@ -111,7 +111,7 @@ export function defaultEdition(vp) {
  * @returns {string}
  */
 export function defaultFinish(vp, edition, isFoil = false) {
-  const order = isFoil ? ['holofoil', 'reverse', 'normal'] : ['normal', 'holofoil', 'reverse']
+  const order = isFoil ? ['holofoil', 'rainbow', 'cold', 'reverse', 'normal'] : ['normal', 'holofoil', 'rainbow', 'cold', 'reverse']
   const have = finishesOf(vp, edition)
   return order.find((f) => have.includes(f)) ?? (isFoil ? 'holofoil' : 'normal')
 }

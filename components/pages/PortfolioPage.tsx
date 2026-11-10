@@ -191,7 +191,7 @@ export default function PortfolioPage() {
 
   // By-game breakdown — respects floor + activeGames but always shows selected games
   const byGame = useMemo(() => {
-    return (['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh'] as Game[])
+    return (['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld'] as Game[])
       .filter((g) => activeGames.includes(g))
       .map((game) => {
         const gc = cards.filter(

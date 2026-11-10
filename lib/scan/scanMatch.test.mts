@@ -338,6 +338,48 @@ assert.equal(decide([{ key: 'a', score: 99, exact: true, trusted: true }], [0.88
   assert.ok(!readClues([L('LIGHT', 0.03, 0.03)]).topLines.every((t) => t === 'nothing'))
 }
 
+// ── The TCGplayer-sourced games: each one's printed code (real cards from the catalogs) ──
+{
+  const gundam: ScanCatalog = { key: 'gundam', cards: [
+    { id: 'tcg-g1', name: 'Hamma-Hamma', number: 'GD06-020', set: 'GD06' },
+    { id: 'tcg-g2', name: 'Hamma-Hamma', number: 'GD06-020', set: 'GD06' },   // its R+ parallel
+    { id: 'tcg-g3', name: 'Wing Gundam', number: 'ST02-001', set: 'ST02' },
+  ] }
+  const digimon: ScanCatalog = { key: 'digimon', cards: [
+    { id: 'tcg-d1', name: 'GraceNovamon', number: 'BT25-103', set: 'BT-25' },
+    { id: 'tcg-d2', name: 'Agumon', number: 'ST1-01', set: 'ST-1' },
+  ] }
+  const palworld: ScanCatalog = { key: 'palworld', cards: [
+    { id: 'tcg-p1', name: 'Digtoise - Seismic Drillback', number: 'EBP01-050', set: 'BP01' },
+    { id: 'tcg-p2', name: 'Digtoise - Seismic Drillback', number: 'EBP01-050SP', set: 'BP01' },
+    { id: 'tcg-p3', name: 'Fine Bed', number: 'EBP02-090', set: 'BP02' },
+  ] }
+  const fab: ScanCatalog = { key: 'fab', cards: [
+    { id: 'tcg-f1', name: 'Chains of Eminence', number: 'ARC162', set: 'ARC' },
+    { id: 'tcg-f2', name: 'Rising Energy (Red)', number: 'MPG001', set: 'MPG' },
+    { id: 'tcg-f3', name: 'Anothos // Bravo', number: 'WTR040 // WTR001', set: 'WTR' },
+  ] }
+  const swu: ScanCatalog = { key: 'swu', cards: [
+    { id: 'tcg-s1', name: 'Han Solo - I Got a Really Good Feeling', number: '17/264', set: 'LAW' },
+    { id: 'tcg-s2', name: 'Orbiting K-Wing', number: '017', set: 'JTL' },
+  ] }
+  const games = [gundam, digimon, palworld, fab, swu]
+  assert.equal(top([L('Wing Gundam', 0.04, 0.045), L('ST02-001', 0.94, 0.02)], games)[0].id, 'tcg-g3')
+  const hh = top([L('Hamma-Hamma', 0.04, 0.045), L('GD06-020', 0.94, 0.02)], games)
+  assert.deepEqual(hh.filter((x) => x.score === hh[0].score).map((x) => x.id).sort(), ['tcg-g1', 'tcg-g2'], 'a parallel ties with its base — the picture picks')
+  assert.equal(top([L('GraceNovamon', 0.04, 0.045), L('BT25-103', 0.94, 0.02)], games)[0].id, 'tcg-d1')
+  assert.deepEqual(readClues([L('ST1-01', 0.94, 0.02)]).ygoCodes, ['ST1-01'], 'Digimon starter: two-digit number')
+  assert.equal(top([L('Agumon', 0.04, 0.045), L('ST1-01', 0.94, 0.02)], games)[0].id, 'tcg-d2')
+  const dig = top([L('Digtoise', 0.04, 0.045), L('Seismic Drillback', 0.09, 0.03), L('EBP01-050', 0.94, 0.02)], games)
+  assert.deepEqual(dig.filter((x) => x.score === dig[0].score).map((x) => x.id).sort(), ['tcg-p1', 'tcg-p2'], 'the SP version is found by its base code')
+  assert.deepEqual(readClues([L('ARC162', 0.94, 0.02)]).fabCodes, ['ARC162'])
+  assert.equal(top([L('Chains of Eminence', 0.04, 0.045), L('ARC162', 0.94, 0.02)], games)[0].id, 'tcg-f1')
+  assert.equal(top([L('Anothos', 0.04, 0.045), L('WTR040', 0.94, 0.02)], games)[0].id, 'tcg-f3', 'either side of a double-sided number')
+  // Star Wars: the set code and the number together; the same number in another set loses
+  const han = top([L('Han Solo', 0.04, 0.045), L('I Got a Really Good Feeling', 0.09, 0.03), L('LAW', 0.94, 0.02), L('017/264', 0.94, 0.02)], games)
+  assert.equal(han[0].id, 'tcg-s1')
+}
+
 // ── Nothing readable → nothing guessed ──
 assert.deepEqual(top([L('the', 0.5)]), [])
 

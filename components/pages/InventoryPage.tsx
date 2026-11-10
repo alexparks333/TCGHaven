@@ -24,7 +24,7 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld']
 
 // Module-level (not component-local) so it survives InventoryPage unmounting/remounting as the
 // user switches tabs — see the backfill effect below for why a component-local ref isn't enough.

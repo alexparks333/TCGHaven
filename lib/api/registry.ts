@@ -150,6 +150,12 @@ export interface SetRegistry {
   // Yu-Gi-Oh!'s set list is automatic (catalog_meta/yugioh.sets, from TCGplayer — lib/api/yugioh.ts);
   // the registry only holds custom sets made with Admin Catalog's "New Set", like Magic's
   yugioh: { sets: MtgRegistrySet[] }
+  // The TCGplayer-sourced games (lib/api/tcgplayerGames.ts) — the same: custom sets only
+  swu: { sets: MtgRegistrySet[] }
+  gundam: { sets: MtgRegistrySet[] }
+  fab: { sets: MtgRegistrySet[] }
+  digimon: { sets: MtgRegistrySet[] }
+  palworld: { sets: MtgRegistrySet[] }
 }
 
 const EMPTY_REGISTRY: SetRegistry = {
@@ -160,6 +166,11 @@ const EMPTY_REGISTRY: SetRegistry = {
   onepiece: { sets: [] },
   mtg: { sets: [] },
   yugioh: { sets: [] },
+  swu: { sets: [] },
+  gundam: { sets: [] },
+  fab: { sets: [] },
+  digimon: { sets: [] },
+  palworld: { sets: [] },
 }
 
 const REGISTRY_DOC_PATH = ['registry', 'main'] as const

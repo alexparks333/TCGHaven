@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import type { Card, Game } from './types'
+import { isTcgplayerSourced, type Card, type Game } from './types'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -257,12 +257,16 @@ export function ebaySearchUrl(card: Parameters<typeof openEbaySearch>[0]): strin
   } else {
     if (card.set && card.set !== 'N/A') parts.push(card.set)
     if (card.finish === 'reverse') parts.push('Reverse Holo')
+    else if (card.finish === 'rainbow') parts.push('Rainbow Foil')   // Flesh and Blood
+    else if (card.finish === 'cold') parts.push('Cold Foil')
+    // The TCGplayer-sourced games call it foil, not holo
+    else if (!card.finish && card.isFoil && isTcgplayerSourced(card.game)) parts.push('Foil')
     else if (card.finish === 'holofoil' || (!card.finish && card.isFoil)) parts.push('Holo')
   }
   if (card.edition === '1st') parts.push('1st Edition')
   else if (card.edition === 'limited') parts.push('Limited Edition')
   else if (card.edition === 'shadowless') parts.push('Shadowless', '-1st')
-  else if (card.edition === 'unlimited') parts.push('-1st', '-shadowless')
+  else if (card.edition === 'unlimited') parts.push(...(card.game === 'pokemon' ? ['-1st', '-shadowless'] : ['-1st']))
   if (card.language === 'ja') parts.push('Japanese')
   const query = parts.join(' ')
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Sold=1&LH_Complete=1`

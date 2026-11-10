@@ -1,7 +1,8 @@
 # TCGHaven
 
 A collector app (web + iPhone) for tracking TCG cards across Pokémon (EN + Japanese), Lorcana,
-Riftbound, One Piece, Magic and Yu-Gi-Oh!, plus a staff portal for the shared card catalog and Haven Badges.
+Riftbound, One Piece, Magic, Yu-Gi-Oh!, Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon and
+Palworld, plus a staff portal for the shared card catalog and Haven Badges.
 Next.js 14 App Router · TypeScript · Tailwind v3 · Firebase Auth + Firestore + Storage · Zustand ·
 three.js. Deployed on Vercel.
 
@@ -38,7 +39,7 @@ npm run typecheck      # tsc --noEmit — run before trusting a change
 npm run lint
 npm run download-cards # re-sync catalogs into Firestore (MTG only with -- --include-mtg; MTG also syncs daily via .github/workflows/sync-mtg.yml)
 npm run check-images -- <game>|all
-npm run test:search / test:snapshot / test:variants / test:pokemon-source / test:onepiece-source / test:yugioh-source / test:scan
+npm run test:search / test:snapshot / test:variants / test:pokemon-source / test:onepiece-source / test:yugioh-source / test:tcgplayer-games / test:scan
 ```
 
 - The owner works on both a Mac and a Windows PC (RTX 4090). `.env.local` is gitignored and must be
@@ -48,7 +49,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
   function limit, so `npm run download-cards` locally is its reliable fallback.
 - Removed on purpose — don't bring back: Pack Analysis (2026-10-08) and Spending (2026-10-24).
   Leftover `registry/main` `packAnalysis` fields and `users/{uid}/purchases` docs are unread.
-- **Deploy gate:** every push to main runs `.github/workflows/checks.yml` (typecheck, lint, 10 test
+- **Deploy gate:** every push to main runs `.github/workflows/checks.yml` (typecheck, lint, 11 test
   suites, production build, ~90 s); Vercel holds the new version off www.tcghaven.org until it
   passes. Failed → fix and push again (`gh run watch` shows why); Vercel's Force Promote is the
   emergency override. CI uses only the six public `NEXT_PUBLIC_FIREBASE_*` repo variables — never real secrets.
@@ -106,6 +107,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
 33. Shared docs (registry, badge catalog, Text Keys) are saved as a change on the latest copy — `updateSetRegistry()`, `saveBadgeCatalog(db, base, next)` — never `setDoc` of a copy.
 34. Pokémon EN: TCGplayer decides which cards exist, GitHub is the check; a card's id never changes (`pokemon-tcgplayer.mjs`, run `npm run pokemon-source-report` before touching matching).
 36. Yu-Gi-Oh!: every card = one TCGplayer product (`tcg-{productId}`); editions are `variantPrices`; rarity versions are separate cards (`yugioh-tcgplayer.mjs`, `npm run yugioh-source-report`).
+37. Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld: one shared TCGplayer engine, a settings block per game (`tcgplayer-games.mjs` `TCGPLAYER_GAMES`, `npm run tcgplayer-games-report`) — add the next TCGplayer-only game there, don't copy.
 35. One Piece: every card = one TCGplayer product (`tcgProductId`); existing cards never change what they show (`onepiece-tcgplayer.mjs`, `npm run onepiece-source-report`).
 
 ## Badges & the Relief Studio — the essentials
