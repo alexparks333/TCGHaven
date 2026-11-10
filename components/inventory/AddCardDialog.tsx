@@ -1078,7 +1078,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             <div className="w-full flex justify-center" style={{ perspective: '900px' }}>
               {form.imageUrl && form.gradingCompany ? (
                 <div className="w-full" style={{ aspectRatio: '0.66' }}>
-                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '', cert: form.certNumber, tier: form.gradeTier ?? null, subgrades: form.subgrades, printing: printingText(form) || undefined }} name={form.name} number={form.number} setName={form.set} variety={form.rarity}>
+                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '', cert: form.certNumber, tier: form.gradeTier ?? null, subgrades: form.subgrades, printing: printingText(form) || undefined }} name={form.name} number={form.number} setName={form.set}>
                     {artLandscape ? (
                       // Turned on its side to fill the portrait window, like a real slab holds it
                       <img src={cardImage(form.imageUrl, 'grid')} alt={form.name} onLoad={noteArt}

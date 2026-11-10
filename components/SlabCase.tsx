@@ -67,15 +67,15 @@ const cq = (n: number) => `${n}cqw`
 
 // ── Labels ──────────────────────────────────────────────────────────────────
 
-interface LabelProps { slab: SlabInfo; name: string; number: string; setName?: string; variety?: string }
+interface LabelProps { slab: SlabInfo; name: string; number: string; setName?: string }
 
 // PSA's label, as on a current slab (matched to photos): a thick orange-red frame with square
 // corners around a white label; heavy, slightly condensed uppercase type that fills it — set /
-// name / variety on the left, card number / grade word / grade on the right, row for row; a wide
+// name (over two lines when long) on the left, card number / grade word / grade on the right; a wide
 // barcode on the bottom row with the cert number opposite; and the silver hologram sticker hanging
 // over the bottom edge of the frame (a made-up emblem — not PSA's logo). The label sits in a dark
 // recess in the case.
-function PsaLabel({ slab, name, number, setName, variety }: LabelProps) {
+function PsaLabel({ slab, name, number, setName }: LabelProps) {
   const word = gradeWordFor('PSA', slab.grade, slab.tier)
   const font = { fontFamily: '"Arial Narrow", "Helvetica Neue", Arial, sans-serif', fontWeight: 600, fontSize: cq(4.4), lineHeight: 1, letterSpacing: '0' }
   const cell = 'flex items-center min-w-0'
@@ -83,14 +83,16 @@ function PsaLabel({ slab, name, number, setName, variety }: LabelProps) {
     <div className="relative h-full" style={{ padding: cq(0.9), background: 'linear-gradient(180deg, rgba(40,40,40,0.55), rgba(70,70,70,0.4))', borderRadius: cq(0.6), boxShadow: 'inset 0 0.3cqw 0.6cqw rgba(0,0,0,0.45)' }}>
       <div className="relative h-full" style={{ background: '#e4432d', padding: cq(2.1) }}>
         <div className="relative h-full bg-white text-[#141414] uppercase grid grid-rows-4 grid-cols-[1fr_auto] gap-x-[3cqw]" style={{ ...font, padding: `${cq(0.9)} ${cq(2.6)} ${cq(0.9)} ${cq(2.6)}` }}>
-          <div className={cell}><span className="truncate">{setName || ' '}</span></div>
-          <div className={`${cell} justify-end`}>#{number}</div>
-          <div className={cell}><span className="truncate">{name}</span></div>
-          <div className={`${cell} justify-end`}>{word}</div>
-          <div className={cell}><span className="truncate">{variety || ' '}</span></div>
-          <div className={`${cell} justify-end`}>{slab.grade}</div>
-          <div className={cell}><Barcode seed={slab.cert || name} color="#141414" bars={34} unit={0.36} gap={0.32} className="h-[78%] w-fit" /></div>
-          <div className={`${cell} justify-end tabular-nums`}>{slab.cert || ' '}</div>
+          <div className={cell} style={{ gridRow: 1, gridColumn: 1 }}><span className="truncate">{setName || ' '}</span></div>
+          <div className={`${cell} justify-end`} style={{ gridRow: 1, gridColumn: 2 }}>#{number}</div>
+          {/* The name takes the second line, and the third when it's long */}
+          <div className="min-w-0 flex items-start pt-[0.35em]" style={{ gridRow: '2 / span 2', gridColumn: 1 }}>
+            <span className="line-clamp-2" style={{ lineHeight: 1.12 }}>{name}</span>
+          </div>
+          <div className={`${cell} justify-end`} style={{ gridRow: 2, gridColumn: 2 }}>{word}</div>
+          <div className={`${cell} justify-end`} style={{ gridRow: 3, gridColumn: 2 }}>{slab.grade}</div>
+          <div className={cell} style={{ gridRow: 4, gridColumn: 1 }}><Barcode seed={slab.cert || name} color="#141414" bars={34} unit={0.36} gap={0.32} className="h-[78%] w-fit" /></div>
+          <div className={`${cell} justify-end tabular-nums`} style={{ gridRow: 4, gridColumn: 2 }}>{slab.cert || ' '}</div>
         </div>
       </div>
       {/* Hologram sticker hanging over the bottom of the frame */}
@@ -105,55 +107,78 @@ function PsaLabel({ slab, name, number, setName, variety }: LabelProps) {
   )
 }
 
-// Beckett: the label in its tier's colour (silver; gold for 9.5 / Pristine 10; black with gold
-// lettering for Black Label): a crest (a made-up laurel "B", not Beckett's logo) and the card's
-// lines on the left, the four subgrades stacked in a column, and the grade — big — with its word
-// on the far right; the serial number under the card lines.
-function BgsLabel({ slab, name, number, setName, variety }: LabelProps) {
-  const tone = labelTone('BGS', slab.grade, slab.tier)
-  const bg = tone === 'black' ? 'linear-gradient(160deg, #222 0%, #0a0a0a 55%, #000 100%)'
-    : tone === 'gold' ? 'linear-gradient(160deg, #f2df9f 0%, #d8b765 50%, #c09a4a 100%)'
-    : 'linear-gradient(160deg, #f1f2f4 0%, #cdd1d7 50%, #b5bac2 100%)'
-  const fg = tone === 'black' ? '#e8cc78' : '#15191f'
-  const rule = tone === 'black' ? 'rgba(232,204,120,0.55)' : 'rgba(0,0,0,0.28)'
-  const sub = slab.subgrades ?? {}
-  const subs: Array<[string, string | undefined]> = [['Centering', sub.centering], ['Corners', sub.corners], ['Edges', sub.edges], ['Surface', sub.surface]]
+// Beckett, as on its current (2026) slab — matched to photos: the holder's black insert, a black
+// block on the left with a laurel-wreath "B" crest and BECKETT under it (both made up — not
+// Beckett's logo), and the label panel in its tier (metallic gold for 9.5 / Pristine 10; black with
+// a gold rule and cream lettering for Black Label; silver below 9.5): the card's lines and the two
+// pairs of subgrades in condensed type on the left, the big grade, its word and the serial number
+// on the right.
+function LaurelCrest({ color }: { color: string }) {
+  // Leaves along two arcs that rise from a cross at the bottom
+  const leaves: Array<{ x: number; y: number; r: number }> = []
+  for (let i = 0; i < 8; i++) {
+    const t = (i / 7)
+    const ang = (228 - t * 140) * Math.PI / 180      // around the left side, bottom → top
+    const R = 15.5
+    leaves.push({ x: 20 + R * Math.cos(ang), y: 21 - R * Math.sin(ang), r: (ang * 180 / Math.PI) - 90 })
+  }
   return (
-    <div className="relative h-full rounded-[1cqw] overflow-hidden flex items-stretch"
-      style={{ background: bg, color: fg, fontFamily: 'Arial, Helvetica, sans-serif', padding: `${cq(1.6)} ${cq(2.2)}`, gap: cq(1.8), boxShadow: `inset 0 0 0 0.45cqw ${tone === 'black' ? '#b8913c' : 'rgba(0,0,0,0.22)'}, 0 0.4cqw 1cqw rgba(0,0,0,0.3)` }}>
-      {/* crest */}
-      <div className="shrink-0 self-center relative flex items-center justify-center font-black" style={{ width: cq(8.5), height: cq(8.5), fontSize: cq(4.8), fontFamily: 'Georgia, serif' }}>
-        <svg viewBox="0 0 40 40" className="absolute inset-0 w-full h-full" aria-hidden>
-          <circle cx="20" cy="18" r="12.5" fill="none" stroke={fg} strokeWidth="1.4" />
-          <circle cx="20" cy="18" r="10.2" fill="none" stroke={fg} strokeWidth="0.6" opacity="0.7" />
-          {/* laurel sprigs curving up from the bottom */}
-          {[0, 1, 2].map((i) => {
-            const a = (200 + i * 22) * Math.PI / 180, b = (340 - i * 22) * Math.PI / 180
-            const lx = 20 + 16 * Math.cos(a), ly = 18 - 16 * Math.sin(a), rx = 20 + 16 * Math.cos(b), ry = 18 - 16 * Math.sin(b)
-            return (
-              <g key={i} fill={fg}>
-                <ellipse cx={lx} cy={ly} rx="2.6" ry="1.1" transform={`rotate(${-60 + i * 22} ${lx} ${ly})`} />
-                <ellipse cx={rx} cy={ry} rx="2.6" ry="1.1" transform={`rotate(${60 - i * 22} ${rx} ${ry})`} />
-              </g>
-            )
-          })}
-        </svg>
-        <span className="relative" style={{ marginTop: '-8%' }}>B</span>
+    <svg viewBox="0 0 40 42" className="w-full h-full" aria-hidden>
+      {[1, -1].map((side) => (
+        <g key={side} transform={side === -1 ? 'translate(40 0) scale(-1 1)' : undefined}>
+          <path d="M23 39 C13 35 5 27 4.5 15" fill="none" stroke={color} strokeWidth="0.9" />
+          {leaves.map((l, i) => (
+            <ellipse key={i} cx={l.x} cy={l.y} rx="1.7" ry="3.5" fill={color} transform={`rotate(${l.r + 38} ${l.x} ${l.y})`} />
+          ))}
+        </g>
+      ))}
+      <text x="20" y="27.5" textAnchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontWeight="700" fontSize="19" fill={color}>B</text>
+    </svg>
+  )
+}
+
+function BgsLabel({ slab, name, number, setName }: LabelProps) {
+  const tone = labelTone('BGS', slab.grade, slab.tier)
+  const black = tone === 'black'
+  const panel = black ? 'linear-gradient(170deg, #1a1a1a, #070707)'
+    : tone === 'gold' ? 'linear-gradient(100deg, #b8913f 0%, #e9cf86 22%, #c9a556 48%, #f0d996 70%, #b8913f 100%)'
+    : 'linear-gradient(100deg, #9fa5ad 0%, #e6e8eb 22%, #b9bec6 48%, #eef0f2 70%, #9fa5ad 100%)'
+  const ink = black ? '#ecd9a6' : '#17130b'
+  const big = black ? '#d9b45c' : '#17130b'
+  const cond = { fontFamily: '"Roboto Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif' }
+  const sub = slab.subgrades ?? {}
+  const pair = (a: string, av?: string, b?: string, bv?: string) => (
+    <div className="grid grid-cols-[auto_2.6em_auto_2.6em] gap-x-[1.2cqw]">
+      <span>{a}</span><span className="text-right tabular-nums">{av || '–'}</span>
+      <span>{b}</span><span className="text-right tabular-nums">{bv || '–'}</span>
+    </div>
+  )
+  return (
+    <div className="relative h-full flex bg-[#0a0a0a]" style={{ padding: cq(1.2), gap: cq(1.6), ...cond }}>
+      {/* Crest block */}
+      <div className="shrink-0 flex flex-col items-center justify-center" style={{ width: cq(15) }}>
+        <div style={{ width: cq(9.5), height: cq(10) }}><LaurelCrest color="#f2f0ea" /></div>
+        <div className="text-[#f2f0ea] font-bold tracking-[0.02em] leading-none" style={{ fontFamily: 'Georgia, "Times New Roman", serif', fontSize: cq(2.6), marginTop: cq(0.3) }}>BECKETT</div>
       </div>
-      <div className="flex-1 min-w-0 flex flex-col justify-center uppercase font-bold leading-[1.15]" style={{ fontSize: cq(3.1) }}>
-        <div className="truncate">{setName || ' '}</div>
-        <div className="truncate" style={{ fontSize: cq(3.5) }}>{name}</div>
-        <div className="truncate opacity-85">#{number}{variety ? ` ${variety}` : ''}</div>
-        <div className="truncate opacity-75 tabular-nums font-semibold mt-[0.4cqw]" style={{ fontSize: cq(2.5) }}>{slab.cert || ' '}</div>
-      </div>
-      <div className="shrink-0 flex flex-col justify-center pl-[1.6cqw] uppercase font-bold" style={{ borderLeft: `0.25cqw solid ${rule}`, fontSize: cq(2.35), lineHeight: 1.3 }}>
-        {subs.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-[1.4cqw]"><span className="opacity-80">{k}</span><span className="tabular-nums">{v || '–'}</span></div>
-        ))}
-      </div>
-      <div className="shrink-0 flex flex-col items-center justify-center pl-[1.6cqw] uppercase" style={{ borderLeft: `0.25cqw solid ${rule}`, minWidth: cq(15) }}>
-        <div className="font-black leading-none tabular-nums" style={{ fontSize: cq(10) }}>{slab.grade}</div>
-        <div className="font-bold text-center leading-tight mt-[0.6cqw]" style={{ fontSize: cq(slab.tier === 'black' ? 2.1 : 2.5) }}>{gradeWordFor('BGS', slab.grade, slab.tier)}</div>
+      {/* Label panel */}
+      <div className="flex-1 min-w-0 flex uppercase" style={{ background: panel, color: ink, padding: `${cq(1.1)} ${cq(2)}`, boxShadow: black ? 'inset 0 0 0 0.3cqw #b8913f' : 'inset 0 0 0 0.15cqw rgba(0,0,0,0.25)', borderRadius: cq(0.4) }}>
+        <div className="flex-1 min-w-0 flex flex-col justify-between font-medium" style={{ fontSize: cq(2.6), lineHeight: 1.05 }}>
+          <div>
+            <div className="truncate">{setName || ' '}</div>
+            <div className="line-clamp-2">#{number} {name}</div>
+          </div>
+          <div className="font-medium" style={{ lineHeight: 1.12 }}>
+            {pair('Centering', sub.centering, 'Corners', sub.corners)}
+            {pair('Edges', sub.edges, 'Surface', sub.surface)}
+          </div>
+        </div>
+        <div className="shrink-0 flex flex-col items-end justify-between pl-[2cqw] text-right">
+          <div className="font-bold leading-none tabular-nums" style={{ fontSize: cq(9.5), color: big, letterSpacing: '-0.02em' }}>{slab.grade}</div>
+          <div className="leading-tight">
+            <div className="font-semibold" style={{ fontSize: cq(slab.tier === 'black' ? 2.3 : 2.7) }}>{gradeWordFor('BGS', slab.grade, slab.tier)}</div>
+            <div className="font-medium tabular-nums" style={{ fontSize: cq(2.5) }}>{slab.cert || ' '}</div>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -248,7 +273,6 @@ function GenericLabel({ slab, name, number, setName }: LabelProps) {
 
 /** Just the label, drawn like the grader's own — for a slab, or on its own */
 export function SlabLabel(props: LabelProps) {
-  // (variety: the card's version/rarity line — PSA and BGS print it)
   const c = String(props.slab.company ?? '').toUpperCase()
   if (c === 'PSA') return <PsaLabel {...props} />
   if (c === 'BGS') return <BgsLabel {...props} />
@@ -262,13 +286,14 @@ export function SlabLabel(props: LabelProps) {
 
 /** The full graded case — acrylic shell, the grader's label up top, the card in its window below
  *  (SGC's in its black "tuxedo" insert). Sizes scale with the slab's width. */
-export function FullSlab({ slab, name, number, setName, variety, children }: {
-  slab: SlabInfo; name: string; number: string; setName?: string; variety?: string; children: React.ReactNode
+export function FullSlab({ slab, name, number, setName, children }: {
+  slab: SlabInfo; name: string; number: string; setName?: string; children: React.ReactNode
 }) {
   const c = String(slab.company ?? '').toUpperCase()
   // Labels are wide and short; PSA's is the shortest
-  const labelH = c === 'PSA' ? '16.5%' : c === 'BGS' ? '20%' : '19%'
-  const sgcInsert = c === 'SGC'
+  const labelH = c === 'PSA' ? '16.5%' : c === 'BGS' ? '13%' : '19%'
+  // SGC's "tuxedo" and Beckett's current holder both put the card in a black insert
+  const sgcInsert = c === 'SGC' || c === 'BGS'
   return (
     <div
       className="relative w-full h-full rounded-[18px] p-[4%] flex flex-col gap-[3%] overflow-hidden"
@@ -282,7 +307,7 @@ export function FullSlab({ slab, name, number, setName, variety, children }: {
     >
       <div className="relative shrink-0" style={{ height: labelH }}>
         {/* The printing goes with the name, as graders print it: Charizard - Reverse Holo */}
-        <SlabLabel slab={slab} name={slab.printing ? `${baseCardName(name)} - ${slab.printing}` : name} number={number} setName={setName} variety={variety} />
+        <SlabLabel slab={slab} name={slab.printing ? `${baseCardName(name)} - ${slab.printing}` : name} number={number} setName={setName} />
       </div>
       {/* Card window */}
       <div
@@ -291,8 +316,11 @@ export function FullSlab({ slab, name, number, setName, variety, children }: {
           ? { background: '#0b0b0b', boxShadow: '0 0 0 1px rgba(255,255,255,0.25), inset 0 0 0 1px rgba(255,255,255,0.12), inset 0 2px 10px rgba(0,0,0,0.6)' }
           : { background: 'rgba(200,215,232,0.05)', boxShadow: '0 0 0 1px rgba(255,255,255,0.28), inset 0 0 0 1px rgba(255,255,255,0.55), inset 0 0 0 4px rgba(225,235,248,0.09), inset 0 2px 10px rgba(0,0,0,0.35)' }}
       >
-        <div className="relative h-full rounded-[6px] overflow-hidden" style={{ aspectRatio: '5 / 7', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>
-          {children}
+        {/* The card, as big as the window allows either way (5 : 7) */}
+        <div className="absolute inset-[2%] flex items-center justify-center" style={{ containerType: 'size' }}>
+          <div className="relative rounded-[6px] overflow-hidden" style={{ width: 'min(100cqw, calc(100cqh * 5 / 7))', aspectRatio: '5 / 7', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>
+            {children}
+          </div>
         </div>
       </div>
       {/* Acrylic glare sweeping across the whole case */}
