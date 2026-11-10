@@ -109,6 +109,84 @@
   .scroll-themed::-webkit-scrollbar-track { background: transparent; }
   .scroll-themed::-webkit-scrollbar-thumb { background: rgba(122, 82, 48, 0.3); border-radius: 9999px; border: 2px solid transparent; background-clip: content-box; }
   .scroll-themed::-webkit-scrollbar-thumb:hover { background: rgba(122, 82, 48, 0.5); background-clip: content-box; }
+
+  /* No scrollbar at all (a row whose edges fade instead — AddCardDialog's FadeScrollRow) */
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+
+/* ── Add Card (components/inventory/AddCardDialog.tsx) in TCG Haven's own materials ─────────────
+   haven-panel: a framed parchment section (walnut rule, binder-dot interior, like the profile
+   showcase); brass-medallion / haven-plate: the pin book's brass; grader-chip: each grader in its
+   real label colours; grade-coin: round brass coins; card-stage: the chosen card on its stand. */
+.haven-panel {
+  border-radius: 1rem;
+  padding: 0.875rem;
+  border: 1.5px solid #bba883;
+  background-color: #f3e9d3;
+  background-image: radial-gradient(circle at 1px 1px, rgba(122, 101, 74, 0.11) 1px, transparent 0);
+  background-size: 16px 16px;
+  box-shadow: inset 0 0 0 3px #f3e9d3, inset 0 0 0 4px rgba(148, 128, 95, 0.35), 0 1px 2px rgba(120, 80, 30, 0.06);
+}
+.haven-panel-on { box-shadow: inset 0 0 0 3px #f3e9d3, inset 0 0 0 4px rgba(148, 128, 95, 0.55), 0 10px 24px -16px rgba(60, 35, 15, 0.45); }
+.haven-rule { height: 1px; background: linear-gradient(90deg, transparent, rgba(148, 128, 95, 0.6), transparent); }
+.brass-medallion {
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px; color: #4a3313;
+  background: radial-gradient(circle at 35% 30%, #f7e3a8, #d9b25e 45%, #a87f35 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 3px rgba(80, 50, 10, 0.35), 0 2px 5px -1px rgba(60, 35, 15, 0.45);
+}
+.haven-switch {
+  position: relative; width: 44px; height: 26px; border-radius: 9999px; flex-shrink: 0; transition: background-color 0.2s;
+  background: #d8c9a8; box-shadow: inset 0 1px 3px rgba(60, 35, 15, 0.35);
+}
+.haven-switch > span {
+  position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 9999px; transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1);
+  background: radial-gradient(circle at 35% 30%, #fffaf0, #efe2c4); box-shadow: 0 1px 3px rgba(60, 35, 15, 0.45);
+}
+.haven-switch-on { background: #7a5230; }
+.haven-switch-on > span { transform: translateX(18px); background: radial-gradient(circle at 35% 30%, #f7e3a8, #d9b25e 50%, #b38a3e); }
+.grader-chip {
+  position: relative; height: 34px; border-radius: 8px; font-size: 12px; transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.2s;
+  outline: 1px solid rgba(60, 35, 15, 0.18); opacity: 0.82;
+}
+.grader-chip:hover { transform: translateY(-1px); opacity: 1; }
+.grader-chip-on { opacity: 1; transform: translateY(-2px); outline: 2px solid #7a5230; outline-offset: 2px; }
+.grade-coin {
+  width: 38px; height: 38px; border-radius: 9999px; font-size: 13px; font-weight: 800; color: #5a4120;
+  background: radial-gradient(circle at 35% 30%, #fbf3df, #ead9b4);
+  box-shadow: inset 0 0 0 1.5px #c9b083, inset 0 -2px 2px rgba(120, 80, 30, 0.12), 0 1px 2px rgba(60, 35, 15, 0.15);
+  transition: transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.grade-coin:hover { transform: translateY(-1px); }
+.grade-coin-on {
+  color: #3b2709; transform: translateY(-2px) scale(1.06);
+  background: radial-gradient(circle at 35% 30%, #f7e3a8, #d9b25e 50%, #b38a3e);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1.5px #9a7330, 0 3px 6px -2px rgba(60, 35, 15, 0.5);
+}
+.haven-plate {
+  border-radius: 10px; padding: 0.6rem 0.75rem; color: #3b2a12;
+  background: linear-gradient(180deg, #f2dc9f 0%, #d9b866 48%, #c39c4c 52%, #dcbf74 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 1px rgba(110, 75, 20, 0.45), 0 3px 8px -3px rgba(60, 35, 15, 0.5);
+}
+.card-stage-wrap { animation: card-stage-wrap-in 0.4s cubic-bezier(0.34, 1.3, 0.64, 1) 0.05s both; }
+@keyframes card-stage-wrap-in { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+.card-stage-card {
+  position: relative; border-radius: 4.5%; transition: transform 0.4s cubic-bezier(0.34, 1.4, 0.64, 1);
+  box-shadow: 0 18px 30px -14px rgba(50, 30, 10, 0.6), 0 4px 10px -4px rgba(50, 30, 10, 0.35);
+}
+.card-stage-card:hover { transform: rotateY(-8deg) rotateX(4deg) translateY(-4px); }
+.card-stage-in { animation: card-stage-in 0.55s cubic-bezier(0.34, 1.3, 0.64, 1) both; }
+@keyframes card-stage-in { from { opacity: 0; transform: rotateY(-75deg) scale(0.92); } to { opacity: 1; transform: none; } }
+.card-stage-sheen { position: absolute; inset: 0; border-radius: 4.5%; overflow: hidden; pointer-events: none; }
+.card-stage-sheen::before {
+  content: ''; position: absolute; top: -20%; bottom: -20%; width: 40%; left: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: slab-glare-sweep 5s ease-in-out 0.8s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-stage-wrap, .card-stage-in { animation: none; }
+  .card-stage-card:hover { transform: none; }
+  .card-stage-sheen::before { animation: none; display: none; }
 }
 
 @keyframes sold-pop {

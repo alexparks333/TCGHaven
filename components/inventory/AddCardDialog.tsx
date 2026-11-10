@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Search, Loader2, ChevronDown, AlertCircle, Plus, Check } from 'lucide-react'
+import { X, Search, Loader2, ChevronDown, AlertCircle, Plus, Check, Award } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
@@ -12,7 +12,8 @@ import {
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
 import { cn, localDateString, isFirstCopyOfCard } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { cardImage } from '@/lib/cardImage'
+import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
+import { FullSlab, slabStyle, gradeWord } from '@/components/SlabCase'
 import { CardName } from '@/components/CardName'
 
 
@@ -63,9 +64,43 @@ function useDebounce<T>(value: T, delay: number): T {
 
 // Shorter names for the game tabs, so the row fits without scrolling at today's game count.
 // Shorter names where the full one crowds a game chip
-const GAME_TAB_LABELS: Partial<Record<Game, string>> = { mtg: 'Magic', swu: 'Star Wars', fab: 'Flesh & Blood' }
+const GAME_TAB_LABELS: Partial<Record<Game, string>> = { mtg: 'Magic' }
 const GRADING_COMPANIES = ['PSA', 'CGC', 'BGS', 'SGC', 'TAG', 'HGA', 'CSG', 'Other']
 const QUICK_GRADES = ['10', '9.5', '9', '8.5', '8', '7']
+
+/** A row that scrolls sideways with no scrollbar: its edges fade out on the side(s) with more to
+ *  see, and a mouse wheel scrolls it sideways (no trackpad needed). */
+function FadeScrollRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ left: false, right: false })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => setEdges({ left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 })
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    for (const c of Array.from(el.children)) ro.observe(c)
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+      const atEnd = (e.deltaY > 0 && el.scrollLeft + el.clientWidth >= el.scrollWidth - 1) || (e.deltaY < 0 && el.scrollLeft <= 0)
+      if (atEnd) return   // at an end, let the dialog scroll as usual
+      e.preventDefault()
+      el.scrollLeft += e.deltaY
+    }
+    el.addEventListener('scroll', update, { passive: true })
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => { ro.disconnect(); el.removeEventListener('scroll', update); el.removeEventListener('wheel', onWheel) }
+  }, [])
+  const fade = 36
+  const mask = `linear-gradient(to right, ${edges.left ? 'transparent' : '#000'} 0, #000 ${edges.left ? fade : 0}px, #000 calc(100% - ${edges.right ? fade : 0}px), ${edges.right ? 'transparent' : '#000'} 100%)`
+  return (
+    <div ref={ref} className={cn('no-scrollbar overflow-x-auto overscroll-x-contain', className)} style={{ maskImage: mask, WebkitMaskImage: mask }}>
+      {children}
+    </div>
+  )
+}
+
 
 export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveError }: Props) {
   const { addCard, updateCard, deleteCard, cards: allCards, pushCardUnlock, trackedGames } = useStore()
@@ -107,6 +142,22 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   const cardResultsRef = useRef<HTMLDivElement>(null)
   // Group: typing a new one (the "+ New group" chip, or a saved group that isn't in the list)
   const [newGroupOpen, setNewGroupOpen] = useState(false)
+  // The card preview: is the chosen card's art landscape (Star Wars leaders and bases, Riftbound
+  // battlefields)? A slab holds those turned on their side.
+  const [artLandscape, setArtLandscape] = useState(false)
+  useEffect(() => { setArtLandscape(false) }, [form.imageUrl])
+  const noteArt = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    setArtLandscape(img.naturalWidth > img.naturalHeight * 1.05)
+  }
+  // Keep the selected game in view in the sideways-scrolling game row (e.g. editing a card from a
+  // game further along it, or picking one at the row's edge)
+  const activeGameRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    // Centred in the row — clear of the faded edges (scrolls only the row, never the page)
+    const chip = activeGameRef.current, row = chip?.parentElement
+    if (chip && row) row.scrollTo({ left: chip.offsetLeft - (row.clientWidth - chip.offsetWidth) / 2, behavior: 'smooth' })
+  }, [form.game])
   const setDropdownRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const cardJustSelectedRef = useRef(false)
@@ -389,7 +440,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
-      <div className="add-card-panel scroll-themed relative w-full max-w-[592px] card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div className="relative w-full max-w-[592px] lg:max-w-[924px] flex items-center justify-center gap-7">
+      <div className="add-card-panel scroll-themed relative w-full max-w-[592px] min-w-0 card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -401,35 +453,28 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-          {/* Game — hidden when there's only one to pick from. A grid of chips that wraps (no
-              sideways scrolling), each with its game's colour. */}
+          {/* Game tabs — hidden when there's only one game to pick from. One row that scrolls
+              sideways (no scrollbar; the edges fade where there's more), rather than wrapping. */}
           {gameChoices.length > 1 && <div>
             <label className="field-label">Game</label>
-            <div className="grid grid-cols-2 min-[420px]:grid-cols-3 gap-1.5">
-              {gameChoices.map((g) => {
-                const on = form.game === g
-                return (
-                  <button
-                    key={g}
-                    type="button"
-                    onClick={() => changeGame(g)}
-                    aria-pressed={on}
-                    className={cn(
-                      'flex items-center gap-2 min-w-0 px-2.5 py-2 rounded-xl text-[13px] font-medium transition-all border text-left',
-                      on
-                        ? 'bg-violet-600 border-violet-500 text-white shadow-sm shadow-violet-900/20'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
-                    )}
-                  >
-                    <span
-                      className={cn('w-2.5 h-2.5 rounded-full shrink-0', on && 'ring-2 ring-white/70')}
-                      style={{ backgroundColor: GAME_COLORS[g] }}
-                    />
-                    <span className="truncate">{GAME_TAB_LABELS[g] ?? GAME_LABELS[g]}</span>
-                  </button>
-                )
-              })}
-            </div>
+            <FadeScrollRow className="flex gap-2 pb-0.5">
+              {gameChoices.map((g) => (
+                <button
+                  key={g}
+                  ref={form.game === g ? activeGameRef : undefined}
+                  type="button"
+                  onClick={() => changeGame(g)}
+                  className={cn(
+                    'flex-auto shrink-0 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all border',
+                    form.game === g
+                      ? 'bg-violet-600 border-violet-500 text-white'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700'
+                  )}
+                >
+                  {GAME_TAB_LABELS[g] ?? GAME_LABELS[g]}
+                </button>
+              ))}
+            </FadeScrollRow>
           </div>}
 
           {/* Card search */}
@@ -769,83 +814,93 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             )
           })()}
 
-          {/* Graded — a switch; on, the company and the grade */}
-          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+          {/* Graded — TCG Haven's framed parchment panel: a brass medallion and engraved title with a
+              switch; on, each grader as its own label colours, the grade as quick-pick coins, and a
+              preview of the slab label */}
+          <div className={cn('haven-panel transition-shadow', form.gradingCompany && 'haven-panel-on')}>
             <button
               type="button"
               role="switch"
               aria-checked={!!form.gradingCompany}
               onClick={() => setForm((f) => (f.gradingCompany ? { ...f, gradingCompany: '', grade: '' } : { ...f, gradingCompany: 'PSA', grade: '' }))}
-              className="w-full flex items-center justify-between gap-3 text-left"
+              className="w-full flex items-center gap-3 text-left"
             >
-              <span>
-                <span className="block text-sm font-medium text-ink">Graded card</span>
+              <span className="brass-medallion w-9 h-9 shrink-0"><Award size={17} /></span>
+              <span className="flex-1 min-w-0">
+                <span className="pinbook-serif block text-[15px] font-bold tracking-wide text-ink">Graded Card</span>
                 <span className="block text-xs text-slate-500">Slabbed by PSA, CGC, BGS and others</span>
               </span>
-              <span className={cn('relative w-10 h-6 rounded-full transition-colors shrink-0', form.gradingCompany ? 'bg-violet-600' : 'bg-slate-700')}>
-                <span className={cn('absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform', form.gradingCompany && 'translate-x-4')} />
-              </span>
+              <span className={cn('haven-switch', form.gradingCompany && 'haven-switch-on')}><span /></span>
             </button>
 
             {!!form.gradingCompany && (
-              <div className="mt-3 pt-3 border-t border-slate-800 space-y-3">
+              <div className="mt-4 space-y-4">
+                <div className="haven-rule" />
                 <div>
-                  <label className="field-label">Company</label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {GRADING_COMPANIES.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setField('gradingCompany', c)}
-                        className={cn(
-                          'py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                          form.gradingCompany === c
-                            ? 'bg-violet-600 border-violet-500 text-white'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
-                        )}
-                      >
-                        {c}
-                      </button>
-                    ))}
+                  <label className="field-label">Grading Company</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {GRADING_COMPANIES.map((c) => {
+                      const st = slabStyle(c === 'Other' ? '' : c)
+                      const on = form.gradingCompany === c
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setField('gradingCompany', c)}
+                          className={cn('grader-chip', on && 'grader-chip-on')}
+                          style={{ backgroundColor: st.bg, color: st.fg, boxShadow: `inset 0 -2px 0 ${st.accent}` }}
+                        >
+                          <span className="italic font-black tracking-wider">{c}</span>
+                          {on && <Check size={11} className="absolute top-1 right-1" />}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
                 <div>
                   <label className="field-label">Grade</label>
-                  <div className="flex gap-1.5 items-center">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {QUICK_GRADES.map((g) => (
+                      <button key={g} type="button" onClick={() => setField('grade', g)} className={cn('grade-coin', form.grade === g && 'grade-coin-on')}>
+                        {g}
+                      </button>
+                    ))}
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={form.grade ?? ''}
+                      value={QUICK_GRADES.includes(form.grade ?? '') ? '' : (form.grade ?? '')}
                       onChange={(e) => setField('grade', e.target.value)}
-                      placeholder="e.g. 10"
-                      className="input-field w-24 shrink-0 text-center font-semibold"
+                      placeholder="Other"
+                      aria-label="Another grade"
+                      className="input-field !w-20 !py-1.5 text-center text-xs font-semibold"
                     />
-                    <div className="flex flex-wrap gap-1">
-                      {QUICK_GRADES.map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setField('grade', g)}
-                          className={cn(
-                            'min-w-[2.25rem] px-2 py-1.5 rounded-lg text-xs font-semibold border transition-all',
-                            form.grade === g
-                              ? 'bg-violet-600 border-violet-500 text-white'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
-                          )}
-                        >
-                          {g}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 </div>
+                {/* The slab label as the grader prints it */}
+                {(() => {
+                  const st = slabStyle(form.gradingCompany === 'Other' ? '' : form.gradingCompany)
+                  const word = form.grade ? gradeWord(form.gradingCompany, form.grade) : ''
+                  return (
+                    <div className="rounded-lg flex items-center gap-3 px-3 py-2 overflow-hidden" style={{ backgroundColor: st.bg, color: st.fg, boxShadow: `inset 0 0 0 2px ${st.accent}, 0 2px 6px -2px rgba(60,35,15,0.35)` }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide opacity-70 truncate">{form.set || 'Set'}</div>
+                        <div className="text-[13px] font-extrabold uppercase leading-tight truncate">{form.name || 'Card name'}</div>
+                        <span className="inline-block mt-0.5 text-[10px] font-black italic tracking-wider px-1 rounded-[2px]" style={{ backgroundColor: st.accent, color: st.bg }}>{form.gradingCompany}</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {word && <div className="text-[10px] font-extrabold tracking-wide leading-none">{word}</div>}
+                        <div className="text-[26px] font-black leading-none mt-0.5">{form.grade || '—'}</div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>
 
           {/* Card preview */}
           {form.imageUrl && (
-            <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
+            <div className="lg:hidden flex items-center gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
               <img src={cardImage(form.imageUrl, 'thumb')} alt={form.name} className="w-12 h-16 object-contain rounded" />
               <div>
                 <div className="text-sm font-medium text-ink"><CardName name={form.name} /></div>
@@ -889,6 +944,52 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Wide screens: the chosen card on display beside the form — a framed stand with the card
+          (in its slab when it's graded) and a brass nameplate */}
+      <aside className="card-stage-wrap hidden lg:block w-[300px] shrink-0">
+        <div className="showcase-frame">
+          <div className="showcase-inner px-5 pt-4 pb-5 flex flex-col items-center gap-4">
+            <div className="pinbook-serif flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GAME_COLORS[form.game] }} />
+              {GAME_LABELS[form.game]}{japanese ? ' · Japanese' : ''}
+            </div>
+            <div className="w-full flex justify-center" style={{ perspective: '900px' }}>
+              {form.imageUrl && form.gradingCompany ? (
+                <div key={`slab-${form.imageUrl}`} className="card-stage-in w-full" style={{ aspectRatio: '0.66' }}>
+                  <FullSlab slab={{ company: form.gradingCompany, grade: form.grade ?? '' }} name={form.name} number={form.number} setName={form.set}>
+                    {artLandscape ? (
+                      // Turned on its side to fill the portrait window, like a real slab holds it
+                      <img src={cardImage(form.imageUrl, 'grid')} alt={form.name} onLoad={noteArt}
+                        className="absolute top-1/2 left-1/2 max-w-none object-cover rotate-90"
+                        style={{ width: '140%', height: '71.43%', translate: '-50% -50%' }} />
+                    ) : (
+                      <img src={cardImage(form.imageUrl, 'grid')} alt={form.name} onLoad={noteArt} className="w-full h-full object-cover" />
+                    )}
+                  </FullSlab>
+                </div>
+              ) : (
+                <div key={form.imageUrl || 'empty'} className={cn('card-stage-card w-[88%]', form.imageUrl ? 'card-stage-in' : 'opacity-70')}>
+                  <img src={form.imageUrl ? cardImage(form.imageUrl, 'grid') : NO_CARD_IMAGE} alt={form.name || 'No card chosen'} onLoad={form.imageUrl ? noteArt : undefined} className="w-full rounded-[4.5%] block" />
+                  {form.imageUrl && <span className="card-stage-sheen" />}
+                </div>
+              )}
+            </div>
+            <div className="haven-plate w-full text-center">
+              <div className="pinbook-serif text-[13px] font-bold leading-snug line-clamp-2">
+                {form.name ? <CardName name={form.name} /> : 'Choose a card'}
+              </div>
+              <div className="text-[11px] opacity-75 mt-0.5 truncate">
+                {form.name ? [form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ') : 'Search above to see it here'}
+              </div>
+              {form.name && catalogMarketPrice() > 0 && (
+                <div className="mt-1.5 inline-block text-xs font-bold px-2 py-0.5 rounded-full bg-black/10">${catalogMarketPrice().toFixed(2)}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </aside>
       </div>
     </div>
   )
