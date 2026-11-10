@@ -1,4 +1,4 @@
-import type { Game, Edition, Finish } from './types'
+import { hasPrintings, type Game, type Edition, type Finish } from './types'
 import { riftboundVariantFlags } from './utils'
 import { variantPrice } from '@/scripts/lib/pokemon-variants.mjs'
 
@@ -24,7 +24,7 @@ export interface CatalogPriceFields {
 
 export interface PrintingChoice {
   isFoil?: boolean
-  edition?: Edition   // Pokémon only — Unlimited / Shadowless / 1st Edition
+  edition?: Edition   // Pokémon: Unlimited / Shadowless / 1st Edition; Yu-Gi-Oh!: 1st Edition / Unlimited / Limited
   finish?: Finish     // Pokémon only — Normal / Holo / Reverse Holo
 }
 
@@ -33,8 +33,8 @@ export function catalogPrice(
   card: CatalogPriceFields,
   { isFoil = false, edition, finish }: PrintingChoice = {},
 ): number {
-  // A Pokémon card added with an explicit edition/finish is priced as exactly that printing.
-  if (game === 'pokemon' && (edition || finish)) {
+  // A card added with an explicit edition/finish (Pokémon, Yu-Gi-Oh!) is priced as exactly that printing.
+  if (hasPrintings(game) && (edition || finish)) {
     const vp = card.variantPrices
     if (vp && Object.keys(vp).length) return variantPrice(vp, { edition, finish, isFoil })
     // No per-printing prices (a backup-priced card, or a history day from before editions were
@@ -47,6 +47,9 @@ export function catalogPrice(
   // One Piece has no foil duality (a Parallel print is its own catalog card) and no
   // lowest-listing field — just the one market price.
   if (game === 'onepiece') return card.marketPrice ?? 0
+  // Yu-Gi-Oh! has no foil toggle (foil is the rarity, and a rarity version is its own card): the
+  // default printing's market price
+  if (game === 'yugioh') return card.marketPrice ?? 0
 
   // Always TCGplayer's market price (what copies actually sell for). The catalog's lowPriceNM*
   // fields are NOT near-mint despite the name — they're TCGCSV's lowest listing in ANY condition

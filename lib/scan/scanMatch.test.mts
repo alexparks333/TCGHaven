@@ -2,7 +2,7 @@
 // Fixtures are real catalog cards (trimmed); the OCR lines are what each card prints, laid out
 // where it prints it. lib/scan/scanMatch.ts reads them, lib/scan/decide.ts makes the final call.
 import assert from 'node:assert/strict'
-import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, readSlabLabel, type OcrLine, type ScanCatalog } from './scanMatch.ts'
+import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, readSlabLabel, ygoKey, type OcrLine, type ScanCatalog } from './scanMatch.ts'
 import { decide } from './decide.ts'
 
 const L = (text: string, y: number, h = 0.03): OcrLine => ({ text, x: 0.05, y, w: 0.6, h })
@@ -302,6 +302,40 @@ assert.equal(decide([{ key: 'a', score: 99, exact: true, trusted: true }], [0.88
   // A name inside the card's name is the same card ("Genesect" on Genesect EX); "TRAINER" isn't a name
   assert.equal(top([L('Genesect', 0.04, 0.05), L('11/101', 0.93, 0.015)], [cat])[0]?.id, 'tcg-x')
   assert.ok(!readClues([L('TRAINER', 0.03, 0.04)]).topLines.some(() => false))
+}
+
+// ── Yu-Gi-Oh!: the set code under the artwork, the name along the top (real MAMS / LAVD cards) ──
+{
+  const ygo: ScanCatalog = {
+    key: 'yugioh',
+    cards: [
+      { id: 'tcg-731469', name: 'Blue-Eyes White Dragon, the White Phantom Beast', number: 'MAMS-EN001', set: 'MAMS' },
+      { id: 'tcg-731470', name: 'Blue-Eyes White Dragon, the White Phantom Beast', number: 'MAMS-EN001', set: 'MAMS' },
+      { id: 'tcg-731471', name: 'Blue-Eyes White Dragon, the White Phantom Beast', number: 'MAMS-EN001', set: 'MAMS' },
+      { id: 'tcg-731472', name: 'Deep-Eyes White Dragon, the Blue Abyss', number: 'MAMS-EN002', set: 'MAMS' },
+      { id: 'tcg-708276', name: 'Performapal Odd-Eyes Dissolver', number: 'LAVD-ENO09', set: 'LAVD' },
+      { id: 'tcg-1', name: 'Blue-Eyes White Dragon', number: 'LOB-001', set: 'LOB' },
+    ],
+  }
+  assert.equal(ygoKey('LAVD-ENO09'), 'LAVD-EN009', 'TCGplayer typed an O for a 0')
+  const lines = [
+    L('Blue-Eyes White Dragon, the White Phantom Beast', 0.04, 0.045), L('LIGHT', 0.04, 0.03),
+    L('MAMS-EN001', 0.71, 0.015), L('[Dragon/Effect]', 0.75), L('ATK/3000 DEF/2500', 0.9), L('89631139', 0.95, 0.012),
+  ]
+  const c = readClues(lines)
+  assert.deepEqual(c.ygoCodes, ['MAMS-EN001'])
+  assert.ok(c.yugiohWords)
+  const r = top(lines, [...ALL, ygo])
+  const firsts = r.filter((x) => x.score === r[0].score).map((x) => x.id).sort()
+  assert.deepEqual(firsts, ['tcg-731469', 'tcg-731470', 'tcg-731471'], 'the rarity versions of MAMS-EN001 tie — the picture or the person picks')
+  // An O for a 0 on the card, and the old code style
+  assert.equal(top([L('Performapal Odd-Eyes Dissolver', 0.04, 0.045), L('LAVD-ENO09', 0.7, 0.015)], [ygo])[0].id, 'tcg-708276')
+  assert.equal(top([L('Blue-Eyes White Dragon', 0.04, 0.045), L('LOB-001', 0.7, 0.015), L('ATK/3000 DEF/2500', 0.9)], [...ALL, ygo])[0].id, 'tcg-1')
+  // A wrong code read off a clearly named card doesn't win against the name
+  const wrong = top([L('Deep-Eyes White Dragon, the Blue Abyss', 0.04, 0.045), L('MAMS-EN001', 0.7, 0.015)], [ygo])
+  assert.equal(wrong[0].name, 'Deep-Eyes White Dragon, the Blue Abyss')
+  // "LIGHT" along the top isn't a name
+  assert.ok(!readClues([L('LIGHT', 0.03, 0.03)]).topLines.every((t) => t === 'nothing'))
 }
 
 // ── Nothing readable → nothing guessed ──

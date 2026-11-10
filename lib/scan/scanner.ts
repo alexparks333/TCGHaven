@@ -63,6 +63,16 @@ function trayOption(m: ScanMatch & { final?: number; distance?: number | null },
   }
 }
 
+/** A printing key ("1st:normal", "unlimited:reverse") as shown in the card sheet's Finish row */
+function printingLabel(key: string, game: Game): string {
+  const [edition, finish] = key.split(':')
+  const ed: Record<string, string> = { unlimited: '', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
+  const fin: Record<string, string> = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo' }
+  // Yu-Gi-Oh! has editions only — its foil is the rarity
+  if (game === 'yugioh') return edition === 'unlimited' ? 'Unlimited' : ed[edition] ?? edition
+  return [ed[edition] ?? edition, fin[finish] ?? finish].filter(Boolean).join(' ')
+}
+
 // The card sheet's "Search for another card": Add Card's own search, in every game being scanned
 async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]> {
   const perGame = await Promise.all(games.flatMap((game) => {
@@ -82,7 +92,7 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
           name: r.name.replace(/ ✦ (Foil|Holo)$/, ''), setName: r.setName, number: r.number, imageUrl: r.imageUrl,
           price: r.marketPrice > 0 ? r.marketPrice : r.marketPriceFoil, score: 0, why: 'searched', exact: true,
           printings: r.variantPrices && Object.keys(r.variantPrices).length
-            ? Object.entries(r.variantPrices).map(([k, v]) => ({ key: k, label: k.replace('unlimited:', '').replace('1st:', '1st Edition ').replace('shadowless:', 'Shadowless ').replace('normal', 'Normal').replace('holofoil', 'Holo').replace('reverse', 'Reverse Holo'), price: v }))
+            ? Object.entries(r.variantPrices).map(([k, v]) => ({ key: k, label: printingLabel(k, game), price: v }))
             : [],
         }]
       }).slice(0, 8)

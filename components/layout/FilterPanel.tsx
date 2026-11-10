@@ -7,7 +7,7 @@ import { useStore } from '@/lib/store'
 import { formatCurrency, cn } from '@/lib/utils'
 import { GAME_LABELS, type Game } from '@/lib/types'
 
-const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 
 // Pill styles — on / off
 const pillOn   = 'text-xs px-3 py-1.5 rounded-full border font-medium transition-all bg-violet-600/20 border-violet-500/40 text-violet-700 hover:bg-violet-600/30'

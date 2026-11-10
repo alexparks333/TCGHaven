@@ -21,7 +21,7 @@ import type { Card, Game } from '@/lib/types'
 // changes, every CHECK_EVERY_MS, and when the tab comes back.
 
 const CHECK_EVERY_MS = 15 * 60 * 1000
-const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 
 // Per-game batch price endpoints — in-memory catalog lookups server-side, no live external fetch.
 const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> = {
@@ -33,6 +33,8 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
   // base card (see app/api/prices/onepiece/route.ts).
   onepiece:  { url: '/api/prices/onepiece',  payload: (c) => ({ id: c.id, apiId: c.apiId }) },
   mtg:       { url: '/api/prices/mtg',       payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil }) },
+  // edition picks the exact printing (1st Edition / Unlimited / Limited)
+  yugioh:    { url: '/api/prices/yugioh',    payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish }) },
 }
 
 // Everything that decides a card's price — a change to any of these reloads prices.

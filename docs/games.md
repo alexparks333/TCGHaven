@@ -921,3 +921,101 @@ oversized-card products, starter sets, etc.) collapsing into one "Special Sets" 
 shape as One Piece's Main Sets/Special Sets split.
 
 ---
+
+## Yu-Gi-Oh! — Data Source, Schema, Add-a-Set Guide
+
+Added 2026-11-10, the sixth game, following `docs/adding-a-game.md`. Owner's scope: **English TCG
+singles**; Speed Duel, Rush Duel, sealed product and non-English prints left out; Japanese / OCG
+later as its own catalog if wanted.
+
+### Data Source — TCGplayer only (YGOPRODeck as the check)
+
+**TCGplayer (tcgcsv category 2) is the whole source** — every English single is one TCGplayer product
+= one catalog card, id **`tcg-{productId}`** (set once, never changes). Each set (TCGplayer group) is
+one `ProductsAndPrices.csv` download. Pure logic: `scripts/lib/yugioh-tcgplayer.mjs` (tests: `npm
+run test:yugioh-source`); fetch + write: `planYugiohCatalog()` / `downloadYugioh()` in
+`catalog-sync.mjs`.
+
+**YGOPRODeck** (`db.ygoprodeck.com/api/v7/cardinfo.php`, free) is the independent check:
+`npm run yugioh-source-report` compares every English set code it lists against the catalog (97.9%
+present on 2026-11-10 — the rest are European-only printings, e.g. `MRD-E098`, that TCGplayer doesn't
+sell, or printings TCGplayer files under another number, e.g. War of the Giants Reinforcements as
+`BPW2-…`), checks every card's fields, price coverage and outliers, and prints a seeded 50-card
+sample with TCGplayer links for a hand check. It exits 1 on duplicates, missing fields, or an
+existing card that would change what collectors see.
+
+What's in (2026-11-10): **44,600 cards in 588 sets**; 26 Speed Duel / Rush Duel sets, 1,313 sealed
+products and 51 non-English prints left out; 97.6% priced.
+
+### Catalog Schema (`catalog/yugioh/cards/{id}`)
+
+```jsonc
+{
+  "id": "tcg-731471",
+  "name": "Blue-Eyes White Dragon, the White Phantom Beast",  // as printed
+  "variant": "Starlight Rare",     // TCGplayer's bracketed version, when the product has one
+  "number": "MAMS-EN001",          // the printed set code + number, exactly as TCGplayer has it
+  "set": "MAMS",                   // the code before the dash
+  "setName": "Magnificent Maestros",
+  "rarity": "Starlight Rare",
+  "cardType": "Effect Monster", "attribute": "LIGHT",
+  "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/731471_200w.jpg",
+  "tcgProductId": 731471, "tcgGroupId": 24808,
+  "variantPrices": { "1st:normal": 900 },   // edition → price
+  "marketPrice": 900, "lowPriceNM": 850     // the default edition's (Unlimited when priced, else 1st, else Limited)
+}
+```
+
+### Variants — two different things
+
+- **Rarity versions are separate cards.** TCGplayer sells `MAMS-EN001` as the plain Ultra Rare, an
+  Extended Art, a Starlight Rare and a GMR — four products sharing one printed number. Each is its own
+  card; the name stays as printed and the version goes in `variant`. Search, Add Card and the Cardex
+  show it after the name — "Blue-Eyes … (Starlight Rare)" (`yugiohDisplayName()` in
+  `lib/api/yugioh.ts`; `/api/cardex` does the same).
+- **Editions are printings of one card** — 1st Edition / Unlimited / Limited, each priced, in
+  `variantPrices` (`"1st:normal"`, `"unlimited:normal"`, `"limited:normal"` — Pokémon's scheme,
+  `pokemon-variants.mjs`, which gained the `limited` edition). Yu-Gi-Oh! has no foil toggle (foil is
+  the rarity). Add Card's Edition picker, the scanner's Finish row and the review screen offer them;
+  `lib/pricing.ts` prices the edition logged. `PRINTING_GAMES` / `hasPrintings()` in `lib/types.ts`
+  is where a game opts into printings.
+
+### Rules that keep logged cards safe
+
+An existing card never changes what it shows — name, number, set, rarity, version, photo stay as
+collectors logged them (a card saved before TCGplayer photographed it gets the photo once). Only
+prices refresh; an edition with no price today keeps its last one. Never deleted — a product that
+vanishes is just no longer updated.
+
+### Sets and the Cardex
+
+The set list is written by the sync to `catalog_meta/yugioh.sets` (newest first) and read by
+`getYugiohSets()` → `/api/sets?game=yugioh`. TCGplayer has no set type, so `setTypeOf()` reads it
+from the set's name into six Cardex groups: **Booster Sets, Structure Decks, Starter & Theme Decks,
+Tins & Mega Packs, Collections & Special Sets, Promos & Prizes** (`SET_TYPE_LABELS`). Custom sets
+made with Admin Catalog's "New Set" live in the registry (`registry/main` `yugioh.sets`, like
+Magic's). Within a set, cards sort by number ("MAMS-EN001" numerically) then rarity
+(`CARDEX_RARITY_ORDER`).
+
+### Syncing
+
+Its own daily job — **`.github/workflows/sync-yugioh.yml`, 21:30 UTC** (after tcgcsv publishes and
+after the 21:00 sync-prices run) — running `npm run download-cards -- --only yugioh`; ~660 per-set
+downloads are too long for the twice-daily web sync. `lib/api/priceStatus.ts` treats it like Magic
+(own schedule). The staff portal's Sync button calls `app/api/sync/yugioh` (may time out — the CLI
+is the reliable path). New sets need no code change: they appear in TCGplayer's groups and sync in.
+
+### Scanner
+
+The set code is printed **under the artwork, on the right** — not along the bottom — so
+`readClues()` looks for it anywhere (`ygoCodes`, O read as 0). The name is along the top
+(`NAME_ON_TOP`); "ATK/", "DEF/", "[Spell Card]" mark a Yu-Gi-Oh! card (`gameHints`); attribute words
+("DARK", "LIGHT") aren't names (`NOT_A_NAME`). Rarity versions share a code and tie on text — the
+picture or the person picks. Not used yet: the 8-digit passcode bottom-left (the card's id across
+printings — not in TCGplayer's data; YGOPRODeck has it) and TCGplayer's card text (`extDescription`).
+
+### Gotchas
+
+- **TCGplayer sometimes types a letter O for a zero** in a number ("LAVD-ENO09" — 51 cards). Kept as
+  TCGplayer has it; search and the scanner compare with O as 0 (`ygoKey()`).
+- `GAME_TAB_LABELS` / `GAME_LABELS`: "Yu-Gi-Oh!"; colour `#5b4a8a`.

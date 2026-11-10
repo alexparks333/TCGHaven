@@ -1,0 +1,54 @@
+name: Sync Yu-Gi-Oh! prices
+
+# Yu-Gi-Oh!'s catalog (~44,600 English singles in ~590 sets, from TCGplayer through tcgcsv) once a
+# day, as its own job like Magic (sync-mtg.yml): ~660 per-set downloads plus comparing every card
+# is too long to add to the twice-daily sync-prices run. Runs the same command an admin runs locally
+# (`npm run download-cards -- --only yugioh`); only cards whose prices changed are written.
+# Details: docs/games.md (Yu-Gi-Oh!).
+#
+# Setup (one-time): repository secrets ADMIN_EMAIL and ADMIN_PASSWORD (Settings → Secrets and
+# variables → Actions → Secrets) — the staff sync account in .env.local. Store the password as it
+# really is: .env.local escapes a `$` as `\$` (CLAUDE.md quirk 23), a GitHub secret must not. The six
+# NEXT_PUBLIC_FIREBASE_* repository variables the Checks workflow uses are reused.
+#
+# A failed run fails this job (GitHub emails the repo owner) and shows on the staff portal's Sync
+# panel (sync_status/yugioh).
+
+on:
+  schedule:
+    # 21:30 UTC — after tcgcsv publishes (~20:05) and after the 21:00 sync-prices run
+    - cron: '30 21 * * *'
+  workflow_dispatch: {} # a "Run workflow" button in the Actions tab
+
+concurrency:
+  group: sync-yugioh
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the secrets are set
+        run: |
+          if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
+            echo "::error::Add the ADMIN_EMAIL and ADMIN_PASSWORD repository secrets (see the comment at the top of this file)"
+            exit 1
+          fi
+      - name: Sync Yu-Gi-Oh!
+        run: npm run download-cards -- --only yugioh

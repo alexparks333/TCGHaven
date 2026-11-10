@@ -17,6 +17,7 @@ import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
+import { SET_TYPE_LABELS as YUGIOH_SET_TYPE_LABELS } from '@/scripts/lib/yugioh-tcgplayer.mjs'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -41,14 +42,14 @@ export interface CatalogCard {
   priceSource?: string
 }
 
-type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg'
+type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg' | 'yugioh'
 // The Cardex's own tabs: every game, plus Japanese Pokémon — its own catalog with its own sets
 // (catalog/pokemon-jp), shown as its own Cardex. Its cards are still Pokémon (game 'pokemon',
 // language 'ja') everywhere else in the app.
 type CatalogGame = BaseGame | 'pokemon-jp'
 const baseGameOf = (g: CatalogGame): BaseGame => (g === 'pokemon-jp' ? 'pokemon' : g)
 const CARDEX_TAB_LABELS: Record<CatalogGame, string> = {
-  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic',
+  pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic', yugioh: 'Yu-Gi-Oh!',
 }
 
 interface SetMeta {
@@ -156,11 +157,11 @@ interface MtgSetOption {
 
 const PLACEHOLDER_SET: SetMeta = { name: '', game: 'lorcana' }
 
-const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], 'pokemon-jp': [], onepiece: [], mtg: [] }
+const EMPTY_GROUPS_BY_GAME: Record<CatalogGame, SetGroup[]> = { lorcana: [], riftbound: [], pokemon: [], 'pokemon-jp': [], onepiece: [], mtg: [], yugioh: [] }
 
 // Deep-link support (e.g. clicking a "Card Unlocked" toast) — ?game=riftbound&set=Secret+Garden
 function isCatalogGame(v: string | null): v is CatalogGame {
-  return v === 'lorcana' || v === 'riftbound' || v === 'pokemon' || v === 'pokemon-jp' || v === 'onepiece' || v === 'mtg'
+  return v === 'lorcana' || v === 'riftbound' || v === 'pokemon' || v === 'pokemon-jp' || v === 'onepiece' || v === 'mtg' || v === 'yugioh'
 }
 
 function buildGroups(
@@ -336,6 +337,23 @@ function buildMtgGroups(sets: MtgSetOption[]): SetGroup[] {
   return groups
 }
 
+// Yu-Gi-Oh!'s Cardex groups, from each set's type (scripts/lib/yugioh-tcgplayer.mjs setTypeOf —
+// TCGplayer has no set type, so it's read from the set's name), in this order; custom sets after
+function buildYugiohGroups(sets: MtgSetOption[]): SetGroup[] {
+  const byGroup = new Map<string, SetMeta[]>()
+  for (const label of Object.values(YUGIOH_SET_TYPE_LABELS)) byGroup.set(label, [])
+  const custom: SetMeta[] = []
+  for (const s of sets) {
+    if (s.isCustom) { custom.push({ name: s.name, game: 'yugioh' }); continue }
+    const label = (YUGIOH_SET_TYPE_LABELS as Record<string, string>)[s.setType ?? ''] ?? YUGIOH_SET_TYPE_LABELS.special
+    byGroup.get(label)!.push({ name: s.name, game: 'yugioh' })
+  }
+  const groups: SetGroup[] = Array.from(byGroup.entries()).filter(([, v]) => v.length > 0).map(([label, v]) => ({ label, sets: v }))
+  if (custom.length > 0) groups.push({ label: 'Custom Sets', sets: custom })
+  groups.push({ label: 'Unmatched', sets: [{ name: '__special__', game: 'yugioh', label: 'Other / Unmatched', fromInventory: true }] })
+  return groups
+}
+
 // ── Rarity colors ─────────────────────────────────────────────────────────────
 
 export const RARITY_COLORS: Record<string, string> = {
@@ -386,7 +404,7 @@ export const RARITY_COLORS: Record<string, string> = {
 const FIRST_SCREEN_ART = 40
 const ART_WAIT_LIMIT_MS = 15_000
 
-const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg'])
+const RARITY_TOGGLE_GAMES = new Set<CatalogGame>(['riftbound', 'pokemon', 'lorcana', 'onepiece', 'mtg', 'yugioh'])
 const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
@@ -418,6 +436,9 @@ function getOwnedInfo(
     // Riftbound's variants are), so a bare setName+number fallback can't collapse two real
     // printings onto one Cardex slot.
     if (game === 'mtg') return c.set === catalogCard.setName && c.number === catalogCard.number
+    // Yu-Gi-Oh!: rarity versions share a printed number (MAMS-EN001 as Ultra / Starlight / Extended
+    // Art), so a card without apiId can't be told apart by number — match by name too
+    if (game === 'yugioh') return c.set === catalogCard.setName && c.number === catalogCard.number && c.name === catalogCard.name
     return false
   })
   return {
@@ -686,6 +707,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   const [jpSetsLoading, setJpSetsLoading] = useState(true)
   const [onepieceSetsLoading, setOnepieceSetsLoading] = useState(true)
   const [mtgSetsLoading, setMtgSetsLoading] = useState(true)
+  const [yugiohSetsLoading, setYugiohSetsLoading] = useState(true)
 
   // The set picker is a two-level tree: pick a category (an era/product group, e.g. "Scarlet &
   // Violet" or "Main Sets") first, then pick a set from just that category's list — replacing an
@@ -836,6 +858,28 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Yu-Gi-Oh!'s set list (catalog_meta/yugioh, written by its sync) → its Cardex groups
+  useEffect(() => {
+    if (!trackedGames.includes('yugioh')) { setYugiohSetsLoading(false); return }
+    let stale = false
+    fetch('/api/sets?game=yugioh')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((sets: MtgSetOption[]) => {
+        if (stale) return
+        const built = buildYugiohGroups(sets)
+        setGroupsByGame((g) => ({ ...g, yugioh: built }))
+        if (!initialSetPicked.current && activeGame === 'yugioh') {
+          setActiveSet(built[0]?.sets[0] ?? PLACEHOLDER_SET)
+          if (built[0]) setActiveCategoryByGame((c) => ({ ...c, yugioh: built[0].label }))
+          initialSetPicked.current = true
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!stale) setYugiohSetsLoading(false) })
+    return () => { stale = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Resolves a deep-linked ?game=&set= once that game's groups have finished loading. Looks for
   // an exact-name match among registered sets first; a card added under a set name the catalog
   // doesn't recognize (not yet synced, or genuinely custom) instead lands in that game's
@@ -969,12 +1013,12 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   useEffect(() => {
     if (activeGame === 'personal' || trackedGames.includes(baseGameOf(activeGame))) return
     const target = trackedGames[0]
-    const targetLoading = target === 'pokemon' ? pokemonSetsLoading : target === 'onepiece' ? onepieceSetsLoading : target === 'mtg' ? mtgSetsLoading : registryLoading
+    const targetLoading = target === 'pokemon' ? pokemonSetsLoading : target === 'onepiece' ? onepieceSetsLoading : target === 'mtg' ? mtgSetsLoading : target === 'yugioh' ? yugiohSetsLoading : registryLoading
     if (targetLoading) return
     initialSetPicked.current = true
     switchGame(target)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeGame, trackedGames, pokemonSetsLoading, onepieceSetsLoading, mtgSetsLoading, registryLoading])
+  }, [activeGame, trackedGames, pokemonSetsLoading, onepieceSetsLoading, mtgSetsLoading, yugiohSetsLoading, registryLoading])
 
   function switchGame(game: CatalogGame | 'personal') {
     setActiveGame(game)
@@ -1109,7 +1153,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   const categories = groupsByGame[catalogGame]
   const activeCategoryLabel = activeCategoryByGame[catalogGame] ?? categories[0]?.label
   const activeCategoryGroup = categories.find((g) => g.label === activeCategoryLabel) ?? categories[0]
-  const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'pokemon-jp' ? jpSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : registryLoading
+  const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'pokemon-jp' ? jpSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : catalogGame === 'yugioh' ? yugiohSetsLoading : registryLoading
 
   return (
     <MaybeAuthGuard guard={!picker}>
@@ -1123,7 +1167,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
         {/* Game bubbles — only the games this user tracks (added from Inventory's "+" menu) */}
         <GamePicker<CatalogGame | 'personal'>
           options={[
-            ...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg'] as const)
+            ...(['pokemon', 'pokemon-jp', 'onepiece', 'lorcana', 'riftbound', 'mtg', 'yugioh'] as const)
               .filter((g) => trackedGames.includes(baseGameOf(g)))
               .map((g) => ({ id: g, label: CARDEX_TAB_LABELS[g], shortLabel: g === 'pokemon-jp' ? 'Pokémon JP' : undefined, color: GAME_COLORS[baseGameOf(g)] })),
             ...(readOnly ? [] : [{ id: 'personal' as const, label: 'Personalized Collections', shortLabel: 'Collections', color: '#7a5230', icon: <FolderHeart size={14} /> }]),

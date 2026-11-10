@@ -34,7 +34,7 @@ export interface SyncStatus {
   unplaced?: number
   // Pokémon: the secondary source check (TCGplayer primary, GitHub secondary — see
   // scripts/lib/pokemon-tcgplayer.mjs): how many cards each source decided, and where they disagree
-  sourceReport?: PokemonSourceReport
+  sourceReport?: PokemonSourceReport | { at: string; newCards: number; unpriced: number }
   error?: string
 }
 

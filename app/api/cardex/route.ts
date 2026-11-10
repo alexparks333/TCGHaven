@@ -22,6 +22,8 @@ interface CatalogCard {
   publicCode?: string  // Riftbound only — carries the "a"/"*" variant suffix `number` lacks
   cardType?: string    // Riftbound only — the Cardex zoom shows 'Battlefield' cards landscape
   priceSource?: string // Pokémon backup price — see scripts/lib/price-fallback.mjs
+  variant?: string     // Yu-Gi-Oh! only — TCGplayer's version ("Starlight Rare"), shown after the name
+  variantPrices?: Record<string, number> // Pokémon / Yu-Gi-Oh! printings
 }
 
 export async function GET(request: Request) {
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
   const setName = searchParams.get('set')
 
   if (!game || !setName) return NextResponse.json([])
-  if (game !== 'lorcana' && game !== 'riftbound' && game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg') return NextResponse.json([])
+  if (game !== 'lorcana' && game !== 'riftbound' && game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh') return NextResponse.json([])
 
   // loadVisibleCatalog already excludes hidden cards (via the in-memory cache described in
   // lib/api/catalog.ts) — a hide/unhide shows up here as soon as this instance's cache next
@@ -45,7 +47,8 @@ export async function GET(request: Request) {
   const cards = sortCatalogCards(visible.filter((c) => c.setName === setName))
     .map((c) => ({
       id:         c.id,
-      name:       c.name,
+      // Yu-Gi-Oh!: the version too, as search and Add Card show it (lib/api/yugioh.ts yugiohDisplayName)
+      name:       c.variant ? `${c.name} (${c.variant})` : c.name,
       number:     riftboundDisplayNumber(c.number, c.publicCode),
       setCode:    c.setCode ?? c.set ?? '',
       setName:    c.setName,

@@ -216,6 +216,17 @@ export const MTG_RARITY_LABELS: Record<string, string> = {
 // string can mean something different in two games' catalogs: Riftbound's Rune cards and
 // Pokemon's real chase tier both happen to use the literal string "Promo", and relabeling one
 // with the other's meaning would be actively wrong, not just cosmetically off.
+// Yu-Gi-Oh! rarities → the short codes collectors use — searchable ("qcsr", "utr"); the full names are
+// what's displayed (lib/api/searchTerms.ts)
+export const YUGIOH_RARITY_CODES: Record<string, string> = {
+  'Common': 'C', 'Rare': 'R', 'Super Rare': 'SR', 'Ultra Rare': 'UR', 'Secret Rare': 'ScR', 'Ultimate Rare': 'UtR',
+  'Ghost Rare': 'GR', 'Gold Rare': 'GUR', 'Premium Gold Rare': 'PGR', 'Gold Secret Rare': 'GScR', 'Ghost/Gold Rare': 'GGR',
+  'Platinum Rare': 'PlR', 'Platinum Secret Rare': 'PlScR', 'Prismatic Secret Rare': 'PScR', "Prismatic Collector's Rare": 'PCR',
+  'Prismatic Ultimate Rare': 'PUR', "Collector's Rare": 'CR', 'Starlight Rare': 'StR', 'Quarter Century Secret Rare': 'QCSR',
+  'Starfoil Rare': 'SFR', 'Shatterfoil Rare': 'SHR', 'Mosaic Rare': 'MSR', 'Parallel Rare': 'PR', 'Grand Master Rare': 'GMR',
+  'Emblazoned Ultra Rare': 'EUR', 'Emblazoned Secret Rare': 'EScR', '10000 Secret Rare': '10000 ScR',
+}
+
 export const RARITY_LABELS_BY_GAME: Partial<Record<Card['game'], Record<string, string>>> = {
   riftbound: RIFTBOUND_RARITY_LABELS,
   pokemon: POKEMON_RARITY_LABELS,
@@ -249,6 +260,7 @@ export function ebaySearchUrl(card: Parameters<typeof openEbaySearch>[0]): strin
     else if (card.finish === 'holofoil' || (!card.finish && card.isFoil)) parts.push('Holo')
   }
   if (card.edition === '1st') parts.push('1st Edition')
+  else if (card.edition === 'limited') parts.push('Limited Edition')
   else if (card.edition === 'shadowless') parts.push('Shadowless', '-1st')
   else if (card.edition === 'unlimited') parts.push('-1st', '-shadowless')
   if (card.language === 'ja') parts.push('Japanese')

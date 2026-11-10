@@ -7,6 +7,8 @@ import { searchLorcanaCards, getLorcanaSets } from './lorcana'
 import { searchRiftboundCards, getRiftboundSets } from './riftbound'
 import { searchOnePieceCards, getOnePieceSets } from './onepiece'
 import { searchMtgCards, getMtgSets, isMtgSetsCacheReliable } from './mtg'
+import { searchYugiohCards, getYugiohSets, yugiohDisplayName } from './yugioh'
+import { loadSetRegistry } from './registry'
 import { riftboundDisplayNumber, riftboundVariantFlags } from '../utils'
 import { parseQuery, buildSearchIndex, type SearchableCard } from './cardSearch'
 import { loadVisibleCatalog } from './catalog'
@@ -287,6 +289,28 @@ async function searchCardsUncapped(game: Game, query: string, onlyId?: string, l
     return results
   }
 
+  if (game === 'yugioh') {
+    // One row per card: its editions (1st Edition / Unlimited / Limited) are printings with their
+    // own prices (variantPrices), picked in Add Card like a Pokémon card's — not separate rows.
+    // A rarity version is its own card, shown with its version ("… (Starlight Rare)").
+    const cards = await searchYugiohCards(query, onlyId)
+    return cards.map((c) => ({
+      id: c.id,
+      name: yugiohDisplayName(c),
+      set: c.set,
+      setName: c.setName,
+      number: c.number,
+      imageUrl: c.imageUrl ?? '',
+      game: 'yugioh' as Game,
+      rarity: c.rarity || undefined,
+      marketPrice: c.marketPrice ?? 0,
+      marketPriceFoil: 0,
+      lowPriceNM: c.lowPriceNM ?? 0,
+      isFoil: false,
+      ...(c.variantPrices && Object.keys(c.variantPrices).length ? { variantPrices: c.variantPrices } : {}),
+    }))
+  }
+
   return []
 }
 
@@ -374,6 +398,16 @@ export async function getSetsForGame(game: Game, language?: Language): Promise<S
     // Same reasoning as the pokemon branch above — don't let a manual-only fallback (after every
     // retry failed) satisfy the generic "non-empty" cache check below.
     if (!isMtgSetsCacheReliable()) return sets
+  }
+
+  if (game === 'yugioh') {
+    // The set list the sync writes (catalog_meta/yugioh.sets) — newest first, with each set's
+    // Cardex group (setType); custom sets made with "New Set" come from the registry
+    const custom = (await loadSetRegistry().catch(() => null))?.yugioh?.sets ?? []
+    sets = [
+      ...(await getYugiohSets()).map((s) => ({ code: s.code, name: s.name, releaseDate: s.releaseDate, cardCount: s.cardCount, setType: s.setType })),
+      ...custom.map((s) => ({ code: s.code ?? '', name: s.setName, releaseDate: s.releaseDate ?? '', isCustom: true })),
+    ]
   }
 
   // Only cache non-empty results so a transient API failure doesn't stick

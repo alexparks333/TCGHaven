@@ -1,4 +1,4 @@
-export type Game = 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg'
+export type Game = 'pokemon' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
 
 export type Condition = 'mint' | 'near_mint' | 'lightly_played' | 'moderately_played' | 'heavily_played'
 
@@ -43,7 +43,7 @@ export function catalogKeyFor(game: Game, language?: Language | string): Catalog
   return game === 'pokemon' && language === 'ja' ? 'pokemon-jp' : game
 }
 
-export type Edition = 'unlimited' | 'shadowless' | '1st'
+export type Edition = 'unlimited' | 'shadowless' | '1st' | 'limited'   // 'limited': Yu-Gi-Oh!'s Limited Edition
 export type Finish = 'normal' | 'holofoil' | 'reverse'
 export type Language = 'en' | 'ja'
 
@@ -84,6 +84,7 @@ export const GAME_LABELS: Record<Game, string> = {
   riftbound: 'Riftbound',
   onepiece: 'One Piece',
   mtg: 'Magic: The Gathering',
+  yugioh: 'Yu-Gi-Oh!',
 }
 
 export const GAME_COLORS: Record<Game, string> = {
@@ -93,7 +94,14 @@ export const GAME_COLORS: Record<Game, string> = {
   riftbound: '#b5532f',
   onepiece: '#566a5e',
   mtg: '#a8642e',
+  yugioh: '#5b4a8a',
 }
+
+/** Games whose cards come in priced printings — an edition and/or finish of the one card, kept in
+ *  its `variantPrices` (scripts/lib/pokemon-variants.mjs): Pokémon (Unlimited / Shadowless / 1st
+ *  Edition × Normal / Holo / Reverse Holo) and Yu-Gi-Oh! (1st Edition / Unlimited / Limited). */
+export const PRINTING_GAMES: readonly Game[] = ['pokemon', 'yugioh']
+export const hasPrintings = (game: Game): boolean => PRINTING_GAMES.includes(game)
 
 export const CONDITION_MULTIPLIER: Record<Condition, number> = {
   mint: 1.0,

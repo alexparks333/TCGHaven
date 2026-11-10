@@ -32,6 +32,7 @@ import {
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
 import { buildOnePieceCatalog, productsFromRows as opProductsFromRows } from './onepiece-tcgplayer.mjs'
+import { YUGIOH_CATEGORY, buildYugiohCatalog, productsFromRows as ygoProductsFromRows } from './yugioh-tcgplayer.mjs'
 import { writeCompressedSnapshot } from './snapshot-codec.mjs'
 import { JP_CATEGORY, JP_CATALOG, isSingleRow, jpCard, jpSetMeta, placeholderDates } from './pokemon-jp.mjs'
 
@@ -2115,3 +2116,64 @@ export async function planMtgCatalog() {
   all.sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
   return all
 }
+
+// ── Yu-Gi-Oh! ─────────────────────────────────────────────────────────────────
+// TCGplayer (tcgcsv category 2) is the whole source: every English single is one TCGplayer product
+// = one card (`tcg-{productId}`), its 1st Edition / Unlimited / Limited prices its printings.
+// Pure logic + rules: yugioh-tcgplayer.mjs (tests: npm run test:yugioh-source). Checked against
+// YGOPRODeck by scripts/yugioh-source-report.mjs. Owner's scope (2026-11-10): English TCG singles,
+// no Speed Duel / Rush Duel. Synced daily by its own job (.github/workflows/sync-yugioh.yml).
+
+const YUGIOH_TCGCSV_HEADERS = { 'User-Agent': 'TCGHaven-catalog-sync/1.0', Accept: 'text/csv,application/json' }
+
+async function fetchTcgplayerYugioh() {
+  const groups = (await fetchJSON(`https://tcgcsv.com/tcgplayer/${YUGIOH_CATEGORY}/groups`, YUGIOH_TCGCSV_HEADERS)).results ?? []
+  if (groups.length < 400) throw new Error(`TCGplayer returned ${groups.length} Yu-Gi-Oh! groups — not syncing against a partial list`)
+  const productsByGroup = new Map()
+  const failedGroupIds = new Set()
+  for (let i = 0; i < groups.length; i += 16) {
+    await Promise.all(groups.slice(i, i + 16).map(async (g) => {
+      let csv = null
+      for (let attempt = 0; attempt < 3 && csv === null; attempt++) {
+        try { csv = await fetchText(`https://tcgcsv.com/tcgplayer/${YUGIOH_CATEGORY}/${g.groupId}/ProductsAndPrices.csv`, YUGIOH_TCGCSV_HEADERS) } catch {
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)))
+        }
+      }
+      if (csv === null) { failedGroupIds.add(g.groupId); return }
+      productsByGroup.set(g.groupId, ygoProductsFromRows(parseCsv(csv)))
+    }))
+    if (process.stdout.isTTY) process.stdout.write(`   TCGplayer: ${Math.min(i + 16, groups.length)}/${groups.length} groups...\r`)
+  }
+  if (failedGroupIds.size > groups.length * 0.1) {
+    throw new Error(`${failedGroupIds.size}/${groups.length} TCGplayer Yu-Gi-Oh! groups failed to download — not syncing a partial catalog`)
+  }
+  return { groups, productsByGroup, failedGroupIds }
+}
+
+/** What a Yu-Gi-Oh! sync would write, without writing (scripts/yugioh-source-report.mjs uses it too). */
+export async function planYugiohCatalog() {
+  const [tcg, snap] = await Promise.all([fetchTcgplayerYugioh(), getDocs(collection(db, 'catalog', 'yugioh', 'cards'))])
+  const existing = new Map(snap.docs.map((d) => [d.id, d.data()]))
+  const built = buildYugiohCatalog({ groups: tcg.groups, productsByGroup: tcg.productsByGroup, existing, failedGroupIds: tcg.failedGroupIds })
+  const r = built.report
+  console.log(`   TCGplayer: ${tcg.groups.length} groups${tcg.failedGroupIds.size ? ` (${tcg.failedGroupIds.size} failed)` : ''} · ${built.cards.length} cards in ${built.sets.length} sets · ${r.newCards} new · ${r.existingCards} existing (kept as they are, prices refreshed) · ${r.unpriced} without a price yet`)
+  return { ...built, existing, tcg }
+}
+
+export async function downloadYugioh() {
+  console.log('\n🃏 Yu-Gi-Oh!...')
+  const plan = await planYugiohCatalog()
+  const cards = [...plan.cards].sort((a, b) => a.set.localeCompare(b.set) || a.number.localeCompare(b.number, undefined, { numeric: true }))
+  // No per-sync HEAD checks of ~45k images (TCGplayer's CDN; npm run check-images -- yugioh does it)
+  const result = await syncToFirestore('yugioh', cards, { checkImages: false })
+  // The set list the Cardex and Add Card read (lib/api/yugioh.ts getYugiohSets) — a set whose
+  // download failed this run keeps its entry from last time
+  const metaRef = doc(db, 'catalog_meta', 'yugioh')
+  const previous = (await getDoc(metaRef)).data()?.sets ?? []
+  const fresh = new Set(plan.sets.map((s) => s.id))
+  const kept = previous.filter((s) => !fresh.has(s.id) && plan.tcg.failedGroupIds.has(s.tcgplayerGroupId))
+  const allSets = [...plan.sets, ...kept].sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || '') || a.name.localeCompare(b.name))
+  await setDoc(metaRef, { sets: allSets }, { merge: true })
+  return { ...result, sets: allSets.length, sourceReport: { at: new Date().toISOString(), newCards: plan.report.newCards, unpriced: plan.report.unpriced } }
+}
+

@@ -38,7 +38,7 @@ export interface ScanCard {
   publicCode?: string
 }
 
-export type ScanCatalogKey = 'pokemon' | 'pokemon-jp' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg'
+export type ScanCatalogKey = 'pokemon' | 'pokemon-jp' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
 
 export interface ScanCatalog {
   key: ScanCatalogKey
@@ -63,6 +63,7 @@ export interface ScanClues {
   promos: string[]            // Pokémon black-star numbers: "SWSH123", "SM60"
   starPromo: Array<{ set: string; num: string }> // "SVP 085" → svp / 85
   opCodes: string[]           // "OP05-119", "P-001"
+  ygoCodes: string[]          // Yu-Gi-Oh! set codes, printed under the art: "MAMS-EN001", "LOB-001"
   jpPromos: Array<{ num: string; mark: string }> // "388/SM-P" → 388 in the "SM-P" promo set
   lorcanaSet: string[]        // "• EN • 10" → "10"
   mtgSets: string[]           // "BLB • EN" → "blb"
@@ -76,6 +77,7 @@ export interface ScanClues {
   pokemonWords: boolean       // "HP", "Weakness", "Retreat" — printed on every Pokémon card
   slab: SlabLabel | null      // a graded card's label (PSA / CGC / BGS / SGC), when one was read
   riftboundPromo: boolean     // "156/219 • P" — the promo mark after a Riftbound number
+  yugiohWords: boolean        // "ATK/", "DEF/", "[Spell Card]" — printed on Yu-Gi-Oh! cards only
 }
 
 /** What a grading company's label says. PSA's, for example:
@@ -180,8 +182,8 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
-    fractions: [], promos: [], starPromo: [], opCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
-    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false, topLines: [],
+    fractions: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
+    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
 
@@ -215,6 +217,14 @@ export function readClues(lines: OcrLine[]): ScanClues {
       const s = { set: m[1].toLowerCase(), num: String(parseInt(m[2], 10)) }
       add(clues.starPromo, s, (o) => o.set === s.set && o.num === s.num)
     }
+    // Yu-Gi-Oh!: "MAMS-EN001", "LOB-001", "LOB-E001", "DB1-EN001" — anywhere on the card (it sits
+    // under the artwork, not along the bottom); an O read (or typed by TCGplayer) for a 0 is a 0
+    for (const m of Array.from(text.toUpperCase().matchAll(/\b([A-Z0-9]{2,5})\s?-\s?([A-Z]{0,2}?)([0-9O]{3})(?![0-9])/g))) {
+      if (!/[A-Z]/.test(m[1]) || !/\d/.test(m[3].replace(/O/g, ''))) continue
+      const c = ygoKey(`${m[1]}-${m[2]}${m[3]}`)
+      add(clues.ygoCodes, c, (o) => o === c)
+    }
+    if (/\b(ATK|DEF)\s?\//i.test(text) || /\[(spell|trap) card\]/i.test(text)) clues.yugiohWords = true
     // "OP05-119", "OPO4-021" (O for 0), "OP17-042E" (the rarity glued on)
     for (const m of Array.from(text.toUpperCase().matchAll(/\b(OP|ST|EB|PRB|GC)\s?([0-9O]{2})\s?[-–—]\s?([0-9O]{3})/g))) {
       if (!/\d/.test(m[2] + m[3])) continue
@@ -320,6 +330,12 @@ function toDigitsAfterPrefix(s: string): string {
 
 // ── Candidates ──────────────────────────────────────────────────────────────
 
+/** A Yu-Gi-Oh! set code as an index key: upper-case, O → 0 in the digits ("LAVD-ENO09" → "LAVD-EN009") */
+export function ygoKey(code: string): string {
+  const m = String(code ?? '').toUpperCase().replace(/\s+/g, '').match(/^([A-Z0-9]+)-([A-Z]{0,2}?)([0-9O]+)([A-Z]?)$/)
+  return m ? `${m[1]}-${m[2]}${m[3].replace(/O/g, '0')}${m[4]}` : String(code ?? '').toUpperCase()
+}
+
 /** The code printed on a One Piece card. Reprints keep their original code: apitcg ids carry it
  *  ("OP01-006_p2" sold in PRB01 still says OP01-006); TCGplayer-only cards use set + number. */
 export function onePiecePrintedCode(c: ScanCard): string {
@@ -349,6 +365,7 @@ interface CatIndex {
   byId: Map<string, ScanCard>
   byNum: Map<string, ScanCard[]>     // numKey(card.number)
   byOpCode: Map<string, ScanCard[]>  // One Piece printed code
+  byYgoCode: Map<string, ScanCard[]> // Yu-Gi-Oh! set code (ygoKey)
   bySet: Map<string, ScanCard[]>
   rb: Map<string, Array<{ c: ScanCard; p: RbParts }>> // Riftbound "num/den"
   names: Map<string, ScanCard[]>     // folded name (and printed name) → cards
@@ -363,13 +380,14 @@ export function catalogIndex(cat: ScanCatalog): CatIndex {
   const sig = `${cat.cards.length}|${cat.cards[0]?.id}|${cat.cards[cat.cards.length - 1]?.id}|${cat.sets?.length ?? 0}`
   const hit = indexCache.get(cat.key)
   if (hit && hit.sig === sig && Date.now() - hit.at < INDEX_TTL_MS) return hit.index
-  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map() }
+  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), byYgoCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map() }
   for (const c of cat.cards) {
     index.byId.set(c.id, c)
     const k = numKey(c.number)
     if (k) push(index.byNum, k, c)
     if (c.set) push(index.bySet, String(c.set), c)
     if (cat.key === 'onepiece') push(index.byOpCode, onePiecePrintedCode(c), c)
+    if (cat.key === 'yugioh') push(index.byYgoCode, ygoKey(c.number), c)
     if (cat.key === 'riftbound') {
       const p = riftboundParts(c.publicCode)
       if (p) push(index.rb, `${numKey(p.num)}/${p.den}`, { c, p })
@@ -401,6 +419,7 @@ function gameHints(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
   const hints = new Set<string>()
   if (clues.pokemonWords) { hints.add('pokemon'); hints.add('pokemon-jp') }
   if (clues.opCodes.length) hints.add('onepiece')
+  if (clues.yugiohWords) hints.add('yugioh')
   // "143/204 • EN • 10" — only Lorcana prints a set number after the language
   if (clues.lorcanaSet.length && clues.fractions.some((f) => !f.pre)) hints.add('lorcana')
   const mtg = catalogs.find((c) => c.key === 'mtg')
@@ -409,14 +428,16 @@ function gameHints(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
 }
 
 // Games whose name is printed along the top edge — where a clearly read name is reliable
-const NAME_ON_TOP = new Set<ScanCatalogKey>(['pokemon', 'mtg'])
+const NAME_ON_TOP = new Set<ScanCatalogKey>(['pokemon', 'mtg', 'yugioh'])
 
 /** Card names read clearly along the top of the card: a top line that IS a catalog name (allowing
  *  trailing HP / stage noise like "Magikarp 22"). Folded. */
 // Words printed along the top of cards that aren't the card's name (and happen to be card names
 // in some catalog — Magic has a card called "Trainer")
 const NOT_A_NAME = new Set(['trainer', 'trainers', 'energy', 'basic', 'item', 'supporter', 'stadium', 'pokemon', 'stage', 'tool',
-  'pokemon tool', 'special energy', 'basic energy', 'technical machine', 'not tournament legal', 'ace spec'])
+  'pokemon tool', 'special energy', 'basic energy', 'technical machine', 'not tournament legal', 'ace spec',
+  // Yu-Gi-Oh!'s attribute icons read as words along the top
+  'dark', 'light', 'earth', 'water', 'fire', 'wind', 'divine', 'spell', 'trap'])
 
 function strongNames(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
   const out = new Set<string>()
@@ -459,7 +480,6 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
   // number and the wrong name (a misread "65/112" landing on another card) must not win. Seen on
   // the phone: Jigglypuff scans matched to Baltoy / Shuppet / Growlithe by misread numbers.
   const named = strongNames(clues, catalogs)
-  const nameWords = new Set(Array.from(named).flatMap((n) => n.split(' ')))
   const offer = (catalog: ScanCatalogKey, c: ScanCard, codeScore: number, why: string, exact = true) => {
     // Stamps and variant suffixes aren't printed as words, so they mustn't count against a card:
     // a League-stamped copy ties with the plain one on text, and the picture (or the person) decides
@@ -480,7 +500,15 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
       const t = n.split(' ')
       return t.every((w) => own.includes(w)) || own.every((w) => t.includes(w))
     })
-    if (named.size && checkName && !sameName && nameScore(printed, nameWords) < 0.75) {
+    // …or the same name with a few letters misread, judged on the whole name — sharing most words
+    // isn't enough ("Deep-Eyes White Dragon, the Blue Abyss" vs "Blue-Eyes White Dragon, the White
+    // Phantom Beast" share 6 of 8)
+    const whole = fold(printed)
+    const nearlySame = Array.from(named).some((n) => {
+      const max = Math.max(1, Math.round(n.length * 0.15))
+      return editDistance(whole, n, max) <= max
+    })
+    if (named.size && checkName && !sameName && !nearlySame) {
       score -= 40
       wrongName = true
     }
@@ -560,6 +588,12 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
           offer('pokemon-jp', c, (setHit ? 58 : 30) + fit, setHit ? `set mark + number ${f.num}/${f.den}` : `number ${f.num}/${f.den}`)
         }
       }
+    }
+
+    if (cat.key === 'yugioh') {
+      // The set code names the card; its rarity versions (Ultra / Starlight / Extended Art…) share
+      // it and tie — the picture or the person picks
+      for (const code of clues.ygoCodes) for (const c of ix.byYgoCode.get(code) ?? []) offer('yugioh', c, 60, `code ${code}`)
     }
 
     if (cat.key === 'onepiece') {

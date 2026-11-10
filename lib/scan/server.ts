@@ -28,17 +28,21 @@ export interface ScanMatch {
   printings: Array<{ key: string; label: string; price: number }>
 }
 
-const EDITION_LABEL: Record<string, string> = { unlimited: '', shadowless: 'Shadowless', '1st': '1st Edition' }
+const EDITION_LABEL: Record<string, string> = { unlimited: '', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
 const FINISH_LABEL: Record<string, string> = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo' }
 
-function printingsOf(card: RawCard): ScanMatch['printings'] {
+function printingsOf(card: RawCard, game: Game): ScanMatch['printings'] {
   const vp = card.variantPrices
   if (vp && Object.keys(vp).length) {
-    const order = ['unlimited', 'shadowless', '1st'], fin = ['normal', 'holofoil', 'reverse']
+    const order = ['unlimited', 'shadowless', '1st', 'limited'], fin = ['normal', 'holofoil', 'reverse']
     return Object.entries(vp)
       .map(([key, price]) => {
         const [edition, finish] = key.split(':')
-        return { key, label: [EDITION_LABEL[edition] ?? edition, FINISH_LABEL[finish] ?? finish].filter(Boolean).join(' '), price, o: order.indexOf(edition) * 10 + fin.indexOf(finish) }
+        // Yu-Gi-Oh! has editions only (its foil is the rarity): "1st Edition" / "Unlimited" / "Limited Edition"
+        const label = game === 'yugioh'
+          ? (edition === 'unlimited' ? 'Unlimited' : EDITION_LABEL[edition] ?? edition)
+          : [EDITION_LABEL[edition] ?? edition, FINISH_LABEL[finish] ?? finish].filter(Boolean).join(' ')
+        return { key, label, price, o: order.indexOf(edition) * 10 + fin.indexOf(finish) }
       })
       .sort((a, b) => a.o - b.o)
       .map(({ key, label, price }) => ({ key, label, price }))
@@ -56,6 +60,7 @@ const GAME_CATALOGS: Record<Game, ScanCatalogKey[]> = {
   riftbound: ['riftbound'],
   onepiece: ['onepiece'],
   mtg: ['mtg'],
+  yugioh: ['yugioh'],
 }
 
 type RawCard = ScanCard & { hidden?: boolean; imageUrl?: string; marketPrice?: number; marketPriceFoil?: number; variantPrices?: Record<string, number> }
@@ -124,7 +129,7 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise
       score: c.score,
       why: c.why,
       exact: c.exact,
-      printings: printingsOf(card),
+      printings: printingsOf(card, c.catalog === 'pokemon-jp' ? 'pokemon' : c.catalog),
     }]
   }) }
 }

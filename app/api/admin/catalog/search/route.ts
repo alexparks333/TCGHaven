@@ -7,7 +7,7 @@ import type { Game } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 const MAX_RESULTS = 300
 
 interface CatalogCard {

@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
 // Structured patch of a single set entry — used by the Settings "Needs Review" editor.
 // Only ever reads/writes the registry/main Firestore doc, never TypeScript source.
-const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+const REGISTRY_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 
 export async function PUT(request: Request) {
   const unauthorized = await verifyAdminRequest(request)
@@ -97,7 +97,7 @@ export async function POST(request: Request) {
   let newSet: Record<string, unknown>
   try {
     newSet = await updateSetRegistry((registry) => {
-      if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && cardexGroup) {
+      if (game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh' && cardexGroup) {
         const groupOrder = registry[game].groupOrder
         // `newCardexGroup: true` creates the category too (added after the existing ones). A group
         // some set already uses counts as known even if groupOrder doesn't list it (Riftbound's

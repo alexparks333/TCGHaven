@@ -54,7 +54,7 @@ loadEnvLocal()
 // Imported dynamically, AFTER env vars are loaded above — scripts/lib/catalog-sync.mjs reads
 // process.env.NEXT_PUBLIC_FIREBASE_* at module-load time (initializeApp() runs at import time),
 // so a static top-level `import` here would run before loadEnvLocal() ever executed.
-const { ensureSignedIn, recordCliSyncStatus, downloadPokemon, downloadPokemonJapanese, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG } =
+const { ensureSignedIn, recordCliSyncStatus, downloadPokemon, downloadPokemonJapanese, downloadLorcana, downloadRiftbound, downloadOnePiece, downloadMTG, downloadYugioh } =
   await import('./lib/catalog-sync.mjs')
 
 const includeMtg = process.argv.includes('--include-mtg')
@@ -68,8 +68,10 @@ const JOBS = {
   riftbound: downloadRiftbound,
   onepiece: downloadOnePiece,
   mtg: downloadMTG,
+  // Yu-Gi-Oh! has its own daily job (.github/workflows/sync-yugioh.yml) — like MTG, only with --only yugioh
+  yugioh: downloadYugioh,
 }
-const selected = Object.keys(JOBS).filter((g) => (only ? only.has(g) : g !== 'mtg' || includeMtg))
+const selected = Object.keys(JOBS).filter((g) => (only ? only.has(g) : g !== 'yugioh' && (g !== 'mtg' || includeMtg)))
 
 console.log(`📦 Downloading card catalogs: ${selected.join(', ')}`)
 if (!only && !includeMtg) console.log('   (skipping MTG — pass --include-mtg to include it; see docs/games.md (Magic section))')

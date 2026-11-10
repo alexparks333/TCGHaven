@@ -21,7 +21,7 @@
  */
 import fs from 'node:fs'
 
-const ALL_GAMES = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+const ALL_GAMES = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 const args = process.argv.slice(2)
 const games = args.includes('all') ? ALL_GAMES : args
 

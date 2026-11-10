@@ -5,7 +5,7 @@ import { X, Search, Loader2, ChevronDown, AlertCircle } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
-import { CONDITION_LABELS, GAME_LABELS, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
+import { CONDITION_LABELS, GAME_LABELS, hasPrintings, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
 import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
@@ -16,7 +16,7 @@ import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
 
-const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
 
 interface Props {
@@ -316,8 +316,9 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       ...(form.rarity && { rarity: form.rarity }),
       ...(form.game === 'riftbound' && { nexus: !!form.nexus }),
       // Pokémon printing — only when it was picked from catalog prices (lib/pricing.ts)
-      ...(form.game === 'pokemon' && variantPrices && form.edition && { edition: form.edition }),
-      ...(form.game === 'pokemon' && variantPrices && form.finish && { finish: form.finish }),
+      // A printing picked from catalog prices (Pokémon, Yu-Gi-Oh! — lib/pricing.ts)
+      ...(hasPrintings(form.game) && variantPrices && form.edition && { edition: form.edition }),
+      ...(hasPrintings(form.game) && variantPrices && form.finish && { finish: form.finish }),
       ...(japanese && { language: 'ja' as Language }),
       // Editing a card from before the manual-price lock was retired clears it.
       ...(editCard?.priceLocked && { priceLocked: false }),
@@ -664,7 +665,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           {/* Pokémon cards picked from the catalog choose an exact printing instead: Edition (only
               for cards TCGplayer prices in more than one — WotC-era sets, early Japanese sets) and
               Finish (Normal / Holo / Reverse Holo — only the ones that card actually comes in). */}
-          {form.game === 'pokemon' && variantPrices && (() => {
+          {hasPrintings(form.game) && variantPrices && (() => {
             const vp = variantPrices
             const edition = (form.edition ?? defaultEdition(vp)) as Edition
             const editions = editionsOf(vp) as Edition[]
@@ -711,7 +712,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
           {/* No checkbox for Pokémon either: its printings come from the catalog (the pickers above,
               or a backup-priced card's own "✦ Holo" search row). A saved card's isFoil is kept as is. */}
-          {form.game !== 'onepiece' && form.game !== 'pokemon' && (
+          {form.game !== 'onepiece' && !hasPrintings(form.game) && (
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -833,7 +834,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                 {form.game === 'riftbound' && form.nexus && (
                   <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-600 border border-blue-300 rounded px-1 py-0.5">Nexus</span>
                 )}
-                {form.game === 'pokemon' && (japanese || (variantPrices && (form.edition !== 'unlimited' || form.finish === 'reverse'))) && (
+                {hasPrintings(form.game) && (japanese || (variantPrices && (form.edition !== 'unlimited' || form.finish === 'reverse'))) && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {variantPrices && form.edition && form.edition !== 'unlimited' && (
                       <span className="text-[10px] font-bold uppercase text-amber-700 border border-amber-400 rounded px-1 py-0.5">{EDITION_LABELS[form.edition]}</span>

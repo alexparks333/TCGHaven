@@ -45,7 +45,7 @@ await ensureSignedIn()
 // catalogPrice() from lib/pricing.ts — duplicated across the runtime boundary like the sync's other
 // shared helpers (kept identical; compare when lib/pricing.ts changes)
 function catalogPrice(game, card, { isFoil = false, edition, finish } = {}) {
-  if (game === 'pokemon' && (edition || finish)) {
+  if ((game === 'pokemon' || game === 'yugioh') && (edition || finish)) {
     const vp = card.variantPrices
     if (vp && Object.keys(vp).length) return variantPrice(vp, { edition, finish, isFoil })
     if (edition && edition !== 'unlimited') return 0

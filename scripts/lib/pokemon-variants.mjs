@@ -11,10 +11,11 @@
 // Plain .mjs (like price-history.mjs) so the sync script and the Next.js app share one copy:
 // scripts/lib/catalog-sync.mjs builds the prices, lib/pricing.ts reads them.
 
-export const EDITIONS = ['unlimited', 'shadowless', '1st']   // also the default-edition order
+// also the default-edition order. 'limited' is Yu-Gi-Oh!'s Limited Edition (yugioh-tcgplayer.mjs)
+export const EDITIONS = ['unlimited', 'shadowless', '1st', 'limited']
 export const FINISHES = ['normal', 'holofoil', 'reverse']
 
-export const EDITION_LABELS = { unlimited: 'Unlimited', shadowless: 'Shadowless', '1st': '1st Edition' }
+export const EDITION_LABELS = { unlimited: 'Unlimited', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
 export const FINISH_LABELS = { normal: 'Normal', holofoil: 'Holo', reverse: 'Reverse Holo' }
 
 export function variantKey(edition, finish) {
@@ -40,6 +41,7 @@ export function classifySubtype(subTypeName, { unlimitedIs = 'unlimited' } = {})
   const lower = sub.toLowerCase()
   let edition = 'unlimited'
   if (lower.startsWith('1st edition')) edition = '1st'
+  else if (lower.startsWith('limited')) edition = 'limited'
   else if (lower.startsWith('unlimited')) edition = unlimitedIs
   const finish = lower.includes('reverse') ? 'reverse' : (lower.includes('holo') || lower.includes('foil')) ? 'holofoil' : 'normal'
   return { edition, finish, weak: false }

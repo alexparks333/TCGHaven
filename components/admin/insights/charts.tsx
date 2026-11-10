@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils'
 // tell apart in a chart. Checked with the data-viz palette validator on the portal's card surface
 // (#efe4cc): lightness, chroma, colour-blind and normal-vision separation, 3:1 contrast — all pass.
 export const GAME_CHART: Record<string, string> = {
-  pokemon: '#a87600', lorcana: '#8a4fb0', riftbound: '#c94a2c', onepiece: '#16876a', mtg: '#3d6db8',
+  pokemon: '#a87600', lorcana: '#8a4fb0', riftbound: '#c94a2c', onepiece: '#16876a', mtg: '#3d6db8', yugioh: '#5b4a8a',
 }
-export const GAME_ORDER = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg']
+export const GAME_ORDER = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh']
 export const ONE = '#7a5230'       // single-series colour (walnut)
 const INK = '#2b2014'
 const MUTED = '#7a6a55'

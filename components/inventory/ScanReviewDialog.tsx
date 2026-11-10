@@ -10,7 +10,7 @@ import { X, Loader2, AlertCircle } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard } from '@/lib/firebase/db'
-import { CONDITION_LABELS, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
+import { CONDITION_LABELS, hasPrintings, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
 import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
@@ -161,8 +161,8 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           // Read off the slab's label (prices stay the raw card's — graded prices aren't tracked yet)
           ...(row.slab?.company && row.slab.grade && { gradingCompany: row.slab.company, grade: row.slab.grade }),
           ...(match.game === 'riftbound' && { nexus: false }),
-          ...(match.game === 'pokemon' && vp && row.edition && { edition: row.edition }),
-          ...(match.game === 'pokemon' && vp && row.finish && { finish: row.finish }),
+          ...(hasPrintings(match.game) && vp && row.edition && { edition: row.edition }),
+          ...(hasPrintings(match.game) && vp && row.finish && { finish: row.finish }),
           ...(match.language === 'ja' && { language: 'ja' as Language }),
           ...(price > 0 && { currentPrice: price, priceUpdatedAt: now, priceAtEntry: price }),
         }

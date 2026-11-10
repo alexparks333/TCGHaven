@@ -18,6 +18,8 @@
     "test:variants": "node scripts/lib/pokemon-variants.test.mjs",
     "test:pokemon-source": "node scripts/lib/pokemon-tcgplayer.test.mjs",
     "test:onepiece-source": "node scripts/lib/onepiece-tcgplayer.test.mjs",
+    "test:yugioh-source": "node scripts/lib/yugioh-tcgplayer.test.mjs",
+    "yugioh-source-report": "node scripts/yugioh-source-report.mjs",
     "onepiece-source-report": "node scripts/onepiece-source-report.mjs",
     "pokemon-source-report": "node scripts/pokemon-source-report.mjs",
     "test:snapshot": "node scripts/lib/snapshot-codec.test.mjs",

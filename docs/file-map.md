@@ -46,6 +46,9 @@ TCGHaven/
 │       ├── onepiece-tcgplayer.mjs ← One Piece: every card = a TCGplayer product (`tcgProductId`),
 │       │                             apitcg secondary; existing cards never change (games.md One
 │       │                             Piece) — tests: `npm run test:onepiece-source`
+│       ├── yugioh-tcgplayer.mjs   ← Yu-Gi-Oh!: every English single = a TCGplayer product
+│       │                             (`tcg-{productId}`), editions in variantPrices, set types
+│       │                             (games.md Yu-Gi-Oh!) — tests: `npm run test:yugioh-source`
 │       ├── pokemon-tcgplayer.mjs  ← English catalog: TCGplayer primary + GitHub secondary — linking,
 │       │                             variants, new sets, claimed sets, id collisions (games.md
 │       │                             Pokémon) — tests: `npm run test:pokemon-source`
@@ -114,6 +117,8 @@ TCGHaven/
 │   │   ├── riftbound.ts           ← searchRiftboundCards(), getRiftboundSets()
 │   │   ├── onepiece.ts            ← searchOnePieceCards(), getOnePieceSets() (registry-backed,
 │   │   │                             no live sets API — mirrors riftbound.ts's shape, §10)
+│   │   ├── yugioh.ts              ← searchYugiohCards(), getYugiohSets() (catalog_meta/yugioh,
+│   │   │                             written by the sync), yugiohDisplayName()
 │   │   └── mtg.ts                 ← searchMtgCards(), getMtgSets() (live api.scryfall.com/sets +
 │   │                             manual-registry merge — mirrors pokemon.ts's shape, §11)
 │
@@ -178,10 +183,12 @@ TCGHaven/
 │       │   ├── riftbound/{route.ts,sync.ts} ← syncs Riftbound + TCGPlayer group-matching (§17)
 │       │   ├── onepiece/{route.ts,sync.ts} ← syncs One Piece + registers any new sets, no
 │       │   │                         group-matching needed (§10, §17)
-│       │   └── mtg/{route.ts,sync.ts} ← syncs MTG (§11, §17). NOT on the automatic cron below
+│       │   ├── mtg/{route.ts,sync.ts} ← syncs MTG (§11, §17). NOT on the automatic cron below
 │       │                             yet — manual-click-only until Firestore write-quota impact
 │       │                             is confirmed OK (~99k writes on first run). See "MTG
 │       │                             Integration.md" at the repo root.
+│       │   └── yugioh/{route.ts,sync.ts} ← syncs Yu-Gi-Oh! (may outrun the function limit —
+│       │                             the daily job .github/workflows/sync-yugioh.yml runs the CLI)
 │       ├── cron/
 │       │   └── sync-prices/route.ts ← GET/POST, secret-protected — calls the pokemon/lorcana/
 │       │                             riftbound/onepiece sync.ts functions above twice a day (MTG's
@@ -194,6 +201,7 @@ TCGHaven/
 │           ├── riftbound/route.ts ← Batch Riftbound price lookup — catalog-only
 │           ├── onepiece/route.ts  ← Batch One Piece price lookup — catalog-only, no isFoil
 │           │                         branching (no foil/non-foil duality — §10)
+│           ├── yugioh/route.ts    ← Batch Yu-Gi-Oh! price lookup — catalog-only, by edition
 │           └── mtg/route.ts       ← Batch MTG price lookup — catalog-only, isFoil-branching
 │                                     (same shape as lorcana/route.ts — §11)
 │

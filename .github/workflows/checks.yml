@@ -50,6 +50,7 @@ jobs:
           npm run test:variants
           npm run test:pokemon-source
           npm run test:onepiece-source
+          npm run test:yugioh-source
           npm run test:snapshot
           npm run test:rebase
           npm run test:relief

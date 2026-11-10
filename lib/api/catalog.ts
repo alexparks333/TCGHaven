@@ -259,6 +259,18 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   // (verified live against api.scryfall.com — only 9 `bonus` cards exist and all are digital-only
   // as of this writing) — kept here anyway in case Scryfall ever prints a paper one.
   common: 0, uncommon: 1, rare: 2, mythic: 3, special: 4, bonus: 5,
+  // Yu-Gi-Oh! (from TCGplayer's rarities, 2026-11-10) — roughly by how rare each is to pull.
+  // Common / Rare are shared with the entries above.
+  // ('Ultra Rare' is shared with Pokémon's entry above)
+  'Super Rare': 120, 'Secret Rare': 122, 'Ultimate Rare': 123, 'Ghost Rare': 124,
+  'Gold Rare': 125, 'Premium Gold Rare': 126, 'Gold Secret Rare': 127, 'Ghost/Gold Rare': 128, 'Platinum Rare': 129,
+  'Platinum Secret Rare': 130, 'Prismatic Secret Rare': 131, "Prismatic Collector's Rare": 132, 'Prismatic Ultimate Rare': 133,
+  "Collector's Rare": 134, 'Starlight Rare': 135, 'Quarter Century Secret Rare': 136, 'Starfoil Rare': 137,
+  'Shatterfoil Rare': 138, 'Mosaic Rare': 139, 'Parallel Rare': 140, 'Duel Terminal Normal Parallel Rare': 141,
+  'Duel Terminal Rare Parallel Rare': 142, 'Duel Terminal Super Parallel Rare': 143, 'Duel Terminal Ultra Parallel Rare': 144,
+  'Duel Terminal Technology Common': 145, 'Duel Terminal Technology Ultra Rare': 146, 'Emblazoned Ultra Rare': 147,
+  'Emblazoned Secret Rare': 148, 'Ultra Pharaoh’s Rare': 149, 'Secret Pharaoh’s Rare': 150, 'Grand Master Rare': 151,
+  '10000 Secret Rare': 152,
 }
 
 /** Sorts catalog cards by collector number, then rarity, matching Cardex's display order. */
@@ -273,7 +285,9 @@ export function sortCatalogCards<T extends { number: string; rarity?: string }>(
       if (numDiff !== 0) return numDiff
       return (CARDEX_RARITY_ORDER[a.rarity ?? ''] ?? 50) - (CARDEX_RARITY_ORDER[b.rarity ?? ''] ?? 50)
     }
-    if (aIsR && bIsR) return a.number.localeCompare(b.number)
+    // Codes like Yu-Gi-Oh!'s "MAMS-EN001" (and Riftbound's R-format): in number order, then by rarity
+    if (aIsR && bIsR) return a.number.localeCompare(b.number, undefined, { numeric: true })
+      || (CARDEX_RARITY_ORDER[a.rarity ?? ''] ?? 50) - (CARDEX_RARITY_ORDER[b.rarity ?? ''] ?? 50)
     return aIsR ? 1 : -1 // R-format (Rune) cards sort after numeric cards
   })
 }
