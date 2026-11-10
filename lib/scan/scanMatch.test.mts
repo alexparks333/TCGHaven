@@ -275,8 +275,9 @@ assert.equal(decide([{ key: 'a', score: 99, exact: true, trusted: true }], [0.88
     sets: [{ id: 'ecard2', name: 'Aquapolis', total: 182 }],
   }
   const r = top([L('Mr. Mime', 0.04, 0.05), L('50 HP', 0.04, 0.03), L('ID: C-22-b', 0.12), L('© 2002 Pokémon / Nintendo', 0.95, 0.012), L('95a', 0.93, 0.015)], [cat])
-  assert.equal(r[0].id, 'tcg-87590')
-  assert.ok(r[0].exact && (!r[1] || r[0].score > r[1].score), 'the version read wins (or stands alone)')
+  // The letter isn't trusted (a real 95b was read as "95a"): every version ties, to be picked
+  assert.deepEqual(r.map((c) => c.id).sort(), ['ecard2-95', 'tcg-87590', 'tcg-87591'])
+  assert.ok(r.every((c) => c.exact && c.score === r[0].score))
 }
 
 // ── Nothing readable → nothing guessed ──

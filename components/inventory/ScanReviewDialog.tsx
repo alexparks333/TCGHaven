@@ -131,10 +131,14 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
     setSaving(true)
     setError(null)
     const known: Card[] = [...allCards]
-    const now = new Date().toISOString()
+    // The inventory lists newest first: the first card scanned gets the latest time, so the
+    // batch reads top to bottom in the order it was scanned
+    const startedAt = Date.now()
     let done = 0
     try {
-      for (const row of rows) {
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i]
+        const now = new Date(startedAt - i).toISOString()
         const cr = rowsFor(row) as CardSearchResult[]
         const { result, price, isFoil } = picked(row, cr)
         const match = row.options[row.choice]
@@ -182,52 +186,94 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={saving ? undefined : onClose} />
-      <div className="add-card-panel relative w-full max-w-[592px] card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-ink">Scanned cards</h2>
-          <button onClick={onClose} disabled={saving} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700">
+      <div className="add-card-panel relative w-full max-w-[600px] card-glass rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3 border-b border-slate-800">
+          <div className="min-w-0">
+            <h2 className="text-lg font-bold text-ink leading-tight">Review scanned cards</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {count} card{count === 1 ? '' : 's'} · <span className="text-ink tabular-nums">{formatCurrency(total)}</span>
+              {rows.some((r) => r.needsPick) && <span className="text-amber-600 font-medium"> · {rows.filter((r) => r.needsPick).length} to check</span>}
+            </p>
+          </div>
+          <button onClick={onClose} disabled={saving} className="p-2 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label="Close">
             <X size={18} />
           </button>
         </div>
 
-        {rows.length === 0 && <p className="text-sm text-slate-400">Nothing left to add.</p>}
-
-        <ul className="flex flex-col gap-3">
-          {rows.map((row) => {
-            const match = row.options[row.choice]
-            const cr = rowsFor(row)
-            const loaded = Array.isArray(cr) ? cr : null
-            const pick = loaded ? picked(row, loaded) : null
-            const vp = loaded ? vpOf(loaded[0]) : null
-            const editions = vp ? (editionsOf(vp) as Edition[]) : []
-            const finishes = vp && row.edition ? (finishesOf(vp, row.edition) as Finish[]) : []
-            const hasFoilRow = !!loaded && !vp && loaded.some((r) => r.isFoil) && loaded.some((r) => !r.isFoil)
-            const price = pick ? pick.price : match.price
-            return (
-              <li key={row.rowId} className={cn('rounded-xl border p-3 flex gap-3', row.needsPick ? 'border-amber-500/70' : 'border-slate-800')}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={cardImage(match.imageUrl, 'thumb')} alt="" className="w-16 h-[89px] rounded-md object-cover bg-slate-900 shrink-0" />
-                <div className="min-w-0 flex-1 flex flex-col gap-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-ink truncate">{match.name}</div>
-                      <div className="text-xs text-slate-400 truncate">
-                        {match.setName}{match.number ? ` · #${match.number}` : ''}{match.language === 'ja' ? ' · Japanese' : ''}
-                        {row.slab?.grade && <span className="ml-1 font-semibold text-ink"> · {row.slab.company} {row.slab.grade}</span>}
-                      </div>
+        {/* Cards */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
+          {rows.length === 0 && <p className="text-sm text-slate-400 text-center py-8">Nothing left to add.</p>}
+          <ul className="flex flex-col gap-3">
+            {rows.map((row) => {
+              const match = row.options[row.choice]
+              const cr = rowsFor(row)
+              const loaded = Array.isArray(cr) ? cr : null
+              const pick = loaded ? picked(row, loaded) : null
+              const vp = loaded ? vpOf(loaded[0]) : null
+              const price = pick ? pick.price : match.price
+              // Every printing as a button with its price: Pokémon edition × finish, else Normal / Foil
+              const printings: Array<{ id: string; label: string; price: number; on: boolean; set: () => void }> = []
+              if (vp) {
+                for (const ed of editionsOf(vp) as Edition[]) {
+                  for (const fin of finishesOf(vp, ed) as Finish[]) {
+                    printings.push({
+                      id: `${ed}:${fin}`,
+                      label: [ed === 'unlimited' ? '' : EDITION_LABELS[ed], FINISH_LABELS[fin]].filter(Boolean).join(' '),
+                      price: variantPrice(vp, { edition: ed, finish: fin, isFoil: fin !== 'normal' }),
+                      on: row.edition === ed && row.finish === fin,
+                      set: () => update(row.rowId, { edition: ed, finish: fin }),
+                    })
+                  }
+                }
+              } else if (loaded && loaded.some((r) => r.isFoil) && loaded.some((r) => !r.isFoil)) {
+                const normal = loaded.find((r) => !r.isFoil)!, foil = loaded.find((r) => r.isFoil)!
+                printings.push({ id: 'normal', label: 'Normal', price: normal.marketPrice, on: !row.foil, set: () => update(row.rowId, { foil: false }) })
+                printings.push({ id: 'foil', label: 'Foil', price: foil.marketPriceFoil > 0 ? foil.marketPriceFoil : foil.marketPrice, on: !!row.foil, set: () => update(row.rowId, { foil: true }) })
+              }
+              return (
+                <li key={row.rowId} className={cn('rounded-2xl border bg-slate-950/40 p-3', row.needsPick ? 'border-amber-500/70' : 'border-slate-800')}>
+                  <div className="flex gap-3">
+                    <div className="relative shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={cardImage(match.imageUrl, 'thumb')} alt="" className="w-[72px] h-[100px] rounded-lg object-cover bg-slate-900 shadow" />
+                      {row.slab?.grade && (
+                        <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-white px-1.5 py-0.5 text-[10px] font-black text-[#1a1a1a] shadow ring-1 ring-[#c8102e]">
+                          <span className="text-[#c8102e]">{row.slab.company}</span> {row.slab.grade}
+                        </span>
+                      )}
                     </div>
-                    <button onClick={() => setRows((rs) => rs.filter((r) => r.rowId !== row.rowId))} disabled={saving} className="p-1 text-slate-500 hover:text-ink shrink-0" aria-label="Remove">
-                      <X size={16} />
-                    </button>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-ink leading-snug line-clamp-2">{match.name}</div>
+                          <div className="text-xs text-slate-400 truncate mt-0.5">
+                            {match.setName}{match.number ? ` · #${match.number}` : ''}{match.language === 'ja' ? ' · Japanese' : ''}
+                          </div>
+                        </div>
+                        <button onClick={() => setRows((rs) => rs.filter((r) => r.rowId !== row.rowId))} disabled={saving}
+                          className="p-1.5 -mr-1 -mt-1 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800 shrink-0" aria-label="Remove">
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="mt-2 text-lg font-bold text-ink tabular-nums">
+                        {price > 0 ? formatCurrency(price) : <span className="text-slate-500 text-sm font-medium">No price yet</span>}
+                        {row.quantity > 1 && price > 0 && <span className="ml-2 text-xs font-medium text-slate-400">× {row.quantity} = {formatCurrency(price * row.quantity)}</span>}
+                      </div>
+                      {cr === 'loading' && <Loader2 size={14} className="animate-spin text-slate-400 mt-1" />}
+                      {cr === 'error' && <p className="text-xs text-red-600 mt-1">Couldn’t load this card — remove it to add the rest</p>}
+                    </div>
                   </div>
 
                   {(row.needsPick || row.options.length > 1) && (
-                    <label className="text-xs">
-                      {row.needsPick && <span className="text-amber-600 font-medium">Not sure which card — check this: </span>}
+                    <label className={cn('block mt-3 rounded-xl p-2.5 text-xs', row.needsPick ? 'bg-amber-500/10' : 'bg-slate-900/60')}>
+                      <span className={cn('font-semibold', row.needsPick ? 'text-amber-600' : 'text-slate-400')}>
+                        {row.needsPick ? 'Not sure which card — pick the right one' : 'Card'}
+                      </span>
                       <select
-                        className="input-field mt-1 py-1.5 text-sm"
+                        className="input-field mt-1.5 py-2 text-sm"
                         value={row.choice}
                         onChange={(e) => update(row.rowId, { choice: Number(e.target.value), needsPick: false, foil: undefined, edition: undefined, finish: undefined })}
                       >
@@ -240,59 +286,56 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                     </label>
                   )}
 
-                  <div className="flex flex-wrap gap-2">
-                    {cr === 'loading' && <Loader2 size={16} className="animate-spin text-slate-400 self-center" />}
-                    {cr === 'error' && <span className="text-xs text-red-600 self-center">Couldn’t load this card — remove it to add the rest</span>}
-                    {editions.length > 1 && (
-                      <select className="input-field py-1.5 text-sm w-auto" value={row.edition}
-                        onChange={(e) => {
-                          const edition = e.target.value as Edition
-                          const fs = finishesOf(vp!, edition) as Finish[]
-                          update(row.rowId, { edition, finish: row.finish && fs.includes(row.finish) ? row.finish : (defaultFinish(vp!, edition, false) as Finish) })
-                        }}>
-                        {editions.map((ed) => <option key={ed} value={ed}>{EDITION_LABELS[ed]}</option>)}
-                      </select>
-                    )}
-                    {finishes.length > 1 && (
-                      <select className="input-field py-1.5 text-sm w-auto" value={row.finish} onChange={(e) => update(row.rowId, { finish: e.target.value as Finish })}>
-                        {finishes.map((f) => <option key={f} value={f}>{FINISH_LABELS[f]}</option>)}
-                      </select>
-                    )}
-                    {hasFoilRow && (
-                      <select className="input-field py-1.5 text-sm w-auto" value={row.foil ? 'foil' : 'normal'} onChange={(e) => update(row.rowId, { foil: e.target.value === 'foil' })}>
-                        <option value="normal">Normal</option>
-                        <option value="foil">Foil</option>
-                      </select>
-                    )}
-                    <select className="input-field py-1.5 text-sm w-auto" value={row.condition} onChange={(e) => update(row.rowId, { condition: e.target.value as Condition })}>
-                      {CONDITIONS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
-                    </select>
-                    <div className="flex items-center rounded-lg border border-slate-800 text-sm">
-                      <button type="button" className="px-2.5 py-1 text-slate-400 hover:text-ink" disabled={row.quantity <= 1}
-                        onClick={() => update(row.rowId, { quantity: Math.max(1, row.quantity - 1) })}>−</button>
-                      <span className="w-6 text-center text-ink">{row.quantity}</span>
-                      <button type="button" className="px-2.5 py-1 text-slate-400 hover:text-ink"
-                        onClick={() => update(row.rowId, { quantity: row.quantity + 1 })}>+</button>
+                  {printings.length > 1 && (
+                    <div className="mt-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Finish</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {printings.map((p) => (
+                          <button key={p.id} type="button" onClick={p.set}
+                            className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors text-left',
+                              p.on ? 'border-amber-500 bg-amber-500/15 text-ink' : 'border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700')}>
+                            {p.label}
+                            {p.price > 0 && <span className="block text-[11px] font-medium tabular-nums opacity-80">{formatCurrency(p.price)}</span>}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <span className="ml-auto self-center text-sm text-ink tabular-nums">{price > 0 ? formatCurrency(price) : '—'}</span>
+                  )}
+
+                  <div className="mt-3 flex items-end gap-2">
+                    <label className="flex-1 min-w-0">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Condition</span>
+                      <select className="input-field mt-1 py-2 text-sm" value={row.condition} onChange={(e) => update(row.rowId, { condition: e.target.value as Condition })}>
+                        {CONDITIONS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
+                      </select>
+                    </label>
+                    <div>
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Qty</span>
+                      <div className="mt-1 flex items-center rounded-xl border border-slate-800 bg-slate-950 text-sm h-[38px]">
+                        <button type="button" className="px-3 h-full text-slate-400 hover:text-ink disabled:opacity-40" disabled={row.quantity <= 1}
+                          onClick={() => update(row.rowId, { quantity: Math.max(1, row.quantity - 1) })} aria-label="One fewer">−</button>
+                        <span className="w-6 text-center text-ink font-semibold tabular-nums">{row.quantity}</span>
+                        <button type="button" className="px-3 h-full text-slate-400 hover:text-ink"
+                          onClick={() => update(row.rowId, { quantity: row.quantity + 1 })} aria-label="One more">+</button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
 
-        {error && (
-          <div className="mt-4 flex items-start gap-2 text-sm text-red-600">
-            <AlertCircle size={16} className="shrink-0 mt-0.5" /> {error}
-          </div>
-        )}
-
-        <div className="mt-5 flex items-center justify-between gap-3">
-          <span className="text-sm text-slate-400">{rows.length > 0 && <>Total <span className="text-ink tabular-nums">{formatCurrency(total)}</span></>}</span>
-          <button onClick={addAll} disabled={saving || rows.length === 0 || !ready} className="btn-primary">
+        {/* Footer: always in view */}
+        <div className="border-t border-slate-800 px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {error && (
+            <div className="mb-3 flex items-start gap-2 text-sm text-red-600">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" /> {error}
+            </div>
+          )}
+          <button onClick={addAll} disabled={saving || rows.length === 0 || !ready} className="btn-primary w-full justify-center py-3 text-base">
             {saving || (!ready && rows.length > 0) ? <Loader2 size={16} className="animate-spin" /> : null}
-            Add {count} card{count === 1 ? '' : 's'}
+            Add {count} card{count === 1 ? '' : 's'} to inventory · {formatCurrency(total)}
           </button>
         </div>
       </div>

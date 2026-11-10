@@ -458,8 +458,15 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
         }
       }
       for (const p of clues.promos) for (const c of ix.byNum.get(numKey(p)) ?? []) offer('pokemon', c, 55, `promo ${c.number}`)
-      // A number alone low on the card: weaker than "number/total", so the name has to agree
-      for (const n of clues.loneNumbers) for (const c of ix.byNum.get(numKey(n)) ?? []) offer('pokemon', c, 34, `number ${n}`)
+      // A number alone low on the card: weaker than "number/total", so the name has to agree. Its
+      // letter ("95a" / "95b") is tiny and often misread (a real 95b read as "95a" and "956"), so
+      // every version of the number counts the same — the picture or the person picks
+      for (const n of clues.loneNumbers) {
+        const base = numKey(n).replace(/[a-z]$/, '')
+        for (const k of [base, ...'abcd'.split('').map((l) => base + l)]) {
+          for (const c of ix.byNum.get(k) ?? []) offer('pokemon', c, 34, `number ${base}${k === base ? '' : '?'}`)
+        }
+      }
       for (const p of clues.starPromo) {
         for (const c of ix.byNum.get(p.num) ?? []) if (c.set === p.set) offer('pokemon', c, 55, `promo ${p.set.toUpperCase()} ${p.num}`)
       }
