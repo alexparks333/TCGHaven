@@ -928,6 +928,12 @@ Added 2026-11-10, the sixth game, following `docs/adding-a-game.md`. Owner's sco
 singles**; Speed Duel, Rush Duel, sealed product and non-English prints left out; Japanese / OCG
 later as its own catalog if wanted.
 
+**Japanese / OCG — on hold (owner, 2026-11-10).** Unlike Japanese Pokémon (tcgcsv 85), TCGplayer
+sells no Japanese Yu-Gi-Oh! (0 `-JP` numbers in category 2), and no free, permitted feed has OCG
+prices. A card list is possible from Yugipedia-derived community data (YGOJSON, yaml-yugi); prices
+would mean scraping a Japanese shop (Yuyu-tei, bigweb — terms risk) or a paid API (Japanese
+coverage unconfirmed). If picked up: model it on `catalog/pokemon-jp` (`catalogKeyFor()`, `language: 'ja'`).
+
 ### Data Source — TCGplayer only (YGOPRODeck as the check)
 
 **TCGplayer (tcgcsv category 2) is the whole source** — every English single is one TCGplayer product
