@@ -68,6 +68,7 @@ export interface ScanClues {
   mtgSets: string[]           // "BLB • EN" → "blb"
   bottomTokens: string[]      // short words near the bottom (set codes, Japanese set marks)
   bottomNumbers: string[]     // bare numbers near the bottom (MTG collector numbers)
+  loneNumbers: string[]       // a number alone on its line low on the card ("95a" on e-Card era Pokémon)
   nameLines: string[]         // the biggest text — most likely the card name
   words: Set<string>          // every folded word read, for name matching
   japanese: boolean
@@ -178,7 +179,7 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
-    fractions: [], promos: [], starPromo: [], opCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [],
+    fractions: [], promos: [], starPromo: [], opCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
     bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
@@ -230,6 +231,12 @@ export function readClues(lines: OcrLine[]): ScanClues {
     for (const m of Array.from(text.matchAll(/\b([A-Z0-9]{3,5})\s?[•·*.]\s?(EN|JP|JA|FR|DE|IT|ES|PT|KO|RU|ZHS|ZHT|PH)\b/g))) {
       const s = m[1].toLowerCase()
       add(clues.mtgSets, s, (o) => o === s)
+    }
+    // e-Card era Pokémon print the number on its own ("95a"), no "/total"
+    const lone = text.trim().match(/^(\d{1,3})([a-z]?)$/)
+    if (lone && line.y >= 0.75) {
+      const n = `${parseInt(lone[1], 10)}${lone[2] ?? ''}`
+      add(clues.loneNumbers, n, (o) => o === n)
     }
     if (line.y + line.h >= 0.8) {
       // Set codes and marks: "OGN", "BLB", "SV4K", "SM2+", "M6a" — also "SM 9b" read as two words,
@@ -451,6 +458,8 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
         }
       }
       for (const p of clues.promos) for (const c of ix.byNum.get(numKey(p)) ?? []) offer('pokemon', c, 55, `promo ${c.number}`)
+      // A number alone low on the card: weaker than "number/total", so the name has to agree
+      for (const n of clues.loneNumbers) for (const c of ix.byNum.get(numKey(n)) ?? []) offer('pokemon', c, 34, `number ${n}`)
       for (const p of clues.starPromo) {
         for (const c of ix.byNum.get(p.num) ?? []) if (c.set === p.set) offer('pokemon', c, 55, `promo ${p.set.toUpperCase()} ${p.num}`)
       }

@@ -263,6 +263,22 @@ assert.equal(decide([{ key: 'a', score: 65, exact: false }, { key: 'b', score: 6
 // A grading label isn't overruled by a poor picture (the card cut from the slab can be off)
 assert.equal(decide([{ key: 'a', score: 99, exact: true, trusted: true }], [0.889]).status, 'matched')
 
+// e-Card era Pokémon: the number alone ("95a"), no "/total" — a real Aquapolis Mr. Mime
+{
+  const cat: ScanCatalog = {
+    key: 'pokemon',
+    cards: [
+      { id: 'ecard2-95', name: 'Mr. Mime', number: '95', set: 'ecard2' },
+      { id: 'tcg-87590', name: 'Mr. Mime', number: '095a', set: 'tcg-1' },
+      { id: 'tcg-87591', name: 'Mr. Mime', number: '095b', set: 'tcg-1' },
+    ],
+    sets: [{ id: 'ecard2', name: 'Aquapolis', total: 182 }],
+  }
+  const r = top([L('Mr. Mime', 0.04, 0.05), L('50 HP', 0.04, 0.03), L('ID: C-22-b', 0.12), L('© 2002 Pokémon / Nintendo', 0.95, 0.012), L('95a', 0.93, 0.015)], [cat])
+  assert.equal(r[0].id, 'tcg-87590')
+  assert.ok(r[0].exact && (!r[1] || r[0].score > r[1].score), 'the version read wins (or stands alone)')
+}
+
 // ── Nothing readable → nothing guessed ──
 assert.deepEqual(top([L('the', 0.5)]), [])
 

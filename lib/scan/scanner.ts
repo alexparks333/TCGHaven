@@ -115,7 +115,7 @@ async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<{ candi
   }
 }
 
-async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promise<{ card: ScannedCard; tray: TrayOption[] }> {
+async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promise<{ card: ScannedCard; tray: TrayOption[]; topDistance: number | null }> {
   const { candidates, slab } = await fetchCandidates(lines, games)
 
   // Only the candidates still in the running get compared by picture
@@ -136,6 +136,7 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promis
   return {
     card: { scanId, options: ordered.map(({ final: _f, distance: _d, ...m }) => m), choice: 0, status, slab },
     tray: ordered.map((m) => trayOption(m, slab)),
+    topDistance: ranked[0]?.distance ?? null,
   }
 }
 
@@ -157,12 +158,15 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   })
   const listener = await CardScanner.addListener('cardScanned', ({ scanId, lines }) => {
     identify(scanId, lines, games)
-      .then(({ card, tray }) => {
+      .then(({ card, tray, topDistance }) => {
         found.set(scanId, card)
         // Not sure enough to show: nothing found, or only a loose guess (a word on a screen that
         // happens to be a card name) — the tray drops it and asks for another scan
         const top = card.options[0]
-        const loose = !top || card.status === 'none' || (card.status === 'pick' && (!top.exact || top.score < 55))
+        // …unless the picture clearly says which card it is and only the version is in doubt
+        // (Aquapolis Mr. Mime #95 / #95a / #95b): then it's a question, with the versions to pick
+        const pictured = topDistance !== null && topDistance <= 0.3
+        const loose = !top || card.status === 'none' || (card.status === 'pick' && (!top.exact || top.score < 55) && !pictured)
         return CardScanner.update({
           scanId,
           status: loose ? 'reject' : card.status,
