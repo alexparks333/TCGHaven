@@ -1,11 +1,11 @@
 # TCGHaven Card Scanner — Research, Design & Status
 
 _Started 2026-11-08. Point the iPhone at cards and they go into your inventory: the exact
-printing, fast enough to scan a stack._ The iPhone app it lives in: `IOSAppDev.md`.
+printing, fast enough to scan a stack._ The iPhone app it lives in: `"Status & plan" in ios-app.md`.
 
 **Status (2026-11-08): v1 is built and tested on the Mac, but has not been run on a phone yet.**
 The app builds, all checks pass, and the end-to-end test results are below. Next step: run it on
-your iPhone (IOSAppDev.md Day 1, steps 4–5), with the site changes deployed first; see "Trying it".
+your iPhone ("Status & plan" in ios-app.md Day 1, steps 4–5), with the site changes deployed first; see "Trying it".
 
 (There was never any "Card Vision" code in this repo or its history; this started fresh.)
 

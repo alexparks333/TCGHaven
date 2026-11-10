@@ -5,7 +5,7 @@
 // person taps Add we get their picks back — ScanReviewDialog adds them to the inventory.
 //
 // Matching lives here and on the server on purpose: improving it ships with a normal deploy, no
-// new app build. Plan and research: CardScanner.md.
+// new app build. Plan and research: docs/card-scanner.md.
 
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import type { Game } from '../types'
@@ -22,7 +22,7 @@ interface TrayOption {
   subtitle: string
   price: string
   imageUrl: string
-  detail: string   // why it matched — kept with the scan in test builds (CardScanner.md "Debug scans")
+  detail: string   // why it matched — kept with the scan in test builds (docs/card-scanner.md "Debug scans")
   printings: Array<{ key: string; label: string; price: string }>  // the card sheet's Finish row
 }
 

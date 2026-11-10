@@ -33,7 +33,7 @@ export const maxDuration = 300
 // in one run and starve every other write that day, including this cron's own remaining games.
 // Once the Firebase plan/quota is confirmed to handle it, wire it in the same way the others are
 // below (`import { runMtgSync as syncMtg } from '../../sync/mtg/sync'`, add to the Promise.allSettled
-// array and the summarize() calls) — see "MTG Integration.md" at the repo root for the full
+// array and the summarize() calls) — see docs/games.md (Magic section) for the full
 // writeup. Until then, the actual card/price sync only ever runs when an admin manually clicks
 // Admin Catalog → "Sync Card Data" → Magic: The Gathering.
 //

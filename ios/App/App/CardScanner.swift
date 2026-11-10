@@ -1,4 +1,4 @@
-// The TCGHaven card scanner — the native half. Plan, design and test results: CardScanner.md.
+// The TCGHaven card scanner — the native half. Plan, design and test results: docs/card-scanner.md.
 //
 // This screen owns the camera and does everything that needs the phone's hardware:
 //   1. find the card in each video frame (Vision rectangle detection; the largest card-shaped one,
@@ -422,7 +422,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     private var readingImage: CGImage?
     private var readingStarted: CFTimeInterval = 0
     private var readingQuad: [CGPoint]?       // where the card was found for this read
-    // Finish detection (measuring for now — CardScanner.md "Finish detection"): small copies of
+    // Finish detection (measuring for now — docs/card-scanner.md "Finish detection"): small copies of
     // each flattened frame, a few extra frames after the number reads, the way up they were read
     private var finishGrids: [[Float]] = []
     private var codeReadAt: CFTimeInterval?
@@ -470,7 +470,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 
     private static let gold = UIColor(red: 0.85, green: 0.70, blue: 0.35, alpha: 1)
 
-    // Tuning — CardScanner.md "Tuning"
+    // Tuning — docs/card-scanner.md "Tuning"
     private static let cardAspect: (min: Float, max: Float) = (0.55, 0.9)  // 63 × 88 mm, tilted, sleeved
     private static let steadyMotion: CGFloat = 0.018     // corner movement per frame still counted as steady
     private static let steadyTime: CGFloat = 0.4         // seconds of still hands to fill the ring
@@ -1690,7 +1690,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
 // to frame as the hand moves, while ink stays put. Where the foil is names the finish: the picture
 // (Holo), everywhere but the picture (Reverse Holo), the whole card (Foil). These numbers are
 // measured on every scan and kept with it; the rules come from real scans of cards whose finish is
-// known (CardScanner.md "Finish detection").
+// known (docs/card-scanner.md "Finish detection").
 
 enum FinishSensor {
     static let w = 96, h = 134

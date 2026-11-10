@@ -2,7 +2,7 @@
 // other. The app shows this live site; Capacitor injects its native bridge into the page, so the
 // plugins below work straight from here. In a browser every helper quietly does nothing (or uses
 // the browser's own version), and the plugin code is only downloaded inside the app.
-// Plan and status: IOSAppDev.md; how it works: docs/ios-app.md.
+// Plan and status: docs/ios-app.md ("Status & plan"); how it works: docs/ios-app.md.
 
 import { Capacitor } from '@capacitor/core'
 

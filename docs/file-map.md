@@ -60,7 +60,7 @@ TCGHaven/
 │   ├── stats/aggregate.ts          ← The Statistics totals job (stats_daily); types in stats/types.ts
 │   ├── finance.ts                  ← Finances: the Owner's cost tracker (finance/costs)
 │   ├── premium.ts                  ← Haven Premium prices (premium/config) and promo codes (promo_codes)
-│   ├── scan/                       ← The card scanner's site side (CardScanner.md):
+│   ├── scan/                       ← The card scanner's site side (card-scanner.md):
 │   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
 │   │   ├── decide.ts               ←   text score + picture distance → matched / pick / none
 │   │   ├── server.ts               ←   loads catalogs, adds Add-Card rows (for the route)
@@ -141,7 +141,7 @@ TCGHaven/
 │       ├── cards/search/route.ts  ← Unified search proxy (avoids browser CORS), capped at 40
 │       │                             results (§12)
 │       ├── cards/scan/route.ts    ← POST — the iPhone card scanner: OCR lines → ranked catalog
-│       │                             candidates (lib/scan/server.ts; CardScanner.md)
+│       │                             candidates (lib/scan/server.ts; card-scanner.md)
 │       ├── cardex/route.ts        ← Cardex grid data (?game=&set=)
 │       ├── sets/route.ts          ← Set list for AddCardDialog autocomplete (?game=)
 │       ├── auth/verify-passcode/route.ts ← POST — checks a submitted signup code against the

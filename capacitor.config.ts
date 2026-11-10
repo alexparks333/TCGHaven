@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli'
 
 // The TCGHaven iPhone app (Capacitor): a native shell that shows the live site, so a fix on Vercel
 // reaches the app with no new build or review. Only native changes (this file, ios/, plugins)
-// need a rebuild in Xcode. The plan and status: IOSAppDev.md; how it works: docs/ios-app.md.
+// need a rebuild in Xcode. The plan and status: docs/ios-app.md ("Status & plan"); how it works: docs/ios-app.md.
 const config: CapacitorConfig = {
   appId: 'com.alexhparks.tcghaven',
   appName: 'TCGHaven',

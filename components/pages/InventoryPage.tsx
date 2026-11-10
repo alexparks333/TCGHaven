@@ -64,7 +64,7 @@ export default function InventoryPage() {
   const [showGamePicker, setShowGamePicker] = useState(false)
   const gamePickerRef = useRef<HTMLDivElement>(null)
   const [showAdd, setShowAdd] = useState(false)
-  // The card scanner is iPhone-app only (CardScanner.md) — known after mount, so the server render
+  // The card scanner is iPhone-app only (docs/card-scanner.md) — known after mount, so the server render
   // and the first client render agree
   const [canScan, setCanScan] = useState(false)
   useEffect(() => { setCanScan(inApp()) }, [])

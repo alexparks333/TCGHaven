@@ -45,8 +45,8 @@ log against.
 | `docs/catalog.md` | how the shared catalog, snapshots, cache, staff portal and syncs work |
 | `docs/games.md` | how each existing game is sourced — **One Piece** is the closest model (TCGplayer-first, one product = one card) |
 | `docs/quirks.md` | the gotchas each game hit |
-| `CardScanner.md` | how the scanner reads, matches and decides |
-| `trainingAI.md` | how the scanner's picture AI is trained |
+| `card-scanner.md` | how the scanner reads, matches and decides |
+| `training-ai.md` | how the scanner's picture AI is trained |
 | memory: never change logged cards | catalog changes must never alter cards people already logged |
 
 ### 0.2 The rules that never bend
@@ -463,7 +463,7 @@ the game is commonly graded. **Native changes need a new app build** (Xcode / `x
 - `lib/scan/scanMatch.test.mts`: real OCR lines for 5+ cards (normal, variant sharing a number, promo,
   a misread number, a misread name) → the right card / a tie / no wrong-name win. `npm run test:scan`.
 - The 180-card end-to-end benchmark (scratchpad scripts `ocr.swift`, `e2e1.mts`, `e2e2.swift`,
-  `e2e3.mts` — described in `CardScanner.md`): add 30 random cards of the new game, re-run. **The bar:
+  `e2e3.mts` — described in `card-scanner.md`): add 30 random cards of the new game, re-run. **The bar:
   0 wrong cards added automatically; the right card offered for ≥ 95%.**
 - On the phone: scan 20+ real cards (sleeved, toploader, holo, a slab), pull the saved scans
   (`DebugScans` in `CardScanner.swift`, `devicectl device copy from …`), and check each one.
@@ -477,7 +477,7 @@ the game is commonly graded. **Native changes need a new app build** (Xcode / `x
 
 The scanner's picture AI (DINOv2, Apache-2.0) fingerprints every catalog card; a scan's fingerprint
 finds the closest ones. A new game's cards need fingerprints, and the model should be retrained so it
-learns the new game's look. Details: `trainingAI.md`; working folder on the Mac:
+learns the new game's look. Details: `training-ai.md`; working folder on the Mac:
 `~/Developer/tcghaven-vision/`.
 
 1. **Images:** add the game to `fetch_all.py`'s game list; download its catalog images (polite:
@@ -487,12 +487,12 @@ learns the new game's look. Details: `trainingAI.md`; working folder on the Mac:
    `full/neighbors.npy`.
 4. **Measure before training:** `fulleval.py` — add 30 of the new game to the benchmark list.
 5. **Retrain:** rebuild the kit (`pc/` → `tcghaven-vision.zip`) and train on the RTX 4090 following
-   `trainingAI.md` (or `train.py` on the Mac for a quick pass). The real-scan score must not drop for
+   `training-ai.md` (or `train.py` on the Mac for a quick pass). The real-scan score must not drop for
    the existing games.
 6. **Bring the model back**, re-fingerprint (`embed_all.py` with the trained weights), convert to
    Core ML (`convert.py`), ship it in the app and the index to the server.
 7. **Ongoing:** the catalog sync fingerprints each new card as it arrives (once the sync-side
-   fingerprinting step exists — see `CardScanner.md` "What's next"), so new sets are recognised by
+   fingerprinting step exists — see `card-scanner.md` "What's next"), so new sets are recognised by
    picture the day they land, without retraining.
 
 **Gate 8:** the new game's benchmark cards are found in the picture search's top 5 ≥ 95%; the
@@ -507,7 +507,7 @@ existing games' real-scan scores are unchanged or better.
   Cardex grouping, how new sets arrive, gotchas — written like One Piece's.
 - `CLAUDE.md` — the game in the intro line; a "rules that bite" line if it has a sharp edge; any new
   `npm run` command.
-- `docs/catalog.md` — sync details; `docs/file-map.md` — new files; `CardScanner.md` — the game's
+- `docs/catalog.md` — sync details; `docs/file-map.md` — new files; `card-scanner.md` — the game's
   scanning notes and benchmark row; `docs/quirks.md` — anything that bit.
 - This guide — update anything that turned out different.
 
@@ -589,4 +589,4 @@ npm run build                                # before pushing route changes (rul
 ```
 
 Mac AI folder (`~/Developer/tcghaven-vision/`): `fetch_all.py` → `embed_all.py` → `groups.py` →
-`neighbors.py` → `fulleval.py` → kit for the 4090 (`trainingAI.md`) → `convert.py`.
+`neighbors.py` → `fulleval.py` → kit for the 4090 (`training-ai.md`) → `convert.py`.

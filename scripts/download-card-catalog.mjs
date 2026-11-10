@@ -18,7 +18,7 @@
  * ~99,000 Firestore documents (far more than any other game here), which can blow through a
  * Firebase Spark (free) plan's 20k writes/day quota in one shot. Pass --include-mtg once you've
  * confirmed your plan/quota can take it (or just use Admin Catalog -> "Sync Card Data" -> Magic:
- * The Gathering for a one-off, no-code-change way to do the same thing). See "MTG Integration.md"
+ * The Gathering for a one-off, no-code-change way to do the same thing). See docs/games.md (Magic section)
  * at the repo root for the full writeup.
  */
 
@@ -72,7 +72,7 @@ const JOBS = {
 const selected = Object.keys(JOBS).filter((g) => (only ? only.has(g) : g !== 'mtg' || includeMtg))
 
 console.log(`📦 Downloading card catalogs: ${selected.join(', ')}`)
-if (!only && !includeMtg) console.log('   (skipping MTG — pass --include-mtg to include it; see "MTG Integration.md")')
+if (!only && !includeMtg) console.log('   (skipping MTG — pass --include-mtg to include it; see docs/games.md (Magic section))')
 await ensureSignedIn()
 // Each game's result (or error) is recorded on its sync_status doc; any failure fails the run
 const results = await Promise.allSettled(selected.map(async (g) => {

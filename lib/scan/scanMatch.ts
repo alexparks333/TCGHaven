@@ -1,6 +1,6 @@
 // The card scanner's text matcher: what the phone read off a card (Apple Vision OCR, in the
 // iPhone app's native scanner — ios/App/App/CardScanner.swift) → which catalog cards it can be.
-// Plan and research: CardScanner.md.
+// Plan and research: docs/card-scanner.md.
 //
 // Every game prints an identifier at the bottom of the card, and that's what pins down the exact
 // printing (the picture alone confuses reprints of the same art):

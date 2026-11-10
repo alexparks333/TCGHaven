@@ -2,7 +2,7 @@
 // what the scanner's tray shows (name, set, number, photo, price). Kept light on purpose — every
 // scan goes through here; the full Add-Card rows (prices per printing, foil rows) are fetched by
 // the review screen only for the cards actually kept. Called by app/api/cards/scan/route.ts.
-// Plan: CardScanner.md.
+// Plan: docs/card-scanner.md.
 
 import type { CatalogKey, Game, Language } from '../types'
 import { loadVisibleCatalog } from '../api/catalog'

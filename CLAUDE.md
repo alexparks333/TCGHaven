@@ -16,8 +16,9 @@ in that area:**
 | Card search ranking, prices / price history, the Cardex | `docs/search-prices-cardex.md` |
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
-| The iPhone app (Capacitor: `capacitor.config.ts`, `ios/`), the site↔app bridge (`lib/nativeApp.ts`) — status and plan in `IOSAppDev.md` | `docs/ios-app.md` |
-| The card scanner (`ios/App/App/CardScanner.swift`, `lib/scan/`, `/api/cards/scan`) | `CardScanner.md` |
+| The iPhone app (Capacitor: `capacitor.config.ts`, `ios/`), the site↔app bridge (`lib/nativeApp.ts`) — how it works, then its status and plan | `docs/ios-app.md` |
+| The card scanner (`ios/App/App/CardScanner.swift`, `lib/scan/`, `/api/cards/scan`) | `docs/card-scanner.md` |
+| Training the scanner's picture AI on the RTX 4090 PC | `docs/training-ai.md` |
 | Staff portal Statistics & Finances, usage tracking (`usage_days`, `user_stats`, `stats_daily`) | `docs/insights.md` |
 | Haven Premium's money side: Apple's cut, the Small Business Program, pricing plan, automatic costs | `docs/premium-business.md` |
 | Where a file lives | `docs/file-map.md` |

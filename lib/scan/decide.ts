@@ -5,7 +5,7 @@
 // Picture distances: 0 = the same picture, ~0.13 typical for the right card under normal phone
 // conditions, ~0.35 under harsh glare/blur; a different card's art is usually 0.3–0.5 further
 // away. (Measured 2026-11-08 on simulated phone scans of One Piece parallels and Pokémon
-// Charizard printings — CardScanner.md "Picture matching".) Same-art reprints are near 0 apart:
+// Charizard printings — docs/card-scanner.md "Picture matching".) Same-art reprints are near 0 apart:
 // the picture can't separate those — the printed number does.
 
 export interface Scored {

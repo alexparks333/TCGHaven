@@ -32,7 +32,7 @@ never clobbering an admin edit made since the last sync (see
 [§4](#card-catalog-system--deep-dive-firestore-backed)). It's for picking up new upstream
 cards/sets, not a prerequisite for the catalog to work at all. **MTG is the one exception** —
 its first sync is deliberately not yet run; see [§11](#magic-the-gathering--data-source-schema-add-a-set-guide)
-and "MTG Integration.md" at the repo root.
+and docs/games.md (Magic section).
 
 ### 2. User Collection (Inventory)
 When Alex adds a card, the card data is written to **Firestore** under
@@ -427,7 +427,7 @@ from `api.scryfall.com/sets`) — but it's by far the biggest sync here (~99,000
 Pokémon's ~20k), and unlike every other game, it isn't wired into the automatic twice a day cron at
 all yet (see [§18](#cron-driven-price-sync)). Clicking this button IS still the one live way to
 sync it — a deliberate one-off admin action rather than a recurring background one — but read
-"MTG Integration.md" at the repo root before clicking it for the first time: that first click
+docs/games.md (Magic section) before clicking it for the first time: that first click
 writes ~99,000 Firestore documents in one run, which can exceed a Firebase Spark (free) plan's
 daily write quota.
 
@@ -571,7 +571,7 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
   surface it. `checkForNewMtgSets()` also explicitly calls `ensureAdminAuth()` itself now rather
   than relying on one of the other games' `ensureSignedIn()` calls happening to win the race
   inside the same `Promise.allSettled` — see [§11](#magic-the-gathering--data-source-schema-add-a-set-guide)
-  and "MTG Integration.md" at the repo root for how to wire the real sync in once the write-quota
+  and docs/games.md (Magic section) for how to wire the real sync in once the write-quota
   concern is resolved.
 - **Not a Vercel Cron job** — deliberately, so this works on Vercel plans that don't support
   sub-daily cron schedules. It's triggered by **`.github/workflows/sync-prices.yml`**, a scheduled

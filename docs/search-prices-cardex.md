@@ -177,7 +177,7 @@ freshness as everywhere else (at most ~6 hours stale, per the cron above).
   `app/api/cron/sync-prices/route.ts` until its Firestore write-quota impact is confirmed
   acceptable (its first sync alone is ~99,000 document writes). Only a manual Admin Catalog
   "Sync Card Data" click, or `npm run download-cards -- --include-mtg`, actually syncs it right
-  now. See "MTG Integration.md" at the repo root for the full writeup and how to turn it on.
+  now. See docs/games.md (Magic section) for the full writeup and how to turn it on.
 - **Fields in catalog:** `marketPrice` (usd) and `marketPriceFoil` (usd_foil, falling back to
   usd_etched) — same shape as Lorcana/Riftbound's foil handling, not One Piece's separate-id
   Parallels.

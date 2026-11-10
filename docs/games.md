@@ -796,7 +796,7 @@ Riftbound needs — but unlike every other game here, its bulk data source retur
 images directly on the card object itself**, so there's no separate TCGCSV/lorcast-style
 price-merge pass at all; one bulk-data fetch is the whole sync.
 
-**Read `MTG Integration.md` at the repo root before touching anything MTG-related** — it has the
+**Read `docs/games.md` (Magic section) at the repo root before touching anything MTG-related** — it has the
 full story on why the first real sync hasn't been run yet (Firestore write-quota risk) and the
 exact steps to turn it on. Short version: the code below is fully built and wired everywhere
 every other game is, but `app/api/cron/sync-prices/route.ts` (the twice a day automatic price refresh)

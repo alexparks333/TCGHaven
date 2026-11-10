@@ -1,7 +1,7 @@
 # Training the card scanner's AI on the Windows PC (RTX 4090)
 
 _Written 2026-11-09 on the Mac. For the owner, and for Claude on the Windows PC: follow these steps in
-order. The scanner's design and results so far are in `CardScanner.md`._
+order. The scanner's design and results so far are in `card-scanner.md`._
 
 ## What this is
 
