@@ -11,6 +11,7 @@ import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { GamePicker } from '@/components/GamePicker'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { ScanReviewDialog } from '@/components/inventory/ScanReviewDialog'
+import { ScanFromPhoneDialog } from '@/components/inventory/ScanFromPhoneDialog'
 import { inApp } from '@/lib/nativeApp'
 import type { ScannedCard } from '@/lib/scan/scanner'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -86,6 +87,22 @@ export default function InventoryPage() {
     }
   }
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Opened from the website's "Scan with your phone" QR code (/inventory?scan=1): start the scanner
+  // once the collection has loaded (it decides which games are scanned)
+  const [scanLink, setScanLink] = useState(false)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('scan') !== '1') return
+    window.history.replaceState(null, '', '/inventory')
+    setScanLink(true)
+  }, [])
+  useEffect(() => {
+    if (!scanLink || !canScan || !user || dataLoading) return
+    setScanLink(false)
+    startScan()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanLink, canScan, user, dataLoading])
+  // On the website: the Scan button shows a QR code that opens the scanner on the phone
+  const [showPhoneScan, setShowPhoneScan] = useState(false)
   const [dateFilter, setDateFilter] = useState<string>('')
   const [selectedRarities, setSelectedRarities] = useState<Set<string>>(new Set())
   const [showRarityFilter, setShowRarityFilter] = useState(false)
@@ -439,12 +456,11 @@ export default function InventoryPage() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <div className="flex items-center gap-2 shrink-0">
-              {canScan && (
-                <button onClick={startScan} className="btn-secondary whitespace-nowrap">
-                  <ScanLine size={16} />
-                  Scan
-                </button>
-              )}
+              {/* In the app: the camera. On the website: a QR code that opens the scanner on the phone */}
+              <button onClick={canScan ? startScan : () => setShowPhoneScan(true)} className="btn-secondary whitespace-nowrap">
+                <ScanLine size={16} />
+                Scan
+              </button>
               <button onClick={() => setShowAdd(true)} className="btn-primary whitespace-nowrap">
                 <Plus size={16} />
                 Add Card
@@ -968,6 +984,7 @@ export default function InventoryPage() {
         )}
 
         {scanned && <ScanReviewDialog scanned={scanned} onClose={() => setScanned(null)} />}
+        {showPhoneScan && <ScanFromPhoneDialog onClose={() => setShowPhoneScan(false)} />}
 
         {/* ── Sell Card Modal ── */}
         {sellCard && (() => {

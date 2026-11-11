@@ -82,3 +82,27 @@ export async function nativeAppleCredential(): Promise<{ idToken: string; rawNon
     throw e
   }
 }
+
+/** "Scan with your phone" (the website's Scan button shows a QR code → www.tcghaven.org/scan →
+ *  tcghaven://scan opens the app): calls `onScan` when the app is opened by such a link, or was
+ *  launched by one. App only; returns the unsubscribe. docs/card-scanner.md "Scanning from the website". */
+export function onScanLink(onScan: () => void): () => void {
+  if (!inApp()) return () => {}
+  const isScan = (u?: string | null) => !!u && /^tcghaven:\/\/scan\b/i.test(u)
+  let gone = false
+  let remove: (() => void) | null = null
+  import('@capacitor/app').then(async ({ App }) => {
+    // Launched by the link: once per launch (a page reload must not open the scanner again)
+    const launch = await App.getLaunchUrl().catch(() => undefined)
+    let seen = false
+    try { seen = sessionStorage.getItem('tcg-scan-launch') === launch?.url } catch { /* no storage */ }
+    if (!gone && isScan(launch?.url) && !seen) {
+      try { sessionStorage.setItem('tcg-scan-launch', launch!.url) } catch { /* no storage */ }
+      onScan()
+    }
+    const handle = await App.addListener('appUrlOpen', ({ url }) => { if (isScan(url)) onScan() })
+    if (gone) handle.remove()
+    else remove = () => { handle.remove() }
+  }).catch(() => { /* older app build */ })
+  return () => { gone = true; remove?.() }
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { originalImage, isCardImageUrl, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 import { BanGate } from '@/components/auth/BanGate'
@@ -14,11 +14,14 @@ import { FriendsProvider } from '@/components/friends/FriendsProvider'
 import { FriendsDialog } from '@/components/friends/FriendsDialog'
 import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
 import { DevPanel } from '@/components/dev/DevPanel'
-import { hideLaunchScreen } from '@/lib/nativeApp'
+import { hideLaunchScreen, onScanLink } from '@/lib/nativeApp'
 
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
   // The iPhone app's launch screen comes down once the site has drawn (no-op in a browser)
   useEffect(() => { hideLaunchScreen() }, [])
+  // The app opened from the website's "Scan with your phone" QR code: straight to the scanner
+  const router = useRouter()
+  useEffect(() => onScanLink(() => router.push('/inventory?scan=1')), [router])
   // A resized card image from the image proxy (lib/cardImage.ts) that fails to load falls back to
   // the original, and a card image that can't load at all shows "No Image" instead of a broken
   // icon — one listener for every <img> in the app (error events don't bubble; capture does)

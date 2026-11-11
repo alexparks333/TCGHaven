@@ -170,6 +170,26 @@ About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
   - then each card's printing, condition and quantity. A card scanned twice in the same condition
     becomes one row with quantity 2.
 
+## Scanning from the website (2026-11-11)
+
+The website's Inventory → **Scan** button (in the app it opens the camera) shows a QR code
+(`ScanFromPhoneDialog`):
+
+1. The code is always `https://www.tcghaven.org/scan`, because the app shows the live site.
+2. The iPhone's Camera opens that page (`ScanLinkPage`):
+   - in Safari, it hands over to the app with `tcghaven://scan`, the app's URL scheme in
+     `ios/App/App/Info.plist`, and has a button for when iOS asks first;
+   - inside the app, it goes straight on;
+   - on a computer, it explains what to do.
+3. The app, opened by the link (`lib/nativeApp.ts` `onScanLink`, mounted in `ClientWrapper`), goes
+   to `/inventory?scan=1`, which starts the scanner once the collection has loaded. Being launched
+   by the link counts once per launch, so a page reload doesn't open the scanner again.
+4. The cards are saved on the phone as usual, to the same account. While the dialog is open, the
+   website asks for inventory changes every 4 s (`loadCardChanges`), merges them in, and shows the
+   cards arriving. No reload is needed.
+
+The link scheme needs app build 2026-11-11 or later; an older app ignores the link.
+
 ## Trying it
 
 The app shows the live site, so the site half (route, Scan button, review screen) must be
@@ -222,6 +242,8 @@ camera can't do this well).
 | `lib/scan/server.ts`, `app/api/cards/scan/route.ts` | The matching endpoint (public, read-only catalog) |
 | `lib/scan/scanner.ts` | The site ↔ native-scanner conversation |
 | `components/inventory/ScanReviewDialog.tsx` | Review + save (mirrors AddCardDialog's save — keep in step) |
+| `components/inventory/ScanFromPhoneDialog.tsx` | The website's Scan button: the QR code, and the cards arriving from the phone |
+| `app/scan/page.tsx` → `components/pages/ScanLinkPage.tsx` | Where the QR code points: opens the app's scanner (`tcghaven://scan`) |
 | `components/pages/InventoryPage.tsx` | The **Scan** button (only `inApp()`) |
 
 ## Sources

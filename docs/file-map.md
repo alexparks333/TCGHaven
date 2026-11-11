@@ -238,9 +238,12 @@ TCGHaven/
     ├── inventory/
     │   ├── AddCardDialog.tsx       ← Add/edit card modal with live search dropdown; fires the
     │   │                             "Card Unlocked" toast on a genuinely new print (§20)
+    │   ├── ScanFromPhoneDialog.tsx ← The website's Scan button: a QR code that opens the phone's
+    │   │                             scanner; shows the cards arriving (card-scanner.md)
     │   └── ScanReviewDialog.tsx    ← After the iPhone scanner: printing, condition, quantity,
     │                                 then "Add N cards" (saves like AddCardDialog — keep in step)
     ├── pages/
+    │   ├── ScanLinkPage.tsx        ← /scan — the QR code's page: opens the app's scanner
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
     │   ├── PortfolioPage.tsx       ← P&L tracking, price refresh, sort/filter
     │   ├── CardDetailPage.tsx      ← Individual card detail (app/portfolio/[cardId]/page.tsx)

@@ -18,6 +18,16 @@
 				<string>com.googleusercontent.apps.339578847949-pb2ev535hahiv13jb95qrnp4s797b8re</string>
 			</array>
 		</dict>
+		<dict>
+			<!-- tcghaven://scan — the website's "Scan with your phone" QR code opens the scanner
+			     (www.tcghaven.org/scan → here; lib/nativeApp.ts onScanLink) -->
+			<key>CFBundleURLName</key>
+			<string>com.alexhparks.tcghaven.links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>tcghaven</string>
+			</array>
+		</dict>
 	</array>
 	<!-- The card scanner (CardScanner.swift). Shown in the camera permission prompt. -->
 	<key>NSCameraUsageDescription</key>
