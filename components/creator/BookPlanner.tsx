@@ -21,7 +21,7 @@ export function chaptersFor(book: BadgeSet, badges: BadgeDef[]): string[] {
   return out.length ? out : ['Chapter One']
 }
 
-function plan(book: BadgeSet, badges: BadgeDef[]): PlannedPage[] {
+export function plan(book: BadgeSet, badges: BadgeDef[]): PlannedPage[] {
   const pages: PlannedPage[] = []
   chaptersFor(book, badges).forEach((chapter, chapterIndex) => {
     const inChapter = badges.filter((b) => b.page === chapter)
@@ -111,7 +111,7 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
       </div>
       {panel === 'chapters'
         ? <ChaptersPanel chapters={chapters} badges={badges} showing={[left?.chapterIndex, right?.chapterIndex]} onGo={goTo}
-            onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} />
+            onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} onAddBadge={onAdd} />
         : <InsidePanel style={book.insideStyle} onChange={onInside} />}
     </div>
     </div>
@@ -119,7 +119,7 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
 }
 
 // ── Chapters: rename, reorder, remove an empty one, jump to it ────────────────────────────────
-function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onChapters }: {
+function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onChapters, onAddBadge }: {
   chapters: string[]
   badges: BadgeDef[]
   showing: Array<number | undefined>
@@ -127,6 +127,7 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
   onRename: (from: string, to: string) => void
   onAdd: () => void
   onChapters: (next: string[]) => void
+  onAddBadge: (chapter: string) => void   // straight to a new badge in this chapter (it grows a page when full)
 }) {
   const move = (i: number, by: -1 | 1) => {
     const next = [...chapters]
@@ -135,7 +136,7 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
   }
   return (
     <div>
-      <p className="text-xs text-slate-500 mb-3">Each chapter starts on a fresh page. Rename, reorder, or jump to one.</p>
+      <p className="text-xs text-slate-500 mb-3">Each chapter starts on a fresh page and grows another page when its 6 spots fill — the next chapter moves along. Rename, reorder, jump to one, or add a badge straight to it.</p>
       <ol className="space-y-2">
         {chapters.map((c, i) => {
           const count = badges.filter((b) => b.page === c).length
@@ -148,7 +149,9 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
                 <button type="button" onClick={() => onGo(i)} title="Show this chapter" aria-label={`Show ${c}`} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800"><Eye size={15} /></button>
               </div>
               <div className="mt-1.5 flex items-center gap-1 pl-9">
-                <span className="text-[11px] text-slate-500 flex-1">{count} badge{count === 1 ? '' : 's'}</span>
+                <span className="text-[11px] text-slate-500 flex-1">{count} badge{count === 1 ? '' : 's'} · {Math.max(1, Math.ceil((count + 1) / PER_PAGE))} page{Math.ceil((count + 1) / PER_PAGE) > 1 ? 's' : ''}</span>
+                <button type="button" onClick={() => onAddBadge(c)} title={`Make a new badge in ${c}`}
+                  className="mr-1 rounded-full px-2 py-0.5 text-[11px] font-bold bg-violet-600 text-white hover:bg-violet-500 inline-flex items-center gap-0.5"><Plus size={11} />Badge</button>
                 <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up" title="Move up" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowUp size={14} /></button>
                 <button type="button" disabled={i === chapters.length - 1} onClick={() => move(i, 1)} aria-label="Move down" title="Move down" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowDown size={14} /></button>
                 <button type="button" disabled={count > 0 || chapters.length < 2}
