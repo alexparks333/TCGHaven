@@ -28,3 +28,6 @@ public/uploads/
 /tools/havenrelief/in/
 /tools/havenrelief/cache/
 /tools/havenrelief/__pycache__/
+
+# Python bytecode (tools/scanner-ai)
+__pycache__/
