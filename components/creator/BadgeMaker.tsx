@@ -183,38 +183,35 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
             {step === 1 && (
               <div>
                 <h3 className="text-lg font-bold text-ink">Your pin art</h3>
-                <p className="text-sm text-slate-400 mt-1">Upload the artwork for this badge — just the pin itself. Already cut out, or on a plain white background: we take the white away for you. It becomes the enamel pin in your book.</p>
-                {/* What to upload: a real pin cut out, and the same art on white (cut out for you on upload) */}
-                <div className="mt-4 grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border-2 border-emerald-600/50 bg-slate-950/40 p-3">
-                    <div className="aspect-square rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:18px_18px] flex items-center justify-center p-[10%]">
+                <p className="text-sm text-slate-400 mt-1">Just the pin itself — it becomes the enamel pin in your book.</p>
+                {/* What to upload, compact: cut out, or on white (cut out for you on upload) */}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-emerald-600/40 bg-slate-950/40 p-2 flex items-center gap-2.5">
+                    <span className="w-16 h-16 shrink-0 rounded-lg bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:12px_12px] flex items-center justify-center p-1.5">
                       {example?.imageUrl
-                        // eslint-disable-next-line @next/next/no-img-element
-                        ? <img src={badgeArt(example.imageUrl, 384)} alt="An example pin" className="max-w-full max-h-full object-contain drop-shadow-[0_6px_6px_rgba(0,0,0,0.35)]" />
-                        : <BadgePin art="crest" size={120} />}
-                    </div>
-                    <p className="mt-2 text-xs font-bold text-emerald-700 flex items-center gap-1"><Check size={13} />Like this</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">Already cut out (see-through around it)</p>
-                  </div>
-                  <div className="rounded-2xl border-2 border-emerald-600/50 bg-slate-950/40 p-3">
-                    <div className="aspect-square rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:18px_18px] flex items-center justify-center p-[6%]">
-                      <span className="w-full h-full bg-white rounded-md shadow-inner flex items-center justify-center p-[12%] relative">
-                        {example?.imageUrl
                           // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={badgeArt(example.imageUrl, 384)} alt="" className="max-w-full max-h-full object-contain" />
-                          : <BadgePin art="crest" size={100} />}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs font-bold text-emerald-700 flex items-center gap-1"><Check size={13} />This works too</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">On plain white — we cut the white away</p>
+                          ? <img src={badgeArt(example.imageUrl, 192)} alt="" className="max-w-full max-h-full object-contain" />
+                          : <BadgePin art="crest" size={56} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold text-emerald-700"><Check size={12} className="inline -mt-0.5 mr-0.5" />Cut out</span>
+                      <span className="block text-[11px] text-slate-500 leading-snug">See-through around it</span>
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-emerald-600/40 bg-slate-950/40 p-2 flex items-center gap-2.5">
+                    <span className="w-16 h-16 shrink-0 rounded-lg bg-white shadow-inner flex items-center justify-center p-2">
+                      {example?.imageUrl
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={badgeArt(example.imageUrl, 192)} alt="" className="max-w-full max-h-full object-contain" />
+                          : <BadgePin art="crest" size={56} />}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-bold text-emerald-700"><Check size={12} className="inline -mt-0.5 mr-0.5" />On plain white</span>
+                      <span className="block text-[11px] text-slate-500 leading-snug">We cut the white away</span>
+                    </span>
                   </div>
                 </div>
-                <ul className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px] leading-snug text-slate-400">
-                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Cut out, or on plain white</li>
-                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />The pin&rsquo;s own shape — any shape works</li>
-                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />At least 1000 × 1000 px</li>
-                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Bold shapes and colours read best small</li>
-                </ul>
+                <p className="mt-2 text-[11px] text-slate-500">Any shape · at least 1000 × 1000 px · bold shapes and colours read best small</p>
                 {draft.imageUrl && !busy ? (
                   <div className="mt-4 rounded-2xl border-2 border-emerald-600/50 bg-emerald-600/5 p-3 flex items-center gap-3">
                     <span className="w-16 h-16 shrink-0 rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:12px_12px] flex items-center justify-center p-1.5">
