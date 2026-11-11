@@ -54,7 +54,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        emblem) draws the picture as is; the 3D pin and HavenRelief would cope either way. Photos or
        coloured backgrounds aren't removed.
      - **Name it:** name, how to earn it, what the cards are called.
-     - **Cards to collect:** search the catalog in any game; each card is one slot.
+     - **Cards to collect:** pick a game (pills), then search it, or **browse the whole Cardex**
+       full screen (the staff badge editor's `CardexCardPicker`: every set, multi-select, Shift+click
+       ranges). Each card is one slot. Below that, **When fans unlock the pin**: the Grayscale and
+       Full colour points (`tiers` / `tiersOff`), set by % or by card count.
      - **Make it 3D:** the staff Relief Studio itself (`components/admin/ReliefStudio.tsx`, given
        the collector app's Storage and the creator's folder).
   5. **Preview:** the real `BadgeBook`, given the creator's own badges (`defs`), exactly as

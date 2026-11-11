@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight } from 'lucide-react'
+import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid } from 'lucide-react'
 import { DEFAULT_TIERS, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -30,6 +30,7 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import { cn } from '@/lib/utils'
 
 const ReliefStudio = dynamic(() => import('@/components/admin/ReliefStudio'), { ssr: false })
+const CardexCardPicker = dynamic(() => import('@/components/admin/CardexCardPicker'), { ssr: false }) // the whole Cardex, full screen
 const PinInspector = dynamic(() => import('@/components/badges/PinInspector'), { ssr: false }) // the sculpted pin, in 3D
 
 const GAMES = Object.keys(GAME_LABELS) as Game[]
@@ -343,6 +344,13 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
   const [q, setQ] = useState('')
   const [results, setResults] = useState<CardSearchResult[]>([])
   const [loading, setLoading] = useState(false)
+  const [cardex, setCardex] = useState(false)
+  // From the Cardex: its slots for this game, minus cards already picked
+  const addFromCardex = (picked: BadgeSlot[]) => {
+    const have = new Set(slots.flatMap((s) => s.cardIds))
+    const fresh = picked.filter((s) => !s.cardIds.some((id) => have.has(id))).map((s) => ({ ...s, game }) as BadgeSlot)
+    if (fresh.length) onChange([...slots, ...fresh])
+  }
   useEffect(() => {
     const query = q.trim()
     if (query.length < 2) { setResults([]); return }
@@ -406,7 +414,8 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
           ))}
         </div>
       </div>
-      <div className="relative mt-3">
+      <div className="mt-3 flex gap-2">
+      <div className="relative flex-1 min-w-0">
         <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
         <input className="input-field !pl-10 !pr-10 text-sm" value={q} onChange={(e) => setQ(e.target.value)}
           placeholder={`Search ${GAME_LABELS[game]} cards — e.g. ${game === 'pokemon' ? 'Charizard 4' : 'a name and number'}`} />
@@ -414,12 +423,16 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
           ? <Loader2 size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 animate-spin" />
           : q && <button type="button" onClick={() => setQ('')} aria-label="Clear the search" className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:text-ink hover:bg-slate-800"><X size={14} /></button>}
       </div>
+        <button type="button" onClick={() => setCardex(true)} title={`Browse every ${GAME_LABELS[game]} card, set by set`}
+          className="shrink-0 btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><LayoutGrid size={15} /><span className="hidden sm:inline">Cardex</span></button>
+      </div>
       {q.trim().length < 2 ? (
-        <div className="mt-3 rounded-2xl border-2 border-dashed border-slate-800 py-10 flex flex-col items-center gap-1.5 text-center">
-          <Search size={22} className="text-slate-600" />
-          <p className="text-sm font-semibold text-slate-400">Search for a card to add it</p>
-          <p className="text-xs text-slate-500">Tap a card to add it · tap it again to take it off</p>
-        </div>
+        <button type="button" onClick={() => setCardex(true)}
+          className="group mt-3 w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 hover:bg-violet-600/5 py-9 flex flex-col items-center gap-1.5 text-center transition-colors">
+          <span className="w-12 h-12 rounded-2xl bg-violet-600 text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform"><LayoutGrid size={22} /></span>
+          <p className="mt-1 text-sm font-bold text-ink">Browse the whole {GAME_LABELS[game]} Cardex</p>
+          <p className="text-xs text-slate-500 max-w-xs">Every set, full screen — tap cards to pick them, Shift+click for a run of cards. Or search above.</p>
+        </button>
       ) : !loading && results.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500 text-center py-8">No {GAME_LABELS[game]} cards match &ldquo;{q.trim()}&rdquo;</p>
       ) : null}
@@ -438,6 +451,11 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
           )
         })}
       </div>
+      {cardex && (
+        <CardexCardPicker game={game} onAdd={addFromCardex} onClose={() => setCardex(false)}
+          title={`Pick ${GAME_LABELS[game]} cards for this badge`}
+          addLabel={(n) => `Add ${n || ''} card${n === 1 ? '' : 's'} to the badge`} />
+      )}
     </div>
   )
 }
