@@ -1,0 +1,4 @@
+# The CI index update (fingerprint_new.py) — torch is installed separately, CPU-only
+transformers
+pillow
+numpy

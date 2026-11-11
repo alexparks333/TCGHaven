@@ -19,6 +19,7 @@ in that area:**
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
 | The iPhone app (Capacitor: `capacitor.config.ts`, `ios/`), the site↔app bridge (`lib/nativeApp.ts`) — how it works, then its status and plan | `docs/ios-app.md` |
 | The card scanner (`ios/App/App/CardScanner.swift`, `lib/scan/`, `/api/cards/scan`) | `docs/card-scanner.md` |
+| The scanner's picture AI — the trained model, the fingerprint index, after a training run | `docs/scanner-ai.md` |
 | Training the scanner's picture AI on the RTX 4090 PC | `docs/training-ai.md` |
 | Staff portal Statistics & Finances, usage tracking (`usage_days`, `user_stats`, `stats_daily`) | `docs/insights.md` |
 | Haven Premium's money side: Apple's cut, the Small Business Program, pricing plan, automatic costs | `docs/premium-business.md` |
@@ -37,6 +38,7 @@ npm run dev            # port 3000, hot reload (scripts/dev.mjs — works on Mac
 npm run build && npm run start   # production on 3000; rebuild after any CODE change
 npm run typecheck      # tsc --noEmit — run before trusting a change
 npm run lint
+npm run scanner-index -- status   # the scanner's picture index (docs/scanner-ai.md); publish / update too
 npm run download-cards # re-sync catalogs into Firestore (MTG only with -- --include-mtg; MTG also syncs daily via .github/workflows/sync-mtg.yml)
 npm run check-images -- <game>|all
 npm run test:search / test:snapshot / test:variants / test:pokemon-source / test:onepiece-source / test:yugioh-source / test:tcgplayer-games / test:scan
@@ -108,6 +110,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
 34. Pokémon EN: TCGplayer decides which cards exist, GitHub is the check; a card's id never changes (`pokemon-tcgplayer.mjs`, run `npm run pokemon-source-report` before touching matching).
 36. Yu-Gi-Oh!: every card = one TCGplayer product (`tcg-{productId}`); editions are `variantPrices`; rarity versions are separate cards (`yugioh-tcgplayer.mjs`, `npm run yugioh-source-report`).
 37. Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld / Cyberpunk: one shared TCGplayer engine, a settings block per game (`tcgplayer-games.mjs` `TCGPLAYER_GAMES`, `npm run tcgplayer-games-report`) — add the next TCGplayer-only game there, don't copy.
+38. The scanner's picture AI: the model and the fingerprint index are published together (`npm run scanner-index -- publish`, same model for both); the picture never adds a card on its own (`decide.ts`); never commit models or indexes (`docs/scanner-ai.md`).
 35. One Piece: every card = one TCGplayer product (`tcgProductId`); existing cards never change what they show (`onepiece-tcgplayer.mjs`, `npm run onepiece-source-report`).
 
 ## Badges & the Relief Studio — the essentials

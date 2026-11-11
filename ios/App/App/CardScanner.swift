@@ -9,14 +9,17 @@
 //   4. hand the text to the site ("cardScanned") — lib/scan/scanner.ts matches it against the
 //      catalog on the server and sends back the candidates ("update")
 //   5. compare the scanned card's picture with candidate catalog photos ("compare" — PictureMatcher)
-//      so look-alikes the text can't separate (One Piece parallels, reprints) are told apart
+//      so look-alikes the text can't separate (One Piece parallels, reprints) are told apart; and
+//      fingerprint it with the trained picture AI (CardFingerprinter, docs/scanner-ai.md) so the
+//      server can search every catalog card by picture
 //   6. a tray of everything scanned; "Add" returns the picks to the site, which saves them through
 //      lib/firebase/db.ts like any other added card (ScanReviewDialog.tsx)
 //
 // Everything on screen reflects real work: the ring is the measured steadiness, the scan line runs
 // only while the card is being read / matched / compared, and the stage label says which.
 //
-// Nothing here writes user data, and no photo leaves the phone — only the text that was read.
+// Nothing here writes user data, and no photo leaves the phone — only the text that was read and
+// the picture AI's 384-number fingerprint of the card.
 // Test builds (Xcode ▶︎ Run) keep every scan on the phone for tuning: see "Debug scans" below.
 
 import UIKit
@@ -26,6 +29,7 @@ import CoreImage
 import Capacitor
 import WebKit
 import CoreMotion
+import CoreML
 
 // MARK: - Registering the plugin
 
@@ -56,7 +60,18 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "compare", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "update", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "searchResults", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "prepareModel", returnType: CAPPluginReturnPromise),
     ]
+
+    /// Have the picture AI model ready: { version, files: { path inside the .mlpackage: URL } }.
+    /// Downloaded once per version and kept; resolves { ready } when it can be used.
+    @objc func prepareModel(_ call: CAPPluginCall) {
+        guard let version = call.getString("version"), let files = call.getObject("files") as? [String: String], !files.isEmpty else {
+            call.resolve(["ready": false])
+            return
+        }
+        CardFingerprinter.shared.prepare(version: version, files: files) { ready in call.resolve(["ready": ready]) }
+    }
 
     private weak var scanner: ScannerViewController?
 
@@ -69,8 +84,10 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             let vc = ScannerViewController()
             vc.screenTitle = call.getString("title") ?? "Scan cards"
-            vc.onScanned = { [weak self] scanId, lines in
-                self?.notifyListeners("cardScanned", data: ["scanId": scanId, "lines": lines])
+            vc.onScanned = { [weak self] scanId, lines, fingerprints in
+                var data: [String: Any] = ["scanId": scanId, "lines": lines]
+                if let fps = fingerprints, !fps.isEmpty { data["fingerprints"] = fps.map { $0.map { Double($0) } } }
+                self?.notifyListeners("cardScanned", data: data)
             }
             vc.onSearch = { [weak self] requestId, query in
                 self?.notifyListeners("searchCards", data: ["requestId": requestId, "query": query])
@@ -389,7 +406,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     UICollectionViewDataSource, UICollectionViewDelegate {
 
     var screenTitle = "Scan cards"
-    var onScanned: ((String, [[String: Any]]) -> Void)?
+    var onScanned: ((String, [[String: Any]], [[Float]]?) -> Void)?
     var onFinish: (([[String: Any]]) -> Void)?
     var onSearch: ((String, String) -> Void)?
     private var searchWaiting: [String: ([TrayOption]) -> Void] = [:]
@@ -1227,6 +1244,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let cardOnly = slab ? (cardInsideSlab(image) ?? image) : loose ? (tighten(image) ?? image) : image
         if loose { DebugScans.log("number read at \(String(format: "%.2f", codeY ?? 0)) of the height — crop tightened for the picture check") }
         let signature = PictureMatcher.signature(of: cardOnly)
+        let tFp = CACurrentMediaTime()
+        let fingerprints = CardFingerprinter.shared.fingerprints(of: cardOnly)
+        if let fps = fingerprints { DebugScans.log("picture AI: \(fps.count) fingerprint(s) in \(Int((CACurrentMediaTime() - tFp) * 1000)) ms") }
         let swap = nextIsSwap
         nextIsSwap = false
         let thumb = Self.thumbnail(image)
@@ -1268,7 +1288,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                 self.endActive(id: id, result: "Couldn’t read that card — try again")
             } else {
                 self.setStage("Finding the card…", for: id)
-                self.onScanned?(id, merged)
+                self.onScanned?(id, merged, fingerprints)
             }
         }
     }
@@ -2731,5 +2751,164 @@ final class PaddedLabel: UILabel {
     override var intrinsicContentSize: CGSize {
         let s = super.intrinsicContentSize
         return CGSize(width: s.width + insets.left + insets.right, height: s.height + insets.top + insets.bottom)
+    }
+}
+
+
+// MARK: - The picture AI (docs/scanner-ai.md)
+//
+// A DINOv2-small model (Apache-2.0, Meta) trained on TCGHaven's catalog cards on the RTX 4090
+// (docs/training-ai.md), converted to Core ML. It turns the flattened card into 384 numbers — its
+// "fingerprint" — that the server compares with every catalog card's (lib/scan/picture.ts). The
+// model isn't in the app: the site names the current version (prepareModel), it's downloaded once
+// (~41 MB) and kept, so a retrained model reaches phones without an app update. Until it's ready,
+// scans simply go without a fingerprint and the text + tile comparison work as before.
+
+final class CardFingerprinter {
+    static let shared = CardFingerprinter()
+    static let width = 224, height = 308
+
+    private let lock = NSLock()
+    private var model: MLModel?
+    private var version: String?
+    private var busy = false
+    private let work = DispatchQueue(label: "tcghaven.scanner.fingerprinter", qos: .utility)
+
+    private var folder: URL? {
+        guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
+        var dir = base.appendingPathComponent("CardFingerprint", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true // downloaded again if ever needed — not the person's data
+        try? dir.setResourceValues(values)
+        return dir
+    }
+
+    var isReady: Bool { lock.lock(); defer { lock.unlock() }; return model != nil }
+
+    func prepare(version: String, files: [String: String], done: @escaping (Bool) -> Void) {
+        lock.lock()
+        if self.version == version, model != nil { lock.unlock(); done(true); return }
+        if busy { lock.unlock(); done(false); return }
+        busy = true
+        lock.unlock()
+        work.async {
+            let ok = self.load(version: version, files: files)
+            self.lock.lock(); self.busy = false; self.lock.unlock()
+            DispatchQueue.main.async { done(ok) }
+        }
+    }
+
+    private func load(version: String, files: [String: String]) -> Bool {
+        guard let dir = folder else { return false }
+        let safe = version.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
+        let compiled = dir.appendingPathComponent("\(safe).mlmodelc", isDirectory: true)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: compiled.path) {
+            let t0 = CACurrentMediaTime()
+            let download = dir.appendingPathComponent("\(safe).download", isDirectory: true)
+            let package = download.appendingPathComponent("CardFingerprint.mlpackage", isDirectory: true)
+            try? fm.removeItem(at: download)
+            for (rel, url) in files {
+                guard let u = URL(string: url), !rel.contains("..") else { return false }
+                let dest = package.appendingPathComponent(rel)
+                try? fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                guard Self.fetch(u, to: dest) else {
+                    DebugScans.log("picture AI: download failed (\(rel))")
+                    try? fm.removeItem(at: download)
+                    return false
+                }
+            }
+            do {
+                let built = try MLModel.compileModel(at: package)
+                try? fm.removeItem(at: compiled)
+                try fm.moveItem(at: built, to: compiled)
+            } catch {
+                DebugScans.log("picture AI: compile failed — \(error.localizedDescription)")
+                try? fm.removeItem(at: download)
+                return false
+            }
+            try? fm.removeItem(at: download)
+            DebugScans.log("picture AI \(version): downloaded + compiled in \(Int((CACurrentMediaTime() - t0) * 1000)) ms")
+        }
+        let config = MLModelConfiguration()
+        config.computeUnits = .all
+        guard let m = try? MLModel(contentsOf: compiled, configuration: config) else {
+            try? fm.removeItem(at: compiled) // damaged — fetched again next time
+            return false
+        }
+        lock.lock(); model = m; self.version = version; lock.unlock()
+        // The first prediction prepares the Neural Engine (slow once) — do it now, not on a scan
+        if let blank = Self.blankImage() { _ = run(blank) }
+        // Older versions' files
+        for f in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] where f.lastPathComponent != compiled.lastPathComponent {
+            try? fm.removeItem(at: f)
+        }
+        DebugScans.log("picture AI \(version) ready")
+        return true
+    }
+
+    private static func fetch(_ url: URL, to dest: URL) -> Bool {
+        let done = DispatchSemaphore(value: 0)
+        var ok = false
+        let task = URLSession.shared.downloadTask(with: url) { tmp, response, _ in
+            if let tmp = tmp, (response as? HTTPURLResponse)?.statusCode == 200 {
+                try? FileManager.default.removeItem(at: dest)
+                ok = (try? FileManager.default.moveItem(at: tmp, to: dest)) != nil
+            }
+            done.signal()
+        }
+        task.resume()
+        _ = done.wait(timeout: .now() + 300)
+        return ok
+    }
+
+    private static func blankImage() -> CGImage? {
+        guard let c = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        c.setFillColor(UIColor.gray.cgColor)
+        c.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        return c.makeImage()
+    }
+
+    /// The card turned a quarter (counter-clockwise when `ccw`) — for landscape cards
+    private static func turned(_ image: CGImage, ccw: Bool) -> CGImage? {
+        let w = image.height, h = image.width
+        guard let c = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        // Core Graphics' y axis points up: a +90° rotation here turns the picture counter-clockwise
+        c.translateBy(x: CGFloat(w) / 2, y: CGFloat(h) / 2)
+        c.rotate(by: ccw ? .pi / 2 : -.pi / 2)
+        c.draw(image, in: CGRect(x: -CGFloat(image.width) / 2, y: -CGFloat(image.height) / 2, width: CGFloat(image.width), height: CGFloat(image.height)))
+        return c.makeImage()
+    }
+
+    private func run(_ image: CGImage) -> [Float]? {
+        lock.lock(); let m = model; lock.unlock()
+        guard let m = m else { return nil }
+        // Squashed to 224 × 308, never cropped — the same as the catalog photos were fingerprinted
+        let options: [MLFeatureValue.ImageOption: Any] = [.cropAndScale: VNImageCropAndScaleOption.scaleFill.rawValue]
+        guard let input = try? MLFeatureValue(cgImage: image, pixelsWide: Self.width, pixelsHigh: Self.height,
+                                              pixelFormatType: kCVPixelFormatType_32BGRA, options: options),
+              let provider = try? MLDictionaryFeatureProvider(dictionary: ["image": input]),
+              let out = try? m.prediction(from: provider).featureValue(for: "fingerprint")?.multiArrayValue else { return nil }
+        let n = out.count
+        guard n == 384 else { return nil }
+        var v = [Float](repeating: 0, count: n)
+        for i in 0..<n { v[i] = out[i].floatValue }
+        return v
+    }
+
+    /// The scan's fingerprint(s): one for a portrait card; a landscape card (leaders, bases,
+    /// battles, locations) as it is and turned each way, since its catalog photo may be stored either way
+    func fingerprints(of image: CGImage) -> [[Float]]? {
+        guard isReady else { return nil }
+        var pictures = [image]
+        if image.width > Int(Double(image.height) * 1.1) {
+            if let a = Self.turned(image, ccw: true) { pictures.append(a) }
+            if let b = Self.turned(image, ccw: false) { pictures.append(b) }
+        }
+        let out = pictures.compactMap { run($0) }
+        return out.isEmpty ? nil : out
     }
 }

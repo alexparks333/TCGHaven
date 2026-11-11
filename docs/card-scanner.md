@@ -39,6 +39,8 @@ read its text: Vision OCR, English + Japanese
   (auto language); upside-down cards are turned round  ──▶  POST /api/cards/scan: text → catalog candidates
                                                               (scanMatch.ts: the printed number/code picks the
                                                               printing, the name confirms; all 6 catalogs)
+  + the picture AI's fingerprint of the card            ──▶  + picture search over every catalog card's photo
+  (CardFingerprinter — docs/scanner-ai.md)                    (picture.ts): look-alikes + how alike each is
 compare the scan's picture with each candidate's      ◀──  the candidates still in the running
   catalog photo (PictureMatcher)                       ──▶  decide.ts: text + picture → matched / pick / none
 tray: ✓ added, ? pick one, ! not found               ◀──  the answer
@@ -46,8 +48,9 @@ tray: ✓ added, ? pick one, ! not found               ◀──  the answer
                                                               saved through lib/firebase/db.ts like Add Card
 ```
 
-- **The phone does what needs hardware.** Camera, Vision OCR and picture comparison run on the
-  phone, in milliseconds. No photo leaves the phone; only the text that was read is sent.
+- **The phone does what needs hardware.** Camera, Vision OCR, the picture AI and picture comparison
+  run on the phone, in milliseconds. No photo leaves the phone. Only the text that was read and the
+  AI's 384-number fingerprint are sent.
 - **The site does the matching.** It knows the catalog. Improving the matching ships with a normal
   push, with no new app build or App Review.
 - **Inventory is written only by the site** (`lib/firebase/db.ts`), exactly as Add Card writes it.
@@ -61,7 +64,7 @@ tray: ✓ added, ? pick one, ! not found               ◀──  the answer
 | Game | Read from the card | Notes |
 |---|---|---|
 | Pokémon EN | "025/198", "TG05/TG30", "SWSH123" + name | The set total checks the set; a regulation letter glued on ("F091") is handled |
-| Pokémon JP | "001/066" + set mark ("SV4K", "SM2+") or promo "388/SM-P" | The catalog's names are English, so the number and set mark carry it, then the picture |
+| Pokémon JP | "001/066" + set mark ("SV4K", "SM2+") or promo "388/SM-P" + the name in katakana | The katakana name is translated to English (`pokemonJaNames.ts`), then matched like an English name; then the picture |
 | One Piece | "OP05-119", "P-001" | Reprints keep the original code (The Best, Pre-Release…); parallels tie on text and the picture decides |
 | Lorcana | "143/204 • EN • 10" | Number + set number |
 | Riftbound | "OGN • 048/298" | Metal / Judge / Nexus reprints print the original code; "★" picks Signature |
@@ -161,7 +164,7 @@ What to look for on a real phone:
 | Phase | What | Why |
 |---|---|---|
 | **2** | Real-phone tuning | Stillness and timing thresholds, focus and zoom on your iPhone model, sleeve glare, low light |
-| **3** | A picture index of the whole catalog, on the phone (a model trained on the 4090; commercial-use licence, DINOv2 or SigLIP 2 — Apache-2.0) | Finds the card even when no text is readable. The big fix for Japanese and old cards |
+| ~~3~~ | **Done 2026-11-10** — the picture AI (DINOv2-small trained on the 4090) searches every catalog card by picture; Japanese names are translated. See `scanner-ai.md` | Finds the card even when no text is readable; separates look-alikes |
 | **4** | Finish detection (holo / reverse holo) from how the foil changes between frames | Today the review screen's finish picker does it; no scanner does this well |
 | **5** | Binder pages (9 at once), graded slabs (PSA/BGS/CGC cert number), opt-in learning from corrections | |
 
@@ -177,7 +180,9 @@ camera can't do this well).
 | `ios/App/App/SceneDelegate.swift` | Uses `TCGBridgeViewController` |
 | `ios/App/App/Info.plist` | `NSCameraUsageDescription` (the permission prompt) |
 | `lib/scan/scanMatch.ts` | OCR → candidates. Pure, tested by `npm run test:scan` (`scanMatch.test.mts`) |
-| `lib/scan/decide.ts` | Text + picture → matched / pick / none |
+| `lib/scan/decide.ts` | Text + picture (tiles, and the AI's similarity) → matched / pick / none |
+| `lib/scan/picture.ts` | The picture AI's search over every catalog card (`scanner-ai.md`) |
+| `lib/scan/pokemonJaNames.ts` | Japanese → English Pokémon names, for Japanese cards (generated) |
 | `lib/scan/server.ts`, `app/api/cards/scan/route.ts` | The matching endpoint (public, read-only catalog) |
 | `lib/scan/scanner.ts` | The site ↔ native-scanner conversation |
 | `components/inventory/ScanReviewDialog.tsx` | Review + save (mirrors AddCardDialog's save — keep in step) |

@@ -1,0 +1,6 @@
+# The Mac / CI side of the scanner AI (the 4090's training needs are in train_cuda.py's kit README)
+torch
+transformers
+pillow
+numpy
+coremltools  # convert.py only (Mac)

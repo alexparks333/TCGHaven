@@ -1,12 +1,17 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { matchScannedCard, cleanLines, warmScanner } from '@/lib/scan/server'
+import { cleanFingerprints, pictureModel } from '@/lib/scan/picture'
 import { GAME_LABELS, type Game } from '@/lib/types'
 
 // The iPhone app's card scanner (lib/scan/server.ts). Public, like card search — it only reads
 // the public catalog.
-//   POST { lines: OCR lines from one card, games }  → ranked catalog candidates
-//   GET ?warm=1&games=pokemon,mtg                    → loads those catalogs (as the scanner opens)
+//   POST { lines: OCR lines from one card, games, fingerprints?: the picture AI's numbers for the
+//          scan (lib/scan/picture.ts) }                        → ranked catalog candidates
+//   GET ?warm=1&games=pokemon,mtg                              → loads those catalogs and picture
+//          indexes (as the scanner opens)
+//   GET ?model=1                                               → the picture model the phone should
+//          have: { version, files: { path in the .mlpackage: URL } } (or null)
 
 const ALL = Object.keys(GAME_LABELS) as Game[]
 const pickGames = (raw: unknown[]) => {
@@ -15,6 +20,7 @@ const pickGames = (raw: unknown[]) => {
 }
 
 export async function GET(req: NextRequest) {
+  if (req.nextUrl.searchParams.get('model')) return NextResponse.json({ model: await pictureModel().catch(() => null) })
   const games = pickGames((req.nextUrl.searchParams.get('games') ?? '').split(','))
   await warmScanner(games).catch(() => {})
   return NextResponse.json({ ok: true })
@@ -23,6 +29,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
   const lines = cleanLines(body?.lines)
-  if (lines.length === 0) return NextResponse.json({ candidates: [], slab: null })
-  return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : [])))
+  const fingerprints = cleanFingerprints(body?.fingerprints)
+  if (lines.length === 0 && fingerprints.length === 0) return NextResponse.json({ candidates: [], slab: null })
+  return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : []), fingerprints))
 }

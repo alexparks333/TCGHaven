@@ -127,6 +127,21 @@ assert.equal(ids([L('Galarian Articuno V', 0.04, 0.05), L('SWSH123', 0.93, 0.015
   assert.ok(r[0].score > r[1].score)
 }
 
+// ── Pokémon Japanese: the name translated (lib/scan/pokemonJaNames.ts) ──
+assert.deepEqual(readClues([L('たね リザードンex HP330', 0.04, 0.05)]).jaNames, ['charizard ex'])
+assert.deepEqual(readClues([L('ミュウツーGX', 0.04, 0.05)]).jaNames, ['mewtwo gx'], 'the longest name wins (Mewtwo, not Mew)')
+assert.deepEqual(readClues([L('1進化 リザード', 0.04, 0.05), L('ヒトカゲから進化', 0.02, 0.02)]).jaNames, ['charmeleon'], '"evolves from" is not the name')
+assert.deepEqual(readClues([L('アローラ ロコン', 0.04, 0.05)]).jaNames, ['alolan vulpix'])
+assert.deepEqual(readClues([L('ﾋﾟｶﾁｭｳ', 0.04, 0.05)]).jaNames, ['pikachu'], 'half-width katakana')
+assert.deepEqual(readClues([L('ピカチュウ', 0.6, 0.03)]).jaNames, [], 'a name low on the card (attack text) is not the card name')
+{
+  // The number's set total points at the wrong set; the translated name settles it
+  const r = top([L('ピカチュウ HP 60', 0.04, 0.05), L('001/095', 0.93, 0.015), L('にげる', 0.85)])
+  assert.equal(r[0].id, 'jp-1')
+  // No number read at all: the translated name brings the card in
+  assert.ok(top([L('ピカチュウ HP 60', 0.04, 0.05), L('にげる', 0.85)]).some((c) => c.id === 'jp-1'))
+}
+
 // ── One Piece: the code, reprints included ──
 {
   const r = top([L('Monkey.D.Luffy', 0.82, 0.04), L('OP05-119', 0.9, 0.015)])
@@ -406,6 +421,39 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   assert.equal(decide([]).status, 'none')
   // A clear text winner whose picture looks like nothing at all → asked, not added
   assert.equal(decide([{ key: 'x', score: 95 }, { key: 'y', score: 40 }], [0.82, 0.9]).status, 'pick')
+}
+
+// ── decide() with the picture AI (similarities; thresholds from 57 real scans, decide.ts top) ──
+{
+  const tie = [{ key: 'paras-a', score: 80, exact: true }, { key: 'paras-b', score: 80, exact: true }]
+  // Same-name printings the text can't separate: a small picture lead (real Paras scans were
+  // wrong by up to 0.10) is asked about; a clear one is added
+  assert.equal(decide(tie, undefined, [0.62, 0.53]).status, 'pick')
+  const clear = decide(tie, undefined, [0.75, 0.55])
+  assert.equal(clear.status, 'matched')
+  assert.equal(clear.ranked[0].key, 'paras-a')
+  assert.equal(decide(tie, undefined, [0.55, 0.75]).ranked[0].key, 'paras-b')
+  // A clear text answer the picture clearly disagrees with (another card 0.15+ more alike) → asked
+  const veto = [{ key: 'read', score: 95, exact: true }, { key: 'looks', score: 0, exact: false }]
+  assert.equal(decide(veto, undefined, [0.35, 0.78]).status, 'pick')
+  assert.equal(decide(veto, undefined, [0.35, 0.78]).ranked[0].key, 'read') // the picture never overturns the text's order on its own
+  // …but a near miss is no veto (the right card was beaten by up to 0.13 on real scans)
+  assert.equal(decide(veto, undefined, [0.62, 0.7]).status, 'matched')
+  // Picture only — no text found the card: offered, never added
+  const pic = decide([{ key: 'p1', score: 0, exact: false }, { key: 'p2', score: 0, exact: false }], undefined, [0.9, 0.5])
+  assert.equal(pic.status, 'pick')
+  assert.equal(pic.ranked[0].key, 'p1')
+  assert.equal(decide([{ key: 'p1', score: 0, exact: false }], undefined, [0.95]).status, 'pick')
+  assert.equal(decide([{ key: 'p1', score: 0, exact: false }], undefined, [0.3]).status, 'none')
+  // Found by a name many printings share: the picture names it only with a big lead
+  const named = [{ key: 'n1', score: 60, exact: false }, { key: 'n2', score: 60, exact: false }]
+  assert.equal(decide(named, undefined, [0.8, 0.55]).status, 'matched')
+  assert.equal(decide(named, undefined, [0.68, 0.6]).status, 'pick')
+  // A card too new for the picture index (no similarity) → the tile comparison decides as before
+  assert.equal(decide(tie, [0.05, 0.6], [null, 0.7]).status, 'matched')
+  assert.equal(decide(tie, [0.05, 0.6], [null, 0.7]).ranked[0].key, 'paras-a')
+  // A graded slab's label is trusted over the picture
+  assert.equal(decide([{ key: 'slab', score: 99, exact: true, trusted: true }, { key: 'other', score: 0, exact: false }], undefined, [0.3, 0.8]).status, 'matched')
 }
 
 console.log('scan matching: all tests passed')

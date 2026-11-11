@@ -38,6 +38,9 @@ export interface ScanCard {
   publicCode?: string
 }
 
+// (".ts" spelled out: the scan tests run this file directly in Node — tsconfig allowImportingTsExtensions)
+import { POKEMON_JA_NAMES } from './pokemonJaNames.ts'
+
 export type ScanCatalogKey = 'pokemon' | 'pokemon-jp' | 'lorcana' | 'riftbound' | 'onepiece' | 'mtg' | 'yugioh'
   | 'swu' | 'gundam' | 'fab' | 'digimon' | 'palworld' | 'cyberpunk'
 
@@ -76,6 +79,7 @@ export interface ScanClues {
   topLines: string[]          // text along the top edge, where Pokémon and Magic print the name
   words: Set<string>          // every folded word read, for name matching
   japanese: boolean
+  jaNames: string[]           // a Japanese card's Pokémon name, translated ("リザードンex" → "charizard ex"), folded
   pokemonWords: boolean       // "HP", "Weakness", "Retreat" — printed on every Pokémon card
   slab: SlabLabel | null      // a graded card's label (PSA / CGC / BGS / SGC), when one was read
   riftboundPromo: boolean     // "156/219 • P" — the promo mark after a Riftbound number
@@ -185,13 +189,13 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 export function readClues(lines: OcrLine[]): ScanClues {
   const clues: ScanClues = {
     fractions: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], fabCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
-    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
+    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, jaNames: [], pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
 
   for (const line of lines) {
     const raw = String(line.text ?? '').slice(0, 200)
-    if (/[\u3040-\u30ff\u4e00-\u9faf]/.test(raw)) clues.japanese = true
+    if (/[\u3040-\u30ff\u4e00-\u9faf\uff66-\uff9f]/.test(raw)) clues.japanese = true
     const text = latin(raw)
     for (const w of fold(text).split(' ')) if (w) clues.words.add(w)
 
@@ -296,7 +300,53 @@ export function readClues(lines: OcrLine[]): ScanClues {
   clues.nameLines = picks
     .map((l) => latin(l.text).replace(HP_NOISE, ' ').replace(/\s+/g, ' ').trim())
     .filter((t) => t.length >= 2)
+  if (clues.japanese) {
+    clues.jaNames = japaneseNames(lines)
+    for (const n of clues.jaNames) for (const w of n.split(' ')) clues.words.add(w)
+  }
   return clues
+}
+
+// ── Japanese Pokémon names ──────────────────────────────────────────────────
+// A Japanese card prints its name in katakana ("リザードンex"); the catalog lists Japanese cards
+// under English names. Every Pokémon's Japanese name is known (lib/scan/pokemonJaNames.ts), so the
+// name along the top is translated and then matched exactly like an English card's.
+
+const JA_NAMES = Object.keys(POKEMON_JA_NAMES).sort((a, b) => b.length - a.length)
+// Printed before the Pokémon's name: regional forms, Mega, Team Rocket's…
+const JA_PREFIX: Array<[string, string]> = [['ロケット団の', "Team Rocket's"], ['アローラ', 'Alolan'], ['ガラル', 'Galarian'], ['ヒスイ', 'Hisuian'], ['パルデア', 'Paldean'], ['メガ', 'Mega']]
+// After it: the card's mechanic, in Latin letters
+const JA_SUFFIX = /^\s*(ex|EX|GX|V|VMAX|VSTAR|V-UNION|BREAK|LV\.?X|δ|☆|◇|プリズムスター)(?![A-Za-z])/
+
+function japaneseNames(lines: OcrLine[]): string[] {
+  // The name is printed along the top (the attack text below can mention other Pokémon; "ヒトカゲから
+  // 進化" — evolves from Charmander — sits up there too, and is skipped)
+  const top = lines.filter((l) => l.y < 0.2).sort((a, b) => b.h - a.h)
+  const found: string[] = []
+  for (const line of top) {
+    // Full-width / half-width forms alike, and the long-vowel mark OCR reads as a dash or 一
+    const text = String(line.text ?? '').normalize('NFKC').replace(/(?<=[ァ-ヴ])[一ー―‐－-](?=[ァ-ヴ]|$|\s|e|E|G|V)/g, 'ー')
+    const taken: Array<[number, number]> = []
+    for (const ja of JA_NAMES) {
+      if (ja.length <= 2 && text.trim() !== ja) continue // ピィ, パモ, ボチ only as the whole line
+      for (let at = text.indexOf(ja); at >= 0; at = text.indexOf(ja, at + 1)) {
+        const end = at + ja.length
+        if (taken.some(([a, b]) => at < b && end > a)) continue
+        // Part of a longer katakana word that isn't a Pokémon (e.g. inside a move's name)
+        if (/[ァ-ヴー]/.test(text[end] ?? '')) continue
+        if (text.startsWith('から', end)) continue
+        taken.push([at, end])
+        const before = text.slice(0, at).trimEnd()
+        const prefix = JA_PREFIX.find(([p]) => before.endsWith(p))?.[1]
+        const suffix = text.slice(end).match(JA_SUFFIX)?.[1]
+        const en = [prefix, POKEMON_JA_NAMES[ja], suffix && suffix !== 'プリズムスター' ? suffix : ''].filter(Boolean).join(' ')
+        const f = fold(en)
+        if (f && !found.includes(f)) found.push(f)
+      }
+    }
+    if (found.length) break // the biggest line with a Pokémon's name is the card's name
+  }
+  return found
 }
 
 // ── Graded slabs ────────────────────────────────────────────────────────────
@@ -466,8 +516,12 @@ const NOT_A_NAME = new Set(['trainer', 'trainers', 'energy', 'basic', 'item', 's
 
 function strongNames(clues: ScanClues, catalogs: ScanCatalog[]): Set<string> {
   const out = new Set<string>()
-  // A Japanese card prints its name in Japanese; the catalog's names are English
-  if (clues.japanese) return out
+  // A Japanese card prints its name in Japanese; the catalog's names are English — use the
+  // translation (a Japanese trainer or energy card has none: no name to require)
+  if (clues.japanese) {
+    for (const n of clues.jaNames) out.add(n)
+    return out
+  }
   for (const line of clues.topLines) {
     if (NOT_A_NAME.has(fold(line))) continue
     const tokens = fold(line).split(' ').filter(Boolean)
@@ -518,7 +572,7 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
     let wrongName = false
     // (Japanese cards are listed under English names, so an English name read off a card with no
     // Japanese on it rules them out too)
-    const checkName = NAME_ON_TOP.has(catalog) || (catalog === 'pokemon-jp' && !clues.japanese)
+    const checkName = NAME_ON_TOP.has(catalog) || (catalog === 'pokemon-jp' && (!clues.japanese || clues.jaNames.length > 0))
     // The same name, or one inside the other ("Genesect" read on "Genesect EX") — else it's another card
     const own = fold(printed).split(' ')
     const sameName = Array.from(named).some((n) => {
@@ -705,13 +759,21 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
   // name always brings in all its cards, and the picture picks among them)
   if (codeBest < 55 || named.size > 0) {
     for (const cat of catalogs) {
-      if (cat.key === 'pokemon-jp') continue // the Japanese catalog's names are English
+      // The Japanese catalog's names are English: only a translated name brings its cards in
+      if (cat.key === 'pokemon-jp' && !clues.jaNames.length) continue
       const index = catalogIndex(cat).names
       // A name recognised along the top (possibly from a misread like "Jggypulf"): all its cards
       for (const n of Array.from(named)) {
-        const hits = index.get(n)
-        if (hits) for (const c of hits.slice(0, 24)) offer(cat.key, c, hits.length === 1 ? 32 : 24, 'name', hits.length === 1)
+        let hits = index.get(n)
+        // A translated Japanese name without its mechanic read ("Charizard" for "Charizard ex"):
+        // every card of that Pokémon — the number or the picture picks among them
+        if (!hits && cat.key === 'pokemon-jp') {
+          hits = Array.from(index.entries()).filter(([k]) => k.startsWith(`${n} `)).flatMap(([, cs]) => cs)
+          if (!hits.length) hits = undefined
+        }
+        if (hits) for (const c of hits.slice(0, 24)) offer(cat.key, c, hits.length === 1 ? 32 : 24, cat.key === 'pokemon-jp' ? 'name (translated)' : 'name', hits.length === 1)
       }
+      if (cat.key === 'pokemon-jp') continue // its other lines are Japanese — nothing to look up
       for (const line of clues.nameLines) {
         const tokens = fold(line).split(' ').filter(Boolean)
         for (let n = Math.min(tokens.length, 8); n >= 1; n--) {

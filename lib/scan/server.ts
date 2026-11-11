@@ -9,6 +9,7 @@ import { loadVisibleCatalog } from '../api/catalog'
 import { getPokemonSets } from '../api/pokemon'
 import { getSetsForGame } from '../api/search'
 import { readClues, matchScan, catalogIndex, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
+import { pictureSearch, pictureSimilarity, warmPictures } from './picture'
 
 export interface ScanMatch {
   key: string                 // "catalog:id"
@@ -23,6 +24,10 @@ export interface ScanMatch {
   score: number
   why: string
   exact: boolean
+  // How much the scan looks like this card's photo, by the trained picture AI (cosine similarity:
+  // a right card ~0.5–0.9 on a real scan) — null when the phone sent no fingerprint or the card
+  // isn't in the picture index yet (lib/scan/picture.ts, docs/scanner-ai.md)
+  picture: number | null
   // Every printing the card comes in, with its price — the card sheet's Finish row. Pokémon:
   // "edition:finish" keys ("unlimited:reverse"); other games "normal" / "foil".
   printings: Array<{ key: string; label: string; price: number }>
@@ -100,26 +105,43 @@ export function cleanLines(raw: unknown): OcrLine[] {
 /** Loads the catalogs and builds their lookups — the scanner calls this as it opens, so the first
  *  card doesn't wait for a cold server */
 export async function warmScanner(games: Game[]): Promise<void> {
-  const catalogs = await Promise.all(catalogsFor(games).map(scanCatalog))
+  const keys = catalogsFor(games)
+  const [catalogs] = await Promise.all([Promise.all(keys.map(scanCatalog)), warmPictures(keys)])
   for (const c of catalogs) catalogIndex(c)
 }
+
+// Cards the picture search brings in that the text didn't find: how many, and how alike they must
+// be to be worth offering (a right card scores ~0.5–0.9 on a real scan; docs/scanner-ai.md)
+const PICTURE_HITS = 8
+const PICTURE_HIT_MIN = 0.42
 
 /** A graded slab's label, when the scan was of one — the review screen fills in the grade */
 export type ScanSlab = Pick<SlabLabel, 'company' | 'grade' | 'cert'>
 
-export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
-  const catalogs = await Promise.all(catalogsFor(games).map(scanCatalog))
-  const byId = new Map<string, RawCard>()
+export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerprints: Float32Array[] = []): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
+  const keys = catalogsFor(games)
+  const [catalogs, hits] = await Promise.all([
+    Promise.all(keys.map(scanCatalog)),
+    pictureSearch(fingerprints, keys, PICTURE_HITS).catch(() => []),
+  ])
   const clues = readClues(lines)
   const slab = clues.slab ? { company: clues.slab.company, grade: clues.slab.grade, cert: clues.slab.cert } : null
-  const candidates = matchScan(clues, catalogs)
-  for (const c of candidates) {
+  const found = lines.length ? matchScan(clues, catalogs) : []
+  // The picture's look-alikes the text didn't bring in (an old card with no number, a Japanese
+  // name, glare over the code) — offered, never added without asking (exact: false)
+  const have = new Set(found.map((c) => `${c.catalog}:${c.id}`))
+  for (const h of hits) {
+    if (h.similarity < PICTURE_HIT_MIN || have.has(`${h.catalog}:${h.id}`)) continue
+    const cat = catalogs.find((x) => x.key === h.catalog)
+    const card = cat && (catalogIndex(cat).byId.get(h.id) as RawCard | undefined)
+    if (!card) continue // hidden or gone from the catalog since it was fingerprinted
+    found.push({ catalog: h.catalog, id: h.id, name: card.name, score: 0, why: 'picture', exact: false })
+    have.add(`${h.catalog}:${h.id}`)
+  }
+  const sims = await pictureSimilarity(fingerprints, found.map((c) => ({ catalog: c.catalog, id: c.id }))).catch(() => found.map(() => null))
+  return { slab, candidates: found.flatMap((c, i) => {
     const cat = catalogs.find((x) => x.key === c.catalog)
     const card = cat && (catalogIndex(cat).byId.get(c.id) as RawCard | undefined)
-    if (card) byId.set(`${c.catalog}:${c.id}`, card)
-  }
-  return { slab, candidates: candidates.flatMap((c) => {
-    const card = byId.get(`${c.catalog}:${c.id}`)
     if (!card) return []
     const regular = card.marketPrice ?? 0, foil = card.marketPriceFoil ?? 0
     return [{
@@ -135,6 +157,7 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[]): Promise
       score: c.score,
       why: c.why,
       exact: c.exact,
+      picture: sims[i] === null ? null : Math.round(sims[i]! * 1000) / 1000,
       printings: printingsOf(card, c.catalog === 'pokemon-jp' ? 'pokemon' : c.catalog),
     }]
   }) }

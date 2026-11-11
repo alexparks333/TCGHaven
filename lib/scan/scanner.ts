@@ -1,7 +1,8 @@
 // The site's side of the iPhone card scanner. The native screen (ios/App/App/CardScanner.swift)
 // owns the camera: it finds each card, flattens it, reads its text and tells us. We match the
-// text against the catalog (POST /api/cards/scan), ask the phone which candidate photo looks most
-// like the card, decide (lib/scan/decide.ts) and show the answer in the phone's tray. When the
+// text — and the picture AI's fingerprint of the card (docs/scanner-ai.md) — against the catalog
+// (POST /api/cards/scan), ask the phone which candidate photo looks most like the card, decide
+// (lib/scan/decide.ts) and show the answer in the phone's tray. When the
 // person taps Add we get their picks back — ScanReviewDialog adds them to the inventory.
 //
 // Matching lives here and on the server on purpose: improving it ships with a normal deploy, no
@@ -11,7 +12,7 @@ import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import type { Game } from '../types'
 import { cardImage } from '../cardImage'
 import { formatCurrency } from '../utils'
-import { decide, type ScanStatus } from './decide'
+import { decide, AI_OFFER, type ScanStatus } from './decide'
 import type { OcrLine } from './scanMatch'
 import type { ScanMatch, ScanSlab } from './server'
 import type { CardSearchResult } from '../api/search'
@@ -31,7 +32,12 @@ interface CardScannerPlugin {
   searchResults(opts: { requestId: string; options: TrayOption[] }): Promise<void>
   compare(opts: { scanId: string; imageUrls: string[] }): Promise<{ distances: Array<number | null> }>
   update(opts: { scanId: string; status: ScanStatus | 'error' | 'reject'; options: TrayOption[]; choice: number; note?: string; slab?: ScanSlab | null }): Promise<void>
-  addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[] }) => void): Promise<PluginListenerHandle>
+  // The picture AI model to have ready (downloaded once per version, then kept on the phone).
+  // Older app builds don't have it — calling it there fails harmlessly.
+  prepareModel(opts: { version: string; files: Record<string, string> }): Promise<{ ready: boolean }>
+  // fingerprints: the picture AI's numbers for the scan (one per way up for a landscape card);
+  // absent until the model is ready, and on older app builds
+  addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[]; fingerprints?: number[][] }) => void): Promise<PluginListenerHandle>
   addListener(event: 'searchCards', fn: (e: { requestId: string; query: string }) => void): Promise<PluginListenerHandle>
 }
 
@@ -50,8 +56,11 @@ export interface ScannedCard {
 // comparison itself works on a 40 × 56 grid, so a thumbnail is plenty
 const MAX_COMPARE = 40
 const MATCH_TIMEOUT_MS = 12000
+// A picture-only find shown in the tray (asked about, never added): this alike or more
+const PICTURE_SHOWS = 0.55
 
 function trayOption(m: ScanMatch & { final?: number; distance?: number | null }, slab: ScanSlab | null): TrayOption {
+  const ai = typeof m.picture === 'number' ? ` · AI ${m.picture.toFixed(2)}` : ''
   return {
     key: m.key,
     title: m.name,
@@ -59,7 +68,7 @@ function trayOption(m: ScanMatch & { final?: number; distance?: number | null },
     price: m.price > 0 ? formatCurrency(m.price) : '',
     imageUrl: cardImage(m.imageUrl, 'grid') ?? m.imageUrl,
     printings: (m.printings ?? []).map((p) => ({ key: p.key, label: p.label, price: p.price > 0 ? formatCurrency(p.price) : '' })),
-    detail: `text ${m.score}${m.final !== undefined ? ` → ${m.final}` : ''}${typeof m.distance === 'number' ? ` · picture ${m.distance.toFixed(3)}` : ''} · ${m.why}${m.exact ? '' : ' · name only'}`,
+    detail: `text ${m.score}${m.final !== undefined ? ` → ${m.final}` : ''}${typeof m.distance === 'number' ? ` · picture ${m.distance.toFixed(3)}` : ''}${ai} · ${m.why}${m.exact || m.why === 'picture' ? '' : ' · name only'}`,
   }
 }
 
@@ -90,7 +99,7 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
         return [{
           key: `${catalog}:${r.id}`, game, ...(lang && { language: lang }), id: r.id,
           name: r.name.replace(/ ✦ (Foil|Holo)$/, ''), setName: r.setName, number: r.number, imageUrl: r.imageUrl,
-          price: r.marketPrice > 0 ? r.marketPrice : r.marketPriceFoil, score: 0, why: 'searched', exact: true,
+          price: r.marketPrice > 0 ? r.marketPrice : r.marketPriceFoil, score: 0, why: 'searched', exact: true, picture: null,
           printings: r.variantPrices && Object.keys(r.variantPrices).length
             ? Object.entries(r.variantPrices).map(([k, v]) => ({ key: k, label: printingLabel(k, game), price: v }))
             : [],
@@ -104,7 +113,7 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
   return out.slice(0, 24)
 }
 
-async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
+async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: number[][]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS)
@@ -112,7 +121,7 @@ async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<{ candi
       const res = await fetch('/api/cards/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines, games }),
+        body: JSON.stringify({ lines, games, ...(fingerprints?.length && { fingerprints }) }),
         signal: ctrl.signal,
       })
       if (!res.ok) throw new Error(`scan match ${res.status}`)
@@ -125,12 +134,13 @@ async function fetchCandidates(lines: OcrLine[], games: Game[]): Promise<{ candi
   }
 }
 
-async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promise<{ card: ScannedCard; tray: TrayOption[]; topDistance: number | null }> {
-  const { candidates, slab } = await fetchCandidates(lines, games)
+async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerprints?: number[][]): Promise<{ card: ScannedCard; tray: TrayOption[]; topDistance: number | null; topPicture: number | null }> {
+  const { candidates, slab } = await fetchCandidates(lines, games, fingerprints)
 
-  // Only the candidates still in the running get compared by picture
-  const best = candidates[0]?.score ?? 0
-  const close = candidates.filter((c) => c.score >= best - 20).slice(0, MAX_COMPARE)
+  // Only the candidates still in the running get compared by picture — plus the picture AI's own
+  // finds (cards the text didn't bring in)
+  const best = Math.max(0, ...candidates.filter((c) => c.why !== 'picture').map((c) => c.score))
+  const close = candidates.filter((c) => c.why === 'picture' ? (c.picture ?? 0) >= AI_OFFER : c.score >= best - 20).slice(0, MAX_COMPARE)
   let distances: Array<number | null> | undefined
   if (close.length > 0) {
     try {
@@ -140,13 +150,14 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promis
       distances = undefined // no picture check — the text decides, and ties become a pick
     }
   }
-  const { ranked, status } = decide(close.map((c) => ({ ...c, trusted: c.why.includes(' label ') })), distances)
+  const { ranked, status } = decide(close.map((c) => ({ ...c, trusted: c.why.includes(' label ') })), distances, close.map((c) => c.picture))
   const rest = candidates.filter((c) => !close.includes(c))
   const ordered: Array<ScanMatch & { final?: number; distance?: number | null }> = [...ranked, ...rest]
   return {
     card: { scanId, options: ordered.map(({ final: _f, distance: _d, ...m }) => m), choice: 0, status, slab },
     tray: ordered.map((m) => trayOption(m, slab)),
     topDistance: ranked[0]?.distance ?? null,
+    topPicture: ranked[0]?.similarity ?? null,
   }
 }
 
@@ -155,6 +166,12 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[]): Promis
 export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   // Wake the server and load the catalogs while the camera starts
   fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`).catch(() => {})
+  // The picture AI: the phone downloads the current model once (~41 MB, then only when it changes)
+  // and fingerprints every scan with it from then on
+  fetch('/api/cards/scan?model=1')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((r: { model?: { version: string; files: Record<string, string> } | null } | null) => (r?.model ? CardScanner.prepareModel(r.model) : null))
+    .catch(() => {})
 
   const found = new Map<string, ScannedCard>()
   const searched = new Map<string, ScanMatch>()
@@ -166,16 +183,17 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
       })
       .catch(() => CardScanner.searchResults({ requestId, options: [] }).catch(() => {}))
   })
-  const listener = await CardScanner.addListener('cardScanned', ({ scanId, lines }) => {
-    identify(scanId, lines, games)
-      .then(({ card, tray, topDistance }) => {
+  const listener = await CardScanner.addListener('cardScanned', ({ scanId, lines, fingerprints }) => {
+    identify(scanId, lines, games, fingerprints)
+      .then(({ card, tray, topDistance, topPicture }) => {
         found.set(scanId, card)
         // Not sure enough to show: nothing found, or only a loose guess (a word on a screen that
         // happens to be a card name) — the tray drops it and asks for another scan
         const top = card.options[0]
         // …unless the picture clearly says which card it is and only the version is in doubt
         // (Aquapolis Mr. Mime #95 / #95a / #95b): then it's a question, with the versions to pick
-        const pictured = topDistance !== null && topDistance <= 0.3
+        // (or the picture AI found it with no text to go on — an old card, a worn number)
+        const pictured = (topDistance !== null && topDistance <= 0.3) || (topPicture !== null && topPicture >= PICTURE_SHOWS)
         const loose = !top || card.status === 'none' || (card.status === 'pick' && (!top.exact || top.score < 55) && !pictured)
         return CardScanner.update({
           scanId,

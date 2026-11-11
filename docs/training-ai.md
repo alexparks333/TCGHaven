@@ -1,7 +1,13 @@
 # Training the card scanner's AI on the Windows PC (RTX 4090)
 
 _Written 2026-11-09 on the Mac. For the owner, and for Claude on the Windows PC: follow these steps in
-order. The scanner's design and results so far are in `card-scanner.md`._
+order. The scanner's design and results so far are in `card-scanner.md`; the trained model in use,
+its index and the Mac-side steps after a run are in `scanner-ai.md`._
+
+> **First run done (2026-11-10).** The small model, pass 7, is live in the scanner. On real scans it
+> went from 61% to 88% right first. Results and lessons are under "Results of the first run" below.
+> The owner's decision: **small only, no base model** — it's faster per scan, and the owner will
+> retrain often as more cards come in.
 
 ## What this is
 
@@ -132,6 +138,40 @@ on the server, add picture search to the matching (alongside the number, name an
 and add fingerprinting of new cards to the twice-daily catalog sync.
 
 ---
+
+## Results of the first run (2026-11-09 / 10)
+
+Score = 57 real iPhone scans, right card first among all 169k catalog cards.
+
+| Pass | Small #1 / top 5 | Base #1 / top 5 |
+|---|---|---|
+| untrained | 65% / 88% | 56% / 86% |
+| 1 | 81% / 91% | 77% / 96% |
+| 6 | **86% / 95%** | 44% / 70% |
+| 7 | **86% / 93%** | 86% / 96% |
+| 12 (final) | 65% / 79% | 63% / 82% |
+
+- **It peaks in the middle, then over-fits the fake phone shots.** From pass 8 the training loss
+  fell to ~0.006 while real scans fell back to the untrained score. Keep every pass's file and
+  choose on the Mac (scanner-ai.md "After a training run").
+- **Re-scored on the Mac:** small pass 7 gets 88% / 93% on real scans, 99% on the fake-damage
+  benchmark, and 96% on the seven games it never saw. It's the one in use.
+- **The PC needed some changes.** Use `--workers 24 --prefetch 2 --grad-checkpoint`:
+  - 32 workers × prefetch 4 hit Windows' paging-file limit (error 1455).
+  - NVIDIA Overlay held ~14 GB of VRAM, so the driver spilled into system RAM: ~10 steps/min
+    instead of ~95.
+  - Gradient checkpointing gives bit-identical results with much less GPU memory.
+  - Small then took ~6 min of training and ~10 min of scoring per pass.
+- **A `?` in a file name broke the kit.** `pokemon:ex10-?` couldn't be unzipped on Windows, which
+  would have shifted every later label (the script's assert caught it). The next kit must use
+  Windows-safe names, or map ids to files through `ids.txt`.
+- Python 3.12 had to be installed on the PC (it only had 3.13). torch 2.6.0+cu124 worked.
+- The PC's improved `train_cuda.py` (resume, per-pass saves, grad checkpointing) is now kept in the
+  repo at `tools/scanner-ai/train_cuda.py`.
+
+**Next run:** include the newer games (Yu-Gi-Oh!, SWU, Gundam, FaB, Digimon, Palworld, Cyberpunk —
+75,770 images ready on the Mac), `--epochs 7`, and as many fresh real scans as possible
+(scanner-ai.md "For the next training run").
 
 ## Where things live on the Mac (for reference)
 

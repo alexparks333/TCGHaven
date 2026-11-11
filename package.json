@@ -25,7 +25,8 @@
     "onepiece-source-report": "node scripts/onepiece-source-report.mjs",
     "pokemon-source-report": "node scripts/pokemon-source-report.mjs",
     "test:snapshot": "node scripts/lib/snapshot-codec.test.mjs",
-    "optimize-pin": "npx -y @gltf-transform/cli@4.5.1 optimize --compress meshopt --texture-compress webp --texture-size 2048 --simplify false"
+    "optimize-pin": "npx -y @gltf-transform/cli@4.5.1 optimize --compress meshopt --texture-compress webp --texture-size 2048 --simplify false",
+    "scanner-index": "node scripts/scanner-index.mjs"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.6.0",
