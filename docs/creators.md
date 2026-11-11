@@ -151,6 +151,8 @@ with `permission-denied`, and the Studio now says so instead of looking saved.
      then redeploy.
 - **When `havenrelief.py` changes:** run `modal deploy` again. If `KIT_VERSION` / `ANALYSIS_REV`
   change, also update the copies in `modal_app.py`'s `web()`.
+- **Live:** deployed 2026-11-11 to the owner's Modal workspace as app `havenrelief`, at
+  `https://alexparks333--havenrelief-web.us-east.modal.run`. Starter plan: $30 of free credit a month, then the card.
 - **Watch the bill:** set a monthly budget in Modal's dashboard (Settings → Usage/Billing).
 
 **What an analysis costs:**
