@@ -18,7 +18,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 - **Your Book** tab:
   1. **No book yet:** name it ("PewDiePie Cuties") and it's made, with a random leather and gold
      foil, chapter "Chapter One", and collection = its name.
-  2. **The cover** (`components/creator/CoverDesigner.tsx`):
+  2. **The cover** (`components/creator/CoverDesigner.tsx`). It's saved as is until **Edit Book
+     Cover**. While editing, the big book previews the unsaved cover. **Save Book Cover** keeps it;
+     ✕ / Cancel throws the changes away. A just-created book opens straight into editing. The
+     designer offers:
      - the title, the line above it, and a stamp (monogram);
      - 12 leathers and 8 foils, each one tap;
      - "Surprise me";

@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { communityPath } from '@/lib/communities'
-import { Loader2, Wand2, PauseCircle, BookOpen, Users, Eye, X, Check, Sparkles, ArrowLeft } from 'lucide-react'
+import { Loader2, Wand2, PauseCircle, BookOpen, Users, Eye, X, Check, Sparkles, ArrowLeft, Pencil, Palette } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
@@ -93,6 +93,8 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
   const [view, setView] = useState<'cover' | 'pages'>('cover')
   const [making, setMaking] = useState<{ badge: BadgeDef; isNew: boolean } | null>(null)
   const [preview, setPreview] = useState(false)
+  // The cover being edited (not saved until "Save Book Cover"; ✕ throws it away)
+  const [coverDraft, setCoverDraft] = useState<BadgeSet | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>()
 
   // The saved book arrives (and later changes elsewhere) — take it unless there are unsaved edits
@@ -117,7 +119,7 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
     <StartBook
       creatorName={creatorName}
       onCreate={async (name, cover) => { const b = newCreatorBook(uid, name, creatorName); b.book.cover = cover; await saveCreatorBook(uid, b, true); return b }}
-      onOpened={(b) => { setDraft(b); setView('cover') }}
+      onOpened={(b) => { setDraft(b); setView('cover'); setCoverDraft(b.book) }}
     />
   )
   const b = draft ?? saved!
@@ -144,10 +146,30 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
 
       {view === 'cover' ? (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
-          <BookStage book={b.book} badges={b.badges} onOpen={() => setView('pages')} />
-          <div className="card-glass p-5">
-            <CoverDesigner uid={uid} book={b.book} onChange={setBook} />
-          </div>
+          {/* While editing, the big book shows the unsaved cover; Save keeps it, ✕ puts it back */}
+          <BookStage book={coverDraft ?? b.book} badges={b.badges} onOpen={() => setView('pages')} editing={!!coverDraft} />
+          {coverDraft ? (
+            <div className="card-glass p-5">
+              <div className="flex items-center gap-2 mb-5">
+                <h3 className="font-bold text-ink flex-1">Editing your cover</h3>
+                <button type="button" onClick={() => setCoverDraft(null)} className="p-2 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label="Cancel — keep the saved cover" title="Cancel — keep the saved cover"><X size={18} /></button>
+              </div>
+              <CoverDesigner uid={uid} book={coverDraft} onChange={setCoverDraft} />
+              <div className="mt-6 flex gap-2">
+                <button type="button" onClick={() => setCoverDraft(null)} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink flex-1 justify-center"><X size={15} />Cancel</button>
+                <button type="button" onClick={() => { setBook(coverDraft); setCoverDraft(null) }} className="btn-primary flex-[2] justify-center"><Check size={16} />Save Book Cover</button>
+              </div>
+            </div>
+          ) : (
+            <div className="card-glass p-6 flex flex-col items-center text-center">
+              <span className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${b.book.cover.from}, ${b.book.cover.to})` }}>
+                <Palette size={22} style={{ color: b.book.cover.accent }} />
+              </span>
+              <h3 className="mt-3 font-bold text-ink text-lg">Your book cover</h3>
+              <p className="text-sm text-slate-400 mt-1">Leather, foil, your title and stamp, and your own cover picture.</p>
+              <button type="button" onClick={() => setCoverDraft(b.book)} className="btn-primary w-full justify-center mt-5 py-3 text-base"><Pencil size={16} />Edit Book Cover</button>
+            </div>
+          )}
         </div>
       ) : (
         <BookPlanner
@@ -325,7 +347,7 @@ function StartBook({ creatorName, onCreate, onOpened }: {
 }
 
 /** The closed book, big, tilting toward the pointer — tap to open it */
-function BookStage({ book, badges, onOpen }: { book: BadgeSet; badges: BadgeDef[]; onOpen: () => void }) {
+function BookStage({ book, badges, onOpen, editing = false }: { book: BadgeSet; badges: BadgeDef[]; onOpen: () => void; editing?: boolean }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   return (
     <div className="flex flex-col items-center gap-5 py-4">
@@ -351,10 +373,16 @@ function BookStage({ book, badges, onOpen }: { book: BadgeSet; badges: BadgeDef[
             style={{ background: `linear-gradient(${110 + tilt.y * 4}deg, transparent 30%, rgba(255,255,255,0.35) 48%, transparent 62%)` }} />
         </div>
       </button>
-      <button type="button" onClick={onOpen} className="btn-primary px-6 py-3 text-base shadow-lg">
-        <BookOpen size={18} /> Open your book{badges.length ? '' : ' & add badges'}
-      </button>
-      <p className="text-xs text-slate-500 text-center max-w-sm">Change the cover on the right — every tap shows here. Open the book to add badges to its pages.</p>
+      {editing ? (
+        <p className="text-xs font-semibold text-violet-700 text-center">Preview — not saved until you press Save Book Cover</p>
+      ) : (
+        <>
+          <button type="button" onClick={onOpen} className="btn-primary px-6 py-3 text-base shadow-lg">
+            <BookOpen size={18} /> Open your book{badges.length ? '' : ' & add badges'}
+          </button>
+          <p className="text-xs text-slate-500 text-center max-w-sm">Open the book to add badges to its pages.</p>
+        </>
+      )}
     </div>
   )
 }
