@@ -51,6 +51,11 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
   const [studio, setStudio] = useState(false)
   const [studioNote, setStudioNote] = useState('')
   const [artName, setArtName] = useState('')
+  // Unsaved changes: the draft vs what was last saved. ✕ with changes asks first.
+  const [savedJson, setSavedJson] = useState(() => JSON.stringify(badge))
+  const dirty = JSON.stringify(draft) !== savedJson
+  const [confirmClose, setConfirmClose] = useState(false)
+  const requestClose = () => { if (busy) return; if (dirty) setConfirmClose(true); else onClose() }
   const sculpted = !!(draft.imageUrl && draft.reliefKit && !studio) // the Studio has its own big view while open
   const fileInput = useRef<HTMLInputElement>(null)
   const folder = `creators/${uid}/badges/${draft.id}`
@@ -112,6 +117,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
     try {
       const game = draft.slots[0] ? (gameOf(draft.slots[0]) ?? draft.game) : draft.game
       await onSave({ ...draft, name: draft.name.trim(), game })
+      setSavedJson(JSON.stringify(draft))
       onClose()
     } catch (e) {
       setError('Couldn’t save — ' + (e instanceof Error ? e.message : String(e)))
@@ -136,7 +142,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
         <div className="relative md:w-[42%] shrink-0 flex flex-col items-center justify-center gap-4 p-6 md:p-8" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
           <div className="absolute inset-[10px] rounded-xl pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 60%, #0f0b18 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)' }} />
           <div className="absolute inset-[18px] rounded-lg border pointer-events-none" style={{ borderColor: accent + '88' }} />
-          <button type="button" onClick={onClose} className="md:hidden absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 text-white" aria-label="Close"><X size={18} /></button>
+          <button type="button" onClick={requestClose} className="md:hidden absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 text-white" aria-label="Close"><X size={18} /></button>
           {/* Once it's sculpted: the real 3D pin, to turn over. Before that: the flat art */}
           {sculpted ? (
             <div className="relative w-full flex-1 min-h-[260px] max-h-[460px]">
@@ -168,7 +174,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                 {done && step !== n ? <Check size={13} className="text-emerald-600" /> : <Icon size={13} />}{label}
               </button>
             ))}
-            <button type="button" onClick={onClose} className="hidden md:block ml-auto p-2 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label="Close"><X size={18} /></button>
+            <button type="button" onClick={requestClose} className="hidden md:block ml-auto p-2 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label="Close"><X size={18} /></button>
           </div>
 
           <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5">
@@ -289,6 +295,22 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
         </div>
       </div>
 
+      {/* ✕ with unsaved changes */}
+      {confirmClose && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setConfirmClose(false)} />
+          <div role="alertdialog" aria-labelledby="close-q" className="add-card-panel relative card-glass rounded-2xl p-6 w-full max-w-sm text-center shadow-2xl">
+            <h3 id="close-q" className="text-lg font-bold text-ink">Are you sure you want to close?</h3>
+            <p className="text-sm text-slate-400 mt-1.5">There are unsaved changes to this badge. Closing now loses them.</p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button type="button" autoFocus onClick={() => { setConfirmClose(false); save() }} className="btn-primary justify-center py-2.5"><Check size={16} />Save badge</button>
+              <button type="button" onClick={() => setConfirmClose(false)} className="btn-secondary justify-center !bg-slate-950 border border-slate-700 !text-ink">Keep editing</button>
+              <button type="button" onClick={onClose} className="py-2 text-sm font-semibold text-red-600 hover:underline">Close without saving</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {studio && (
         <ReliefStudio
           badge={draft}
@@ -299,7 +321,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
             const next = { ...draft, ...patch }
             setDraft(next)
             // Saved straight away, like the staff portal: the sculpting is the slow part
-            if (next.name.trim()) await onSave({ ...next, name: next.name.trim() })
+            if (next.name.trim()) { await onSave({ ...next, name: next.name.trim() }); setSavedJson(JSON.stringify(next)) }
           }}
         />
       )}
