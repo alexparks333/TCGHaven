@@ -90,7 +90,7 @@ TCGHaven goes in the App Store as a **Capacitor** app: a native iPhone shell (bu
 that shows the live site, `https://www.tcghaven.org`. Fixes pushed to main reach the app as soon as
 Vercel deploys them; only native changes need a new build and App Review. What makes it a real app
 rather than a website in a box (Apple rule 4.2): **native Google + Apple sign-in, haptics, the iOS
-share sheet and push notifications** — and the **card scanner** (native camera + Vision; `card-scanner.md`), built 2026-11-08, waiting for its first run on a phone. No Expo — it
+share sheet and push notifications** — and the **card scanner** (native camera + Vision + an on-device picture AI; `card-scanner.md`, `scanner-ai.md`). It's been running on the owner's iPhone since 2026-11-09; test builds install over Wi-Fi (`card-scanner.md` "Trying it"). No Expo — it
 was tried and dropped on 2026-11-04 (not needed for a web app).
 
 ---

@@ -44,7 +44,7 @@ read its text: Vision OCR, English + Japanese
 compare the scan's picture with each candidate's      ◀──  the candidates still in the running
   catalog photo (PictureMatcher)                       ──▶  decide.ts: text + picture → matched / pick / none
 tray: ✓ added, ? pick one, ! not found               ◀──  the answer
-"Add N" → back to the site                            ──▶  ScanReviewDialog: printing, condition, quantity →
+"Add N" → back to the site                            ──▶  ScanReviewDialog: printing, condition, quantity, group →
                                                               saved through lib/firebase/db.ts like Add Card
 ```
 
@@ -141,12 +141,48 @@ Most "asked" cases are One Piece parallels and Magic reprints, which really do l
 stamped copies. **Japanese is the weakest:** old cards without numbers, and same-number cards
 across hundreds of sets. Phase 3 fixes this.
 
+### First real-phone test with the picture AI (2026-11-10, owner's iPhone 17 Pro Max)
+
+About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
+- Matched cards' AI similarity was 0.39–0.94, with a median of 0.76.
+- The picture agreed with the number and name on every normal card.
+- What went wrong, and what was fixed the same night:
+  - **5 errors.** A fresh server waited 12–15 s to download the picture index, and the phone gives
+    up at 12 s. Scans no longer wait for it (`scanner-ai.md`).
+  - **Unown (Unseen Forces) wasn't found.** Its number is a letter, "B/28", which OCR read as
+    "8/28". With 40+ Unowns, the picture's correct find was cut off the list. Same-name picture
+    finds now get the name's score and are compared first, so the card is added.
+- The owner's verdict: "working pretty nicely exactly how I want it".
+
+## The card sheet and the review screen
+
+- **Card sheet** (tap a card in the tray → View Card), top to bottom:
+  - the catalog photo or your scan;
+  - Finish (every printing, with its price);
+  - **Condition** (NM / LP / MP / HP; NM by default; hidden for slabs);
+  - other matches;
+  - grading;
+  - search.
+  The picks go back to the site with the card.
+- **Review screen** (`ScanReviewDialog`):
+  - **"Add these cards to group"** at the top puts the whole batch in one group, using the same
+    chips as Add Card;
+  - then each card's printing, condition and quantity. A card scanned twice in the same condition
+    becomes one row with quantity 2.
+
 ## Trying it
 
 The app shows the live site, so the site half (route, Scan button, review screen) must be
 **deployed** before the phone can use it. Push to main → Checks → Vercel.
 
 1. Run the app from Xcode on the iPhone (the scanner is native code, so this needs the new build).
+   The owner's iPhone is paired, so Claude can install over Wi-Fi with no cable: build with
+   `xcodebuild -project ios/App/App.xcodeproj -scheme App -destination 'id=<UDID>' build`, then
+   `xcrun devicectl device install app --device <UDID> <App.app>`. `xcrun devicectl list devices`
+   shows the UDID.
+   - **Debug scans:** copy them off the phone with `xcrun devicectl device copy from --device
+     <UDID> --domain-type appDataContainer --domain-identifier com.alexhparks.tcghaven --source
+     Documents/scans --destination <dir>`. Each scan has card.jpg, ocr.json and result.json.
 2. Inventory → **Scan** (shown only in the app) → allow the camera.
 3. Hold a card flat, fill most of the screen, and keep it still. Then the next card.
 4. Tap **Add N** → check the review screen → **Add N cards**.
