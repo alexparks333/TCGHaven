@@ -112,7 +112,7 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
     <StartBook
       creatorName={creatorName}
       onCreate={async (name, cover) => { const b = newCreatorBook(uid, name, creatorName); b.book.cover = cover; await saveCreatorBook(uid, b, true); return b }}
-      onOpened={(b) => { setDraft(b); setView('pages') }}
+      onOpened={(b) => { setDraft(b); setView('cover') }}
     />
   )
   const b = draft ?? saved!
@@ -191,18 +191,18 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
   )
 }
 
-/** No book yet: a book that reacts to you — it tilts toward the pointer on a spotlight in its own
- *  leather, the title writes itself on the cover as you type, and the leather and foil change as
- *  you pick them. Create: a gold foil sweep stamps it, then the cover swings open onto its first
- *  velvet page, and the Studio opens on the book. */
+/** No book yet — step one is just naming it: a book that reacts to you (it tilts toward the pointer
+ *  on a spotlight in its leather), its title writing itself on the cover as you type. Create: a gold
+ *  foil sweep stamps it, then the cover swings open onto its first velvet page and the Studio opens
+ *  on the cover designer (colours, picture — the next step). */
 function StartBook({ creatorName, onCreate, onOpened }: {
   creatorName: string
   onCreate: (name: string, cover: BadgeSet['cover']) => Promise<CreatorBook>
   onOpened: (book: CreatorBook) => void
 }) {
   const [name, setName] = useState('')
-  const [leather, setLeather] = useState(0)
-  const [foil, setFoil] = useState(0)
+  // The cover's colours are picked on the next page (the cover designer); it starts in crimson and gold
+  const leather = 0, foil = 0
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   const [phase, setPhase] = useState<'idle' | 'stamping' | 'opening'>('idle')
   const [error, setError] = useState('')
@@ -296,25 +296,6 @@ function StartBook({ creatorName, onCreate, onOpened }: {
               {idea}
             </button>
           ))}
-        </div>
-
-        <div className="mt-5 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
-          <span className="field-label !mb-0">Leather</span>
-          <div className="flex flex-wrap gap-2">
-            {LEATHERS.slice(0, 8).map((x, i) => (
-              <button key={x.name} type="button" title={x.name} onClick={() => setLeather(i)} disabled={phase !== 'idle'}
-                className={cn('w-7 h-7 rounded-full transition-transform hover:scale-110 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.45)]', leather === i && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                style={{ background: `radial-gradient(circle at 32% 28%, ${x.from}, ${x.to})` }} />
-            ))}
-          </div>
-          <span className="field-label !mb-0">Foil</span>
-          <div className="flex flex-wrap gap-2">
-            {FOILS.slice(0, 6).map((x, i) => (
-              <button key={x.name} type="button" title={x.name} onClick={() => setFoil(i)} disabled={phase !== 'idle'}
-                className={cn('w-7 h-7 rounded-lg transition-transform hover:scale-110', foil === i && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                style={{ background: `linear-gradient(135deg, #fffaf0 0%, ${x.color} 35%, ${x.color} 60%, #00000055 100%)` }} />
-            ))}
-          </div>
         </div>
 
         <button type="submit" disabled={!title || phase !== 'idle'}
