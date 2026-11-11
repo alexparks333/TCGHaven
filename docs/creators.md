@@ -5,6 +5,12 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 
 ## What a creator gets
 
+- **First, Create Community** (`components/creator/CreateCommunity.tsx`). Until a creator's
+  `communities/{uid}` exists, the Studio shows only a big **Create Community** start, then four
+  steps: name, bio (tagline + about), **games** (`Community.games`), colour. The community's card
+  (`CommunityCard`) fills in live beside it. **Launch community** saves it, and only then do the
+  Your Book / Community tabs appear.
+
 - **The Creator tab** (`/creator`, `components/pages/CreatorPage.tsx`) sits under a line in the
   sidebar, with a wand button on phones. It's for Creators in good standing and for **Staff**
   (`canUseCreatorStudio()` in `lib/accountRoles.ts`), so the Owner and staff can try it and help
@@ -44,7 +50,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 | Where | What | Rules |
 |---|---|---|
 | `creator_books/{uid}` | `{ owner, book: BadgeSet, badges: BadgeDef[], createdAt, updatedAt }`: one doc per creator, so one book each | Any signed-in user reads. Only that uid writes, and only if `canCreate()` (a Creator not suspended or banned, or staff). Badges ≤ 200 |
-| `communities/{uid}` | `{ name, tagline, about, color, updatedAt }` | Same; fixed keys |
+| `communities/{uid}` | `{ name, nameLower, tagline, about, color, games, updatedAt }` | Same; fixed keys |
 | Storage `creators/{uid}/**` | Cover pictures, badge art, Relief Studio kits, maps and builds | Public read. That creator writes, ≤ 25 MB a file |
 
 Rules deployed 2026-11-11 (`npx firebase-tools deploy --only firestore:rules,storage --project

@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react'
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase/config'
 import type { BadgeDef, BadgeSet } from './badges'
+import type { Game } from './types'
 
 export interface CreatorBook {
   owner: string
@@ -28,6 +29,7 @@ export interface Community {
   tagline: string
   about: string
   color: string       // its banner colour
+  games?: Game[]       // the games it collects (set up when the community is created)
 }
 
 /** Leather and foil a creator picks for their cover (CoverDesigner) */

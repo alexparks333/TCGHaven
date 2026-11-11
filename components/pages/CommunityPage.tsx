@@ -16,6 +16,7 @@ import { useCreatorBook } from '@/lib/creatorBooks'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { GAME_COLORS, GAME_LABELS } from '@/lib/types'
 
 export default function CommunityPage({ uid }: { uid: string }) {
   return (
@@ -81,6 +82,11 @@ function Body({ uid }: { uid: string }) {
           <div className="min-w-0 flex-1">
             <h1 className="text-2xl md:text-3xl font-bold text-ink leading-tight">{community.name}</h1>
             {community.tagline && <p className="text-sm text-slate-500 mt-1">{community.tagline}</p>}
+            {(community.games?.length ?? 0) > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {community.games!.map((g) => <span key={g} className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>)}
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
               <span className="flex items-center gap-1.5"><Users size={14} /><b className="text-ink">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
               {creator && (

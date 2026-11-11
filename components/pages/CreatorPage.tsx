@@ -17,11 +17,13 @@ import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
 import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, saveCommunity, monogramOf, LEATHERS, FOILS, type CreatorBook, type Community } from '@/lib/creatorBooks'
 import { DEFAULT_TIERS, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { CoverDesigner } from '@/components/creator/CoverDesigner'
+import { CreateCommunity, CommunityCard, BANNERS } from '@/components/creator/CreateCommunity'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
 import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export default function CreatorPage() {
@@ -36,8 +38,10 @@ function Body() {
   const { user } = useAuth()
   const { record, loaded } = useAccountRole(user?.uid)
   const [tab, setTab] = useState<'book' | 'community'>('book')
+  // The community comes first: until it's launched, the Studio is the "Create Community" set-up
+  const { community, loaded: communityLoaded } = useCommunity(user?.uid)
 
-  if (!loaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+  if (!loaded || !communityLoaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
 
   if (!canUseCreatorStudio(record)) {
     return (
@@ -65,16 +69,17 @@ function Body() {
             </p>
           )}
         </div>
-        <div className="ml-auto flex rounded-xl bg-slate-900 border border-slate-800 p-1">
+        {community && <div className="ml-auto flex rounded-xl bg-slate-900 border border-slate-800 p-1">
           {([['book', 'Your Book', BookOpen], ['community', 'Community', Users]] as const).map(([id, label, Icon]) => (
             <button key={id} type="button" onClick={() => setTab(id)}
               className={cn('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors', tab === id ? 'bg-violet-600 text-white shadow' : 'text-slate-400 hover:text-ink')}>
               <Icon size={15} />{label}
             </button>
           ))}
-        </div>
+        </div>}
       </div>
-      {user && (tab === 'book' ? <BookTab uid={user.uid} creatorName={user.displayName || 'Creator'} /> : <CommunityTab uid={user.uid} creatorName={user.displayName || 'Creator'} />)}
+      {user && !community && <CreateCommunity uid={user.uid} creatorName={user.displayName || 'Creator'} onLaunched={() => setTab('book')} />}
+      {user && community && (tab === 'book' ? <BookTab uid={user.uid} creatorName={user.displayName || 'Creator'} /> : <CommunityTab uid={user.uid} creatorName={user.displayName || 'Creator'} />)}
     </div>
   )
 }
@@ -378,33 +383,21 @@ function Preview({ book, badges, onClose }: { book: BadgeSet; badges: BadgeDef[]
 
 // ── Community (barebones for now) ─────────────────────────────────────────
 
-const BANNERS = ['#6d28d9', '#b91c1c', '#0f766e', '#1d4ed8', '#c2410c', '#be185d', '#3f6212', '#334155']
-
 function CommunityTab({ uid, creatorName }: { uid: string; creatorName: string }) {
   const { community, loaded } = useCommunity(uid)
   const [draft, setDraft] = useState<Community | null>(null)
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle')
-  useEffect(() => { if (loaded && !draft) setDraft(community ?? { name: `${creatorName}'s Community`, tagline: '', about: '', color: BANNERS[0] }) }, [loaded, community, draft, creatorName])
+  useEffect(() => { if (loaded && !draft) setDraft(community ?? { name: `${creatorName}'s Community`, tagline: '', about: '', color: BANNERS[0], games: [] }) }, [loaded, community, draft, creatorName])
   if (!draft) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
   const set = (p: Partial<Community>) => { setDraft({ ...draft, ...p }); setSaving('idle') }
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
       {/* How it looks */}
-      <div className="card-glass overflow-hidden">
-        <div className="h-36 md:h-44 relative" style={{ background: `linear-gradient(135deg, ${draft.color}, #0b0b12)` }}>
-          <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.35) 0, transparent 40%)' }} />
-        </div>
-        <div className="px-6 pb-6 -mt-10 relative">
-          <div className="w-20 h-20 rounded-2xl border-4 border-[#f3e9d3] shadow-lg flex items-center justify-center text-3xl font-black text-white" style={{ background: draft.color }}>
-            {(draft.name.trim()[0] || '★').toUpperCase()}
-          </div>
-          <h2 className="mt-3 text-2xl font-bold text-ink">{draft.name || 'Your community'}</h2>
-          {draft.tagline && <p className="text-sm text-slate-500 mt-0.5">{draft.tagline}</p>}
-          {draft.about && <p className="text-sm text-slate-400 mt-3 whitespace-pre-line">{draft.about}</p>}
-          <p className="mt-4 text-xs text-slate-500 rounded-xl bg-slate-950/50 border border-slate-800 p-3">
-            Collectors find your community under Friends → Communities and join it; your book shows on its page. Coming next: news posts.
-          </p>
-        </div>
+      <div>
+        <CommunityCard c={draft} big />
+        <p className="mt-3 text-xs text-slate-500 rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+          Collectors find your community under Friends → Communities and join it; your book shows on its page. Coming next: news posts.
+        </p>
       </div>
       {/* Edit it */}
       <div className="card-glass p-5 space-y-4">
@@ -414,6 +407,18 @@ function CommunityTab({ uid, creatorName }: { uid: string; creatorName: string }
           <input className="input-field text-sm" maxLength={80} value={draft.tagline} onChange={(e) => set({ tagline: e.target.value })} placeholder="One line about your community" /></label>
         <label className="block"><span className="field-label">About</span>
           <textarea className="input-field text-sm min-h-[100px]" maxLength={600} value={draft.about} onChange={(e) => set({ about: e.target.value })} /></label>
+        <div><span className="field-label">Games</span>
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(GAME_LABELS) as Game[]).map((g) => {
+              const on = draft.games?.includes(g)
+              return (
+                <button key={g} type="button" onClick={() => set({ games: on ? draft.games!.filter((x) => x !== g) : [...(draft.games ?? []), g] })}
+                  className={cn('rounded-full px-2.5 py-1 text-xs font-bold border transition-colors', on ? 'text-white border-transparent' : 'border-slate-800 text-slate-400 hover:text-ink')}
+                  style={on ? { background: GAME_COLORS[g] } : undefined}>{GAME_LABELS[g]}</button>
+              )
+            })}
+          </div>
+        </div>
         <div><span className="field-label">Banner colour</span>
           <div className="flex flex-wrap gap-2">
             {BANNERS.map((c) => (
