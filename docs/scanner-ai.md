@@ -71,6 +71,15 @@ tray: ✓ added / ? pick one                     ◀──  the answer
   re-checks the manifest every 30 min. Brute force: 245k × 384 int8 dot products ≈ 165 ms for every
   game, ~50 ms for three. It refuses a half-written update (size check) and keeps the old copy.
   Cards hidden since they were fingerprinted are dropped (they're not in the visible catalog).
+- **A scan never waits for the index to download.** A fresh server needs 5–15 s to fetch every
+  game's fingerprints (~96 MB), and the phone gives up after 12 s: on 2026-11-10, 3 of 5 scans
+  errored. A scan now uses whatever is loaded (text only if nothing is) and starts the rest
+  loading. The scanner's warm-up call is the one that waits. When the AI has compared every
+  candidate, the phone's tile comparison (thumbnail downloads) is skipped.
+- **A name shared by many printings** brings in only 24 of them (40+ Unowns). A picture find with
+  that same printed name gets the name's text score (`why: 'name + picture'`), and picture finds
+  are compared first, so they can't be pushed out. A real Unown B ("B/28" read as "8/28") was
+  found this way: 0.62–0.67 alike, 0.2 ahead of the rest.
 - **Phone** (`CardFingerprinter`): no model in the app bundle. The site names the version and the
   phone downloads it, so **a retrained model reaches phones with no app update**. Until it's ready
   (first open, offline), scans go without a fingerprint and work as before.
