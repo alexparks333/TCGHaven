@@ -120,7 +120,7 @@ object CardFingerprinter {
             pictures += turned(image, -90f)
             pictures += turned(image, 90f)
         }
-        val out = pictures.mapNotNull { runCatching { run(it) }.getOrNull() }
+        val out = pictures.mapNotNull { p -> runCatching { run(p) }.onFailure { Log.w(TAG, "fingerprint failed", it) }.getOrNull() }
         return out.ifEmpty { null }
     }
 }

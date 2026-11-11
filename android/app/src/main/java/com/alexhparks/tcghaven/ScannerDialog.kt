@@ -123,6 +123,18 @@ class ScannerDialog(
     @Volatile private var autoScan = prefs.getBoolean("autoScan", true)
     private lateinit var modeButton: TextView
     private val barcodeReader = com.google.mlkit.vision.barcode.BarcodeScanning.getClient()
+    // Test builds: what the scanner sees and decides, in the log ("adb logcat -s TCGScanner") and
+    // the last frame / captures saved in the app's cache (adb exec-out run-as … cat cache/scan-debug/…)
+    private val debug = (activity.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    private var lastDebugAt = 0L
+    private fun dlog(msg: String) { if (debug) android.util.Log.i("TCGScanner", msg) }
+    private fun dsave(name: String, b: Bitmap) {
+        if (!debug) return
+        try {
+            val dir = java.io.File(activity.cacheDir, "scan-debug").apply { mkdirs() }
+            java.io.FileOutputStream(java.io.File(dir, name)).use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        } catch (_: Throwable) {}
+    }
 
     // Steadiness: the phone's rotation rate, from the gyroscope
     private var sensors: SensorManager? = null
@@ -373,6 +385,13 @@ class ScannerDialog(
         val frame = try { uprightFrame(proxy) } catch (e: Throwable) { null } finally { proxy.close() }
         if (frame == null) { busy = false; return }
         val found = CardFinder.find(frame)
+        // How bright the picture is, 0–255 (an 8 × 8 sample) — too dark and nothing can be found or read
+        val lum = run { var t = 0; for (i in 0 until 64) { val c = frame.getPixel((i % 8) * frame.width / 8 + frame.width / 16, (i / 8) * frame.height / 8 + frame.height / 16); t += ((c shr 16 and 255) + (c shr 8 and 255) + (c and 255)) / 3 }; t / 64 }
+        if (debug && now - lastDebugAt > 1500) {
+            lastDebugAt = now
+            dsave("frame.jpg", frame)
+            dlog("look ${frame.width}x${frame.height} brightness $lum: ${if (found == null) "no card" else "${if (found.slab) "slab" else "card"} ${(found.area * 100).toInt()}% of frame"} · still $stableFrames · auto $autoScan")
+        }
         // Still: the card's corners barely moved since the last look (and the phone isn't turning)
         val moved = found?.let { f -> lastCorners?.let { prev -> f.corners.indices.maxOf { i -> kotlin.math.hypot((f.corners[i].x - prev[i].x).toDouble(), (f.corners[i].y - prev[i].y).toDouble()) } / frame.width } }
         stableFrames = if (found != null && moved != null && moved < 0.025) stableFrames + 1 else 0
@@ -404,6 +423,7 @@ class ScannerDialog(
             busy = false
             main.post {
                 setHint(when {
+                    found == null && lum < 40 -> if (torchOn) "Too dark to see the card — more light, please" else "Too dark to see the card — tap 💡 or add light"
                     found == null -> if (autoScan) "Hold a card up — it scans by itself" else "Manual: press the button to scan"
                     !autoScan -> "Press the button to scan"
                     else -> "Hold still…"
@@ -433,6 +453,7 @@ class ScannerDialog(
         val chars = text.text.count { !it.isWhitespace() }
         val sig = words(text)
         val fresh = lastSignature?.let { differs(sig, it) } ?: true
+        dlog("read ${pic.width}x${pic.height}: $lines lines, $chars characters, new card $fresh — ${text.text.replace('\n', ' ').take(80)}")
         if (lines >= 3 && chars >= 15 && fresh) return capture(pic, text, sig, slab)
         busy = false
         main.post { setHint(if (!fresh) "Got it — next card" else "Can’t read it yet — closer, or out of the glare") }
@@ -480,7 +501,10 @@ class ScannerDialog(
                 return
             }
             // A slab: the picture AI looks at the card inside it, not the label and plastic
+            val t0 = System.currentTimeMillis()
             val fingerprints = CardFingerprinter.fingerprints(if (slab) CardFinder.cardInsideSlab(crop) else crop)
+            dsave("capture.jpg", crop)
+            dlog("captured ${crop.width}x${crop.height}${if (slab) " (slab)" else ""}: ${lines.length()} lines, fingerprints ${fingerprints?.size ?: "none (model not ready)"} in ${System.currentTimeMillis() - t0} ms, barcodes $barcodes")
             val id = UUID.randomUUID().toString()
             val thumb = scaled(crop, 240)
             val photo = scaled(crop, 760)
