@@ -5,14 +5,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { Check, ImagePlus, Loader2, Trash2, Sparkles, Type, AlignCenter, Palette, BookOpen, ChevronDown, Crown } from 'lucide-react'
+import { Check, ImagePlus, Loader2, Trash2, Sparkles, Type, AlignCenter, Palette, BookOpen, ChevronDown } from 'lucide-react'
 import type { BadgeSet, CoverStyle } from '@/lib/badges'
 import { COVER_FONTS, FONT_GROUPS, TITLE_FINISHES, loadCoverFonts } from '@/lib/coverFonts'
 import { LEATHERS, FOILS, monogramOf } from '@/lib/creatorBooks'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
 
-export function CoverDesigner({ uid, book, onChange }: { uid: string; book: BadgeSet; onChange: (next: BadgeSet) => void }) {
+export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: string; book: BadgeSet; onChange: (next: BadgeSet) => void; initialOpen?: string }) {
   const set = (patch: Partial<BadgeSet>) => onChange({ ...book, ...patch })
   // The lettering and pages (CoverStyle in lib/badges.ts)
   const st: CoverStyle = book.coverStyle ?? {}
@@ -20,7 +20,7 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
   useEffect(() => { loadCoverFonts(COVER_FONTS.map((f) => f.id)) }, [])
   const fileInput = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
-  const [open, setOpen] = useState<string | null>(null)
+  const [open, setOpen] = useState<string | null>(initialOpen ?? null)
   const [error, setError] = useState('')
 
   async function uploadCover(file: File | undefined) {
@@ -71,7 +71,8 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
   return (
     <div className="space-y-2.5">
       {/* One part at a time: tap a part to open it (the others fold away) */}
-      <Group id="title" open={open} setOpen={setOpen} icon={Type} title="Title" summary={`${font?.name ?? 'Classic'} · ${book.name || 'untitled'}`}>
+      <Group id="title" open={open} setOpen={setOpen} icon={Type} title="Title"
+        summary={`${font?.name ?? 'Classic'}${havenOn ? ` · Haven Style, ${TITLE_FINISHES.find((x) => x.id === st.titleFinish)?.name.toLowerCase()} foil` : ''} · ${book.name || 'untitled'}`}>
         <input
           className="input-field text-base font-semibold"
           value={book.name}
@@ -79,28 +80,7 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
           onChange={(e) => set({ name: e.target.value, collection: e.target.value, monogram: book.monogram === monogramOf(book.name) ? monogramOf(e.target.value) : book.monogram })}
           placeholder="e.g. PewDiePie Cuties"
         />
-        {/* The fonts, in groups, each showing the book's own name (the Elegant ones are in Haven Style) */}
-        <div className="mt-3 max-h-[300px] overflow-y-auto scroll-themed pr-1 space-y-3">
-          {FONT_GROUPS.filter((g) => g !== 'Elegant').map((g) => (
-            <div key={g}>
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
-              <FontGrid fonts={COVER_FONTS.filter((f) => f.group === g)} />
-            </div>
-          ))}
-        </div>
-        <Slider label="Size" min={0.6} max={1.8} step={0.02} value={st.titleSize ?? 1} onChange={(v) => setStyle({ titleSize: v })} />
-        <Slider label="Height" hint="up / down the cover" min={8} max={88} step={0.5} value={st.titleY ?? 38} onChange={(v) => setStyle({ titleY: v })} />
-        {st.titleFinish ? (
-          <p className="mt-3 text-xs text-slate-500 rounded-lg bg-slate-950/50 border border-slate-800 px-3 py-2">
-            Haven Style is on, so the title is in {TITLE_FINISHES.find((x) => x.id === st.titleFinish)?.name.toLowerCase()} foil. <button type="button" className="font-semibold text-ink underline" onClick={() => setHaven(false)}>Turn it off</button> to pick a colour.
-          </p>
-        ) : (
-          <Colors label="Colour" value={st.titleColor ?? '#fbe9c4'} onChange={(c) => setStyle({ titleColor: c })} />
-        )}
-      </Group>
-
-      <Group id="haven" open={open} setOpen={setOpen} icon={Crown} title="Haven Style"
-        summary={st.titleFinish ? `On · ${TITLE_FINISHES.find((x) => x.id === st.titleFinish)?.name} foil${st.titleShine ? ' · shine' : ''}${st.titlePlate ? ' · glow' : ''}` : 'Off'}>
+        <div className="mt-3" />
         {/* The switch: on = lettered like TCG Haven's own books (then fine-tune below); off = a plain title */}
         <button type="button" onClick={() => setHaven(!havenOn)}
           className="w-full rounded-xl px-4 py-3 flex items-center gap-3 text-left shadow-sm border border-black/20 transition-[filter] hover:brightness-110"
@@ -133,6 +113,22 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
             </div>
           </>
         )}
+        {!havenOn && (
+          <>
+            {/* The fonts, in groups, each showing the book's own name (the Elegant ones come with Haven Style) */}
+            <div className="mt-4 max-h-[300px] overflow-y-auto scroll-themed pr-1 space-y-3">
+              {FONT_GROUPS.filter((g) => g !== 'Elegant').map((g) => (
+                <div key={g}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
+                  <FontGrid fonts={COVER_FONTS.filter((f) => f.group === g)} />
+                </div>
+              ))}
+            </div>
+            <Colors label="Colour" value={st.titleColor ?? '#fbe9c4'} onChange={(c) => setStyle({ titleColor: c })} />
+          </>
+        )}
+        <Slider label="Size" min={0.6} max={1.8} step={0.02} value={st.titleSize ?? 1} onChange={(v) => setStyle({ titleSize: v })} />
+        <Slider label="Height" hint="up / down the cover" min={8} max={88} step={0.5} value={st.titleY ?? 38} onChange={(v) => setStyle({ titleY: v })} />
       </Group>
 
       <Group id="text" open={open} setOpen={setOpen} icon={AlignCenter} title="Text & emblem"
