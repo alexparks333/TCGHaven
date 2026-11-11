@@ -501,7 +501,7 @@ export function BookThickness({ style }: { style?: React.CSSProperties }) {
 
 // A Badge Set's closed book: leather cover in the set's colors, stitched spine, strap + snap,
 // embossed title and the set's first pin.
-export function BookCover({ set, badges, defs }: { set: BadgeSet; badges: SharedBadges | null; defs?: BadgeDef[] }) {
+export function BookCover({ set, badges, defs, emptyLabel = 'Coming soon' }: { set: BadgeSet; badges: SharedBadges | null; defs?: BadgeDef[]; emptyLabel?: string }) {
   const { catalog } = useBadgeCatalog()
   // A creator book's badges come with it (lib/creatorBooks.ts); TCG Haven's are in the catalog
   const inSet = defs ?? badgesInSet(catalog, set.id)
@@ -531,7 +531,7 @@ export function BookCover({ set, badges, defs }: { set: BadgeSet; badges: Shared
         </div>
         <div className="absolute inset-x-0 bottom-[5%] flex justify-center">
           <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.55)', color: accent }}>
-            {inSet.length ? `${earned} / ${inSet.length} earned` : 'Coming soon'}
+            {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
           </span>
         </div>
       </div>
@@ -567,7 +567,7 @@ export function BookCover({ set, badges, defs }: { set: BadgeSet; badges: Shared
           )}
         </div>
         <div className="mt-[10%] rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.4)', color: accent }}>
-          {inSet.length ? `${earned} / ${inSet.length} earned` : 'Coming soon'}
+          {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
         </div>
       </div>
     </div>

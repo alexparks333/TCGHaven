@@ -14,7 +14,7 @@ import { Loader2, Wand2, PauseCircle, BookOpen, Users, Eye, X, Check, Sparkles, 
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
-import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, saveCommunity, LEATHERS, type CreatorBook, type Community } from '@/lib/creatorBooks'
+import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, saveCommunity, monogramOf, LEATHERS, FOILS, type CreatorBook, type Community } from '@/lib/creatorBooks'
 import { DEFAULT_TIERS, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { CoverDesigner } from '@/components/creator/CoverDesigner'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
@@ -59,11 +59,11 @@ function Body() {
         <span className="w-11 h-11 rounded-2xl bg-violet-600/15 text-violet-700 flex items-center justify-center"><Wand2 size={22} /></span>
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-ink">Creator Studio</h1>
-          <p className="text-sm text-slate-500">
-            {record.role === 'creator'
-              ? `Creator since ${record.creatorSince ? new Date(record.creatorSince).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'today'} · Premium included`
-              : 'Staff access — your book works exactly like a creator’s'}
-          </p>
+          {record.role === 'creator' && (
+            <p className="text-sm text-slate-500">
+              Creator since {record.creatorSince ? new Date(record.creatorSince).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'today'} · Premium included
+            </p>
+          )}
         </div>
         <div className="ml-auto flex rounded-xl bg-slate-900 border border-slate-800 p-1">
           {([['book', 'Your Book', BookOpen], ['community', 'Community', Users]] as const).map(([id, label, Icon]) => (
@@ -108,7 +108,13 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
 
   if (!loaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
   // Made for good: the book is shown only once it's really saved (refreshing must find it again)
-  if (!saved && !draft) return <StartBook onCreate={async (name) => { const b = newCreatorBook(uid, name, creatorName); await saveCreatorBook(uid, b, true); setDraft(b) }} />
+  if (!saved && !draft) return (
+    <StartBook
+      creatorName={creatorName}
+      onCreate={async (name, cover) => { const b = newCreatorBook(uid, name, creatorName); b.book.cover = cover; await saveCreatorBook(uid, b, true); return b }}
+      onOpened={(b) => { setDraft(b); setView('pages') }}
+    />
+  )
   const b = draft ?? saved!
   const setBook = (book: BadgeSet) => change({ ...b, book })
 
@@ -185,48 +191,149 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
   )
 }
 
-/** No book yet: name it and it's made — a closed leather book waiting on the left */
-function StartBook({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
+/** No book yet: a book that reacts to you — it tilts toward the pointer on a spotlight in its own
+ *  leather, the title writes itself on the cover as you type, and the leather and foil change as
+ *  you pick them. Create: a gold foil sweep stamps it, then the cover swings open onto its first
+ *  velvet page, and the Studio opens on the book. */
+function StartBook({ creatorName, onCreate, onOpened }: {
+  creatorName: string
+  onCreate: (name: string, cover: BadgeSet['cover']) => Promise<CreatorBook>
+  onOpened: (book: CreatorBook) => void
+}) {
   const [name, setName] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [leather, setLeather] = useState(0)
+  const [foil, setFoil] = useState(0)
+  const [tilt, setTilt] = useState({ x: 0, y: 0 })
+  const [phase, setPhase] = useState<'idle' | 'stamping' | 'opening'>('idle')
   const [error, setError] = useState('')
-  const leather = LEATHERS[0]
+  const l = LEATHERS[leather], f = FOILS[foil]
+  const cover = { from: l.from, to: l.to, accent: f.color }
+  const title = name.trim()
   const sample: BadgeSet = {
-    id: 'sample', name: name.trim() || 'Your Book', subtitle: 'Creator Book', monogram: (name.trim()[0] || '★').toUpperCase(),
-    game: 'pokemon', cover: { from: leather.from, to: leather.to, accent: '#e8b35a' },
+    id: 'sample', name: title || 'Your Book', subtitle: `${creatorName} · Creator Book`, monogram: monogramOf(title || '★'),
+    game: 'pokemon', cover,
   }
+  const first = creatorName.split(' ')[0] || 'My'
+  const ideas = [`${first}'s Vault`, `${first}'s Legends`, 'The Collection', 'Pin Masters', 'Holo Hunters']
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault()
+    if (!title || phase !== 'idle') return
+    setError(''); setPhase('stamping')
+    try {
+      const [book] = await Promise.all([onCreate(title, cover), new Promise((r) => setTimeout(r, 900))])
+      setPhase('opening')
+      setTimeout(() => onOpened(book), 1100)
+    } catch (err) {
+      setPhase('idle')
+      const code = (err as { code?: string })?.code
+      setError(code === 'permission-denied'
+        ? 'Couldn’t create your book — creator saving isn’t switched on for this account.'
+        : 'Couldn’t create your book — ' + (err instanceof Error ? err.message : String(err)))
+    }
+  }
+
   return (
-    <div className="card-glass p-6 md:p-10 grid gap-8 md:grid-cols-[260px_1fr] items-center max-w-4xl mx-auto">
-      <div className="relative mx-auto w-[220px] aspect-[0.71] [perspective:900px]" style={{ containerType: 'inline-size' }}>
-        <div className="absolute inset-0 animate-[creatorFloat_5s_ease-in-out_infinite]" style={{ transformStyle: 'preserve-3d' }}>
-          <BookThickness />
-          <span className="absolute inset-0"><BookCover set={sample} badges={null} defs={[]} /></span>
+    <div className="card-glass overflow-hidden grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] max-w-5xl mx-auto">
+      {/* The stage: a spotlight in the book's leather, gold sparks drifting up, the book tilting to you */}
+      <div
+        className="relative min-h-[420px] md:min-h-[520px] flex items-center justify-center overflow-hidden"
+        style={{ background: `radial-gradient(ellipse at 50% 45%, ${l.from}55 0%, ${l.to}cc 45%, #0d0a08 100%)`, transition: 'background 0.6s' }}
+        onPointerMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -14, y: ((e.clientX - r.left) / r.width - 0.5) * 22 })
+        }}
+        onPointerLeave={() => setTilt({ x: 0, y: 0 })}
+      >
+        {Array.from({ length: 16 }, (_, i) => (
+          <span key={i} className="creator-spark absolute rounded-full pointer-events-none"
+            style={{ left: `${(i * 37) % 100}%`, bottom: '-8px', width: 3 + (i % 3), height: 3 + (i % 3), background: f.color, animationDelay: `${(i * 0.53) % 6}s`, animationDuration: `${5 + (i % 5)}s` }} />
+        ))}
+        {/* Its shadow on the floor */}
+        <div className="absolute bottom-[12%] w-[52%] h-6 rounded-[50%] bg-black/50 blur-xl" />
+        <div className="relative w-[min(260px,62vw)] aspect-[0.71] [perspective:1200px]" style={{ containerType: 'inline-size' }}>
+          <div
+            className={cn('absolute inset-0', phase === 'idle' && 'creator-bob')}
+            style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', transition: 'transform 0.25s ease-out' }}
+          >
+            <BookThickness />
+            {/* The first page, under the cover — what the cover swings open onto */}
+            <div className="absolute inset-0 rounded-[12px] overflow-hidden flex flex-col items-center justify-center text-center p-[12%]"
+              style={{ background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 60%, #0f0b18 100%)' }}>
+              <div className="absolute inset-[6%] rounded-md border" style={{ borderColor: f.color + 'aa' }} />
+              <p className="pinbook-serif text-[9cqw] uppercase tracking-[0.18em]" style={{ color: f.color }}>Chapter One</p>
+              <span className="mt-[8%] w-[34%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-[14cqw]" style={{ borderColor: f.color, color: f.color }}>+</span>
+            </div>
+            {/* The cover, hinged at the spine */}
+            <div className="absolute inset-0 origin-left"
+              style={{ transform: phase === 'opening' ? 'rotateY(-158deg)' : 'rotateY(0deg)', transition: 'transform 1s cubic-bezier(.5,.05,.25,1)', transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}>
+              <BookCover set={sample} badges={null} defs={[]} emptyLabel="First edition" />
+              {/* The moving shine */}
+              <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay"
+                style={{ background: `linear-gradient(${105 + tilt.y * 5}deg, transparent 32%, rgba(255,255,255,0.45) 48%, transparent 64%)` }} />
+              {/* The gold foil stamp sweeping across as it's made */}
+              {phase !== 'idle' && <span className="creator-foil absolute inset-0 rounded-[14px] pointer-events-none" style={{ ['--foil' as string]: f.color }} />}
+            </div>
+          </div>
         </div>
+        <p className="absolute bottom-4 inset-x-0 text-center text-[11px] text-white/50">Move your mouse over it</p>
       </div>
-      <div>
+
+      {/* Name it, dress it, make it */}
+      <form onSubmit={create} className="p-6 md:p-9 flex flex-col">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 flex items-center gap-1.5"><Sparkles size={13} />Your Creator Book</p>
-        <h2 className="text-2xl md:text-3xl font-bold text-ink mt-2">Make a pin book for your community</h2>
-        <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-          Design your own Haven Badges — your art, your cards to collect. Your followers fill your book by collecting,
-          and every badge they earn shows up in their pin book next to TCG Haven’s.
-        </p>
-        <form className="mt-5 flex flex-col sm:flex-row gap-2" onSubmit={async (e) => {
-          e.preventDefault(); if (!name.trim()) return
-          setBusy(true); setError('')
-          try { await onCreate(name) } catch (err) {
-            const code = (err as { code?: string })?.code
-            setError(code === 'permission-denied'
-              ? 'Couldn’t create your book — creator saving isn’t switched on yet (the new security rules need publishing).'
-              : 'Couldn’t create your book — ' + (err instanceof Error ? err.message : String(err)))
-          } finally { setBusy(false) }
-        }}>
-          <input className="input-field text-base font-semibold" autoFocus maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name your book — e.g. PewDiePie Cuties" />
-          <button type="submit" disabled={!name.trim() || busy} className="btn-primary justify-center whitespace-nowrap px-5 disabled:opacity-50">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <BookOpen size={16} />}Create my book
-          </button>
-        </form>
+        <h2 className="text-2xl md:text-[28px] font-bold text-ink mt-2 leading-tight">Make a pin book for your community</h2>
+        <p className="text-sm text-slate-400 mt-2 leading-relaxed">Your art, your cards to collect. Followers fill your book by collecting — and every badge they earn shows up in their own pin book.</p>
+
+        <label className="mt-6 block">
+          <span className="field-label flex justify-between"><span>Name it</span><span className="font-normal tabular-nums">{name.length}/40</span></span>
+          <input className="input-field text-lg font-bold" autoFocus maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. PewDiePie Cuties" disabled={phase !== 'idle'} />
+        </label>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {ideas.map((idea) => (
+            <button key={idea} type="button" onClick={() => setName(idea)} disabled={phase !== 'idle'}
+              className="rounded-full border border-slate-800 bg-slate-950/50 px-2.5 py-1 text-xs text-slate-400 hover:text-ink hover:border-slate-700 transition-colors">
+              {idea}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-5 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-3">
+          <span className="field-label !mb-0">Leather</span>
+          <div className="flex flex-wrap gap-2">
+            {LEATHERS.slice(0, 8).map((x, i) => (
+              <button key={x.name} type="button" title={x.name} onClick={() => setLeather(i)} disabled={phase !== 'idle'}
+                className={cn('w-7 h-7 rounded-full transition-transform hover:scale-110 shadow-[inset_0_-2px_4px_rgba(0,0,0,0.45)]', leather === i && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                style={{ background: `radial-gradient(circle at 32% 28%, ${x.from}, ${x.to})` }} />
+            ))}
+          </div>
+          <span className="field-label !mb-0">Foil</span>
+          <div className="flex flex-wrap gap-2">
+            {FOILS.slice(0, 6).map((x, i) => (
+              <button key={x.name} type="button" title={x.name} onClick={() => setFoil(i)} disabled={phase !== 'idle'}
+                className={cn('w-7 h-7 rounded-lg transition-transform hover:scale-110', foil === i && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                style={{ background: `linear-gradient(135deg, #fffaf0 0%, ${x.color} 35%, ${x.color} 60%, #00000055 100%)` }} />
+            ))}
+          </div>
+        </div>
+
+        <button type="submit" disabled={!title || phase !== 'idle'}
+          className="mt-7 w-full rounded-2xl py-3.5 text-base font-bold text-white flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50 hover:brightness-110 active:scale-[0.99]"
+          style={{ background: `linear-gradient(135deg, ${l.from}, ${l.to})`, boxShadow: `0 10px 24px -10px ${l.from}` }}>
+          {phase === 'idle' ? <><BookOpen size={18} />Create my book</> : phase === 'stamping' ? <><Loader2 size={18} className="animate-spin" />Stamping the cover…</> : <><Sparkles size={18} />Opening it up…</>}
+        </button>
         {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
-      </div>
+
+        {/* What comes next */}
+        <div className="mt-7 grid grid-cols-3 gap-2 text-center">
+          {[['1', 'Design the cover'], ['2', 'Add badges to its pages'], ['3', 'Fans collect them']].map(([n, t]) => (
+            <div key={n} className="rounded-xl border border-slate-800 bg-slate-950/40 px-2 py-3">
+              <span className="mx-auto w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-black" style={{ background: f.color }}>{n}</span>
+              <p className="text-[11px] font-semibold text-slate-400 mt-1.5 leading-tight">{t}</p>
+            </div>
+          ))}
+        </div>
+      </form>
     </div>
   )
 }

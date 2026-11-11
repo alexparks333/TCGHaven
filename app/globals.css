@@ -847,11 +847,27 @@
 @keyframes pin-inspector-in { from { opacity: 0; } to { opacity: 1; } }
 .pin-inspector-in { animation: pin-inspector-in 0.25s ease-out both; }
 
-/* Creator Studio: the waiting book floats gently (CreatorPage.tsx StartBook) */
-@keyframes creatorFloat {
-  0%, 100% { transform: translateY(0) rotateY(-14deg) rotateX(4deg); }
-  50% { transform: translateY(-8px) rotateY(-6deg) rotateX(2deg); }
+/* Creator Studio start screen (CreatorPage.tsx StartBook): the book bobs, sparks drift up, and the
+   gold foil sweeps across the cover as the book is made */
+@keyframes creatorBob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
+.creator-bob { animation: creatorBob 4.5s ease-in-out infinite; }
+@keyframes creatorSpark {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  12% { opacity: 0.9; }
+  100% { transform: translateY(-560px) scale(0.4); opacity: 0; }
+}
+.creator-spark { animation: creatorSpark 6s linear infinite; box-shadow: 0 0 8px currentColor; }
+@keyframes creatorFoil {
+  0% { background-position: -160% 0; opacity: 1; }
+  80% { opacity: 1; }
+  100% { background-position: 160% 0; opacity: 0; }
+}
+.creator-foil {
+  background: linear-gradient(105deg, transparent 35%, var(--foil) 46%, #fffbe8 50%, var(--foil) 54%, transparent 65%);
+  background-size: 250% 100%;
+  mix-blend-mode: screen;
+  animation: creatorFoil 0.9s ease-in-out forwards;
 }
 @media (prefers-reduced-motion: reduce) {
-  [class*="creatorFloat"] { animation: none !important; }
+  .creator-bob, .creator-spark, .creator-foil { animation: none !important; }
 }
