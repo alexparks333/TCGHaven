@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers } from 'lucide-react'
+import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight } from 'lucide-react'
 import type { BadgeDef, BadgeSet, BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -49,6 +49,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
   const [error, setError] = useState('')
   const [studio, setStudio] = useState(false)
   const [studioNote, setStudioNote] = useState('')
+  const [artName, setArtName] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
   const folder = `creators/${uid}/badges/${draft.id}`
   // An example to follow: one of TCG Haven's own finished pins (uploaded art, see-through background)
@@ -69,7 +70,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
       const url = await getDownloadURL(r)
       // New art: any 3D work made from the old picture no longer fits it
       set({ imageUrl: url, reliefKit: undefined, relief: undefined, depthMapUrl: undefined, normalMapUrl: undefined, finishMapUrl: undefined, detailMapUrl: undefined, reliefBuildUrl: undefined, reliefBuildKey: undefined })
-      setStep(2)
+      setArtName(file.name) // stays on Pin art: the pin appears on the left first, then Next
     } catch (e) {
       setError('Couldn’t upload that — ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -126,8 +127,9 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
-      <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={busy ? undefined : onClose} />
-      <div className="add-card-panel relative w-full max-w-[920px] card-glass rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col md:flex-row overflow-hidden">
+      {/* No close on an outside click: a pin in progress would be lost to a stray click — only ✕ closes */}
+      <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="add-card-panel relative w-full max-w-[920px] card-glass rounded-t-2xl sm:rounded-2xl h-[94dvh] md:h-[min(94dvh,760px)] flex flex-col md:flex-row overflow-hidden">
         {/* The pin, big, on the book's velvet */}
         <div className="relative md:w-[42%] shrink-0 flex flex-col items-center justify-center gap-4 p-6 md:p-8" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
           <div className="absolute inset-[10px] rounded-xl pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 60%, #0f0b18 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)' }} />
@@ -189,19 +191,33 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                     <p className="text-[11px] text-slate-500 leading-snug">On plain white — we cut the white away</p>
                   </div>
                 </div>
-                <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-slate-400">
+                <ul className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[12px] leading-snug text-slate-400">
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Cut out, or on plain white</li>
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />The pin&rsquo;s own shape — any shape works</li>
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />At least 1000 × 1000 px</li>
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Bold shapes and colours read best small</li>
-                  <li className="flex gap-1.5 col-span-2"><X size={13} className="text-red-600 shrink-0 mt-0.5" />Not a photo or a coloured background — those stay on the pin</li>
                 </ul>
+                {draft.imageUrl && !busy ? (
+                  <div className="mt-4 rounded-2xl border-2 border-emerald-600/50 bg-emerald-600/5 p-3 flex items-center gap-3">
+                    <span className="w-16 h-16 shrink-0 rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:12px_12px] flex items-center justify-center p-1.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={draft.imageUrl} alt="" className="max-w-full max-h-full object-contain" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-emerald-700 flex items-center gap-1"><Check size={15} />Pin art uploaded</p>
+                      <p className="text-xs text-slate-500 truncate">{artName || 'Your pin is on the left — check it looks right'}</p>
+                      <button type="button" onClick={() => fileInput.current?.click()} className="mt-1 text-xs font-semibold text-violet-700 hover:underline flex items-center gap-1"><Upload size={12} />Upload a different one</button>
+                    </div>
+                    <button type="button" onClick={() => setStep(2)} className="btn-primary shrink-0">Next<ArrowRight size={15} /></button>
+                  </div>
+                ) : (
                 <button type="button" disabled={!!busy} onClick={() => fileInput.current?.click()}
                   className="mt-4 w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 py-10 flex flex-col items-center gap-2 text-slate-500 hover:text-ink transition-colors">
                   {busy ? <Loader2 size={28} className="animate-spin" /> : <Upload size={28} />}
                   <span className="font-semibold">{busy || (draft.imageUrl ? 'Upload different art' : 'Choose your pin art')}</span>
                   <span className="text-xs">PNG, WebP or JPG · up to 25 MB</span>
                 </button>
+                )}
                 <input ref={fileInput} type="file" accept="image/png,image/webp,image/jpeg" hidden onChange={(e) => uploadArt(e.target.files?.[0])} />
               </div>
             )}
@@ -307,25 +323,39 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
   }, [q, game])
   const have = new Set(slots.flatMap((s) => s.cardIds))
   const add = (r: CardSearchResult) => {
-    if (have.has(r.id)) return
+    if (have.has(r.id)) return onChange(slots.filter((s) => !s.cardIds.includes(r.id)))
     onChange([...slots, { label: r.name, cardIds: [r.id], cards: [{ id: r.id, name: r.name, setName: r.setName, number: r.number, imageUrl: r.imageUrl }], game: r.game } as BadgeSlot])
   }
   return (
     <div>
       <h3 className="text-lg font-bold text-ink">What do fans collect?</h3>
       <p className="text-sm text-slate-400 mt-1">Pick the cards. Owning one of each earns the badge — fans see their progress fill up in your book.</p>
-      {slots.length > 0 && (
-        <div className="mt-4 flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          {slots.map((s, i) => (
-            <div key={s.cardIds.join() + i} className="relative shrink-0 w-[68px]">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cardImage(s.cards?.[0]?.imageUrl, 'thumb') ?? s.cards?.[0]?.imageUrl} alt="" className="w-[68px] h-[95px] object-cover rounded-md border border-slate-800" />
-              <button type="button" onClick={() => onChange(slots.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-600 text-white flex items-center justify-center shadow" aria-label={`Remove ${s.label}`}><X size={12} /></button>
-              <p className="text-[10px] text-slate-400 truncate mt-1">{s.label}</p>
-            </div>
-          ))}
+      {/* The picked cards: small tiles that wrap, in a tray that scrolls — fits 3 or 300 */}
+      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Picked</span>
+          <span className="rounded-full bg-violet-600 text-white text-[11px] font-bold px-2 py-0.5 tabular-nums">{slots.length}</span>
+          {slots.length > 1 && (
+            <button type="button" onClick={() => { if (confirm(`Remove all ${slots.length} cards from this badge?`)) onChange([]) }}
+              className="ml-auto text-[11px] font-semibold text-slate-500 hover:text-red-600">Clear all</button>
+          )}
         </div>
-      )}
+        {slots.length === 0
+          ? <p className="text-xs text-slate-500 py-2">None yet — tap cards below to add them.</p>
+          : (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(46px,1fr))] gap-1.5 max-h-[188px] overflow-y-auto overscroll-contain pr-1">
+              {slots.map((s, i) => (
+                <button key={s.cardIds.join() + i} type="button" title={`${s.label}${s.cards?.[0]?.setName ? ` · ${s.cards[0].setName}` : ''} — tap to remove`}
+                  onClick={() => onChange(slots.filter((_, j) => j !== i))}
+                  className="group relative aspect-[63/88] rounded-[5px] overflow-hidden border border-slate-800">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={cardImage(s.cards?.[0]?.imageUrl, 'thumb') ?? s.cards?.[0]?.imageUrl} alt={s.label} loading="lazy" className="w-full h-full object-cover" />
+                  <span className="absolute inset-0 bg-red-700/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} /></span>
+                </button>
+              ))}
+            </div>
+          )}
+      </div>
       <div className="mt-4 flex gap-2">
         <select className="input-field !w-auto text-sm" value={game} onChange={(e) => setGame(e.target.value as Game)}>
           {GAMES.map((g) => <option key={g} value={g}>{GAME_LABELS[g]}</option>)}
@@ -335,17 +365,18 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
           <input className="input-field pl-9 text-sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a card — name, or name and number" />
         </div>
       </div>
-      <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-2">
+      <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5">
         {loading && <p className="col-span-full text-sm text-slate-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" />Searching…</p>}
         {results.map((r) => {
           const on = have.has(r.id)
           return (
-            <button key={r.id} type="button" onClick={() => add(r)} disabled={on} className={cn('text-left rounded-lg p-1 transition-colors', on ? 'opacity-50' : 'hover:bg-slate-800')}>
+            <button key={r.id} type="button" onClick={() => add(r)} title={on ? 'Tap to remove' : 'Tap to add'} className={cn('relative text-left rounded-lg p-1 transition-colors hover:bg-slate-800', on && 'bg-emerald-600/10')}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cardImage(r.imageUrl, 'thumb') ?? r.imageUrl} alt="" className="w-full aspect-[63/88] object-cover rounded-md" />
+              <img src={cardImage(r.imageUrl, 'thumb') ?? r.imageUrl} alt="" className={cn('w-full aspect-[63/88] object-cover rounded-md', on && 'ring-2 ring-emerald-600')} />
+              {on && <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow"><Check size={14} /></span>}
               <p className="text-[11px] font-semibold text-ink truncate mt-1">{r.name}</p>
               <p className="text-[10px] text-slate-500 truncate">{r.setName}{r.number ? ` · #${r.number}` : ''}</p>
-              {on && <p className="text-[10px] text-emerald-700 font-semibold">Added</p>}
+              {on && <p className="text-[10px] text-emerald-700 font-semibold">Added · tap to remove</p>}
             </button>
           )
         })}

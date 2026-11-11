@@ -113,7 +113,8 @@ def web():
 
     KIT_VERSION, ANALYSIS_REV, QUALITY = 1, 3, ("fast", "normal", "high")  # keep in step with havenrelief.py
     SECRET = os.environ.get("HAVENRELIEF_SECRET", "")
-    ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("HAVENRELIEF_ORIGINS", "").split(",") if o.strip()]
+    # + the dev server, like server.py: the ticket (signed with the secret) is the real lock
+    ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"] + [o.strip().rstrip("/") for o in os.environ.get("HAVENRELIEF_ORIGINS", "").split(",") if o.strip()]
     MAX_UPLOAD = 40 * 1024 * 1024
 
     api = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
