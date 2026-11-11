@@ -8,6 +8,8 @@
 // Everything saves as you go (lib/creatorBooks.ts → creator_books/{uid}, communities/{uid}).
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { communityPath } from '@/lib/communities'
 import { Loader2, Wand2, PauseCircle, BookOpen, Users, Eye, X, Check, Sparkles, ArrowLeft } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -300,7 +302,7 @@ function CommunityTab({ uid, creatorName }: { uid: string; creatorName: string }
           {draft.tagline && <p className="text-sm text-slate-500 mt-0.5">{draft.tagline}</p>}
           {draft.about && <p className="text-sm text-slate-400 mt-3 whitespace-pre-line">{draft.about}</p>}
           <p className="mt-4 text-xs text-slate-500 rounded-xl bg-slate-950/50 border border-slate-800 p-3">
-            Coming next: followers, your book on your community page, and news posts.
+            Collectors find your community under Friends → Communities and join it; your book shows on its page. Coming next: news posts.
           </p>
         </div>
       </div>
@@ -322,6 +324,11 @@ function CommunityTab({ uid, creatorName }: { uid: string; creatorName: string }
         <button type="button" disabled={saving === 'saving'} onClick={async () => { setSaving('saving'); try { await saveCommunity(uid, draft); setSaving('saved') } catch { setSaving('idle') } }} className="btn-primary w-full justify-center">
           {saving === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}{saving === 'saved' ? 'Saved' : 'Save community'}
         </button>
+        {(community || saving === 'saved') && (
+          <Link href={communityPath(uid)} className="btn-secondary w-full justify-center !bg-slate-950 border border-slate-700 !text-ink">
+            <Eye size={15} />View your community page
+          </Link>
+        )}
       </div>
     </div>
   )

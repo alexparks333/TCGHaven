@@ -128,5 +128,6 @@ export function useCommunity(uid: string | null | undefined): { community: Commu
 }
 
 export async function saveCommunity(uid: string, c: Community) {
-  await setDoc(doc(db, 'communities', uid), { ...clean(c), updatedAt: serverTimestamp() }, { merge: true })
+  // nameLower: for searching by name (lib/communities.ts searchCommunities)
+  await setDoc(doc(db, 'communities', uid), { ...clean(c), nameLower: c.name.trim().toLowerCase(), updatedAt: serverTimestamp() }, { merge: true })
 }

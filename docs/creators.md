@@ -56,14 +56,31 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 - **Rule from the Accounts work:** show a creator's book only while its maker `isCreator()`.
   Suspended or former creators' books are hidden and come back unchanged.
 
+## Communities: joining (2026-11-11)
+
+- **Find them:** Friends page → the search card's **People | Communities** switch
+  (`FriendsPage.tsx` `CommunitySearch`). It's a name prefix search on `communities.nameLower`,
+  which `saveCommunity()` writes.
+- **Join:** a membership doc, `community_members/{communityUid}_{memberUid}` =
+  `{ community, member, joinedAt }` (`lib/communities.ts`). You create and delete only your own.
+- **Your communities:** a section under "Your friends" on the Friends page (`#communities`). Your
+  profile shows a **Communities** count beside Friends.
+- **A community's page:** `/c/{creatorUid}` (`CommunityPage.tsx`) shows:
+  - the banner, name, tagline and member count (a count query);
+  - the creator;
+  - **Join community / Joined** (hover: Leave);
+  - their Creator Book (the cover, which opens into the real pin book);
+  - About.
+  The creator sees "Edit in Creator Studio" instead of Join; the Studio's Community tab links here.
+- **Hidden** (`getCommunity()` returns null) while the creator can't run one
+  (`canUseCreatorStudio`).
+
 ## Not built yet (next steps)
 
-1. **Followers and earning.** Collectors follow a community. That creator's book then appears on
-   their Badges shelf under the book's collection (`BadgeSet.collection`), and `FriendsProvider`
-   counts its badges with the same "collect one of each" rule. The book is already the right
-   shape; it needs follows (`follows/{uid}_{creatorUid}`), a query for followed creators' books,
-   and adding their badges to the earning pass.
-2. **The community page** (`/c/{handle}`): banner, about, the book, a Follow button.
+1. **Earning a community's badges.** A joined community's book appears on your Badges shelf under
+   its collection (`BadgeSet.collection`). `FriendsProvider` counts its badges with the same
+   "collect one of each" rule, using `useMyCommunities` → `creator_books/{uid}` for each.
+2. **A nicer address for a community** (`/c/{handle}` instead of the uid), and news posts.
 3. **Prompt → pin art** (an image model), then Meshy or HavenRelief. The old badges plan mentions this.
 4. **Per-creator 3D limits**: count tickets per day in Firestore (needs a server write).
 

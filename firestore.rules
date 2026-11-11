@@ -80,8 +80,20 @@ service cloud.firestore {
     match /communities/{uid} {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == uid && canCreate()
-        && request.resource.data.keys().hasOnly(['name', 'tagline', 'about', 'color', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'tagline', 'about', 'color', 'updatedAt']);
       allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // Joining a community (lib/communities.ts): {communityUid}_{memberUid}. Anyone signed in reads
+    // (member counts, "your communities"); you add and remove only your own membership.
+    match /community_members/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && notBanned()
+        && request.resource.data.member == request.auth.uid
+        && id == request.resource.data.community + '_' + request.auth.uid
+        && exists(/databases/$(database)/documents/communities/$(request.resource.data.community))
+        && request.resource.data.keys().hasOnly(['community', 'member', 'joinedAt']);
+      allow delete: if signedIn() && resource.data.member == request.auth.uid;
     }
 
     // Account titles (lib/accountRoles.ts): { role, creatorSince?, formerCreator?, updatedAt }; no

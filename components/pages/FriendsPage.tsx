@@ -17,9 +17,11 @@ import {
   searchProfiles, profilePath, sendFriendRequest, acceptFriendRequest, removeFriendship, changeUsername,
   type Profile,
 } from '@/lib/firebase/friends'
+import { searchCommunities, joinCommunity, communityPath, useMyCommunities, type CommunityEntry } from '@/lib/communities'
 
 // /friends — the Friends module. Sections, top to bottom: your profile, requests waiting on you,
-// your friends, requests you sent; invite link + people search on the right (below on phones).
+// your friends, your communities (lib/communities.ts), requests you sent; invite link + search
+// (People | Communities) on the right (below on phones). #communities jumps to your communities.
 // Deep links from the sidebar: ?focus={uid} highlights a friend, ?add=1 jumps to search,
 // ?tab=requests scrolls to requests.
 export default function FriendsPage() {
@@ -56,6 +58,7 @@ function FriendsModule() {
         <div className="flex flex-col gap-6 min-w-0">
           <RequestsSection sectionRef={requestsRef} />
           <FriendsSection focus={focus} />
+          <CommunitiesSection />
           <SentSection />
         </div>
         <aside className="flex flex-col gap-6 lg:sticky lg:top-0">
@@ -467,9 +470,132 @@ function InviteLinkCard() {
   )
 }
 
-// ── Find people ─────────────────────────────────────────────────────────────────────────────
+// ── Your communities ────────────────────────────────────────────────────────────────────────
+
+function CommunityBadge({ c, size = 44 }: { c: CommunityEntry; size?: number }) {
+  return (
+    <span className="rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-sm" style={{ width: size, height: size, fontSize: size * 0.42, background: `linear-gradient(135deg, ${c.color}, #0b0b12)` }}>
+      {(c.name.trim()[0] || '★').toUpperCase()}
+    </span>
+  )
+}
+
+function CommunitiesSection() {
+  const { user } = useAuth()
+  const { communities, ready } = useMyCommunities(user?.uid)
+  return (
+    <section id="communities" className="scroll-mt-4">
+      <SectionHeader icon={Sparkles} title="Your communities" count={ready ? communities.length : undefined} />
+      {!ready ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {[0, 1].map((i) => <div key={i} className="card-glass h-[76px] animate-pulse" />)}
+        </div>
+      ) : communities.length === 0 ? (
+        <div className="card-glass border-dashed flex flex-col items-center text-center py-10 px-6">
+          <span className="w-12 h-12 rounded-2xl bg-violet-600/15 text-violet-700 flex items-center justify-center mb-3"><Sparkles size={22} /></span>
+          <div className="text-base font-bold text-ink">Join a community</div>
+          <div className="text-sm text-slate-500 mt-1 max-w-sm">Follow your favourite creators — collect the badges in their Creator Books. Search for them on the right under Communities.</div>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {communities.map((c) => (
+            <Link key={c.uid} href={communityPath(c.uid)} className="card-glass p-3.5 flex items-center gap-3 hover:border-slate-700 transition-colors">
+              <CommunityBadge c={c} />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-ink truncate">{c.name}</div>
+                <div className="text-xs text-slate-500 truncate">{c.tagline || 'Community'}</div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ── Find people / communities ───────────────────────────────────────────────────────────────
 
 function FindPeople({ inputRef }: { inputRef: React.RefObject<HTMLInputElement> }) {
+  const [mode, setMode] = useState<'people' | 'communities'>('people')
+  return (
+    <section className="card-glass p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex rounded-lg bg-slate-950 border border-slate-800 p-0.5 w-full">
+          {([['people', 'People', UserPlus], ['communities', 'Communities', Sparkles]] as const).map(([id, label, Icon]) => (
+            <button key={id} type="button" onClick={() => setMode(id)}
+              className={cn('flex-1 flex items-center justify-center gap-1.5 rounded-md py-1.5 text-sm font-semibold transition-colors', mode === id ? 'bg-violet-600 text-white shadow' : 'text-slate-400 hover:text-ink')}>
+              <Icon size={14} />{label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {mode === 'people' ? <PeopleSearch inputRef={inputRef} /> : <CommunitySearch />}
+    </section>
+  )
+}
+
+function CommunitySearch() {
+  const { user } = useAuth()
+  const { joined } = useMyCommunities(user?.uid)
+  const [term, setTerm] = useState('')
+  const [results, setResults] = useState<CommunityEntry[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const { busy, error, run } = useAction()
+  const seq = useRef(0)
+  useEffect(() => {
+    const q = term.trim()
+    if (q.length < 2) { setResults(null); setSearching(false); return }
+    setSearching(true)
+    const mine = ++seq.current
+    const t = setTimeout(() => {
+      searchCommunities(q)
+        .then((r) => { if (mine === seq.current) setResults(r) })
+        .catch((e) => { console.error(e); if (mine === seq.current) setResults([]) })
+        .finally(() => { if (mine === seq.current) setSearching(false) })
+    }, 250)
+    return () => clearTimeout(t)
+  }, [term])
+  return (
+    <>
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Community name" className="input-field pl-9 py-2.5" autoComplete="off" spellCheck={false} autoFocus />
+        {searching && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 animate-spin" />}
+      </div>
+      {results === null ? (
+        <p className="text-xs text-slate-500 mt-2.5">Type at least 2 letters to find creators&rsquo; communities.</p>
+      ) : results.length === 0 && !searching ? (
+        <p className="text-xs text-slate-500 mt-3 text-center">No communities match &ldquo;{term.trim()}&rdquo;.</p>
+      ) : (
+        <div className="mt-1.5 divide-y divide-slate-800">
+          {results.map((c) => (
+            <div key={c.uid} className="flex items-center gap-3 py-2">
+              <Link href={communityPath(c.uid)} className="flex items-center gap-3 min-w-0 flex-1">
+                <CommunityBadge c={c} size={40} />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-ink truncate">{c.name}</div>
+                  <div className="text-xs text-slate-500 truncate">{c.tagline || 'Community'}</div>
+                </div>
+              </Link>
+              {c.uid === user?.uid ? (
+                <span className="px-2.5 py-1.5 text-xs font-semibold text-slate-500">Yours</span>
+              ) : joined.has(c.uid) ? (
+                <span className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-emerald-600"><Check size={13} />Joined</span>
+              ) : (
+                <button onClick={() => user && run(c.uid, () => joinCommunity(user.uid, c.uid))} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-colors">
+                  {busy === c.uid ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}Join
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <div className="text-xs text-red-600 mt-2 text-center">{error}</div>}
+    </>
+  )
+}
+
+function PeopleSearch({ inputRef }: { inputRef: React.RefObject<HTMLInputElement> }) {
   const { user } = useAuth()
   const { byUid, cacheProfile } = useFriends()
   const [term, setTerm] = useState('')
@@ -522,11 +648,7 @@ function FindPeople({ inputRef }: { inputRef: React.RefObject<HTMLInputElement> 
   }
 
   return (
-    <section className="card-glass p-5">
-      <div className="flex items-center gap-2 text-base font-bold text-ink mb-3">
-        <UserPlus size={17} className="text-slate-400" />
-        Find people
-      </div>
+    <>
       <div className="relative">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
         <input
@@ -550,6 +672,6 @@ function FindPeople({ inputRef }: { inputRef: React.RefObject<HTMLInputElement> 
         </div>
       )}
       {error && <div className="text-xs text-red-600 mt-2 text-center">{error}</div>}
-    </section>
+    </>
   )
 }

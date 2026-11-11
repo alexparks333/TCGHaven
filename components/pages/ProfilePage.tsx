@@ -13,6 +13,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
+import { useMyCommunities } from '@/lib/communities'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
@@ -113,6 +114,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
 }) {
   const { user } = useAuth()
   const { friends } = useFriends()
+  const { communities } = useMyCommunities(isMe ? profile.uid : null)
   const [editing, setEditing] = useState(false)
   const [bio, setBio] = useState(profile.bio)
   const [saving, setSaving] = useState(false)
@@ -221,9 +223,14 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           </div>
           {/* On desktop this is the tile beside the privacy box */}
           {isMe && (
-            <Link href="/friends" className="md:hidden inline-block mt-1 text-sm font-semibold text-slate-400 hover:text-ink">
-              <span className="text-ink font-bold">{friends.length}</span> {friends.length === 1 ? 'Friend' : 'Friends'}
-            </Link>
+            <div className="md:hidden mt-1 flex gap-4 text-sm font-semibold text-slate-400">
+              <Link href="/friends" className="hover:text-ink">
+                <span className="text-ink font-bold">{friends.length}</span> {friends.length === 1 ? 'Friend' : 'Friends'}
+              </Link>
+              <Link href="/friends#communities" className="hover:text-ink">
+                <span className="text-ink font-bold">{communities.length}</span> {communities.length === 1 ? 'Community' : 'Communities'}
+              </Link>
+            </div>
           )}
         </div>
 
@@ -237,6 +244,14 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             >
               <div className="text-xl font-bold leading-none text-ink">{friends.length}</div>
               <div className="text-[11px] font-semibold text-slate-500 mt-1">{friends.length === 1 ? 'Friend' : 'Friends'}</div>
+            </Link>
+            {/* Communities joined (lib/communities.ts) — the Friends page's "Your communities" */}
+            <Link
+              href="/friends#communities"
+              className="hidden md:block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 px-3 py-2.5 text-center transition-colors"
+            >
+              <div className="text-xl font-bold leading-none text-ink">{communities.length}</div>
+              <div className="text-[11px] font-semibold text-slate-500 mt-1">{communities.length === 1 ? 'Community' : 'Communities'}</div>
             </Link>
             <PrivacyBox profile={profile} onSaved={onSaved} />
           </div>
