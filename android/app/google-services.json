@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "339578847949",
+    "project_id": "tcghaven-85a34",
+    "storage_bucket": "tcghaven-85a34.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:339578847949:android:be519d5d46ef0e41015f84",
+        "android_client_info": {
+          "package_name": "com.alexhparks.tcghaven"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "339578847949-d84onnhv61knm3rqte4huhqqbn86jrru.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.alexhparks.tcghaven",
+            "certificate_hash": "185adf1be7cfce13ef082856f7dbad4d7971a4d4"
+          }
+        },
+        {
+          "client_id": "339578847949-m0vq6ep0b6239rhho9g4i8pbojr12r0r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWIoqRvqMWaD3c30P4T5DLUd7I5UMVjWk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "339578847949-l395j5a0dl1sjq7n07sfpsvb3v7lfara.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "339578847949-9vsrs3ghd8vhiaa870j63fq2dpb1lvjj.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.alexhparks.auctionhaus"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
