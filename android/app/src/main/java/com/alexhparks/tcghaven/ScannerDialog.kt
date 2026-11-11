@@ -672,21 +672,28 @@ class ScannerDialog(
         sheet = CardSheet(item).also { it.show() }
     }
 
-    // ── The card sheet: the card, its finish and condition, other matches, search ──
+    // ── The card sheet — laid out like the iPhone's (CardScanner.swift CardSheetController):
+    //    the card big (Card / Your scan), what it is, Finish, Condition, other matches (a sideways
+    //    strip, the current one outlined), Grading (company, grade, cert), search, Done / Remove ──
 
     private inner class CardSheet(val item: ScanItem) : Dialog(activity, android.R.style.Theme_Black_NoTitleBar) {
-        private val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(dpi(20f), dpi(16f), dpi(20f), dpi(32f)) }
+        private val body = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dpi(16f), 0, dpi(24f)) }
+        private val pad = dpi(20f)
         private var showScan = false
         private var results: List<TrayOption> = emptyList()
         private var searching = false
+        private var searchNote: String? = null
+        private var lastQuery = ""
+        private val companies = listOf("Raw", "PSA", "CGC", "BGS", "SGC", "TAG")
 
         override fun onCreate(savedInstanceState: Bundle?) {
             super.onCreate(savedInstanceState)
             window?.setLayout(-1, -1)
             window?.statusBarColor = sheetBg
+            window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
             val scroll = ScrollView(context).apply { setBackgroundColor(sheetBg); addView(body) }
             ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
-                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
                 v.setPadding(0, bars.top, 0, bars.bottom); insets
             }
             setContentView(scroll)
@@ -694,151 +701,225 @@ class ScannerDialog(
             refresh()
         }
 
-        private fun section(label: String) = TextView(context).apply {
-            text = label.uppercase()
-            setTextColor(muted)
-            textSize = 11f
-            letterSpacing = 0.08f
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dpi(18f), 0, dpi(8f))
+        private fun padded(v: View, top: Int = 0): View = v.also {
+            body.addView(it, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = pad; rightMargin = pad; topMargin = top })
         }
 
-        private fun chip(label: String, on: Boolean, sub: String? = null, onTap: () -> Unit) = TextView(context).apply {
-            text = if (sub.isNullOrEmpty()) label else "$label\n$sub"
-            gravity = Gravity.CENTER
-            textSize = 14f
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(if (on) Color.BLACK else ink)
-            background = rounded(if (on) gold else Color.argb(22, 255, 255, 255), dp(12f))
-            setPadding(dpi(14f), dpi(8f), dpi(14f), dpi(8f))
-            setOnClickListener { onTap(); performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
+        private fun section(label: String) {
+            padded(TextView(context).apply {
+                text = label.uppercase()
+                setTextColor(muted)
+                textSize = 12f
+                letterSpacing = 0.04f
+                typeface = Typeface.DEFAULT_BOLD
+            }, dpi(22f))
         }
 
-        private fun row(vararg views: View) = HorizontalScrollView(context).apply {
-            isHorizontalScrollBarEnabled = false
-            val l = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-            for (v in views) l.addView(v, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dpi(8f) })
-            addView(l)
+        /** A segmented row of choices, like the iPhone's segmented controls */
+        private fun segmented(labels: List<String>, selected: Int, onPick: (Int) -> Unit): View {
+            val row = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                background = rounded(Color.argb(30, 255, 255, 255), dp(9f))
+                setPadding(dpi(2f), dpi(2f), dpi(2f), dpi(2f))
+            }
+            labels.forEachIndexed { i, label ->
+                row.addView(TextView(context).apply {
+                    text = label
+                    gravity = Gravity.CENTER
+                    textSize = 13f
+                    typeface = if (i == selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                    setTextColor(if (i == selected) Color.BLACK else ink)
+                    background = if (i == selected) rounded(gold, dp(7f)) else null
+                    setOnClickListener { if (i != selected) { onPick(i); performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) } }
+                }, LinearLayout.LayoutParams(0, dpi(34f), 1f))
+            }
+            return row
+        }
+
+        private fun field(hintText: String, value: String, numeric: Boolean, onChange: (String) -> Unit) = EditText(context).apply {
+            hint = hintText
+            setText(value)
+            setHintTextColor(muted)
+            setTextColor(ink)
+            textSize = 16f
+            typeface = Typeface.DEFAULT_BOLD
+            inputType = if (numeric) InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL else InputType.TYPE_CLASS_TEXT
+            setSingleLine()
+            background = rounded(Color.argb(18, 255, 255, 255), dp(10f))
+            setPadding(dpi(12f), 0, dpi(12f), 0)
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) { onChange(s?.toString() ?: "") }
+            })
+        }
+
+        /** A sideways strip of cards (other matches, search results) — the iPhone's option strip */
+        private fun strip(options: List<TrayOption>, selectedKey: String?, onTap: (TrayOption) -> Unit): View {
+            val scroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; setPadding(pad, 0, pad, 0) }
+            val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            for (o in options) {
+                val col = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setOnClickListener { onTap(o) } }
+                val img = ImageView(context).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    clipToOutline = true
+                    val on = o.key == selectedKey && o.key.isNotEmpty()
+                    background = rounded(Color.argb(15, 255, 255, 255), dp(7f), if (on) dpi(3f) else 0, gold)
+                    if (on) setPadding(dpi(3f), dpi(3f), dpi(3f), dpi(3f))
+                }
+                if (o.imageUrl.isNotEmpty()) ImageLoader.load(o.imageUrl, img)
+                col.addView(img, LinearLayout.LayoutParams(dpi(104f), dpi(104f * 88f / 63f)))
+                col.addView(TextView(context).apply { text = o.title; setTextColor(ink); textSize = 12f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(6f) })
+                col.addView(TextView(context).apply { text = o.subtitle; setTextColor(muted); textSize = 11f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(2f) })
+                if (o.price.isNotEmpty()) col.addView(TextView(context).apply { text = o.price; setTextColor(gold); textSize = 12f; typeface = Typeface.DEFAULT_BOLD }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(2f) })
+                row.addView(col, LinearLayout.LayoutParams(dpi(104f), -2).apply { rightMargin = dpi(12f) })
+            }
+            scroll.addView(row)
+            body.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
+            return scroll
         }
 
         fun refresh() {
             body.removeAllViews()
             val o = item.current
-            // Close
-            val bar = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            val pill = TextView(context).apply {
+
+            // The card, big — its catalog photo, or your scan
+            val host = FrameLayout(context)
+            val img = ImageView(context).apply {
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                clipToOutline = true
+                background = rounded(Color.TRANSPARENT, dp(12f))
+            }
+            if (!showScan && o != null && o.imageUrl.isNotEmpty()) { img.setImageBitmap(item.photo); ImageLoader.load(o.imageUrl, img) } else img.setImageBitmap(item.photo)
+            host.addView(img, FrameLayout.LayoutParams(-1, -1))
+            item.slab?.takeIf { it.grade.isNotEmpty() }?.let { slab ->
+                host.addView(TextView(context).apply {
+                    text = "${slab.company} ${slab.grade}"
+                    textSize = 14f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.parseColor("#1A1A1A"))
+                    background = rounded(Color.WHITE, dp(5f), dpi(2f), Color.parseColor("#C8102E"))
+                    setPadding(dpi(10f), dpi(3f), dpi(10f), dpi(3f))
+                }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dpi(6f) })
+            }
+            val screenW = context.resources.displayMetrics.widthPixels
+            val cardW = (screenW * 0.62f).toInt()
+            body.addView(host, LinearLayout.LayoutParams(cardW, (cardW * 88f / 63f).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dpi(8f) })
+            body.addView(segmented(listOf("Card", "Your scan"), if (showScan) 1 else 0) { showScan = it == 1; refresh() },
+                LinearLayout.LayoutParams(dpi(210f), -2).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dpi(12f) })
+
+            // What it is
+            padded(TextView(context).apply {
                 text = when (item.status) {
                     "matched" -> if (item.confirmed) "✓ You picked this" else "✓ Matched"
                     "pick" -> "? Not sure — check the other matches"
                     "matching" -> "Matching…"
                     else -> "! Not found — search below"
                 }
-                setTextColor(if (item.status == "matched") Color.BLACK else ink)
+                setTextColor(if (item.status == "matched" || item.status == "pick") Color.BLACK else if (item.status == "matching") ink else Color.WHITE)
                 textSize = 12f
                 typeface = Typeface.DEFAULT_BOLD
                 setPadding(dpi(10f), dpi(4f), dpi(10f), dpi(4f))
-                background = rounded(if (item.status == "matched") gold else if (item.status == "pick") Color.parseColor("#B8860B") else Color.argb(40, 255, 255, 255), dp(11f))
-            }
-            val done = TextView(context).apply {
-                text = "Done"; setTextColor(gold); textSize = 16f; typeface = Typeface.DEFAULT_BOLD
-                setPadding(dpi(12f), dpi(8f), 0, dpi(8f))
-                setOnClickListener { dismiss() }
-            }
-            bar.addView(pill)
-            bar.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f))
-            bar.addView(done)
-            body.addView(bar)
-
-            // The card: its catalog photo, or the scan
-            val img = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER; adjustViewBounds = true }
-            if (!showScan && o != null && o.imageUrl.isNotEmpty()) { img.setImageBitmap(item.photo); ImageLoader.load(o.imageUrl, img) } else img.setImageBitmap(item.photo)
-            body.addView(img, LinearLayout.LayoutParams(-1, dpi(300f)).apply { topMargin = dpi(14f) })
-            body.addView(row(
-                chip("Catalog photo", !showScan) { showScan = false; refresh() },
-                chip("Your scan", showScan) { showScan = true; refresh() },
-            ).also { it.setPadding(0, dpi(10f), 0, 0) })
-
+                background = rounded(when (item.status) { "matched" -> gold; "pick" -> Color.parseColor("#FFCC00"); "matching" -> Color.argb(38, 255, 255, 255); else -> Color.parseColor("#FF3B30") }, dp(11f))
+            }.let { pill -> LinearLayout(context).apply { addView(pill) } }, dpi(18f))
+            padded(TextView(context).apply { text = o?.title ?: "Not found"; setTextColor(ink); textSize = 24f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2 }, dpi(10f))
             if (o != null) {
-                body.addView(TextView(context).apply { text = o.title; setTextColor(ink); textSize = 22f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, dpi(12f), 0, 0) })
-                body.addView(TextView(context).apply { text = o.subtitle; setTextColor(muted); textSize = 14f })
+                padded(TextView(context).apply { text = o.subtitle; setTextColor(muted); textSize = 15f; maxLines = 2 }, dpi(2f))
                 val p = item.currentPrinting
                 val price = if (p != null && o.printings.size > 1 && p.price.isNotEmpty()) "${p.price} · ${p.label}" else o.price
-                if (price.isNotEmpty()) body.addView(TextView(context).apply { text = price; setTextColor(gold); textSize = 19f; typeface = Typeface.DEFAULT_BOLD; setPadding(0, dpi(6f), 0, 0) })
+                if (price.isNotEmpty()) padded(TextView(context).apply { text = price; setTextColor(gold); textSize = 20f; typeface = Typeface.DEFAULT_BOLD }, dpi(8f))
 
                 // Finish: every printing, with its price
                 if (o.printings.size > 1) {
-                    body.addView(section("Finish"))
+                    section("Finish")
                     val picked = item.printing ?: o.printings.first().key
-                    body.addView(row(*o.printings.map { pr -> chip(pr.label, pr.key == picked, pr.price) { item.printing = pr.key; refresh() } }.toTypedArray()))
+                    val scroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; setPadding(pad, 0, pad, 0) }
+                    val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                    for (pr in o.printings) {
+                        val on = pr.key == picked
+                        row.addView(TextView(context).apply {
+                            text = if (pr.price.isEmpty()) pr.label else "${pr.label}\n${pr.price}"
+                            gravity = Gravity.CENTER
+                            textSize = 14f
+                            typeface = Typeface.DEFAULT_BOLD
+                            setTextColor(if (on) Color.BLACK else ink)
+                            background = rounded(if (on) gold else Color.argb(20, 255, 255, 255), dp(14f))
+                            setPadding(dpi(14f), dpi(6f), dpi(14f), dpi(6f))
+                            setOnClickListener { item.printing = pr.key; redrawTray(); refresh() }
+                        }, LinearLayout.LayoutParams(-2, dpi(54f)).apply { rightMargin = dpi(8f) })
+                    }
+                    scroll.addView(row)
+                    body.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
                 }
             }
 
             // Condition (a graded card has its grade instead)
             if (item.slab == null) {
-                body.addView(section("Condition"))
-                val keys = listOf("near_mint" to "NM", "lightly_played" to "LP", "moderately_played" to "MP", "heavily_played" to "HP")
-                val current = item.condition ?: "near_mint"
-                body.addView(row(*keys.map { (k, label) -> chip(label, k == current) { item.condition = if (k == "near_mint") null else k; refresh() } }.toTypedArray()))
-            } else {
-                body.addView(section("Graded"))
-                body.addView(TextView(context).apply { text = "${item.slab!!.company} ${item.slab!!.grade}${if (item.slab!!.cert.isNotEmpty()) " · cert ${item.slab!!.cert}" else ""}"; setTextColor(ink); textSize = 15f })
+                section("Condition")
+                val keys = listOf("near_mint", "lightly_played", "moderately_played", "heavily_played")
+                val current = keys.indexOf(item.condition ?: "near_mint").coerceAtLeast(0)
+                padded(segmented(listOf("NM", "LP", "MP", "HP"), current) { i -> item.condition = if (i == 0) null else keys[i]; refresh() }, dpi(10f))
             }
 
-            // Other matches
+            // Other matches — a sideways strip, the current one outlined
             if (item.options.size > 1) {
-                body.addView(section("Other matches — tap to switch"))
-                item.options.forEachIndexed { i, opt -> if (i != item.choice) body.addView(optionRow(opt) { choose(opt) }) }
+                section("Other matches — tap to switch")
+                strip(item.options, o?.key) { choose(it) }
             }
 
-            // Search
-            body.addView(section("Not right? Find the card"))
-            val field = EditText(context).apply {
-                hint = "Card name, or name and number"
-                setHintTextColor(muted)
-                setTextColor(ink)
-                inputType = InputType.TYPE_CLASS_TEXT
+            // Grading — what was read off the label, or set by hand (a raw card can be marked graded too)
+            section("Grading")
+            val slab = item.slab
+            val company = companies.indexOf(slab?.company?.uppercase() ?: "Raw").let { if (it < 0) 0 else it }
+            padded(segmented(companies, company) { i ->
+                item.slab = if (i == 0) null else SlabGrade(companies[i], item.slab?.grade ?: "", item.slab?.cert ?: "")
+                redrawTray(); refresh()
+            }, dpi(10f))
+            if (slab != null) {
+                val fields = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                fields.addView(field("Grade (e.g. 10, 9.5)", slab.grade, true) { g ->
+                    item.slab = item.slab?.copy(grade = g.trim()); redrawTray()
+                }, LinearLayout.LayoutParams(0, dpi(46f), 0.42f).apply { rightMargin = dpi(10f) })
+                fields.addView(field("Cert number", slab.cert, true) { c ->
+                    item.slab = item.slab?.copy(cert = c.replace(Regex("[^0-9A-Za-z]"), ""))
+                }, LinearLayout.LayoutParams(0, dpi(46f), 0.58f))
+                padded(fields, dpi(10f))
+                if (slab.cert.isNotEmpty()) padded(TextView(context).apply { text = "Cert read from the label — check it matches the slab"; setTextColor(muted); textSize = 12f }, dpi(6f))
+            }
+
+            // Not right? Find the card
+            section("Not right? Find the card")
+            val search = field("Card name, or name and number", lastQuery, false) { lastQuery = it }.apply {
                 imeOptions = EditorInfo.IME_ACTION_SEARCH
-                background = rounded(Color.argb(22, 255, 255, 255), dp(10f))
-                setPadding(dpi(12f), dpi(10f), dpi(12f), dpi(10f))
-                setSingleLine()
                 setOnEditorActionListener { v, _, _ -> search(v.text.toString()); true }
             }
-            body.addView(field, LinearLayout.LayoutParams(-1, -2))
-            if (searching) body.addView(TextView(context).apply { text = "Searching…"; setTextColor(muted); setPadding(0, dpi(8f), 0, 0) })
-            for (opt in results) body.addView(optionRow(opt) { choose(opt) })
+            padded(search, dpi(10f)).layoutParams = (search.layoutParams as LinearLayout.LayoutParams).apply { height = dpi(46f) }
+            val note = if (searching) "Searching…" else searchNote
+            if (note != null) padded(TextView(context).apply { text = note; setTextColor(muted); textSize = 13f; gravity = Gravity.CENTER }, dpi(10f))
+            if (results.isNotEmpty()) strip(results, o?.key) { choose(it) }
 
-            // Remove
-            body.addView(TextView(context).apply {
-                text = "Remove card"
-                setTextColor(Color.parseColor("#E5484D"))
-                textSize = 15f
-                typeface = Typeface.DEFAULT_BOLD
+            // Done / Remove
+            padded(TextView(context).apply {
+                text = "Done"
                 gravity = Gravity.CENTER
-                setPadding(0, dpi(28f), 0, dpi(8f))
+                textSize = 17f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(Color.BLACK)
+                background = rounded(gold, dp(14f))
+                setOnClickListener { dismiss() }
+            }, dpi(28f)).layoutParams = (body.getChildAt(body.childCount - 1).layoutParams as LinearLayout.LayoutParams).apply { height = dpi(52f) }
+            padded(TextView(context).apply {
+                text = "Remove from this scan"
+                gravity = Gravity.CENTER
+                textSize = 15f
+                setTextColor(Color.parseColor("#FF3B30"))
+                setPadding(0, dpi(14f), 0, dpi(8f))
                 setOnClickListener {
                     items.remove(item)
                     redrawTray()
                     dismiss()
                 }
-            })
-        }
-
-        private fun optionRow(o: TrayOption, onTap: () -> Unit): View {
-            val r = LinearLayout(context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dpi(6f), 0, dpi(6f))
-                setOnClickListener { onTap() }
-            }
-            val img = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
-            if (o.imageUrl.isNotEmpty()) ImageLoader.load(o.imageUrl, img)
-            r.addView(img, LinearLayout.LayoutParams(dpi(44f), dpi(62f)))
-            val text = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; setPadding(dpi(12f), 0, 0, 0) }
-            text.addView(TextView(context).apply { this.text = o.title; setTextColor(ink); textSize = 15f; typeface = Typeface.DEFAULT_BOLD })
-            text.addView(TextView(context).apply { this.text = o.subtitle; setTextColor(muted); textSize = 12f })
-            if (o.price.isNotEmpty()) text.addView(TextView(context).apply { this.text = o.price; setTextColor(gold); textSize = 12f })
-            r.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-            return r
+            }, dpi(4f))
         }
 
         private fun choose(o: TrayOption) {
@@ -848,18 +929,28 @@ class ScannerDialog(
             item.confirmed = true
             item.printing = null
             showScan = false
+            performHapticFeedback()
             redrawTray()
             refresh()
         }
 
+        private fun performHapticFeedback() { body.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
+
         private fun search(q: String) {
             val query = q.trim()
             if (query.isEmpty()) return
+            lastQuery = query
             val requestId = UUID.randomUUID().toString()
             searching = true
+            searchNote = null
             results = emptyList()
             refresh()
-            searchWaiting[requestId] = { found -> searching = false; results = found; if (isShowing) refresh() }
+            searchWaiting[requestId] = { found ->
+                searching = false
+                results = found
+                searchNote = if (found.isEmpty()) "No cards found for “$query”" else null
+                if (isShowing) refresh()
+            }
             onSearch(requestId, query)
         }
     }
