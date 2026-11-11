@@ -536,7 +536,7 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
       {/* The title (and the line above it), where the creator put it */}
       <div className={cn('absolute flex flex-col items-center text-center -translate-y-1/2 pointer-events-none', picture ? 'inset-x-[7%]' : 'left-[15%] right-[5%] px-[6%]')} style={{ top: `${st.titleY ?? 38}%` }}>
         {st.showSubtitle !== false && set.subtitle && (
-          <div className="font-black tracking-[0.3em] uppercase" style={{ fontSize: 'clamp(6px,3.4cqw,13px)', color: st.subtitleColor ?? accent, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{set.subtitle}</div>
+          <div className="font-black tracking-[0.3em] uppercase" style={{ fontSize: 'clamp(6px,3.4cqw,13px)', color: st.subtitleColor ?? COVER_TEXT_GOLD, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{set.subtitle}</div>
         )}
         <div className={cn('relative mt-[2%] max-w-full', st.titlePlate && 'cover-title-plate px-[6%] py-[2%] rounded-[4px]')}>
           <div className={cn('leading-[1.05] [overflow-wrap:normal] [word-break:keep-all]', font.upper && 'uppercase', font.id === 'haven' && 'tracking-[0.12em]', finish && st.titleShine && 'cover-title-shine')}
@@ -564,7 +564,7 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
           {first ? (
             <span className="flex items-center justify-center" style={{ width: '24cqw', height: '27cqw' }}><BadgePin art={first.art} imageUrl={first.imageUrl} size={pinSize(first, 70)} ghost={badgeTier(first, badges?.progress[first.id]) === 0} /></span>
           ) : (
-            <span className="flex items-center justify-center rounded-full font-black" style={{ width: '24cqw', height: '24cqw', fontSize: '9cqw', border: `2px solid ${accent}99`, color: accent, background: 'rgba(0,0,0,0.25)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.5)' }}>
+            <span className="flex items-center justify-center rounded-full font-black" style={{ width: '24cqw', height: '24cqw', fontSize: '9cqw', border: `2px solid ${(st.emblemColor ?? COVER_TEXT_GOLD)}99`, color: st.emblemColor ?? COVER_TEXT_GOLD, background: 'rgba(0,0,0,0.25)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.5)' }}>
               {set.monogram}
             </span>
           )}
@@ -572,7 +572,7 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
       )}
       {st.showCount !== false && (
         <div className={cn('absolute bottom-[8%] flex justify-center', picture ? 'inset-x-0' : 'left-[15%] right-[5%]')}>
-          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: accent }}>
+          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: st.countColor ?? COVER_TEXT_GOLD }}>
             {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
           </span>
         </div>
@@ -580,6 +580,9 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
     </div>
   )
 }
+
+/** A creator cover's text and emblem colour until they pick one — never the cover's stitching colour */
+const COVER_TEXT_GOLD = '#e8b35a'
 
 // A Badge Set's closed book: leather cover in the set's colors, stitched spine, strap + snap,
 // embossed title and the set's first pin.

@@ -138,22 +138,26 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
         {st.showSubtitle !== false && (
           <>
             <input className="input-field text-sm mt-2" value={book.subtitle} maxLength={40} onChange={(e) => set({ subtitle: e.target.value })} placeholder="e.g. Alex Parks · Creator Book" />
-            <Colors label="Colour" value={st.subtitleColor ?? book.cover.accent} onChange={(c) => setStyle({ subtitleColor: c })} />
+            <Colors label="Colour" value={st.subtitleColor ?? '#e8b35a'} onChange={(c) => setStyle({ subtitleColor: c })} />
           </>
         )}
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mt-5 mb-2">Emblem & count</p>
         <Toggle on={st.showEmblem !== false} onChange={(v) => setStyle({ showEmblem: v })} label="Emblem" hint="your first pin, or your stamp until you have one" />
         {st.showEmblem !== false && (
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-slate-500">Stamp</span>
-            <input className="input-field !w-20 text-sm text-center font-black tracking-widest uppercase" value={book.monogram} maxLength={3} onChange={(e) => set({ monogram: e.target.value.toUpperCase() })} placeholder="★" />
-          </div>
+          <>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 w-14 shrink-0">Stamp</span>
+              <input className="input-field !w-20 text-sm text-center font-black tracking-widest uppercase" value={book.monogram} maxLength={3} onChange={(e) => set({ monogram: e.target.value.toUpperCase() })} placeholder="★" />
+            </div>
+            <Colors label="Colour" value={st.emblemColor ?? '#e8b35a'} onChange={(c) => setStyle({ emblemColor: c })} />
+          </>
         )}
-        <div className="mt-3"><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
+        <div className="mt-4"><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
+        {st.showCount !== false && <Colors label="Colour" value={st.countColor ?? '#e8b35a'} onChange={(c) => setStyle({ countColor: c })} />}
       </Group>
 
       <Group id="cover" open={open} setOpen={setOpen} icon={Palette} title="Cover"
-        summary={book.coverImage ? 'Your picture' : `${leather?.name ?? 'Custom'} leather · ${foil?.name ?? 'custom'} foil`}>
+        summary={book.coverImage ? 'Your picture' : `${leather?.name ?? 'Custom'} leather · ${foil?.name ?? 'custom'} stitching`}>
         <Section title="Leather">
           <div className="grid grid-cols-6 gap-2.5">
             {LEATHERS.map((l) => {
@@ -169,7 +173,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
           </div>
         </Section>
         <div className="mt-5" />
-        <Section title="Foil">
+        <Section title="Stitching & clasp" hint="the leather's trim — not the text">
           <div className="flex flex-wrap gap-2.5">
             {FOILS.map((f) => {
               const on = book.cover.accent === f.color

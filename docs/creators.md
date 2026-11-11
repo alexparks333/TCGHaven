@@ -25,7 +25,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - **Title:** the name, **about 60 fonts in groups** (Elegant — including `haven`, TCG Haven's own Cinzel lettering — Classic, Clean, Bold, Fun, Script, Retro, Spooky — `lib/coverFonts.ts`; Google Fonts, loaded only when used),
        size, **height on the cover**, and a **finish**: a flat colour (12 swatches or any) or metal foil (gold, silver, rose gold, copper, emerald, sapphire, amethyst — `TITLE_FINISHES`), with **Shine** (a glinting streak) and **Glow behind** (the Haven covers' plate). **Haven style** sets the Haven font + gold foil + glow in one tap;
      - **the line above the title:** on/off, its text, its colour;
-     - **emblem** (the first pin, or the stamp until there is one) and **earned count**, each on/off;
+     - **emblem** (the first pin, or the stamp until there is one) and **earned count**, each on/off
+       with its own colour. **The cover's colours (leather, "Stitching & clasp" = `cover.accent`)
+       never change the text or emblem.** Those start gold (`COVER_TEXT_GOLD`) and are set in
+       Text & emblem;
      - **page edges:** the colour of the page block at the side (`BookThickness pageColor`);
      - these are stored as `BadgeSet.coverStyle` (`CoverStyle` in `lib/badges.ts`). A book with a
        `coverStyle` is drawn by `StyledCover` in BadgeLibrary.tsx; creator books always have one,

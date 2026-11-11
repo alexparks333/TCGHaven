@@ -67,9 +67,11 @@ export interface CoverStyle {
   titleShine?: boolean   // a light streak gliding across the foil
   titlePlate?: boolean   // the soft dark glow behind the title, like TCG Haven's covers
   showSubtitle?: boolean // the line above the title (default on)
-  subtitleColor?: string // default: the foil
+  subtitleColor?: string // default gold — the cover's colours never change the text or emblem
   showEmblem?: boolean   // the stamp / first pin (default on)
+  emblemColor?: string   // the stamp's ring and letters (default gold)
   showCount?: boolean    // "3 / 10 earned" (default on)
+  countColor?: string    // its text (default gold)
   pageColor?: string     // the page edges showing at the side
 }
 
