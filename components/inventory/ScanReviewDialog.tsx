@@ -6,7 +6,7 @@
 // same catalog rows Add Card uses (/api/cards/search?id=, fetched here for the cards kept).
 
 import { useEffect, useMemo, useState } from 'react'
-import { X, Loader2, AlertCircle } from 'lucide-react'
+import { X, Loader2, AlertCircle, Check, Plus } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard } from '@/lib/firebase/db'
@@ -84,7 +84,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
     for (const s of scanned) {
       const key = s.options[s.choice].key
       // (graded cards stay one row each — each slab is its own grade)
-      const same = s.status === 'matched' && !s.slab && !s.printing && out.find((r) => !r.needsPick && !r.slab && r.foil === undefined && r.edition === undefined && r.options[r.choice].key === key)
+      const same = s.status === 'matched' && !s.slab && !s.printing && out.find((r) => !r.needsPick && !r.slab && r.foil === undefined && r.edition === undefined && r.condition === (s.condition ?? 'near_mint') && r.options[r.choice].key === key)
       if (same) { same.quantity += 1; continue }
       // The finish picked in the scanner's card sheet, when one was
       const picked = s.printing
@@ -92,13 +92,17 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           ? { edition: s.printing.split(':')[0] as Edition, finish: s.printing.split(':')[1] as Finish }
           : { foil: s.printing === 'foil' }
         : {}
-      out.push({ rowId: s.scanId, options: s.options, choice: s.choice, needsPick: s.status !== 'matched', condition: 'near_mint', quantity: 1, slab: s.slab, ...picked })
+      out.push({ rowId: s.scanId, options: s.options, choice: s.choice, needsPick: s.status !== 'matched', condition: s.condition ?? 'near_mint', quantity: 1, slab: s.slab, ...picked })
     }
     return out
   })
   const [catalogRows, setCatalogRows] = useState<Record<string, Rows>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // "Add these cards to group": one group for the whole batch (optional) — the same chips as Add Card
+  const [group, setGroup] = useState('')
+  const [newGroupOpen, setNewGroupOpen] = useState(false)
+  const existingGroups = useMemo(() => Array.from(new Set(allCards.map((c) => c.group).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b)), [allCards])
 
   const update = (rowId: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)))
 
@@ -165,6 +169,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           ...(hasPrintings(match.game) && vp && row.edition && { edition: row.edition }),
           ...(hasPrintings(match.game) && vp && row.finish && { finish: row.finish }),
           ...(match.language === 'ja' && { language: 'ja' as Language }),
+          ...(group.trim() && { group: group.trim() }),
           ...(price > 0 && { currentPrice: price, priceUpdatedAt: now, priceAtEntry: price }),
         }
         const ref = newCardRef(user.uid)
@@ -203,6 +208,48 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
             <X size={18} />
           </button>
         </div>
+
+        {/* Add these cards to group — optional, for the whole batch */}
+        {rows.length > 0 && (() => {
+          const custom = !!group && !existingGroups.includes(group)
+          const typing = newGroupOpen || custom
+          const chip = (active: boolean) => cn(
+            'inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-all',
+            active
+              ? 'bg-violet-600 border-violet-500 text-white'
+              : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
+          )
+          return (
+            <div className="px-5 py-3 border-b border-slate-800">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                Add these cards to group <span className="font-normal normal-case tracking-normal">· optional</span>
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" disabled={saving} onClick={() => { setGroup(''); setNewGroupOpen(false) }} className={chip(!group && !typing)}>
+                  None
+                </button>
+                {existingGroups.map((g) => (
+                  <button key={g} type="button" disabled={saving} onClick={() => { setGroup(g); setNewGroupOpen(false) }} className={chip(group === g)}>
+                    {group === g && <Check size={12} />}{g}
+                  </button>
+                ))}
+                <button type="button" disabled={saving} onClick={() => { setNewGroupOpen(true); if (!custom) setGroup('') }} className={chip(typing)}>
+                  <Plus size={12} />New group
+                </button>
+              </div>
+              {typing && (
+                <input
+                  type="text"
+                  autoFocus={newGroupOpen}
+                  value={group}
+                  onChange={(e) => setGroup(e.target.value)}
+                  placeholder="Name the group — e.g. Alex & Brother's Cards"
+                  className="input-field mt-2"
+                />
+              )}
+            </div>
+          )
+        })()}
 
         {/* Cards */}
         <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4">
@@ -336,7 +383,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           )}
           <button onClick={addAll} disabled={saving || rows.length === 0 || !ready} className="btn-primary w-full justify-center py-3 text-base">
             {saving || (!ready && rows.length > 0) ? <Loader2 size={16} className="animate-spin" /> : null}
-            Add {count} card{count === 1 ? '' : 's'} to inventory · {formatCurrency(total)}
+            Add {count} card{count === 1 ? '' : 's'} to {group.trim() ? `“${group.trim()}”` : 'inventory'} · {formatCurrency(total)}
           </button>
         </div>
       </div>

@@ -8,7 +8,7 @@ import type { CatalogKey, Game, Language } from '../types'
 import { loadVisibleCatalog } from '../api/catalog'
 import { getPokemonSets } from '../api/pokemon'
 import { getSetsForGame } from '../api/search'
-import { readClues, matchScan, catalogIndex, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
+import { readClues, matchScan, catalogIndex, printedName, fold, type ScanCandidate, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
 import { pictureSearch, pictureSimilarity, warmPictures } from './picture'
 
 export interface ScanMatch {
@@ -110,6 +110,9 @@ export async function warmScanner(games: Game[]): Promise<void> {
   for (const c of catalogs) catalogIndex(c)
 }
 
+/** "Unown [B]" and "Unown" are the same printed name */
+const baseName = (name: string) => fold(printedName(name))
+
 // Cards the picture search brings in that the text didn't find: how many, and how alike they must
 // be to be worth offering (a right card scores ~0.5–0.9 on a real scan; docs/scanner-ai.md)
 const PICTURE_HITS = 8
@@ -129,12 +132,23 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerpr
   // The picture's look-alikes the text didn't bring in (an old card with no number, a Japanese
   // name, glare over the code) — offered, never added without asking (exact: false)
   const have = new Set(found.map((c) => `${c.catalog}:${c.id}`))
+  // A name read off the card that many printings share (24+ Unowns) brings in only some of them;
+  // a picture find with that same name gets the name's text score — it's one of those cards, and
+  // decide.ts's "name + clear picture" rule can then name it (a real Unown B scan, 2026-11-10)
+  const nameScore = new Map<string, ScanCandidate>()
+  for (const c of found) {
+    const k = baseName(c.name)
+    if (!c.exact && c.why.startsWith('name') && (nameScore.get(k)?.score ?? -1) < c.score) nameScore.set(k, c)
+  }
   for (const h of hits) {
     if (h.similarity < PICTURE_HIT_MIN || have.has(`${h.catalog}:${h.id}`)) continue
     const cat = catalogs.find((x) => x.key === h.catalog)
     const card = cat && (catalogIndex(cat).byId.get(h.id) as RawCard | undefined)
     if (!card) continue // hidden or gone from the catalog since it was fingerprinted
-    found.push({ catalog: h.catalog, id: h.id, name: card.name, score: 0, why: 'picture', exact: false })
+    const named = nameScore.get(baseName(card.name))
+    found.push(named
+      ? { catalog: h.catalog, id: h.id, name: card.name, score: named.score, why: 'name + picture', exact: false }
+      : { catalog: h.catalog, id: h.id, name: card.name, score: 0, why: 'picture', exact: false })
     have.add(`${h.catalog}:${h.id}`)
   }
   let sims: Array<number | null> = found.map(() => null)

@@ -9,7 +9,7 @@
 // new app build. Plan and research: docs/card-scanner.md.
 
 import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
-import type { Game } from '../types'
+import { CONDITION_LABELS, type Condition, type Game } from '../types'
 import { cardImage } from '../cardImage'
 import { formatCurrency } from '../utils'
 import { decide, AI_OFFER, type ScanStatus } from './decide'
@@ -28,7 +28,7 @@ interface TrayOption {
 }
 
 interface CardScannerPlugin {
-  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string; slab?: ScanSlab | null; printing?: string }> }>
+  open(opts: { title: string }): Promise<{ items: Array<{ scanId: string; choice: number; confirmed?: boolean; key?: string; slab?: ScanSlab | null; printing?: string; condition?: string }> }>
   searchResults(opts: { requestId: string; options: TrayOption[] }): Promise<void>
   compare(opts: { scanId: string; imageUrls: string[] }): Promise<{ distances: Array<number | null> }>
   update(opts: { scanId: string; status: ScanStatus | 'error' | 'reject'; options: TrayOption[]; choice: number; note?: string; slab?: ScanSlab | null }): Promise<void>
@@ -50,6 +50,7 @@ export interface ScannedCard {
   status: ScanStatus
   slab: ScanSlab | null  // a graded slab: its company, grade and cert, read off the label
   printing?: string      // the finish picked in the card sheet ("unlimited:reverse", "foil")
+  condition?: Condition  // picked in the card sheet (absent = Near Mint)
 }
 
 // How many look-alikes the phone compares by picture — small thumbnails (~10 KB each); the
@@ -140,7 +141,9 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerp
   // Only the candidates still in the running get compared by picture — plus the picture AI's own
   // finds (cards the text didn't bring in)
   const best = Math.max(0, ...candidates.filter((c) => c.why !== 'picture').map((c) => c.score))
-  const close = candidates.filter((c) => c.why === 'picture' ? (c.picture ?? 0) >= AI_OFFER : c.score >= best - 20).slice(0, MAX_COMPARE)
+  // (the picture's finds first: a name shared by 40+ printings must not push them out)
+  const fromPicture = candidates.filter((c) => c.why.endsWith('picture') && (c.picture ?? 0) >= AI_OFFER)
+  const close = [...fromPicture, ...candidates.filter((c) => !fromPicture.includes(c) && c.why !== 'picture' && c.score >= best - 20)].slice(0, MAX_COMPARE)
   let distances: Array<number | null> | undefined
   // The picture AI already compared every one of them → skip the slower photo-by-photo check
   // (it downloads each candidate's thumbnail)
@@ -212,9 +215,10 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   })
   try {
     const { items } = await CardScanner.open({ title: 'Scan cards' })
-    return items.flatMap(({ scanId, choice, confirmed, key, slab, printing }) => {
+    return items.flatMap(({ scanId, choice, confirmed, key, slab, printing, condition }) => {
       const found0 = found.get(scanId) ?? { scanId, options: [], choice: 0, status: 'none' as ScanStatus, slab: null }
-      const scanned = printing ? { ...found0, printing } : found0
+      const picked = condition && condition in CONDITION_LABELS ? { condition: condition as Condition } : {}
+      const scanned = { ...found0, ...(printing && { printing }), ...picked }
       // The grading as the person left it in the card sheet (they can change or clear what was read)
       const card = slab !== undefined ? { ...scanned, slab: slab?.grade ? slab : null } : scanned
       // Picked by hand in the tray (one of the matches, or a card found with Search) → no need to ask again

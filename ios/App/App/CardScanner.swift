@@ -194,6 +194,7 @@ final class ScanItem {
     var fromSwap = false             // scanned without the last card leaving: dropped if it's the same card
     var slab: SlabGrade?             // a graded slab: drawn in its slab, grade showing
     var printing: String?            // the finish picked in the card sheet (reset when the card changes)
+    var condition: String?           // picked in the card sheet: near_mint (default) / lightly_played / …
 
     /// The card's current finish: the one picked, else the card's first (default) printing
     var currentPrinting: Printing? {
@@ -761,7 +762,8 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
              "key": $0.options.indices.contains($0.choice) ? $0.options[$0.choice].key : "",
              // the grading as left in the card sheet (null = ungraded)
              "slab": $0.slab.map { ["company": $0.company, "grade": $0.grade, "cert": $0.cert] as Any } ?? NSNull(),
-             "printing": $0.printing ?? ""] as [String: Any]
+             "printing": $0.printing ?? "",
+             "condition": $0.condition ?? ""] as [String: Any]
         }
         finish(with: Array(picks))
     }
@@ -1666,6 +1668,10 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         if let p = item.currentPrinting, (o?.printings.count ?? 0) > 1 {
             lines.append("Finish: \(p.label)\(p.price.isEmpty ? "" : " · \(p.price)")\(item.printing == nil ? " (default — change it in View Card)" : "")")
         }
+        if item.slab == nil {
+            let names = ["lightly_played": "Lightly Played", "moderately_played": "Moderately Played", "heavily_played": "Heavily Played"]
+            lines.append("Condition: \(item.condition.flatMap { names[$0] } ?? "Near Mint")")
+        }
         let menu = UIAlertController(title: o?.title ?? "Scanned card", message: lines.joined(separator: "\n"), preferredStyle: .actionSheet)
         menu.addAction(UIAlertAction(title: "View Card", style: .default) { _ in self.openSheet(for: item) })
         menu.addAction(UIAlertAction(title: "Remove Card", style: .destructive) { _ in self.remove(item) })
@@ -2059,6 +2065,10 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
     private let searchSpinner = UIActivityIndicatorView(style: .medium)
     private let searchNote = UILabel()
     private let companyPicker = UISegmentedControl(items: ["Raw", "PSA", "CGC", "BGS", "SGC", "TAG"])
+    // The card's condition, as the site saves it (lib/types.ts Condition) — a graded card has its grade instead
+    private static let conditionKeys = ["near_mint", "lightly_played", "moderately_played", "heavily_played"]
+    private let conditionPicker = UISegmentedControl(items: ["NM", "LP", "MP", "HP"])
+    private var conditionSection: [UIView] = []
     private let gradeField = UITextField()
     private let certField = UITextField()
     private var gradeFields: UIView?
@@ -2216,6 +2226,37 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
         stack.addArrangedSubview(finishHeader)
         stack.addArrangedSubview(finishScroll)
         finishSection = [finishHeader, finishScroll]
+
+        // Condition: Near Mint / Lightly / Moderately / Heavily Played (the review screen can change it too)
+        let conditionHeader = UIView()
+        let conditionTitle = UILabel()
+        sectionTitle(conditionTitle, "Condition")
+        conditionTitle.translatesAutoresizingMaskIntoConstraints = false
+        conditionHeader.addSubview(conditionTitle)
+        NSLayoutConstraint.activate([
+            conditionTitle.leadingAnchor.constraint(equalTo: conditionHeader.leadingAnchor, constant: 20),
+            conditionTitle.topAnchor.constraint(equalTo: conditionHeader.topAnchor, constant: 10),
+            conditionTitle.bottomAnchor.constraint(equalTo: conditionHeader.bottomAnchor),
+        ])
+        conditionPicker.selectedSegmentTintColor = sheetGold
+        conditionPicker.setTitleTextAttributes([.foregroundColor: UIColor.black, .font: UIFont.systemFont(ofSize: 14, weight: .bold)], for: .selected)
+        conditionPicker.setTitleTextAttributes([.foregroundColor: sheetInk, .font: UIFont.systemFont(ofSize: 14, weight: .medium)], for: .normal)
+        conditionPicker.selectedSegmentIndex = Self.conditionKeys.firstIndex(of: item.condition ?? "") ?? 0
+        conditionPicker.addAction(UIAction { [weak self] _ in
+            guard let self = self else { return }
+            let i = max(0, self.conditionPicker.selectedSegmentIndex)
+            self.item.condition = i == 0 ? nil : Self.conditionKeys[i]
+            UISelectionFeedbackGenerator().selectionChanged()
+            self.onChange?()
+        }, for: .valueChanged)
+        let conditionBox = UIStackView(arrangedSubviews: [conditionPicker])
+        conditionBox.isLayoutMarginsRelativeArrangement = true
+        conditionBox.layoutMargins = UIEdgeInsets(top: 0, left: 20, bottom: 4, right: 20)
+        conditionPicker.heightAnchor.constraint(equalToConstant: 36).isActive = true
+        stack.addArrangedSubview(conditionHeader)
+        stack.addArrangedSubview(conditionBox)
+        conditionSection = [conditionHeader, conditionBox]
+        conditionSection.forEach { $0.isHidden = item.slab != nil }
 
         // The other cards it could be
         let otherHeader = UIView()
@@ -2525,6 +2566,7 @@ final class CardSheetViewController: UIViewController, UICollectionViewDataSourc
             if grade.isEmpty && gradeField.text?.isEmpty == true { item.slab?.grade = "" }
         }
         if item.slab?.grade.isEmpty == true { /* shown as a slab once it has a grade */ }
+        conditionSection.forEach { $0.isHidden = item.slab != nil }
         showing = ""
         showImage()
         onChange?()

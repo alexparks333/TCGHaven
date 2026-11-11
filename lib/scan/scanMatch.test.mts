@@ -452,6 +452,16 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   // A card too new for the picture index (no similarity) → the tile comparison decides as before
   assert.equal(decide(tie, [0.05, 0.6], [null, 0.7]).status, 'matched')
   assert.equal(decide(tie, [0.05, 0.6], [null, 0.7]).ranked[0].key, 'paras-a')
+  // A real Unown B scan (2026-11-10): "B/28" read as "28"; the name brings in 40+ Unowns, the
+  // picture clearly picks Unown B (the server gives it the name's score) → added
+  const unown = decide([
+    { key: 'unown-h', score: 75, exact: true }, { key: 'unown-c', score: 65, exact: false },
+    { key: 'unown-b', score: 65, exact: false }, { key: 'jp-unown', score: 0, exact: false },
+  ], undefined, [0.18, 0.2, 0.67, 0.47])
+  assert.equal(unown.ranked[0].key, 'unown-b')
+  assert.equal(unown.status, 'matched')
+  // …but with the picture only a little more sure, it's asked
+  assert.equal(decide([{ key: 'unown-h', score: 75, exact: true }, { key: 'unown-b', score: 65, exact: false }, { key: 'unown-c', score: 65, exact: false }], undefined, [0.5, 0.62, 0.55]).status, 'pick')
   // A graded slab's label is trusted over the picture
   assert.equal(decide([{ key: 'slab', score: 99, exact: true, trusted: true }, { key: 'other', score: 0, exact: false }], undefined, [0.3, 0.8]).status, 'matched')
 }
