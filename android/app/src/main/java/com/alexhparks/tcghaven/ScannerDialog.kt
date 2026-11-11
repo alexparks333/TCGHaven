@@ -691,15 +691,59 @@ class ScannerDialog(
             window?.setLayout(-1, -1)
             window?.statusBarColor = sheetBg
             window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-            val scroll = ScrollView(context).apply { setBackgroundColor(sheetBg); addView(body) }
-            ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
-                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
-                v.setPadding(0, bars.top, 0, bars.bottom); insets
+            window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            val scroll = ScrollView(context).apply { addView(body); isVerticalScrollBarEnabled = false }
+            // The top bar: a grab handle to swipe the sheet down, and ✕ — like an iPhone sheet
+            val header = FrameLayout(context).apply { setPadding(0, dpi(8f), 0, dpi(4f)) }
+            header.addView(View(context).apply { background = rounded(Color.argb(90, 255, 255, 255), dp(3f)) },
+                FrameLayout.LayoutParams(dpi(40f), dpi(5f), Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+            header.addView(TextView(context).apply {
+                text = "✕"
+                gravity = Gravity.CENTER
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(ink)
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.argb(40, 255, 255, 255)) }
+                contentDescription = "Close"
+                setOnClickListener { close() }
+            }, FrameLayout.LayoutParams(dpi(32f), dpi(32f), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = dpi(14f); topMargin = dpi(6f) })
+            val panel = SwipeDownLayout(context, scroll) { close() }.apply {
+                orientation = LinearLayout.VERTICAL
+                background = GradientDrawable().apply {
+                    setColor(sheetBg)
+                    cornerRadii = floatArrayOf(dp(16f), dp(16f), dp(16f), dp(16f), 0f, 0f, 0f, 0f)
+                }
+                addView(header, LinearLayout.LayoutParams(-1, dpi(48f)))
+                addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
             }
-            setContentView(scroll)
+            val root = FrameLayout(context).apply { setBackgroundColor(Color.argb(150, 0, 0, 0)) }
+            root.addView(panel, FrameLayout.LayoutParams(-1, -1))
+            ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+                (panel.layoutParams as FrameLayout.LayoutParams).topMargin = bars.top + dpi(10f)
+                scroll.setPadding(0, 0, 0, bars.bottom)
+                panel.requestLayout(); insets
+            }
+            setContentView(root)
             setOnDismissListener { if (sheet === this) sheet = null }
+            // Slides up as it opens
+            panel.translationY = context.resources.displayMetrics.heightPixels.toFloat()
+            panel.animate().translationY(0f).setDuration(260).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+            sheetPanel = panel
             refresh()
         }
+
+        private var sheetPanel: View? = null
+
+        /** Slides the sheet away, then closes it (✕, a swipe down, the Back button) */
+        fun close() {
+            val panel = sheetPanel ?: return dismiss()
+            panel.animate().translationY(panel.height.toFloat().coerceAtLeast(1f)).setDuration(200)
+                .withEndAction { dismiss() }.start()
+        }
+
+        @Deprecated("Back slides the sheet away")
+        override fun onBackPressed() { close() }
 
         private fun padded(v: View, top: Int = 0): View = v.also {
             body.addView(it, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = pad; rightMargin = pad; topMargin = top })
@@ -906,7 +950,7 @@ class ScannerDialog(
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.BLACK)
                 background = rounded(gold, dp(14f))
-                setOnClickListener { dismiss() }
+                setOnClickListener { close() }
             }, dpi(28f)).layoutParams = (body.getChildAt(body.childCount - 1).layoutParams as LinearLayout.LayoutParams).apply { height = dpi(52f) }
             padded(TextView(context).apply {
                 text = "Remove from this scan"
@@ -953,6 +997,52 @@ class ScannerDialog(
             }
             onSearch(requestId, query)
         }
+    }
+}
+
+/** A sheet that follows the finger down and closes when pulled far enough (or flicked) — from
+ *  anywhere on it while its scroll view is at the top, like an iPhone sheet */
+@SuppressLint("ViewConstructor", "ClickableViewAccessibility")
+class SwipeDownLayout(context: Context, private val scroll: ScrollView, private val onClose: () -> Unit) : LinearLayout(context) {
+    private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+    private var startY = 0f
+    private var startX = 0f
+    private var dragging = false
+    private var tracker: android.view.VelocityTracker? = null
+
+    override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> { startY = e.rawY; startX = e.rawX; dragging = false }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                val dy = e.rawY - startY
+                val dx = kotlin.math.abs(e.rawX - startX)
+                // Downwards, mostly vertical, and nothing above to scroll back to
+                if (dy > slop && dy > dx * 1.5f && !scroll.canScrollVertically(-1)) {
+                    dragging = true
+                    tracker = android.view.VelocityTracker.obtain()
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+        if (!dragging) return e.actionMasked == android.view.MotionEvent.ACTION_DOWN
+        tracker?.addMovement(e)
+        val dy = (e.rawY - startY).coerceAtLeast(0f)
+        when (e.actionMasked) {
+            android.view.MotionEvent.ACTION_MOVE -> translationY = dy
+            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                tracker?.computeCurrentVelocity(1000)
+                val fling = (tracker?.yVelocity ?: 0f) > 1400f
+                tracker?.recycle(); tracker = null
+                dragging = false
+                if (dy > height * 0.22f || fling) onClose()
+                else animate().translationY(0f).setDuration(180).start()
+            }
+        }
+        return true
     }
 }
 
