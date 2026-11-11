@@ -167,7 +167,7 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
               </span>
               <h3 className="mt-3 font-bold text-ink text-lg">Your book cover</h3>
               <p className="text-sm text-slate-400 mt-1">Leather, foil, your title and stamp, and your own cover picture.</p>
-              <button type="button" onClick={() => setCoverDraft(b.book)} className="btn-primary w-full justify-center mt-5 py-3 text-base"><Pencil size={16} />Edit Book Cover</button>
+              <button type="button" onClick={() => setCoverDraft({ ...b.book, coverStyle: b.book.coverStyle ?? {} })} className="btn-primary w-full justify-center mt-5 py-3 text-base"><Pencil size={16} />Edit Book Cover</button>
             </div>
           )}
         </div>
@@ -238,7 +238,7 @@ function StartBook({ creatorName, onCreate, onOpened }: {
   const title = name.trim()
   const sample: BadgeSet = {
     id: 'sample', name: title || 'Your Book', subtitle: `${creatorName} · Creator Book`, monogram: monogramOf(title || '★'),
-    game: 'pokemon', cover,
+    game: 'pokemon', cover, coverStyle: {},
   }
   const first = creatorName.split(' ')[0] || 'My'
   const ideas = [`${first}'s Vault`, `${first}'s Legends`, 'The Collection', 'Pin Masters', 'Holo Hunters']
@@ -366,7 +366,7 @@ function BookStage({ book, badges, onOpen, editing = false }: { book: BadgeSet; 
           className="absolute inset-0 transition-transform duration-200 ease-out"
           style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', containerType: 'inline-size' }}
         >
-          <BookThickness />
+          <BookThickness pageColor={book.coverStyle?.pageColor} />
           <span className="absolute inset-0"><BookCover set={book} badges={null} defs={badges} /></span>
           {/* A sheen that follows the tilt */}
           <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay transition-opacity opacity-60"

@@ -81,6 +81,7 @@ export function newCreatorBook(uid: string, name: string, creatorName: string): 
       cover: { from: leather.from, to: leather.to, accent: FOILS[0].color },
       chapters: ['Chapter One'],
       collection: name.trim(),
+      coverStyle: {},
     },
     badges: [],
   }

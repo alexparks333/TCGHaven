@@ -45,6 +45,9 @@ export interface BadgeSet {
   // of the cover's (1 = as wide as the cover). It may hang past the edges — the leather shows
   // where it doesn't reach. Unset = the picture fills the cover (staff covers).
   coverFit?: { x: number; y: number; scale: number }
+  // A creator's cover lettering and pages (Creator Studio cover designer): unset = the classic
+  // cover (staff books). See BookCover in components/badges/BadgeLibrary.tsx.
+  coverStyle?: CoverStyle
   // The book's chapters, in order (e.g. "Overnumbers", "Alternative Arts"). Each chapter starts on
   // a fresh page with its own tab on the book's edge, and grows extra pages as it fills (6 pins a
   // page) without moving the chapters after it. A badge's `page` is the chapter it's in.
@@ -53,6 +56,18 @@ export interface BadgeSet {
   // collection at a time. Unset = HAVEN_COLLECTION, TCG Haven's own books. Later, creators' books
   // (e.g. "PewDiePie Badges") get their own collection name. Read through bookCollection().
   collection?: string
+}
+
+export interface CoverStyle {
+  font?: string          // lib/coverFonts.ts COVER_FONTS id
+  titleY?: number        // where the title sits, % down the cover (default 38)
+  titleSize?: number     // × the usual size (0.6–1.8)
+  titleColor?: string
+  showSubtitle?: boolean // the line above the title (default on)
+  subtitleColor?: string // default: the foil
+  showEmblem?: boolean   // the stamp / first pin (default on)
+  showCount?: boolean    // "3 / 10 earned" (default on)
+  pageColor?: string     // the page edges showing at the side
 }
 
 /** The collection every TCG Haven-made book is in */

@@ -3,16 +3,21 @@
 // The Creator Book's cover, designed by tapping: its title, a leather, a foil, a stamp, and (if they
 // like) their own cover picture — all shown live on the book beside it (BookStage). docs/creators.md.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { Check, ImagePlus, Loader2, Trash2, Sparkles } from 'lucide-react'
-import type { BadgeSet } from '@/lib/badges'
+import type { BadgeSet, CoverStyle } from '@/lib/badges'
+import { COVER_FONTS, loadCoverFonts } from '@/lib/coverFonts'
 import { LEATHERS, FOILS, monogramOf } from '@/lib/creatorBooks'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
 
 export function CoverDesigner({ uid, book, onChange }: { uid: string; book: BadgeSet; onChange: (next: BadgeSet) => void }) {
   const set = (patch: Partial<BadgeSet>) => onChange({ ...book, ...patch })
+  // The lettering and pages (CoverStyle in lib/badges.ts)
+  const st: CoverStyle = book.coverStyle ?? {}
+  const setStyle = (patch: Partial<CoverStyle>) => onChange({ ...book, coverStyle: { ...st, ...patch } })
+  useEffect(() => { loadCoverFonts(COVER_FONTS.map((f) => f.id)) }, [])
   const fileInput = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
@@ -39,7 +44,7 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
 
   return (
     <div className="space-y-6">
-      <Section title="Name your book">
+      <Section title="Title">
         <input
           className="input-field text-base font-semibold"
           value={book.name}
@@ -47,10 +52,44 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
           onChange={(e) => set({ name: e.target.value, collection: e.target.value, monogram: book.monogram === monogramOf(book.name) ? monogramOf(e.target.value) : book.monogram })}
           placeholder="e.g. PewDiePie Cuties"
         />
-        <div className="mt-2 grid grid-cols-[1fr_88px] gap-2">
-          <input className="input-field text-sm" value={book.subtitle} maxLength={40} onChange={(e) => set({ subtitle: e.target.value })} placeholder="A line above the title" />
-          <input className="input-field text-sm text-center font-black tracking-widest uppercase" value={book.monogram} maxLength={3} onChange={(e) => set({ monogram: e.target.value.toUpperCase() })} placeholder="★" title="The stamp on the cover" />
+        {/* 20 fonts, each showing the book's own name */}
+        <div className="mt-3 grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto scroll-themed pr-1">
+          {COVER_FONTS.map((f) => {
+            const on = (st.font ?? 'classic') === f.id
+            return (
+              <button key={f.id} type="button" onClick={() => setStyle({ font: f.id })} title={f.name}
+                className={cn('rounded-lg border px-1.5 py-2 text-center transition-colors', on ? 'border-transparent text-white shadow' : 'border-slate-800 bg-slate-950/40 text-ink hover:border-slate-700')}
+                style={on ? { background: `linear-gradient(135deg, ${book.cover.from}, ${book.cover.to})` } : undefined}>
+                <span className={cn('block truncate text-[15px] leading-tight', f.upper && 'uppercase')} style={{ fontFamily: f.css, fontWeight: f.weight }}>{(book.name || 'Aa').slice(0, 10)}</span>
+                <span className={cn('block text-[9px] mt-0.5 truncate', on ? 'text-white/70' : 'text-slate-500')}>{f.name}</span>
+              </button>
+            )
+          })}
         </div>
+        <Slider label="Size" min={0.6} max={1.8} step={0.02} value={st.titleSize ?? 1} onChange={(v) => setStyle({ titleSize: v })} />
+        <Slider label="Height" hint="up / down the cover" min={8} max={88} step={0.5} value={st.titleY ?? 38} onChange={(v) => setStyle({ titleY: v })} />
+        <Colors label="Colour" value={st.titleColor ?? '#fbe9c4'} onChange={(c) => setStyle({ titleColor: c })} />
+      </Section>
+
+      <Section title="Line above the title">
+        <Toggle on={st.showSubtitle !== false} onChange={(v) => setStyle({ showSubtitle: v })} label="Show it" />
+        {st.showSubtitle !== false && (
+          <>
+            <input className="input-field text-sm mt-2" value={book.subtitle} maxLength={40} onChange={(e) => set({ subtitle: e.target.value })} placeholder="e.g. Alex Parks · Creator Book" />
+            <Colors label="Colour" value={st.subtitleColor ?? book.cover.accent} onChange={(c) => setStyle({ subtitleColor: c })} />
+          </>
+        )}
+      </Section>
+
+      <Section title="Emblem & count">
+        <Toggle on={st.showEmblem !== false} onChange={(v) => setStyle({ showEmblem: v })} label="Emblem" hint="your first pin, or your stamp until you have one" />
+        {st.showEmblem !== false && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-slate-500">Stamp</span>
+            <input className="input-field !w-20 text-sm text-center font-black tracking-widest uppercase" value={book.monogram} maxLength={3} onChange={(e) => set({ monogram: e.target.value.toUpperCase() })} placeholder="★" />
+          </div>
+        )}
+        <div className="mt-3"><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
       </Section>
 
       <Section title="Leather">
@@ -116,6 +155,19 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
         )}
         <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => uploadCover(e.target.files?.[0])} />
         {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+      </Section>
+
+      <Section title="Page edges" hint="the pages showing at the side">
+        <div className="flex flex-wrap gap-2">
+          {PAGE_COLORS.map((p) => {
+            const on = (st.pageColor ?? '') === (p.color ?? '')
+            return (
+              <button key={p.name} type="button" title={p.name} onClick={() => setStyle({ pageColor: p.color })}
+                className={cn('w-9 h-9 rounded-lg transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                style={{ background: p.color ? `repeating-linear-gradient(0deg, ${p.color} 0 3px, color-mix(in srgb, ${p.color} 80%, black) 3px 4px)` : '#221d1a' }} />
+            )
+          })}
+        </div>
       </Section>
 
       <button
@@ -206,6 +258,54 @@ function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit)
       </div>
       <p className="text-[11px] text-slate-500 mt-2 text-center">Drag to move · scroll or slide to zoom · it can hang past the edges</p>
     </div>
+  )
+}
+
+const TEXT_COLORS = ['#fbe9c4', '#ffffff', '#e8b35a', '#f2d38a', '#d9dde3', '#e8a48e', '#8fb6ff', '#6fd3a2', '#c79bff', '#f5a3c7', '#e05252', '#1c1206']
+const PAGE_COLORS: Array<{ name: string; color?: string }> = [
+  { name: 'Classic dark' }, { name: 'Cream', color: '#efe2c4' }, { name: 'White', color: '#f7f4ee' }, { name: 'Gilded', color: '#d4a24c' },
+  { name: 'Silver', color: '#c9ccd1' }, { name: 'Rose', color: '#e2a3a8' }, { name: 'Red', color: '#8a2b2b' }, { name: 'Blue', color: '#2c4a7a' }, { name: 'Black', color: '#1a1714' },
+]
+
+function Slider({ label, hint, min, max, step, value, onChange }: { label: string; hint?: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void }) {
+  return (
+    <label className="mt-3 flex items-center gap-3">
+      <span className="text-xs font-semibold text-slate-500 w-14 shrink-0">{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="flex-1 accent-violet-600" title={hint} />
+    </label>
+  )
+}
+
+function Colors({ label, value, onChange }: { label: string; value: string; onChange: (c: string) => void }) {
+  return (
+    <div className="mt-3 flex items-start gap-3">
+      <span className="text-xs font-semibold text-slate-500 w-14 shrink-0 pt-1.5">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {TEXT_COLORS.map((c) => (
+          <button key={c} type="button" onClick={() => onChange(c)} aria-label={c}
+            className={cn('w-6 h-6 rounded-full border border-black/15 transition-transform hover:scale-110', value.toLowerCase() === c && 'ring-2 ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+            style={{ background: c }} />
+        ))}
+        {/* Any colour */}
+        <label className="relative w-6 h-6 rounded-full border border-black/15 overflow-hidden cursor-pointer" title="Any colour" style={{ background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }}>
+          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+        </label>
+      </div>
+    </div>
+  )
+}
+
+function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
+  return (
+    <button type="button" onClick={() => onChange(!on)} className="w-full flex items-center gap-3 text-left">
+      <span className={cn('relative w-10 h-6 rounded-full transition-colors shrink-0', on ? 'bg-violet-600' : 'bg-slate-700')}>
+        <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all', on ? 'left-[18px]' : 'left-0.5')} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-ink">{label}</span>
+        {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
+      </span>
+    </button>
   )
 }
 

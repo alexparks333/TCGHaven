@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { coverFont, loadCoverFonts } from '@/lib/coverFonts'
 import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
@@ -490,12 +491,76 @@ function CompletionBar({ set, earned, total }: { set: BadgeSet; earned: number; 
 // The closed book's thickness: the page block peeking out below and right of the cover, with the
 // shadow it casts. Drawn under the cover on the shelf and under the flying book (opening and closing),
 // so the book keeps its whole shape in flight.
-export function BookThickness({ style }: { style?: React.CSSProperties }) {
+export function BookThickness({ style, pageColor }: { style?: React.CSSProperties; pageColor?: string }) {
+  // pageColor: a creator's page edges (CoverStyle.pageColor) — the block showing past the cover
   return (
     <>
       <span className="absolute inset-0 translate-x-[5px] translate-y-[5px] rounded-[14px] bg-[#0f0d0c] shadow-[0_14px_24px_-10px_rgba(40,25,10,0.7)]" style={style} />
-      <span className="absolute inset-0 translate-x-[2.5px] translate-y-[2.5px] rounded-[14px] bg-[#221d1a]" style={style} />
+      <span className="absolute inset-0 translate-x-[2.5px] translate-y-[2.5px] rounded-[14px] bg-[#221d1a]"
+        style={pageColor ? { ...style, background: `repeating-linear-gradient(0deg, ${pageColor} 0 2px, color-mix(in srgb, ${pageColor} 82%, black) 2px 3px)` } : style} />
     </>
+  )
+}
+
+/** A creator's cover (Creator Studio): their leather or picture, and their lettering — the title's
+ *  font, size, colour and height; the line above it, the emblem and the earned count each on or off */
+function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet; inSet: BadgeDef[]; earned: number; badges: SharedBadges | null; emptyLabel: string }) {
+  const st = set.coverStyle!
+  const { from, to, accent } = set.cover
+  const font = coverFont(st.font)
+  useEffect(() => { loadCoverFonts([st.font]) }, [st.font])
+  const first = inSet[0]
+  const picture = !!set.coverImage
+  return (
+    <div className={cn('absolute inset-0 overflow-hidden', picture ? 'rounded-[10px] shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]' : 'badge-cover rounded-[14px]')} style={{ background: `linear-gradient(150deg, ${from}, ${to})`, containerType: 'inline-size' }}>
+      {picture && (set.coverFit ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute max-w-none select-none"
+          style={{ left: `${50 + set.coverFit.x}%`, top: `${50 + set.coverFit.y}%`, width: `${set.coverFit.scale * 100}%`, transform: 'translate(-50%, -50%)' }} />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+      ))}
+      {!picture && (
+        <>
+          <div className="absolute inset-y-0 left-0 w-[11%] bg-black/35 border-r border-black/40">
+            <div className="absolute inset-y-[6%] right-[22%] border-r border-dashed" style={{ borderColor: accent + '66' }} />
+          </div>
+          <div className="absolute top-[5%] bottom-[5%] left-[15%] right-[5%] rounded-[10px] border-[1.5px] border-dashed" style={{ borderColor: accent + '80' }} />
+          <div className="absolute right-0 top-[40%] h-[20%] w-[13%] rounded-l-md bg-black/45 border-y border-l border-black/50 flex items-center justify-center">
+            <span className="w-[42%] aspect-square rounded-full" style={{ background: `radial-gradient(circle at 35% 35%, #fff6dc, ${accent} 55%, #6b4a17)` }} />
+          </div>
+        </>
+      )}
+      {/* The title (and the line above it), where the creator put it */}
+      <div className={cn('absolute flex flex-col items-center text-center -translate-y-1/2 pointer-events-none', picture ? 'inset-x-[7%]' : 'left-[15%] right-[5%] px-[6%]')} style={{ top: `${st.titleY ?? 38}%` }}>
+        {st.showSubtitle !== false && set.subtitle && (
+          <div className="font-black tracking-[0.3em] uppercase" style={{ fontSize: 'clamp(6px,3.4cqw,13px)', color: st.subtitleColor ?? accent, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{set.subtitle}</div>
+        )}
+        <div className={cn('mt-[2%] leading-[1.05] break-words max-w-full', font.upper && 'uppercase')}
+          style={{ fontFamily: font.css, fontWeight: font.weight, fontSize: `calc(clamp(14px, 11cqw, 44px) * ${st.titleSize ?? 1})`, color: st.titleColor ?? '#fbe9c4', textShadow: '0 2px 0 rgba(0,0,0,0.45), 0 0 12px rgba(0,0,0,0.35)' }}>
+          {set.name}
+        </div>
+      </div>
+      {st.showEmblem !== false && (
+        <div className={cn('absolute top-[66%] -translate-y-1/2 flex justify-center drop-shadow-[0_6px_6px_rgba(0,0,0,0.5)]', picture ? 'inset-x-0' : 'left-[15%] right-[5%]')}>
+          {first ? (
+            <span className="flex items-center justify-center" style={{ width: '24cqw', height: '27cqw' }}><BadgePin art={first.art} imageUrl={first.imageUrl} size={pinSize(first, 70)} ghost={badgeTier(first, badges?.progress[first.id]) === 0} /></span>
+          ) : (
+            <span className="flex items-center justify-center rounded-full font-black" style={{ width: '24cqw', height: '24cqw', fontSize: '9cqw', border: `2px solid ${accent}99`, color: accent, background: 'rgba(0,0,0,0.25)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.5)' }}>
+              {set.monogram}
+            </span>
+          )}
+        </div>
+      )}
+      {st.showCount !== false && (
+        <div className={cn('absolute bottom-[8%] flex justify-center', picture ? 'inset-x-0' : 'left-[15%] right-[5%]')}>
+          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: accent }}>
+            {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -508,6 +573,7 @@ export function BookCover({ set, badges, defs, emptyLabel = 'Coming soon' }: { s
   const first = inSet[0]
   const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
   const { from, to, accent } = set.cover
+  if (set.coverStyle) return <StyledCover set={set} inSet={inSet} earned={earned} badges={badges} emptyLabel={emptyLabel} />
   if (set.coverImage) {
     return (
       <div className="absolute inset-0 rounded-[10px] overflow-hidden shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]" style={set.coverFit ? { background: `linear-gradient(150deg, ${from}, ${to})` } : undefined}>

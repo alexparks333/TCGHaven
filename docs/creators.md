@@ -22,7 +22,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      Cover**. While editing, the big book previews the unsaved cover. **Save Book Cover** keeps it;
      ✕ / Cancel throws the changes away. A just-created book opens straight into editing. The
      designer offers:
-     - the title, the line above it, and a stamp (monogram);
+     - **Title:** the name, **20 fonts** (`lib/coverFonts.ts`, Google Fonts loaded only when used),
+       size, **height on the cover**, and colour (12 swatches or any colour);
+     - **the line above the title:** on/off, its text, its colour;
+     - **emblem** (the first pin, or the stamp until there is one) and **earned count**, each on/off;
+     - **page edges:** the colour of the page block at the side (`BookThickness pageColor`);
+     - these are stored as `BadgeSet.coverStyle` (`CoverStyle` in `lib/badges.ts`). A book with a
+       `coverStyle` is drawn by `StyledCover` in BadgeLibrary.tsx; creator books always have one,
+       and staff books (none) keep the classic cover;
      - 12 leathers and 8 foils, each one tap;
      - "Surprise me";
      - an optional cover picture, uploaded as is (big ones shrunk to 2400 px). The creator
