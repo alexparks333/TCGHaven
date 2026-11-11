@@ -212,7 +212,7 @@ class ScannerDialog(
             setPadding(dpi(12f), 0, dpi(12f), 0)
         }
         trayScroll.addView(tray)
-        bottom.addView(trayScroll, LinearLayout.LayoutParams(-1, dpi(118f)))
+        bottom.addView(trayScroll, LinearLayout.LayoutParams(-1, dpi(158f)))
         val controls = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -551,42 +551,80 @@ class ScannerDialog(
 
     private fun redrawTray() {
         tray.removeAllViews()
-        for (item in items) tray.addView(trayCell(item), LinearLayout.LayoutParams(dpi(74f), -1).apply { rightMargin = dpi(8f) })
+        for (item in items) tray.addView(trayCell(item), LinearLayout.LayoutParams(dpi(86f), -2).apply { rightMargin = dpi(10f) })
         refreshAdd()
     }
 
-    private fun statusColor(item: ScanItem) = when (item.status) {
-        "matched" -> gold
-        "pick" -> Color.parseColor("#F2C94C")
-        "matching" -> Color.argb(160, 255, 255, 255)
-        else -> Color.parseColor("#E5484D")
-    }
-
+    /** One scanned card in the tray, like the iPhone's (CardScanner.swift TrayCell): the card's
+     *  photo (the scan until the catalog photo loads) with a status badge, its name, and its finish
+     *  and price; a slab's grade on top; a spinner while it's being matched */
     private fun trayCell(item: ScanItem): View {
-        val cell = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        val o = item.current
+        val cell = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            alpha = if (item.status == "none" || item.status == "error") 0.7f else 1f
+        }
+        val frame = FrameLayout(context)
         val img = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             setImageBitmap(item.thumbnail)
-            background = rounded(Color.DKGRAY, dp(6f), dpi(2f), statusColor(item))
-            setPadding(dpi(2f), dpi(2f), dpi(2f), dpi(2f))
+            background = rounded(Color.argb(20, 255, 255, 255), dp(5f))
             clipToOutline = true
         }
-        item.current?.imageUrl?.takeIf { it.isNotEmpty() }?.let { url -> ImageLoader.load(url, img) }
-        cell.addView(img, LinearLayout.LayoutParams(dpi(64f), dpi(88f)))
-        val label = TextView(context).apply {
-            text = when (item.status) {
-                "matching" -> "Matching…"
-                "matched" -> item.current?.title ?: ""
-                "pick" -> "? ${item.current?.title ?: ""}"
-                else -> "! Not found"
-            }
-            setTextColor(if (item.status == "matched") ink else statusColor(item))
-            textSize = 10f
-            maxLines = 1
-            gravity = Gravity.CENTER
-            ellipsize = android.text.TextUtils.TruncateAt.END
+        o?.imageUrl?.takeIf { it.isNotEmpty() }?.let { url -> ImageLoader.load(url, img) }
+        frame.addView(img, FrameLayout.LayoutParams(-1, -1))
+        // A graded slab: its company and grade across the top
+        item.slab?.takeIf { it.grade.isNotEmpty() }?.let { slab ->
+            frame.addView(TextView(context).apply {
+                text = "${slab.company} ${slab.grade}"
+                textSize = 10f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#1A1A1A"))
+                background = rounded(Color.WHITE, dp(3f), dpi(1f), Color.parseColor("#C8102E"))
+                setPadding(dpi(4f), dpi(1f), dpi(4f), dpi(1f))
+            }, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dpi(4f) })
         }
-        cell.addView(label, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(4f) })
+        if (item.status == "matching") {
+            frame.addView(android.widget.ProgressBar(context).apply {
+                indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            }, FrameLayout.LayoutParams(dpi(26f), dpi(26f), Gravity.CENTER))
+        }
+        val badge = when (item.status) {
+            "matched" -> Triple("✓", gold, Color.BLACK)
+            "pick" -> Triple("?", Color.parseColor("#FFCC00"), Color.BLACK)
+            "none", "error" -> Triple("!", Color.parseColor("#FF3B30"), Color.WHITE)
+            else -> null
+        }
+        badge?.let { (t, bg, fg) ->
+            frame.addView(TextView(context).apply {
+                text = t
+                textSize = 13f
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setTextColor(fg)
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(bg) }
+            }, FrameLayout.LayoutParams(dpi(22f), dpi(22f), Gravity.BOTTOM or Gravity.END).apply { rightMargin = dpi(4f); bottomMargin = dpi(4f) })
+        }
+        cell.addView(frame, LinearLayout.LayoutParams(dpi(86f), dpi(86f * 88f / 63f)))
+        cell.addView(TextView(context).apply {
+            text = o?.title ?: if (item.status == "matching") "Matching…" else "Not found"
+            setTextColor(Color.WHITE)
+            textSize = 11f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(3f) })
+        // The finish with its own price, when the card comes in more than one
+        val p = item.currentPrinting
+        val priceLine = if (p != null && (o?.printings?.size ?: 0) > 1) listOf(p.label, p.price).filter { it.isNotEmpty() }.joinToString(" · ") else o?.price ?: ""
+        cell.addView(TextView(context).apply {
+            text = priceLine
+            setTextColor(Color.rgb(217, 179, 89))
+            textSize = 11f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(1f) })
         cell.setOnClickListener { openSheet(item) }
         return cell
     }
