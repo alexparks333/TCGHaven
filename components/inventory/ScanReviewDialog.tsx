@@ -350,6 +350,23 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                     </div>
                   )}
 
+                  {/* A graded slab: its cert number, read off the label (or its barcode) — check it here */}
+                  {row.slab?.company && (
+                    <label className="mt-3 block">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        {row.slab.company} Slab ID <span className="font-normal normal-case tracking-normal">· {row.slab.cert ? 'read from the label' : 'not read — type it in'}</span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        className="input-field mt-1 py-2 text-sm tabular-nums tracking-wide"
+                        value={row.slab.cert ?? ''}
+                        placeholder="Cert number"
+                        onChange={(e) => update(row.rowId, { slab: { ...row.slab!, cert: e.target.value.replace(/[^0-9A-Za-z]/g, '').slice(0, 12) } })}
+                      />
+                    </label>
+                  )}
+
                   <div className="mt-3 flex items-end gap-2">
                     <label className="flex-1 min-w-0">
                       <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Condition</span>

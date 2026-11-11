@@ -37,7 +37,8 @@ interface CardScannerPlugin {
   prepareModel(opts: { version: string; files: Record<string, string> }): Promise<{ ready: boolean }>
   // fingerprints: the picture AI's numbers for the scan (one per way up for a landscape card);
   // absent until the model is ready, and on older app builds
-  addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[]; fingerprints?: number[][] }) => void): Promise<PluginListenerHandle>
+  // barcodes: a graded slab label's barcode / QR code (its cert number) — newer app builds
+  addListener(event: 'cardScanned', fn: (e: { scanId: string; lines: OcrLine[]; fingerprints?: number[][]; barcodes?: string[] }) => void): Promise<PluginListenerHandle>
   addListener(event: 'searchCards', fn: (e: { requestId: string; query: string }) => void): Promise<PluginListenerHandle>
 }
 
@@ -114,7 +115,7 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
   return out.slice(0, 24)
 }
 
-async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: number[][]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
+async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS)
@@ -122,7 +123,7 @@ async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: n
       const res = await fetch('/api/cards/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines, games, ...(fingerprints?.length && { fingerprints }) }),
+        body: JSON.stringify({ lines, games, ...(fingerprints?.length && { fingerprints }), ...(barcodes?.length && { barcodes }) }),
         signal: ctrl.signal,
       })
       if (!res.ok) throw new Error(`scan match ${res.status}`)
@@ -135,8 +136,8 @@ async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: n
   }
 }
 
-async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerprints?: number[][]): Promise<{ card: ScannedCard; tray: TrayOption[]; topDistance: number | null; topPicture: number | null }> {
-  const { candidates, slab } = await fetchCandidates(lines, games, fingerprints)
+async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ card: ScannedCard; tray: TrayOption[]; topDistance: number | null; topPicture: number | null }> {
+  const { candidates, slab } = await fetchCandidates(lines, games, fingerprints, barcodes)
 
   // Only the candidates still in the running get compared by picture — plus the picture AI's own
   // finds (cards the text didn't bring in)
@@ -189,8 +190,8 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
       })
       .catch(() => CardScanner.searchResults({ requestId, options: [] }).catch(() => {}))
   })
-  const listener = await CardScanner.addListener('cardScanned', ({ scanId, lines, fingerprints }) => {
-    identify(scanId, lines, games, fingerprints)
+  const listener = await CardScanner.addListener('cardScanned', ({ scanId, lines, fingerprints, barcodes }) => {
+    identify(scanId, lines, games, fingerprints, barcodes)
       .then(({ card, tray, topDistance, topPicture }) => {
         found.set(scanId, card)
         // Not sure enough to show: nothing found, or only a loose guess (a word on a screen that

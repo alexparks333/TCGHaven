@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { matchScannedCard, cleanLines, warmScanner } from '@/lib/scan/server'
+import { matchScannedCard, cleanLines, cleanBarcodes, warmScanner } from '@/lib/scan/server'
 import { cleanFingerprints, pictureModel } from '@/lib/scan/picture'
 import { GAME_LABELS, type Game } from '@/lib/types'
 
 // The iPhone app's card scanner (lib/scan/server.ts). Public, like card search — it only reads
 // the public catalog.
 //   POST { lines: OCR lines from one card, games, fingerprints?: the picture AI's numbers for the
-//          scan (lib/scan/picture.ts) }                        → ranked catalog candidates
+//          scan (lib/scan/picture.ts), barcodes?: what a slab label's barcode / QR code says (its
+//          cert) }                                              → ranked catalog candidates
 //   GET ?warm=1&games=pokemon,mtg                              → loads those catalogs and picture
 //          indexes (as the scanner opens)
 //   GET ?model=1[&platform=android]                            → the picture model the phone should
@@ -34,5 +35,5 @@ export async function POST(req: NextRequest) {
   const lines = cleanLines(body?.lines)
   const fingerprints = cleanFingerprints(body?.fingerprints)
   if (lines.length === 0 && fingerprints.length === 0) return NextResponse.json({ candidates: [], slab: null })
-  return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : []), fingerprints))
+  return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : []), fingerprints, cleanBarcodes(body?.barcodes)))
 }

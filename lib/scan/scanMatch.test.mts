@@ -2,7 +2,7 @@
 // Fixtures are real catalog cards (trimmed); the OCR lines are what each card prints, laid out
 // where it prints it. lib/scan/scanMatch.ts reads them, lib/scan/decide.ts makes the final call.
 import assert from 'node:assert/strict'
-import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, readSlabLabel, ygoKey, type OcrLine, type ScanCatalog } from './scanMatch.ts'
+import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, readSlabLabel, sanitizeCert, ygoKey, type OcrLine, type ScanCatalog } from './scanMatch.ts'
 import { decide } from './decide.ts'
 
 const L = (text: string, y: number, h = 0.03): OcrLine => ({ text, x: 0.05, y, w: 0.6, h })
@@ -421,6 +421,25 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   assert.equal(decide([]).status, 'none')
   // A clear text winner whose picture looks like nothing at all → asked, not added
   assert.equal(decide([{ key: 'x', score: 95 }, { key: 'y', score: 40 }], [0.82, 0.9]).status, 'pick')
+}
+
+// ── Slab cert numbers: OCR slips cleaned up, the barcode preferred ──
+{
+  assert.equal(sanitizeCert('Cert #14O7I3476'), '140713476')
+  assert.equal(sanitizeCert('140 713 476'), '140713476')
+  assert.equal(sanitizeCert('S0O12B45'), '50012845')
+  assert.equal(sanitizeCert('https://www.psacard.com/cert/140713476'), '140713476')
+  assert.equal(sanitizeCert('https://www.cgccards.com/certlookup/4123456001/'), '4123456001')
+  assert.equal(sanitizeCert('4123456-001'), '4123456001')
+  assert.equal(sanitizeCert('A1234567', 'TAG'), 'A1234567')
+  assert.equal(sanitizeCert('2022'), '', 'a year is not a cert')
+  assert.equal(sanitizeCert('MEW VMAX'), '')
+  const psa = (cert: string) => [L('2022 POKEMON SWSH', 0.02), L('#TG30', 0.02), L('FA/MEW VMAX', 0.05), L('MINT', 0.05), L('LOST ORIGIN', 0.08), L('9', 0.08), L(cert, 0.11)]
+  assert.equal(readSlabLabel(psa('14O713476'))?.cert, '140713476', 'O read for 0 in the printed cert')
+  assert.equal(readSlabLabel(psa('CERT # 140713476'))?.cert, '140713476')
+  // The barcode beats a misread printed number, and counts as the cert tell-tale on its own
+  assert.equal(readSlabLabel(psa('140713478'), ['140713476'])?.cert, '140713476')
+  assert.equal(readSlabLabel([L('#TG30', 0.02), L('FA/MEW VMAX', 0.05), L('GEM MT 10', 0.05)], ['https://www.psacard.com/cert/140713476'])?.cert, '140713476')
 }
 
 // ── decide() with the picture AI (similarities; thresholds from 57 real scans, decide.ts top) ──

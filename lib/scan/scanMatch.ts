@@ -186,7 +186,7 @@ const HP_NOISE = /\b(?:hp\s?\d{2,3}|\d{2,3}\s?hp|basic|stage\s?[12]|mega|evolves
 // "025/198", "TG05/TG30", "F091/086" (a regulation mark glued on), "226*/219" (Riftbound signature)
 const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([a-z*]?)\\s?\\/\\s?(?:[A-Z]{0,4})\\s?(${DIGITISH}{2,3})(?![0-9])`, 'g')
 
-export function readClues(lines: OcrLine[]): ScanClues {
+export function readClues(lines: OcrLine[], barcodes?: string[]): ScanClues {
   const clues: ScanClues = {
     fractions: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], fabCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
     bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, jaNames: [], pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
@@ -288,7 +288,7 @@ export function readClues(lines: OcrLine[]): ScanClues {
     }
   }
 
-  clues.slab = readSlabLabel(lines)
+  clues.slab = readSlabLabel(lines, barcodes)
   clues.pokemonWords = ['hp', 'weakness', 'resistance', 'retreat', 'trainer', 'pokemon'].some((w) => clues.words.has(w))
     || lines.some((l) => /弱点|抵抗力|にげる/.test(l.text))
   // The name: the biggest text, or anything along the top edge (Pokémon and Magic print it there)
@@ -355,13 +355,41 @@ const GRADE_WORDS = /^(GEM\s?MT|GEM\s?MINT|PRISTINE|MINT\+?|NM-MT\+?|NM\+?|EX-MT
 
 /** A grading company's label along the top of a slab: the card number ("#TG30"), the grade and
  *  the cert number, plus the name/set lines. Null when the lines don't look like a label. */
-export function readSlabLabel(lines: OcrLine[]): SlabLabel | null {
+/** A slab's certification number as printed or encoded, cleaned up: "Cert #14O7I3476" → "140713476".
+ *  OCR look-alikes inside the number become digits (O/Q/D → 0, I/l/| → 1, S → 5, B → 8, Z → 2); a
+ *  label word, "#", spaces and dashes go; a cert lookup link ("psacard.com/cert/140713476") gives its
+ *  number. TAG's start with one letter, kept. '' when it isn't a cert (7–10 digits). */
+export function sanitizeCert(raw: string, company?: string): string {
+  let s = String(raw ?? '').trim()
+  const link = s.match(/cert(?:lookup|-code-lookup)?\/(?:[^/]*\/)?([A-Za-z]?[0-9-]{6,14})/i) ?? s.match(/[?&](?:cert|certno|id)=([A-Za-z]?[0-9-]{6,14})/i)
+  if (link) s = link[1]
+  s = s.toUpperCase().replace(/^(?:CERT(?:IFICATION)?|NO\.?|NUMBER|#|:|\s)+/g, '').replace(/[\s\-.#:]/g, '')
+  const tag = String(company ?? '').toUpperCase() === 'TAG' && /^[A-Z]/.test(s) ? s[0] : ''
+  const body = (tag ? s.slice(1) : s).replace(/[OQD]/g, '0').replace(/[IL|]/g, '1').replace(/S/g, '5').replace(/B/g, '8').replace(/Z/g, '2')
+  return /^\d{7,10}$/.test(body) ? tag + body : ''
+}
+
+/** A cert number from what a slab label's barcode / QR code says (the most reliable source) */
+function certFromBarcodes(barcodes: string[] | undefined, company: string): string {
+  for (const b of barcodes ?? []) {
+    const c = sanitizeCert(b, company) || sanitizeCert((b.match(/\d{7,10}/) ?? [''])[0], company)
+    if (c) return c
+  }
+  return ''
+}
+
+export function readSlabLabel(lines: OcrLine[], barcodes?: string[]): SlabLabel | null {
   const top = lines.filter((l) => l.y < 0.3).map((l) => ({ ...l, text: latin(l.text).trim() }))
   const numLine = top.find((l) => /^#\s?[A-Z]{0,4}[0-9OIl]{1,4}[a-z]?$/i.test(l.text))
-  const certLine = top.find((l) => /^\d{7,10}$/.test(l.text.replace(/\s/g, '')))
+  // The cert: a line that is (after cleaning up OCR slips) a 7–10 digit number, or ends with one
+  // ("CERT # 14O713476"); never the card's "#number" line. The barcode, when read, beats it.
+  const certLine = top.filter((l) => l !== numLine).map((l) => ({ l, c: sanitizeCert(l.text) || sanitizeCert((l.text.match(/[0-9OIlSB]{7,10}\s*$/) ?? [''])[0]) }))
+    .filter((x) => x.c && /\d{5}/.test(x.l.text.replace(/\s/g, '')))
+    .sort((a, b) => b.l.y - a.l.y || b.l.x - a.l.x)[0]
+  const barcodeCert = certFromBarcodes(barcodes, '')
   const gradeIdx = top.findIndex((l) => GRADE_WORDS.test(l.text))
-  // Two of the three tell-tales — a "#number", a cert, a grade word
-  if ([numLine, certLine, gradeIdx >= 0 ? 1 : undefined].filter(Boolean).length < 2) return null
+  // Two of the three tell-tales — a "#number", a cert (printed or in the barcode), a grade word
+  if ([numLine, certLine ?? (barcodeCert || undefined), gradeIdx >= 0 ? 1 : undefined].filter(Boolean).length < 2) return null
 
   let grade = ''
   if (gradeIdx >= 0) {
@@ -380,10 +408,11 @@ export function readSlabLabel(lines: OcrLine[]): SlabLabel | null {
   const game: ScanCatalogKey | null = /POKEMON JAPANESE|JAPANESE/.test(all) ? 'pokemon-jp' : /POKEMON|POKÉMON/.test(all) ? 'pokemon'
     : /ONE PIECE/.test(all) ? 'onepiece' : /LORCANA/.test(all) ? 'lorcana' : /MAGIC|MTG/.test(all) ? 'mtg' : /RIFTBOUND/.test(all) ? 'riftbound' : null
   const number = numLine ? toDigitsAfterPrefix(numLine.text.replace(/^#\s?/, '')) : ''
-  const used = new Set([numLine, certLine, gradeIdx >= 0 ? top[gradeIdx] : undefined].filter(Boolean))
+  const used = new Set([numLine, certLine?.l, gradeIdx >= 0 ? top[gradeIdx] : undefined].filter(Boolean))
   const text = top.filter((l) => !used.has(l) && !/^\d{1,2}(\.5)?$/.test(l.text) && /[A-Za-z]{2,}/.test(l.text))
     .map((l) => l.text.replace(/^\d{4}\s+/, '').replace(/^(FA|SA|AA|RH|HOLO|REV\.? FOIL)\//i, ''))
-  return { company, grade, cert: certLine ? certLine.text.replace(/\s/g, '') : '', number, game, text }
+  const cert = certFromBarcodes(barcodes, company) || (certLine ? sanitizeCert(certLine.c, company) || certLine.c : '')
+  return { company, grade, cert, number, game, text }
 }
 
 /** "TG3O" → "TG30": the letters in front stay, O / I / l after them are digits */

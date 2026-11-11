@@ -1,13 +1,15 @@
 // The scanner screen on Android (CardScannerPlugin.open). Full screen over the page — the page
 // keeps running underneath, matching each card on the site (lib/scan/scanner.ts).
 //
-//   1. the camera, with a card-shaped outline to line the card up in (the part inside the outline
-//      is the card: no edge finding needed — the picture AI copes with a little background)
-//   2. every ~quarter second: the text inside the outline (ML Kit, on the phone). When the phone is
-//      held still and a card's worth of text is there, it's captured — once per card: the next
-//      capture waits for different text (the next card) or an empty outline
-//   3. the capture: the text again, English + Japanese; the picture AI's fingerprint; then
-//      "cardScanned" to the site, which answers with update()
+//   1. the camera; each frame, the card's — or a graded slab's — edges are found (CardFinder,
+//      OpenCV) and outlined on screen. Nothing is read until a card is actually there.
+//   2. Auto: once the card has sat still (its corners and the phone's gyroscope) it's flattened and
+//      its text read (ML Kit, on the phone); a card's worth of new text → captured. Once per card:
+//      the next capture waits for different text (the next card) or the card leaving.
+//      Manual: the shutter button captures (the found card, else the faint outline's area).
+//   3. the capture: the text again, English + Japanese; a slab's label barcode (its cert); the
+//      picture AI's fingerprint (a slab: of the card inside it); then "cardScanned" to the site,
+//      which answers with update()
 //   4. a tray of everything scanned; tap one for its card sheet (other matches, finish, condition,
 //      search); "Add N" sends the picks back
 //
@@ -87,7 +89,7 @@ import kotlin.math.sqrt
 class ScannerDialog(
     private val activity: AppCompatActivity,
     private val title: String,
-    private val onScanned: (String, JSONArray, List<FloatArray>?) -> Unit,
+    private val onScanned: (String, JSONArray, List<FloatArray>?, List<String>) -> Unit,
     private val onSearch: (String, String) -> Unit,
     private val onFinish: (JSONArray) -> Unit,
 ) : Dialog(activity, android.R.style.Theme_Black_NoTitleBar), SensorEventListener {
@@ -115,6 +117,12 @@ class ScannerDialog(
     @Volatile private var finished = false
     private var lastSignature: Set<String>? = null   // the last captured card's words
     private var emptyTicks = 0
+    private var lastCorners: Array<android.graphics.PointF>? = null
+    private var stableFrames = 0
+    private val prefs = activity.getSharedPreferences("scanner", Context.MODE_PRIVATE)
+    @Volatile private var autoScan = prefs.getBoolean("autoScan", true)
+    private lateinit var modeButton: TextView
+    private val barcodeReader = com.google.mlkit.vision.barcode.BarcodeScanning.getClient()
 
     // Steadiness: the phone's rotation rate, from the gyroscope
     private var sensors: SensorManager? = null
@@ -210,7 +218,16 @@ class ScannerDialog(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpi(16f), dpi(8f), dpi(16f), 0)
         }
-        val spacer = View(context)
+        val left = FrameLayout(context)
+        modeButton = TextView(context).apply {
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(dpi(14f), 0, dpi(14f), 0)
+            setOnClickListener { toggleMode() }
+        }
+        left.addView(modeButton, FrameLayout.LayoutParams(-2, dpi(36f), Gravity.START or Gravity.CENTER_VERTICAL))
+        styleMode()
         val shutter = View(context).apply {
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
@@ -229,7 +246,7 @@ class ScannerDialog(
             setPadding(dpi(18f), 0, dpi(18f), 0)
             setOnClickListener { doneTapped() }
         }
-        controls.addView(spacer, LinearLayout.LayoutParams(0, 1, 1f))
+        controls.addView(left, LinearLayout.LayoutParams(0, dpi(68f), 1f))
         controls.addView(shutter, LinearLayout.LayoutParams(dpi(68f), dpi(68f)))
         val right = FrameLayout(context)
         right.addView(addButton, FrameLayout.LayoutParams(-2, dpi(44f), Gravity.END or Gravity.CENTER_VERTICAL))
@@ -301,16 +318,42 @@ class ScannerDialog(
         torchButton.background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(if (torchOn) gold else Color.argb(120, 0, 0, 0)) }
     }
 
-    /** The upright camera frame cropped to the outline (with a little margin round the card) */
-    private fun cardCrop(proxy: ImageProxy): Bitmap? {
+    private fun styleMode() {
+        modeButton.text = if (autoScan) "⚡ Auto" else "✋ Manual"
+        modeButton.setTextColor(if (autoScan) Color.BLACK else Color.WHITE)
+        modeButton.background = rounded(if (autoScan) gold else Color.argb(115, 0, 0, 0), dp(18f), if (autoScan) 0 else dpi(1f), Color.argb(90, 255, 255, 255))
+    }
+
+    private fun toggleMode() {
+        autoScan = !autoScan
+        prefs.edit().putBoolean("autoScan", autoScan).apply()
+        styleMode()
+        stableFrames = 0
+        modeButton.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+        setHint(if (autoScan) "Auto: hold a card still to scan it" else "Manual: press the button to scan")
+    }
+
+    /** The camera frame, upright */
+    private fun uprightFrame(proxy: ImageProxy): Bitmap {
         val raw = proxy.toBitmap()
         val rotation = proxy.imageInfo.rotationDegrees
-        val frame = if (rotation == 0) raw else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, Matrix().apply { postRotate(rotation.toFloat()) }, true)
+        return if (rotation == 0) raw else Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, Matrix().apply { postRotate(rotation.toFloat()) }, true)
+    }
+
+    /** How the frame sits in the preview (FILL_CENTER: scaled to cover, centred) */
+    private fun frameToView(frame: Bitmap): Triple<Float, Float, Float>? {
+        val vw = preview.width.toFloat(); val vh = preview.height.toFloat()
+        if (vw <= 0 || vh <= 0) return null
+        val scale = max(vw / frame.width, vh / frame.height)
+        return Triple(scale, (vw - frame.width * scale) / 2, (vh - frame.height * scale) / 2)
+    }
+
+    /** Manual mode with no card found: the area inside the faint outline (with a little margin) */
+    private fun guideCrop(frame: Bitmap): Bitmap? {
         val vw = preview.width.toFloat()
         val vh = preview.height.toFloat()
         val g = guide.cardRect ?: return null
         if (vw <= 0 || vh <= 0) return null
-        // FILL_CENTER: the frame is scaled to cover the view and centred
         val scale = max(vw / frame.width, vh / frame.height)
         val dx = (vw - frame.width * scale) / 2
         val dy = (vh - frame.height * scale) / 2
@@ -324,13 +367,54 @@ class ScannerDialog(
 
     private fun analyze(proxy: ImageProxy) {
         val now = System.currentTimeMillis()
-        if (finished || busy || (now - lastTick < 250 && !forceCapture)) { proxy.close(); return }
+        if (finished || busy || (now - lastTick < 140 && !forceCapture)) { proxy.close(); return }
         lastTick = now
         busy = true
-        val crop = try { cardCrop(proxy) } catch (e: Throwable) { null } finally { proxy.close() }
-        if (crop == null) { busy = false; return }
-        latin.process(InputImage.fromBitmap(crop, 0))
-            .addOnSuccessListener { text -> onRead(crop, text) }
+        val frame = try { uprightFrame(proxy) } catch (e: Throwable) { null } finally { proxy.close() }
+        if (frame == null) { busy = false; return }
+        val found = CardFinder.find(frame)
+        // Still: the card's corners barely moved since the last look (and the phone isn't turning)
+        val moved = found?.let { f -> lastCorners?.let { prev -> f.corners.indices.maxOf { i -> kotlin.math.hypot((f.corners[i].x - prev[i].x).toDouble(), (f.corners[i].y - prev[i].y).toDouble()) } / frame.width } }
+        stableFrames = if (found != null && moved != null && moved < 0.025) stableFrames + 1 else 0
+        lastCorners = found?.corners
+        val steady = System.currentTimeMillis() - lastShakeAt > 400 && stableFrames >= 3
+        // Show the edges found
+        val placement = frameToView(frame)
+        main.post {
+            guide.quad = if (found != null && placement != null) FloatArray(8) { i -> val p = found.corners[i / 2]; if (i % 2 == 0) p.x * placement.first + placement.second else p.y * placement.first + placement.third } else null
+            guide.locked = steady
+            guide.slab = found?.slab == true
+        }
+        if (found == null) {
+            emptyTicks++
+            if (emptyTicks >= 3) lastSignature = null // the last card left: the same card again is a second copy
+        } else emptyTicks = 0
+
+        if (forceCapture) {
+            forceCapture = false
+            val pic = found?.let { CardFinder.flatten(frame, it.corners) } ?: guideCrop(frame)
+            if (pic == null) { busy = false; return }
+            val slab = found?.slab ?: (pic.height > pic.width * 1.55)
+            latin.process(InputImage.fromBitmap(pic, 0))
+                .addOnSuccessListener { text -> if (text.text.isBlank()) { busy = false; main.post { setHint("No text there — closer, and out of the glare") } } else capture(pic, text, words(text), slab) }
+                .addOnFailureListener { busy = false }
+            return
+        }
+        if (!autoScan || found == null || !steady) {
+            busy = false
+            main.post {
+                setHint(when {
+                    found == null -> if (autoScan) "Hold a card up — it scans by itself" else "Manual: press the button to scan"
+                    !autoScan -> "Press the button to scan"
+                    else -> "Hold still…"
+                })
+            }
+            return
+        }
+        val pic = CardFinder.flatten(frame, found.corners)
+        if (pic == null) { busy = false; return }
+        latin.process(InputImage.fromBitmap(pic, 0))
+            .addOnSuccessListener { text -> onRead(pic, text, found.slab) }
             .addOnFailureListener { busy = false }
     }
 
@@ -343,44 +427,34 @@ class ScannerDialog(
         return shared / a.union(b).size < 0.4f
     }
 
-    /** One look inside the outline: capture it when a card is there, still, and new */
-    private fun onRead(crop: Bitmap, text: Text) {
+    /** Auto: a still card's text — capture it when there's a card's worth and it's a new card */
+    private fun onRead(pic: Bitmap, text: Text, slab: Boolean) {
         val lines = text.textBlocks.sumOf { it.lines.size }
         val chars = text.text.count { !it.isWhitespace() }
         val sig = words(text)
-        val steady = System.currentTimeMillis() - lastShakeAt > 450
-        val force = forceCapture
-        if (chars < 8) emptyTicks++ else emptyTicks = 0
-        // The last card left the outline: the next one may be the same card again (a second copy)
-        if (emptyTicks >= 2) lastSignature = null
         val fresh = lastSignature?.let { differs(sig, it) } ?: true
-        when {
-            force && chars > 0 -> { forceCapture = false; capture(crop, text, sig) }
-            lines >= 3 && chars >= 15 && fresh && steady -> capture(crop, text, sig)
-            else -> {
-                if (force) forceCapture = false
-                busy = false
-                main.post {
-                    guide.state = if (lines >= 3 && fresh) GuideOverlay.State.SEEN else GuideOverlay.State.IDLE
-                    setHint(when {
-                        lines >= 3 && fresh && !steady -> "Hold still…"
-                        lines >= 3 && !fresh -> "Got it — next card"
-                        else -> "Line the card up inside the outline"
-                    })
-                }
+        if (lines >= 3 && chars >= 15 && fresh) return capture(pic, text, sig, slab)
+        busy = false
+        main.post { setHint(if (!fresh) "Got it — next card" else "Can’t read it yet — closer, or out of the glare") }
+    }
+
+    private fun capture(pic: Bitmap, latinText: Text, sig: Set<String>, slab: Boolean) {
+        lastSignature = sig
+        stableFrames = 0
+        main.post { guide.locked = false; setHint("Reading…"); guide.performHapticFeedback(HapticFeedbackConstants.CONFIRM) }
+        // Japanese too, on the captured picture only (it reads Latin as well, a little slower); a
+        // slab's label barcode (its cert number)
+        japanese.process(InputImage.fromBitmap(pic, 0)).addOnCompleteListener { jp ->
+            val jpText = if (jp.isSuccessful) jp.result else null
+            if (!slab) return@addOnCompleteListener captureThread.execute { finishCapture(pic, latinText, jpText, slab, emptyList()) }
+            barcodeReader.process(InputImage.fromBitmap(pic, 0)).addOnCompleteListener { bc ->
+                val codes = if (bc.isSuccessful) bc.result.mapNotNull { it.rawValue?.trim()?.takeIf { v -> v.isNotEmpty() } }.distinct().take(6) else emptyList()
+                captureThread.execute { finishCapture(pic, latinText, jpText, slab, codes) }
             }
         }
     }
 
-    private fun capture(crop: Bitmap, latinText: Text, sig: Set<String>) {
-        lastSignature = sig
-        main.post { guide.state = GuideOverlay.State.READING; setHint("Reading…"); guide.performHapticFeedback(HapticFeedbackConstants.CONFIRM) }
-        // Japanese too, on the captured picture only (it reads Latin as well, a little slower)
-        japanese.process(InputImage.fromBitmap(crop, 0))
-            .addOnCompleteListener { jp -> captureThread.execute { finishCapture(crop, latinText, jp.result) } }
-    }
-
-    private fun finishCapture(crop: Bitmap, latinText: Text, jpText: Text?) {
+    private fun finishCapture(crop: Bitmap, latinText: Text, jpText: Text?, slab: Boolean, barcodes: List<String>) {
         try {
             val w = crop.width.toFloat()
             val h = crop.height.toFloat()
@@ -405,7 +479,8 @@ class ScannerDialog(
                 main.post { setHint("No card there"); guide.state = GuideOverlay.State.IDLE }
                 return
             }
-            val fingerprints = CardFingerprinter.fingerprints(crop)
+            // A slab: the picture AI looks at the card inside it, not the label and plastic
+            val fingerprints = CardFingerprinter.fingerprints(if (slab) CardFinder.cardInsideSlab(crop) else crop)
             val id = UUID.randomUUID().toString()
             val thumb = scaled(crop, 240)
             val photo = scaled(crop, 760)
@@ -417,7 +492,7 @@ class ScannerDialog(
                 trayScroll.smoothScrollTo(0, 0)
                 guide.state = GuideOverlay.State.IDLE
                 setHint("Finding the card…")
-                onScanned(id, lines, fingerprints)
+                onScanned(id, lines, fingerprints, barcodes)
             }
         } finally {
             busy = false
@@ -444,8 +519,8 @@ class ScannerDialog(
         val item = items.firstOrNull { it.id == scanId } ?: return
         if (status == "reject") {
             // Not sure enough to show (a word on a screen, a loose guess): dropped, scan again
+            // (the same view isn't scanned again until something different is in front of the camera)
             items.remove(item)
-            lastSignature = null
             redrawTray()
             Toast.makeText(context, note ?: "Couldn’t tell which card that was — try again", Toast.LENGTH_SHORT).show()
             return
@@ -752,19 +827,27 @@ class ScannerDialog(
     }
 }
 
-/** The card-shaped outline, with the rest of the picture dimmed */
+/** The card's edges as found (gold once it's still enough to read), over a faint card-shaped
+ *  outline that shows where to hold it; the rest of the picture dimmed */
 @SuppressLint("ViewConstructor")
 class GuideOverlay(context: Context) : View(context) {
     enum class State { IDLE, SEEN, READING }
     var state = State.IDLE
         set(v) { if (field != v) { field = v; invalidate() } }
+    /** The found card's corners in view pixels (x0, y0 … x3, y3: top-left, top-right, bottom-right, bottom-left) */
+    var quad: FloatArray? = null
+        set(v) { field = v; invalidate() }
+    var locked = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+    var slab = false
     var insetTop = 0
     var insetBottom = 0
     var cardRect: RectF? = null
         private set
 
-    private val dim = Paint().apply { color = Color.argb(140, 0, 0, 0) }
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 6f }
+    private val dim = Paint().apply { color = Color.argb(110, 0, 0, 0) }
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
 
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
@@ -772,7 +855,7 @@ class GuideOverlay(context: Context) : View(context) {
         val top = max(insetTop.toFloat(), h * 0.12f)
         val bottom = h - max(insetBottom.toFloat(), h * 0.2f)
         val room = bottom - top
-        // A card: 63 × 88 mm
+        // Where to hold a card: 63 × 88 mm
         var cw = w * 0.82f
         var ch = cw * 88f / 63f
         if (ch > room) { ch = room; cw = ch * 63f / 88f }
@@ -781,19 +864,33 @@ class GuideOverlay(context: Context) : View(context) {
         val r = RectF(left, t, left + cw, t + ch)
         cardRect = r
         val radius = cw * 0.05f
-        val path = Path().apply {
-            fillType = Path.FillType.EVEN_ODD
-            addRect(0f, 0f, w, h, Path.Direction.CW)
-            addRoundRect(r, radius, radius, Path.Direction.CW)
+        val q = quad
+        if (q == null) {
+            // No card yet: dim around the outline
+            val path = Path().apply {
+                fillType = Path.FillType.EVEN_ODD
+                addRect(0f, 0f, w, h, Path.Direction.CW)
+                addRoundRect(r, radius, radius, Path.Direction.CW)
+            }
+            canvas.drawPath(path, dim)
+            line.color = Color.argb(200, 255, 255, 255)
+            line.strokeWidth = 5f
+            canvas.drawRoundRect(r, radius, radius, line)
+            return
         }
-        canvas.drawPath(path, dim)
-        line.color = when (state) {
-            State.IDLE -> Color.argb(220, 255, 255, 255)
-            State.SEEN -> Color.parseColor("#F2C94C")
-            State.READING -> Color.parseColor("#D4A24C")
+        // The card (or slab) found: its own edges
+        val edge = Path().apply {
+            moveTo(q[0], q[1]); lineTo(q[2], q[3]); lineTo(q[4], q[5]); lineTo(q[6], q[7]); close()
         }
-        line.strokeWidth = if (state == State.IDLE) 5f else 9f
-        canvas.drawRoundRect(r, radius, radius, line)
+        val goldColor = Color.parseColor("#D4A24C")
+        fill.color = if (locked) Color.argb(60, 212, 162, 76) else Color.argb(28, 255, 255, 255)
+        canvas.drawPath(edge, fill)
+        line.color = if (locked) goldColor else Color.argb(235, 255, 255, 255)
+        line.strokeWidth = if (locked) 10f else 6f
+        canvas.drawPath(edge, line)
+        // Corner marks
+        fill.color = line.color
+        for (i in 0 until 4) canvas.drawCircle(q[i * 2], q[i * 2 + 1], if (locked) 11f else 8f, fill)
     }
 }
 

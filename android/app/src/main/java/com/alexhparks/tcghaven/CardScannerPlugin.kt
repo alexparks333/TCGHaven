@@ -58,7 +58,7 @@ class CardScannerPlugin : Plugin() {
             val dialog = ScannerDialog(
                 activity = activity,
                 title = call.getString("title") ?: "Scan cards",
-                onScanned = { scanId, lines, fingerprints ->
+                onScanned = { scanId, lines, fingerprints, barcodes ->
                     val data = JSObject()
                     data.put("scanId", scanId)
                     data.put("lines", lines)
@@ -67,6 +67,7 @@ class CardScannerPlugin : Plugin() {
                         for (fp in fingerprints) fps.put(JSONArray().apply { for (v in fp) put(v.toDouble()) })
                         data.put("fingerprints", fps)
                     }
+                    if (barcodes.isNotEmpty()) data.put("barcodes", JSONArray(barcodes))
                     notifyListeners("cardScanned", data)
                 },
                 onSearch = { requestId, query ->

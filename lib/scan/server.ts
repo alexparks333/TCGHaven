@@ -121,12 +121,17 @@ const PICTURE_HIT_MIN = 0.42
 /** A graded slab's label, when the scan was of one — the review screen fills in the grade */
 export type ScanSlab = Pick<SlabLabel, 'company' | 'grade' | 'cert'>
 
-export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerprints: Float32Array[] = []): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
+/** What the phone's barcode reader found (a graded slab's label: the cert, as a number or a link) */
+export function cleanBarcodes(raw: unknown): string[] {
+  return Array.isArray(raw) ? raw.filter((b): b is string => typeof b === 'string' && b.length > 0).slice(0, 6).map((b) => b.slice(0, 200)) : []
+}
+
+export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerprints: Float32Array[] = [], barcodes: string[] = []): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   const keys = catalogsFor(games)
   const catalogs = await Promise.all(keys.map(scanCatalog))
   let hits: ReturnType<typeof pictureSearch> = []
   try { hits = pictureSearch(fingerprints, keys, PICTURE_HITS) } catch { /* no picture search this time */ }
-  const clues = readClues(lines)
+  const clues = readClues(lines, barcodes)
   const slab = clues.slab ? { company: clues.slab.company, grade: clues.slab.grade, cert: clues.slab.cert } : null
   const found = lines.length ? matchScan(clues, catalogs) : []
   // The picture's look-alikes the text didn't bring in (an old card with no number, a Japanese

@@ -84,9 +84,10 @@ public class CardScannerPlugin: CAPPlugin, CAPBridgedPlugin {
             }
             let vc = ScannerViewController()
             vc.screenTitle = call.getString("title") ?? "Scan cards"
-            vc.onScanned = { [weak self] scanId, lines, fingerprints in
+            vc.onScanned = { [weak self] scanId, lines, fingerprints, barcodes in
                 var data: [String: Any] = ["scanId": scanId, "lines": lines]
                 if let fps = fingerprints, !fps.isEmpty { data["fingerprints"] = fps.map { $0.map { Double($0) } } }
+                if !barcodes.isEmpty { data["barcodes"] = barcodes }
                 self?.notifyListeners("cardScanned", data: data)
             }
             vc.onSearch = { [weak self] requestId, query in
@@ -407,7 +408,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     UICollectionViewDataSource, UICollectionViewDelegate {
 
     var screenTitle = "Scan cards"
-    var onScanned: ((String, [[String: Any]], [[Float]]?) -> Void)?
+    var onScanned: ((String, [[String: Any]], [[Float]]?, [String]) -> Void)?
     var onFinish: (([[String: Any]]) -> Void)?
     var onSearch: ((String, String) -> Void)?
     private var searchWaiting: [String: ([TrayOption]) -> Void] = [:]
@@ -1246,6 +1247,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         let cardOnly = slab ? (cardInsideSlab(image) ?? image) : loose ? (tighten(image) ?? image) : image
         if loose { DebugScans.log("number read at \(String(format: "%.2f", codeY ?? 0)) of the height — crop tightened for the picture check") }
         let signature = PictureMatcher.signature(of: cardOnly)
+        // A slab's label barcode (its cert number) — looked for on slabs and anything slab-shaped
+        let barcodes = (slab || image.height > Int(Double(image.width) * 1.55)) ? Self.readBarcodes(image) : []
+        if !barcodes.isEmpty { DebugScans.log("barcodes: \(barcodes)") }
         let tFp = CACurrentMediaTime()
         let fingerprints = CardFingerprinter.shared.fingerprints(of: cardOnly)
         if let fps = fingerprints { DebugScans.log("picture AI: \(fps.count) fingerprint(s) in \(Int((CACurrentMediaTime() - tFp) * 1000)) ms") }
@@ -1290,7 +1294,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
                 self.endActive(id: id, result: "Couldn’t read that card — try again")
             } else {
                 self.setStage("Finding the card…", for: id)
-                self.onScanned?(id, merged, fingerprints)
+                self.onScanned?(id, merged, fingerprints, barcodes)
             }
         }
     }
@@ -1419,6 +1423,20 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
     /// A grading company's label along the top: a cert number or a grade word up there
     private static let slabPattern = try! NSRegularExpression(
         pattern: "^(\\d{7,10}|#\\s?[A-Z]{0,4}\\d{1,4}[a-z]?|GEM\\s?MT.*|GEM\\s?MINT.*|MINT.*|NM-MT.*|EX-MT.*|PRISTINE.*|AUTHENTIC.*)$", options: [.caseInsensitive])
+    /// What the barcodes / QR codes on the picture say — a graded slab's label encodes its cert
+    /// number (PSA, CGC, BGS, SGC), more reliably than reading the printed digits. The site cleans it
+    /// up (lib/scan/scanMatch.ts sanitizeCert).
+    private static func readBarcodes(_ image: CGImage) -> [String] {
+        let request = VNDetectBarcodesRequest()
+        request.symbologies = [.code128, .code39, .qr, .dataMatrix, .ean13, .i2of5]
+        try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+        var out: [String] = []
+        for r in request.results ?? [] {
+            if let p = r.payloadStringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !p.isEmpty, !out.contains(p) { out.append(p) }
+        }
+        return Array(out.prefix(6))
+    }
+
     private static func isSlab(_ lines: [[String: Any]]) -> Bool {
         let hits = lines.filter { l in
             guard let t = (l["text"] as? String)?.trimmingCharacters(in: .whitespaces), let y = l["y"] as? CGFloat, y < 0.3 else { return false }
