@@ -457,7 +457,7 @@ export default function InventoryPage() {
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <div className="flex items-center gap-2 shrink-0">
               {/* In the app: the camera. On the website: a QR code that opens the scanner on the phone */}
-              <button onClick={canScan ? startScan : () => setShowPhoneScan(true)} className="btn-secondary whitespace-nowrap">
+              <button onClick={canScan ? startScan : () => setShowPhoneScan(true)} className="btn-secondary whitespace-nowrap !bg-slate-950 hover:!bg-slate-900 border border-slate-700 !text-ink shadow-sm">
                 <ScanLine size={16} />
                 Scan
               </button>
