@@ -575,6 +575,8 @@ export interface CardexPicker {
   selected: Set<string>
   /** `on`: whether these cards should end up selected; `game`: the game they're from */
   onSelect: (cards: CatalogCard[], on: boolean, game: Game) => void
+  /** Told which game is showing (and again on every switch) */
+  onGame?: (game: Game) => void
 }
 
 export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
@@ -672,6 +674,8 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   // catalog-indexed lookups below (groupsByGame, GAME_COLORS), none of which actually get
   // rendered while that tab is active.
   const catalogGame: CatalogGame = activeGame === 'personal' ? 'lorcana' : activeGame
+  const onPickerGame = picker?.onGame
+  useEffect(() => { onPickerGame?.((catalogGame === 'pokemon-jp' ? 'pokemon' : catalogGame) as Game) }, [catalogGame, onPickerGame])
   // The real game behind the tab (Japanese Pokémon → 'pokemon') — what pricing, rarity labels,
   // eBay search and ownership matching go by.
   const baseGame = baseGameOf(catalogGame)
