@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage'
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
+import { ReliefAnalyzing, type AnalyzingKind } from './ReliefAnalyzing'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffStorage } from '@/lib/firebase/staff'
@@ -98,6 +99,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   const [activeLayer, setActiveLayer] = useState<string | null>(null)
   const cur = settings.finishLayers.find((l) => l.id === activeLayer) ?? null
   const [status, setStatus] = useState<string | null>(null) // what it's busy doing
+  const [aiRun, setAiRun] = useState<{ kind: AnalyzingKind; startedAt: number } | null>(null) // the AI at work: the friendly loading screen
   const [error, setError] = useState('')
   const [server, setServer] = useState<boolean | null>(null)
   const [quality, setQuality] = useState<'fast' | 'normal' | 'high'>('high')
@@ -374,7 +376,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
     setError('')
     try {
       const art = await artBlob()
-      setStatus(`Analyzing on ${new URL(reliefServerUrl()).host}… (about a minute on the GPU)`)
+      setStatus(`Analyzing on ${new URL(reliefServerUrl()).host}…`)
+      setAiRun({ kind: 'analyze', startedAt: Date.now() })
       const k = await loadKit(await analyzeArt(art, quality, settings.artHoles))
       setKit(k); setSelected(0); setOthers([])
       setSettings((s) => ({ ...s, levelRule: 'borders', pieces: {}, soft: {}, flat: {}, materials: {}, finishOpts: {}, details: {}, finishLayers: [], finishOff: [], names: {}, off: [] })) // piece ids belong to one analysis
@@ -383,7 +386,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
       setKitUrls(await saveKit(storage, fileFolder, k))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally { setStatus(null) }
+    } finally { setStatus(null); setAiRun(null) }
   }
 
   // "Recalculate Normals": the same pin, new normal.png and detail.png — saved with the kit at once
@@ -391,14 +394,15 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
     if (!kit) return
     setError('')
     try {
-      setStatus(`Recalculating the normals on ${new URL(reliefServerUrl()).host}… (about a minute on the GPU)`)
+      setStatus(`Recalculating the normals on ${new URL(reliefServerUrl()).host}…`)
+      setAiRun({ kind: 'normals', startedAt: Date.now() })
       const k = await loadKit({ ...kit.files, ...(await recalculateNormals(kit.art, 'high')) })
       setKit(k)
       setStatus('Saving the kit…')
       setKitUrls(await saveKit(storage, fileFolder, k))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
-    } finally { setStatus(null) }
+    } finally { setStatus(null); setAiRun(null) }
   }
 
   async function apply() {
@@ -537,7 +541,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
           </div>
         )}
         {kit && <p className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-slate-500 pointer-events-none">Drag to turn · scroll to zoom · click a piece to select it · hold Tab to paint a selection</p>}
-        {status && (
+        {aiRun && <ReliefAnalyzing kind={aiRun.kind} startedAt={aiRun.startedAt} artUrl={badgeAsset(badge.imageUrl)} saving={status === 'Saving the kit…'} />}
+        {status && !aiRun && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
             <div className="flex items-center gap-2 text-sm"><Loader2 size={16} className="animate-spin" />{status}</div>
           </div>

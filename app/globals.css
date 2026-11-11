@@ -868,8 +868,18 @@
   mix-blend-mode: screen;
   animation: creatorFoil 0.9s ease-in-out forwards;
 }
+/* The Relief Studio's loading screen (ReliefAnalyzing): a gold light sweeps down the art */
+@keyframes reliefScan { 0% { top: -3rem; } 100% { top: 100%; } }
+.relief-scan-line {
+  top: -3rem;
+  background: linear-gradient(180deg, transparent, rgba(232, 179, 90, 0.35) 70%, rgba(255, 241, 196, 0.9) 96%, transparent);
+  mix-blend-mode: screen;
+  animation: reliefScan 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes reliefArt { 0%, 100% { filter: grayscale(0.6) brightness(0.8); transform: scale(0.97); } 50% { filter: grayscale(0) brightness(1.05); transform: scale(1); } }
+.relief-scan-art { animation: reliefArt 4.8s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .creator-bob, .creator-spark, .creator-foil { animation: none !important; }
+  .creator-bob, .creator-spark, .creator-foil, .relief-scan-line, .relief-scan-art { animation: none !important; }
 }
 
 /* A creator cover's foil title with Shine on (BadgeLibrary StyledCover): a light streak glides
