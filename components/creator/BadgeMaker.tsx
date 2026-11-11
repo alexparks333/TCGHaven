@@ -16,6 +16,8 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers } from 'lucide-react'
 import type { BadgeDef, BadgeSet, BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
+import { useBadgeCatalog } from '@/lib/badgeCatalog'
+import { badgeArt } from '@/lib/badgeAssets'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { auth } from '@/lib/firebase/config'
 import { RELIEF_SERVER, setReliefEndpoint } from '@/lib/reliefStudio'
@@ -47,6 +49,9 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
   const [studioNote, setStudioNote] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
   const folder = `creators/${uid}/badges/${draft.id}`
+  // An example to follow: one of TCG Haven's own finished pins (uploaded art, see-through background)
+  const { catalog } = useBadgeCatalog()
+  const example = catalog.badges.find((b) => b.imageUrl && !b.set.startsWith('creator-'))
   const { accent, from, to } = book.cover
 
   async function uploadArt(file: File | undefined) {
@@ -125,7 +130,16 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
           <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center drop-shadow-[0_14px_14px_rgba(0,0,0,0.6)]">
             {draft.imageUrl
               ? <BadgePin art={draft.art} imageUrl={draft.imageUrl} size={220} />
-              : <span className="w-[70%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}
+              : (
+                // Before any art: a faint example pin where theirs will go
+                <span className="relative w-full h-full flex items-center justify-center">
+                  <span className="absolute inset-[6%] flex items-center justify-center opacity-25 grayscale-[30%]"><BadgePin art={example?.art ?? 'crest'} imageUrl={example?.imageUrl} size={200} /></span>
+                  <span className="relative w-[70%] aspect-square rounded-full border-2 border-dashed flex flex-col items-center justify-center text-center text-xs px-6 gap-1" style={{ borderColor: accent + 'aa', color: accent }}>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Example</span>
+                    Your pin appears here
+                  </span>
+                </span>
+              )}
           </div>
           <span className="relative pinbook-serif max-w-[90%] truncate rounded px-3 py-1 text-xs font-bold uppercase tracking-wider" style={{ background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>
             {draft.name.trim() || '? ? ?'}
@@ -152,7 +166,38 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
             {step === 1 && (
               <div>
                 <h3 className="text-lg font-bold text-ink">Your pin art</h3>
-                <p className="text-sm text-slate-400 mt-1">Upload the artwork for this badge. A PNG with a see-through background looks best — it becomes the enamel pin in your book.</p>
+                <p className="text-sm text-slate-400 mt-1">Upload the artwork for this badge — just the pin itself, cut out, with a see-through background. It becomes the enamel pin in your book.</p>
+                {/* What to upload: a real pin as it should be, and the same art done wrong */}
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border-2 border-emerald-600/50 bg-slate-950/40 p-3">
+                    <div className="aspect-square rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:18px_18px] flex items-center justify-center p-[10%]">
+                      {example?.imageUrl
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={badgeArt(example.imageUrl, 384)} alt="An example pin" className="max-w-full max-h-full object-contain drop-shadow-[0_6px_6px_rgba(0,0,0,0.35)]" />
+                        : <BadgePin art="crest" size={120} />}
+                    </div>
+                    <p className="mt-2 text-xs font-bold text-emerald-700 flex items-center gap-1"><Check size={13} />Like this</p>
+                    <p className="text-[11px] text-slate-500 leading-snug">Just the pin, see-through around it (the checks)</p>
+                  </div>
+                  <div className="rounded-2xl border-2 border-red-500/40 bg-slate-950/40 p-3">
+                    <div className="aspect-square rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:18px_18px] flex items-center justify-center p-[6%]">
+                      <span className="w-full h-full bg-white rounded-md shadow-inner flex items-center justify-center p-[12%] relative">
+                        {example?.imageUrl
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={badgeArt(example.imageUrl, 384)} alt="" className="max-w-full max-h-full object-contain" />
+                          : <BadgePin art="crest" size={100} />}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs font-bold text-red-600 flex items-center gap-1"><X size={13} />Not like this</p>
+                    <p className="text-[11px] text-slate-500 leading-snug">A box or photo behind it shows up on the pin</p>
+                  </div>
+                </div>
+                <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-slate-400">
+                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />PNG with a transparent background</li>
+                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />The pin&rsquo;s own shape — any shape works</li>
+                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />At least 1000 × 1000 px</li>
+                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Bold shapes and colours read best small</li>
+                </ul>
                 <button type="button" disabled={!!busy} onClick={() => fileInput.current?.click()}
                   className="mt-4 w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 py-10 flex flex-col items-center gap-2 text-slate-500 hover:text-ink transition-colors">
                   {busy ? <Loader2 size={28} className="animate-spin" /> : <Upload size={28} />}
