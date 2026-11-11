@@ -59,6 +59,18 @@ export async function pictureModel(): Promise<{ version: string; files: Record<s
 const indexes = new Map<string, CatalogIndex>()
 const loading = new Map<string, Promise<CatalogIndex | null>>()
 
+// A scan never waits for an index to download (~10 MB per catalog; a fresh server took 12–15 s for
+// every game and the phone gave up — 2026-11-10): a scan uses what's loaded and starts the rest
+// loading for the next one. The scanner's warm-up call (warmPictures) is the one that waits.
+function loadedIndex(catalog: ScanCatalogKey): CatalogIndex | null {
+  const have = indexes.get(catalog) ?? null
+  const entry = manifestCache?.manifest?.catalogs?.[catalog]
+  if (!entry || !have || have.rev !== entry.rev || !manifestCache || Date.now() - manifestCache.at >= RECHECK_MS) {
+    catalogIndex(catalog).catch(() => null)
+  }
+  return have
+}
+
 async function catalogIndex(catalog: ScanCatalogKey): Promise<CatalogIndex | null> {
   const manifest = await pictureManifest()
   const entry = manifest?.catalogs?.[catalog]
@@ -124,10 +136,10 @@ export interface PictureHit { catalog: ScanCatalogKey; id: string; similarity: n
 
 /** Similarity (cosine, −1…1; a right card scores ~0.5–0.9 on a real scan) of the scan to each card,
  *  the best over the fingerprints sent (a landscape card comes in each turn). null = not indexed. */
-export async function pictureSimilarity(fps: Float32Array[], cards: Array<{ catalog: ScanCatalogKey; id: string }>): Promise<Array<number | null>> {
+export function pictureSimilarity(fps: Float32Array[], cards: Array<{ catalog: ScanCatalogKey; id: string }>): Array<number | null> {
   if (!fps.length) return cards.map(() => null)
   const byCat = new Map<ScanCatalogKey, CatalogIndex | null>()
-  for (const c of cards) if (!byCat.has(c.catalog)) byCat.set(c.catalog, await catalogIndex(c.catalog))
+  for (const c of cards) if (!byCat.has(c.catalog)) byCat.set(c.catalog, loadedIndex(c.catalog))
   return cards.map((c) => {
     const idx = byCat.get(c.catalog)
     const row = idx?.pos.get(c.id)
@@ -137,12 +149,12 @@ export async function pictureSimilarity(fps: Float32Array[], cards: Array<{ cata
 }
 
 /** The catalog cards that look most like the scan, best first */
-export async function pictureSearch(fps: Float32Array[], catalogs: ScanCatalogKey[], k = 8): Promise<PictureHit[]> {
+export function pictureSearch(fps: Float32Array[], catalogs: ScanCatalogKey[], k = 8): PictureHit[] {
   if (!fps.length) return []
   const top: PictureHit[] = []
   let floor = -Infinity
   for (const catalog of catalogs) {
-    const idx = await catalogIndex(catalog)
+    const idx = loadedIndex(catalog)
     if (!idx) continue
     const n = idx.ids.length
     for (let row = 0; row < n; row++) {

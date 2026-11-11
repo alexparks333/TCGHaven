@@ -142,7 +142,10 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerp
   const best = Math.max(0, ...candidates.filter((c) => c.why !== 'picture').map((c) => c.score))
   const close = candidates.filter((c) => c.why === 'picture' ? (c.picture ?? 0) >= AI_OFFER : c.score >= best - 20).slice(0, MAX_COMPARE)
   let distances: Array<number | null> | undefined
-  if (close.length > 0) {
+  // The picture AI already compared every one of them → skip the slower photo-by-photo check
+  // (it downloads each candidate's thumbnail)
+  const aiCoversAll = close.length > 0 && close.every((c) => typeof c.picture === 'number')
+  if (close.length > 0 && !aiCoversAll) {
     try {
       const urls = close.map((c) => cardImage(c.imageUrl, 'thumb') ?? c.imageUrl)
       distances = (await CardScanner.compare({ scanId, imageUrls: urls })).distances

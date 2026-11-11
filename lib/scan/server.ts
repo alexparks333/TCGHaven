@@ -120,10 +120,9 @@ export type ScanSlab = Pick<SlabLabel, 'company' | 'grade' | 'cert'>
 
 export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerprints: Float32Array[] = []): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   const keys = catalogsFor(games)
-  const [catalogs, hits] = await Promise.all([
-    Promise.all(keys.map(scanCatalog)),
-    pictureSearch(fingerprints, keys, PICTURE_HITS).catch(() => []),
-  ])
+  const catalogs = await Promise.all(keys.map(scanCatalog))
+  let hits: ReturnType<typeof pictureSearch> = []
+  try { hits = pictureSearch(fingerprints, keys, PICTURE_HITS) } catch { /* no picture search this time */ }
   const clues = readClues(lines)
   const slab = clues.slab ? { company: clues.slab.company, grade: clues.slab.grade, cert: clues.slab.cert } : null
   const found = lines.length ? matchScan(clues, catalogs) : []
@@ -138,7 +137,8 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerpr
     found.push({ catalog: h.catalog, id: h.id, name: card.name, score: 0, why: 'picture', exact: false })
     have.add(`${h.catalog}:${h.id}`)
   }
-  const sims = await pictureSimilarity(fingerprints, found.map((c) => ({ catalog: c.catalog, id: c.id }))).catch(() => found.map(() => null))
+  let sims: Array<number | null> = found.map(() => null)
+  try { sims = pictureSimilarity(fingerprints, found.map((c) => ({ catalog: c.catalog, id: c.id }))) } catch { /* text only */ }
   return { slab, candidates: found.flatMap((c, i) => {
     const cat = catalogs.find((x) => x.key === c.catalog)
     const card = cat && (catalogIndex(cat).byId.get(c.id) as RawCard | undefined)
