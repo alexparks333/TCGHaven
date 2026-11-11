@@ -134,7 +134,7 @@ with `permission-denied`, and the Studio now says so instead of looking saved.
 - **Web half:** a small CPU web app. It answers `/health` and checks the ticket and origin. It
   answers art it has seen before from the cache, for free.
 - **GPU half:** a `Relief` class on an **L40S**. It's started only for new art, with **at most 3 at
-  once** (`MAX_GPUS`). It stays warm 60 s after a pin (`IDLE_SECONDS`), then scales to zero.
+  once** (`MAX_GPUS`). It is let go 5 s after a pin (`IDLE_SECONDS`): only the AI analysis ever uses the GPU — sculpting, finishes, baking and the 3D view run in the browser.
 - **Storage:** model weights (~6 GB, downloaded on the first run) and finished analyses live in the
   Modal Volume `havenrelief-store`.
 - **Jobs:** Modal ends a web request at 150 s, so new art gets `202 { job }`. The Studio

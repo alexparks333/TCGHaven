@@ -23,7 +23,7 @@ import { appStorage } from '@/lib/firebase/appStorage'
 import { cutOutWhite } from '@/lib/pinArtCutout'
 import { auth } from '@/lib/firebase/config'
 import { RELIEF_SERVER, setReliefEndpoint } from '@/lib/reliefStudio'
-import { GAME_LABELS, type Game } from '@/lib/types'
+import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage } from '@/lib/cardImage'
 import { useScrollLock } from '@/lib/useScrollLock'
@@ -388,17 +388,38 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
             </div>
           )}
       </div>
-      <div className="mt-4 flex gap-2">
-        <select className="input-field !w-auto text-sm" value={game} onChange={(e) => setGame(e.target.value as Game)}>
-          {GAMES.map((g) => <option key={g} value={g}>{GAME_LABELS[g]}</option>)}
-        </select>
-        <div className="relative flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input className="input-field pl-9 text-sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search a card — name, or name and number" />
+      {/* Which game: a row of pills (scrolls sideways) — then the search, full width */}
+      <div className="mt-5">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Game</p>
+        <div className="-mx-5 px-5 flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+          {GAMES.map((g) => (
+            <button key={g} type="button" onClick={() => setGame(g)}
+              className={cn('shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors border',
+                game === g ? 'text-white border-transparent shadow-sm' : 'border-slate-700 text-slate-400 hover:text-ink hover:border-slate-600')}
+              style={game === g ? { background: GAME_COLORS[g] } : undefined}>
+              {GAME_LABELS[g]}
+            </button>
+          ))}
         </div>
       </div>
+      <div className="relative mt-3">
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+        <input className="input-field !pl-10 !pr-10 text-sm" value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder={`Search ${GAME_LABELS[game]} cards — e.g. ${game === 'pokemon' ? 'Charizard 4' : 'a name and number'}`} />
+        {loading
+          ? <Loader2 size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 animate-spin" />
+          : q && <button type="button" onClick={() => setQ('')} aria-label="Clear the search" className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:text-ink hover:bg-slate-800"><X size={14} /></button>}
+      </div>
+      {q.trim().length < 2 ? (
+        <div className="mt-3 rounded-2xl border-2 border-dashed border-slate-800 py-10 flex flex-col items-center gap-1.5 text-center">
+          <Search size={22} className="text-slate-600" />
+          <p className="text-sm font-semibold text-slate-400">Search for a card to add it</p>
+          <p className="text-xs text-slate-500">Tap a card to add it · tap it again to take it off</p>
+        </div>
+      ) : !loading && results.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500 text-center py-8">No {GAME_LABELS[game]} cards match &ldquo;{q.trim()}&rdquo;</p>
+      ) : null}
       <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5">
-        {loading && <p className="col-span-full text-sm text-slate-500 flex items-center gap-2"><Loader2 size={14} className="animate-spin" />Searching…</p>}
         {results.map((r) => {
           const on = have.has(r.id)
           return (

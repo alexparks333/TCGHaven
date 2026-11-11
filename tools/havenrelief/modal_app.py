@@ -31,7 +31,7 @@ import modal
 
 GPU = "L40S"          # 48 GB: one pass for the normals (big_gpu), ~2½ min a pin. "L4" is cheaper an hour but ~2× slower
 MAX_GPUS = 3          # the most pins analysed at once — the bill's ceiling (more wait in the queue)
-IDLE_SECONDS = 60     # a GPU stays warm this long after a pin (billed), so a quick second try skips the cold start
+IDLE_SECONDS = 5      # the GPU is let go almost at once after a pin (idle time is billed); the Studio works in the browser from there
 
 here = Path(__file__).parent
 app = modal.App("havenrelief")
@@ -103,7 +103,7 @@ class Relief:
 
 # ── The web half (CPU only, cheap; starts the GPU just for real work) ─────────────────────────
 
-@app.function(image=web_image, secrets=[secret], volumes={STORE: store}, max_containers=4, scaledown_window=120)
+@app.function(image=web_image, secrets=[secret], volumes={STORE: store}, max_containers=4, scaledown_window=30)
 @modal.concurrent(max_inputs=50)
 @modal.asgi_app()
 def web():
