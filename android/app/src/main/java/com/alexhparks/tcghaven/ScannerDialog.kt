@@ -745,19 +745,21 @@ class ScannerDialog(
         @Deprecated("Back slides the sheet away")
         override fun onBackPressed() { close() }
 
-        private fun padded(v: View, top: Int = 0): View = v.also {
-            body.addView(it, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = pad; rightMargin = pad; topMargin = top })
+        private fun padded(v: View, top: Int = 0, into: LinearLayout = body): View = v.also {
+            into.addView(it, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = pad; rightMargin = pad; topMargin = top })
         }
 
-        private fun section(label: String) {
-            padded(TextView(context).apply {
+        private fun section(label: String, into: LinearLayout = body) {
+            padded(into = into, top = dpi(22f), v = TextView(context).apply {
                 text = label.uppercase()
                 setTextColor(muted)
                 textSize = 12f
                 letterSpacing = 0.04f
                 typeface = Typeface.DEFAULT_BOLD
-            }, dpi(22f))
+            })
         }
+
+        private fun box() = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
 
         /** A segmented row of choices, like the iPhone's segmented controls */
         private fun segmented(labels: List<String>, selected: Int, onPick: (Int) -> Unit): View {
@@ -799,7 +801,7 @@ class ScannerDialog(
         }
 
         /** A sideways strip of cards (other matches, search results) — the iPhone's option strip */
-        private fun strip(options: List<TrayOption>, selectedKey: String?, onTap: (TrayOption) -> Unit): View {
+        private fun strip(options: List<TrayOption>, selectedKey: String?, into: LinearLayout = body, onTap: (TrayOption) -> Unit): View {
             val scroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; setPadding(pad, 0, pad, 0) }
             val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
             for (o in options) {
@@ -819,15 +821,34 @@ class ScannerDialog(
                 row.addView(col, LinearLayout.LayoutParams(dpi(104f), -2).apply { rightMargin = dpi(12f) })
             }
             scroll.addView(row)
-            body.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
+            into.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
             return scroll
         }
 
-        fun refresh() {
-            body.removeAllViews()
-            val o = item.current
+        // Each part of the sheet draws itself, so a tap redraws only what it changes (picking PSA
+        // mustn't reload the other matches' photos)
+        private val imageBox = box()
+        private val infoBox = box()
+        private val finishBox = box()
+        private val conditionBox = box()
+        private val matchesBox = box()
+        private val gradingBox = box()
+        private val searchBox = box()
+        private val resultsBox = box()
 
-            // The card, big — its catalog photo, or your scan
+        /** Everything — on opening, and when the card itself changes */
+        fun refresh() {
+            if (body.childCount == 0) {
+                for (b in listOf(imageBox, infoBox, finishBox, conditionBox, matchesBox, gradingBox, searchBox, resultsBox)) body.addView(b, LinearLayout.LayoutParams(-1, -2))
+                drawSearch()
+                drawButtons()
+            }
+            drawImage(); drawInfo(); drawFinish(); drawCondition(); drawMatches(); drawGrading(); drawResults()
+        }
+
+        private fun drawImage() {
+            imageBox.removeAllViews()
+            val o = item.current
             val host = FrameLayout(context)
             val img = ImageView(context).apply {
                 scaleType = ImageView.ScaleType.FIT_CENTER
@@ -848,12 +869,15 @@ class ScannerDialog(
             }
             val screenW = context.resources.displayMetrics.widthPixels
             val cardW = (screenW * 0.62f).toInt()
-            body.addView(host, LinearLayout.LayoutParams(cardW, (cardW * 88f / 63f).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dpi(8f) })
-            body.addView(segmented(listOf("Card", "Your scan"), if (showScan) 1 else 0) { showScan = it == 1; refresh() },
+            imageBox.addView(host, LinearLayout.LayoutParams(cardW, (cardW * 88f / 63f).toInt()).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dpi(4f) })
+            imageBox.addView(segmented(listOf("Card", "Your scan"), if (showScan) 1 else 0) { showScan = it == 1; drawImage() },
                 LinearLayout.LayoutParams(dpi(210f), -2).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = dpi(12f) })
+        }
 
-            // What it is
-            padded(TextView(context).apply {
+        private fun drawInfo() {
+            infoBox.removeAllViews()
+            val o = item.current
+            padded(into = infoBox, top = dpi(18f), v = LinearLayout(context).apply { addView(TextView(context).apply {
                 text = when (item.status) {
                     "matched" -> if (item.confirmed) "✓ You picked this" else "✓ Matched"
                     "pick" -> "? Not sure — check the other matches"
@@ -865,85 +889,105 @@ class ScannerDialog(
                 typeface = Typeface.DEFAULT_BOLD
                 setPadding(dpi(10f), dpi(4f), dpi(10f), dpi(4f))
                 background = rounded(when (item.status) { "matched" -> gold; "pick" -> Color.parseColor("#FFCC00"); "matching" -> Color.argb(38, 255, 255, 255); else -> Color.parseColor("#FF3B30") }, dp(11f))
-            }.let { pill -> LinearLayout(context).apply { addView(pill) } }, dpi(18f))
-            padded(TextView(context).apply { text = o?.title ?: "Not found"; setTextColor(ink); textSize = 24f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2 }, dpi(10f))
-            if (o != null) {
-                padded(TextView(context).apply { text = o.subtitle; setTextColor(muted); textSize = 15f; maxLines = 2 }, dpi(2f))
-                val p = item.currentPrinting
-                val price = if (p != null && o.printings.size > 1 && p.price.isNotEmpty()) "${p.price} · ${p.label}" else o.price
-                if (price.isNotEmpty()) padded(TextView(context).apply { text = price; setTextColor(gold); textSize = 20f; typeface = Typeface.DEFAULT_BOLD }, dpi(8f))
+            }) })
+            padded(into = infoBox, top = dpi(10f), v = TextView(context).apply { text = o?.title ?: "Not found"; setTextColor(ink); textSize = 24f; typeface = Typeface.DEFAULT_BOLD; maxLines = 2 })
+            if (o == null) return
+            padded(into = infoBox, top = dpi(2f), v = TextView(context).apply { text = o.subtitle; setTextColor(muted); textSize = 15f; maxLines = 2 })
+            val p = item.currentPrinting
+            val price = if (p != null && o.printings.size > 1 && p.price.isNotEmpty()) "${p.price} · ${p.label}" else o.price
+            if (price.isNotEmpty()) padded(into = infoBox, top = dpi(8f), v = TextView(context).apply { text = price; setTextColor(gold); textSize = 20f; typeface = Typeface.DEFAULT_BOLD })
+        }
 
-                // Finish: every printing, with its price
-                if (o.printings.size > 1) {
-                    section("Finish")
-                    val picked = item.printing ?: o.printings.first().key
-                    val scroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; setPadding(pad, 0, pad, 0) }
-                    val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                    for (pr in o.printings) {
-                        val on = pr.key == picked
-                        row.addView(TextView(context).apply {
-                            text = if (pr.price.isEmpty()) pr.label else "${pr.label}\n${pr.price}"
-                            gravity = Gravity.CENTER
-                            textSize = 14f
-                            typeface = Typeface.DEFAULT_BOLD
-                            setTextColor(if (on) Color.BLACK else ink)
-                            background = rounded(if (on) gold else Color.argb(20, 255, 255, 255), dp(14f))
-                            setPadding(dpi(14f), dpi(6f), dpi(14f), dpi(6f))
-                            setOnClickListener { item.printing = pr.key; redrawTray(); refresh() }
-                        }, LinearLayout.LayoutParams(-2, dpi(54f)).apply { rightMargin = dpi(8f) })
-                    }
-                    scroll.addView(row)
-                    body.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
-                }
+        // Finish: every printing, with its price
+        private fun drawFinish() {
+            finishBox.removeAllViews()
+            val o = item.current ?: return
+            if (o.printings.size < 2) return
+            section("Finish", finishBox)
+            val picked = item.printing ?: o.printings.first().key
+            val scroll = HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; clipToPadding = false; setPadding(pad, 0, pad, 0) }
+            val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            for (pr in o.printings) {
+                val on = pr.key == picked
+                row.addView(TextView(context).apply {
+                    text = if (pr.price.isEmpty()) pr.label else "${pr.label}\n${pr.price}"
+                    gravity = Gravity.CENTER
+                    textSize = 14f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(if (on) Color.BLACK else ink)
+                    background = rounded(if (on) gold else Color.argb(20, 255, 255, 255), dp(14f))
+                    setPadding(dpi(14f), dpi(6f), dpi(14f), dpi(6f))
+                    setOnClickListener { item.printing = pr.key; redrawTray(); drawFinish(); drawInfo() }
+                }, LinearLayout.LayoutParams(-2, dpi(54f)).apply { rightMargin = dpi(8f) })
             }
+            scroll.addView(row)
+            finishBox.addView(scroll, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
+        }
 
-            // Condition (a graded card has its grade instead)
-            if (item.slab == null) {
-                section("Condition")
-                val keys = listOf("near_mint", "lightly_played", "moderately_played", "heavily_played")
-                val current = keys.indexOf(item.condition ?: "near_mint").coerceAtLeast(0)
-                padded(segmented(listOf("NM", "LP", "MP", "HP"), current) { i -> item.condition = if (i == 0) null else keys[i]; refresh() }, dpi(10f))
-            }
+        // Condition (a graded card has its grade instead)
+        private fun drawCondition() {
+            conditionBox.removeAllViews()
+            if (item.slab != null) return
+            section("Condition", conditionBox)
+            val keys = listOf("near_mint", "lightly_played", "moderately_played", "heavily_played")
+            val current = keys.indexOf(item.condition ?: "near_mint").coerceAtLeast(0)
+            padded(into = conditionBox, top = dpi(10f), v = segmented(listOf("NM", "LP", "MP", "HP"), current) { i -> item.condition = if (i == 0) null else keys[i]; drawCondition() })
+        }
 
-            // Other matches — a sideways strip, the current one outlined
-            if (item.options.size > 1) {
-                section("Other matches — tap to switch")
-                strip(item.options, o?.key) { choose(it) }
-            }
+        // Other matches — a sideways strip, the current one outlined
+        private fun drawMatches() {
+            matchesBox.removeAllViews()
+            if (item.options.size < 2) return
+            section("Other matches — tap to switch", matchesBox)
+            strip(item.options, item.current?.key, matchesBox) { choose(it) }
+        }
 
-            // Grading — what was read off the label, or set by hand (a raw card can be marked graded too)
-            section("Grading")
+        // Grading — what was read off the label, or set by hand (a raw card can be marked graded too)
+        private fun drawGrading() {
+            gradingBox.removeAllViews()
+            section("Grading", gradingBox)
             val slab = item.slab
             val company = companies.indexOf(slab?.company?.uppercase() ?: "Raw").let { if (it < 0) 0 else it }
-            padded(segmented(companies, company) { i ->
+            padded(into = gradingBox, top = dpi(10f), v = segmented(companies, company) { i ->
+                val wasGraded = item.slab != null
                 item.slab = if (i == 0) null else SlabGrade(companies[i], item.slab?.grade ?: "", item.slab?.cert ?: "")
-                redrawTray(); refresh()
-            }, dpi(10f))
-            if (slab != null) {
-                val fields = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-                fields.addView(field("Grade (e.g. 10, 9.5)", slab.grade, true) { g ->
-                    item.slab = item.slab?.copy(grade = g.trim()); redrawTray()
-                }, LinearLayout.LayoutParams(0, dpi(46f), 0.42f).apply { rightMargin = dpi(10f) })
-                fields.addView(field("Cert number", slab.cert, true) { c ->
-                    item.slab = item.slab?.copy(cert = c.replace(Regex("[^0-9A-Za-z]"), ""))
-                }, LinearLayout.LayoutParams(0, dpi(46f), 0.58f))
-                padded(fields, dpi(10f))
-                if (slab.cert.isNotEmpty()) padded(TextView(context).apply { text = "Cert read from the label — check it matches the slab"; setTextColor(muted); textSize = 12f }, dpi(6f))
-            }
+                redrawTray()
+                drawGrading()
+                drawImage()
+                if (wasGraded != (item.slab != null)) drawCondition()
+            })
+            if (slab == null) return
+            val fields = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            fields.addView(field("Grade (e.g. 10, 9.5)", slab.grade, true) { g ->
+                item.slab = item.slab?.copy(grade = g.trim()); redrawTray(); drawImage()
+            }, LinearLayout.LayoutParams(0, dpi(46f), 0.42f).apply { rightMargin = dpi(10f) })
+            fields.addView(field("Cert number", slab.cert, true) { c ->
+                item.slab = item.slab?.copy(cert = c.replace(Regex("[^0-9A-Za-z]"), ""))
+            }, LinearLayout.LayoutParams(0, dpi(46f), 0.58f))
+            padded(into = gradingBox, top = dpi(10f), v = fields)
+            if (slab.cert.isNotEmpty()) padded(into = gradingBox, top = dpi(6f), v = TextView(context).apply { text = "Cert read from the label — check it matches the slab"; setTextColor(muted); textSize = 12f })
+        }
 
-            // Not right? Find the card
-            section("Not right? Find the card")
+        // Not right? Find the card (drawn once — typing must keep its field)
+        private fun drawSearch() {
+            section("Not right? Find the card", searchBox)
             val search = field("Card name, or name and number", lastQuery, false) { lastQuery = it }.apply {
                 imeOptions = EditorInfo.IME_ACTION_SEARCH
                 setOnEditorActionListener { v, _, _ -> search(v.text.toString()); true }
             }
-            padded(search, dpi(10f)).layoutParams = (search.layoutParams as LinearLayout.LayoutParams).apply { height = dpi(46f) }
-            val note = if (searching) "Searching…" else searchNote
-            if (note != null) padded(TextView(context).apply { text = note; setTextColor(muted); textSize = 13f; gravity = Gravity.CENTER }, dpi(10f))
-            if (results.isNotEmpty()) strip(results, o?.key) { choose(it) }
+            searchBox.addView(search, LinearLayout.LayoutParams(-1, dpi(46f)).apply { leftMargin = pad; rightMargin = pad; topMargin = dpi(10f) })
+        }
 
-            // Done / Remove
-            padded(TextView(context).apply {
+        private fun drawResults() {
+            resultsBox.removeAllViews()
+            val note = if (searching) "Searching…" else searchNote
+            if (note != null) padded(into = resultsBox, top = dpi(10f), v = TextView(context).apply { text = note; setTextColor(muted); textSize = 13f; gravity = Gravity.CENTER })
+            if (results.isNotEmpty()) strip(results, item.current?.key, resultsBox) { choose(it) }
+        }
+
+        // Done / Remove (drawn once)
+        private fun drawButtons() {
+            body.addView(TextView(context).apply {
                 text = "Done"
                 gravity = Gravity.CENTER
                 textSize = 17f
@@ -951,8 +995,8 @@ class ScannerDialog(
                 setTextColor(Color.BLACK)
                 background = rounded(gold, dp(14f))
                 setOnClickListener { close() }
-            }, dpi(28f)).layoutParams = (body.getChildAt(body.childCount - 1).layoutParams as LinearLayout.LayoutParams).apply { height = dpi(52f) }
-            padded(TextView(context).apply {
+            }, LinearLayout.LayoutParams(-1, dpi(52f)).apply { leftMargin = pad; rightMargin = pad; topMargin = dpi(28f) })
+            body.addView(TextView(context).apply {
                 text = "Remove from this scan"
                 gravity = Gravity.CENTER
                 textSize = 15f
@@ -963,7 +1007,7 @@ class ScannerDialog(
                     redrawTray()
                     dismiss()
                 }
-            }, dpi(4f))
+            }, LinearLayout.LayoutParams(-1, -2).apply { leftMargin = pad; rightMargin = pad; topMargin = dpi(4f) })
         }
 
         private fun choose(o: TrayOption) {
@@ -988,12 +1032,12 @@ class ScannerDialog(
             searching = true
             searchNote = null
             results = emptyList()
-            refresh()
+            drawResults()
             searchWaiting[requestId] = { found ->
                 searching = false
                 results = found
                 searchNote = if (found.isEmpty()) "No cards found for “$query”" else null
-                if (isShowing) refresh()
+                if (isShowing) drawResults()
             }
             onSearch(requestId, query)
         }
