@@ -3,7 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { GamePicker } from '@/components/GamePicker'
-import { Package, FolderHeart, ChevronRight, Search, X, Sparkles } from 'lucide-react'
+import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
@@ -570,9 +570,11 @@ export interface CardexViewer {
 // colour, click to select, Shift+Click to select a range. No owned state, prices, adding or URL.
 export interface CardexPicker {
   game: Game
+  /** The games to switch between (the Creator Studio offers all of them); unset = just `game` */
+  games?: Game[]
   selected: Set<string>
-  /** `on`: whether these cards should end up selected */
-  onSelect: (cards: CatalogCard[], on: boolean) => void
+  /** `on`: whether these cards should end up selected; `game`: the game they're from */
+  onSelect: (cards: CatalogCard[], on: boolean, game: Game) => void
 }
 
 export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
@@ -580,7 +582,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   const readOnly = !!viewer || !!picker
   const cards = picker ? NO_CARDS : viewer?.cards ?? store.cards
   const viewerGames = useMemo(() => {
-    if (picker) return [picker.game]
+    if (picker) return picker.games?.length ? picker.games : [picker.game]
     if (!viewer) return null
     const games = Array.from(new Set(viewer.cards.map((c) => c.game)))
     return games.length ? games : DEFAULT_TRACKED_GAMES
@@ -600,7 +602,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   // Starts on the deep-linked game if there is one, else the first game this user tracks
   // (trackedGames is already hydrated from localStorage by the time this first renders).
   const [activeGame, setActiveGame] = useState<CatalogGame | 'personal'>(
-    isCatalogGame(urlGame) || urlGame === 'personal' ? urlGame : trackedGames[0],
+    picker ? picker.game : isCatalogGame(urlGame) || urlGame === 'personal' ? urlGame : trackedGames[0],
   )
   const [activeSet, setActiveSet] = useState<SetMeta>(PLACEHOLDER_SET)
   const [catalogCards, setCatalogCards] = useState<CatalogCard[]>([])
@@ -1268,9 +1270,9 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
                         const last = lastPicked.current ? filteredEnriched.findIndex((c) => c.id === lastPicked.current) : -1
                         if (shift && last >= 0) {
                           const [a, b] = last < i ? [last, i] : [i, last]
-                          picker.onSelect(filteredEnriched.slice(a, b + 1), true)
+                          picker.onSelect(filteredEnriched.slice(a, b + 1), true, (catalogGame === "pokemon-jp" ? "pokemon" : catalogGame) as Game)
                         } else {
-                          picker.onSelect([card], !picker.selected.has(card.id))
+                          picker.onSelect([card], !picker.selected.has(card.id), (catalogGame === "pokemon-jp" ? "pokemon" : catalogGame) as Game)
                         }
                         lastPicked.current = card.id
                       },
@@ -1510,6 +1512,15 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
           <img src={NO_CARD_IMAGE} alt={card.name} ref={(el) => { if (el) onArtDone?.(card.id) }} className="w-full h-full object-cover" />
         )}
         {card.owned && card.slab && <SlabTileOverlay slab={card.slab} />}
+        {/* Picking: the eye opens the card's own view (a plain click selects it) */}
+        {pick && (
+          <span role="button" tabIndex={0} aria-label={`Look at ${card.name}`} title="Look at the card"
+            onClick={(e) => { e.stopPropagation(); zoom(e.currentTarget.parentElement!) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); zoom(e.currentTarget.parentElement!) } }}
+            className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/55 text-white flex items-center justify-center shadow hover:bg-black/80 hover:scale-110 transition-transform">
+            <Eye size={13} />
+          </span>
+        )}
         {pick?.on && (
           <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center shadow">
             <svg width="10" height="10" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>

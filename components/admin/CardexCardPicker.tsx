@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { X, Loader2 } from 'lucide-react'
@@ -50,14 +50,16 @@ export function fetchSetCards(game: Game, setName: string): Promise<CatalogRow[]
   return setCache.get(key)!
 }
 
-export default function CardexCardPicker({ game, onAdd, onClose, title, addLabel }: {
+export default function CardexCardPicker({ game, games, onAdd, onClose, title, addLabel }: {
   game: Game
+  games?: Game[]                        // switchable games (the Creator Studio: all of them); slots then carry `game`
   onAdd: (slots: BadgeSlot[]) => void
   onClose: () => void
   title?: string                        // e.g. adding to one slot: 'Add cards to "Lee Sin"'
   addLabel?: (n: number) => string
 }) {
   const [picked, setPicked] = useState<Map<string, CatalogCard>>(new Map())
+  const gameOf = useRef(new Map<string, Game>()) // each picked card's game (the picker can switch games)
   const [setRows, setSetRows] = useState<Record<string, CatalogRow[]>>({})
   const [alsoCount, setAlsoCount] = useState<Set<string>>(new Set(['Star']))
   const selected = useMemo(() => new Set(picked.keys()), [picked])
@@ -70,18 +72,24 @@ export default function CardexCardPicker({ game, onAdd, onClose, title, addLabel
   }, [onClose])
 
   // Load the sets the picked cards come from, to know their other printings
-  const pickedSets = useMemo(() => Array.from(new Set(Array.from(picked.values()).map((c) => c.setName))), [picked])
+  const setKey = (c: CatalogCard) => `${gameOf.current.get(c.id) ?? game}|${c.setName}`
+  const pickedSets = useMemo(() => Array.from(new Set(Array.from(picked.values()).map(setKey))), [picked]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    for (const s of pickedSets) if (!setRows[s]) fetchSetCards(game, s).then((rows) => setSetRows((r) => ({ ...r, [s]: rows })))
-  }, [pickedSets, game, setRows])
+    for (const key of pickedSets) {
+      if (setRows[key]) continue
+      const [g, s] = key.split('|') as [Game, string]
+      fetchSetCards(g, s).then((rows) => setSetRows((r) => ({ ...r, [key]: rows })))
+    }
+  }, [pickedSets, setRows])
 
   const siblingRarities = useMemo(() => {
     const out = new Set<string>()
-    picked.forEach((c) => { for (const s of siblingsOf(c, setRows[c.setName] ?? [])) if (!picked.has(s.id)) out.add(s.rarity ?? '') })
+    picked.forEach((c) => { for (const s of siblingsOf(c, setRows[setKey(c)] ?? [])) if (!picked.has(s.id)) out.add(s.rarity ?? '') })
     return Array.from(out)
-  }, [picked, setRows])
+  }, [picked, setRows]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function select(cards: CatalogCard[], on: boolean) {
+  function select(cards: CatalogCard[], on: boolean, from: Game) {
+    for (const c of cards) gameOf.current.set(c.id, from)
     setPicked((m) => {
       const next = new Map(m)
       for (const c of cards) { if (on) next.set(c.id, c); else next.delete(c.id) }
@@ -91,9 +99,10 @@ export default function CardexCardPicker({ game, onAdd, onClose, title, addLabel
 
   function add() {
     const slots: BadgeSlot[] = Array.from(picked.values()).map((c) => {
-      const extra = siblingsOf(c, setRows[c.setName] ?? []).filter((s) => !picked.has(s.id) && alsoCount.has(s.rarity ?? ''))
+      const extra = siblingsOf(c, setRows[setKey(c)] ?? []).filter((s) => !picked.has(s.id) && alsoCount.has(s.rarity ?? ''))
       const all = [toSlotCard(c), ...extra.map(toSlotCard)]
-      return { label: slotLabel(c.name), cardIds: all.map((x) => x.id), cards: all }
+      const slot = { label: slotLabel(c.name), cardIds: all.map((x) => x.id), cards: all }
+      return games ? ({ ...slot, game: gameOf.current.get(c.id) ?? game } as BadgeSlot) : slot
     })
     onAdd(slots)
     onClose()
@@ -113,7 +122,7 @@ export default function CardexCardPicker({ game, onAdd, onClose, title, addLabel
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
-        <CardexPage picker={{ game, selected, onSelect: select }} />
+        <CardexPage picker={{ game, games, selected, onSelect: select }} />
       </div>
 
       <div className="border-t border-slate-800 bg-slate-950 px-5 py-3 flex flex-wrap items-center gap-3">

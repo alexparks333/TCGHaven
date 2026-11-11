@@ -12,9 +12,10 @@
 // Files go to Storage creators/{uid}/badges/{id}/ (storage.rules).
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid } from 'lucide-react'
+import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye } from 'lucide-react'
 import { DEFAULT_TIERS, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -27,7 +28,8 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage } from '@/lib/cardImage'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { cn } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
+import { CardZoomOverlay, RARITY_COLORS, type ZoomCardData } from '@/components/pages/CardexPage'
 
 const ReliefStudio = dynamic(() => import('@/components/admin/ReliefStudio'), { ssr: false })
 const CardexCardPicker = dynamic(() => import('@/components/admin/CardexCardPicker'), { ssr: false }) // the whole Cardex, full screen
@@ -345,10 +347,23 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
   const [results, setResults] = useState<CardSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [cardex, setCardex] = useState(false)
+  // The eye on a result: the Cardex's own card view (big card, rarity, set, price)
+  const [zoom, setZoom] = useState<ZoomCardData | null>(null)
+  useScrollLock(zoom !== null)
+  const look = (el: HTMLElement, r: CardSearchResult) => {
+    const rarity = r.rarity ? (RARITY_LABELS_BY_GAME[r.game]?.[r.rarity] ?? r.rarity) : ''
+    setZoom({
+      imageUrl: r.imageUrl, name: r.name, number: r.number, setName: r.setName,
+      rarityLabel: rarity.replace('_', ' '), rarityColor: (r.rarity && RARITY_COLORS[r.rarity]) || '#7a6a55',
+      marketPrice: r.marketPrice, owned: false, quantity: 0,
+      glowColor: zoomGlowColor(r.game, r.rarity ?? '', GAME_COLORS[r.game]),
+      originRect: el.getBoundingClientRect(),
+    } as ZoomCardData)
+  }
   // From the Cardex: its slots for this game, minus cards already picked
   const addFromCardex = (picked: BadgeSlot[]) => {
     const have = new Set(slots.flatMap((s) => s.cardIds))
-    const fresh = picked.filter((s) => !s.cardIds.some((id) => have.has(id))).map((s) => ({ ...s, game }) as BadgeSlot)
+    const fresh = picked.filter((s) => !s.cardIds.some((id) => have.has(id))) // each carries its own game
     if (fresh.length) onChange([...slots, ...fresh])
   }
   useEffect(() => {
@@ -440,10 +455,14 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
         {results.map((r) => {
           const on = have.has(r.id)
           return (
-            <button key={r.id} type="button" onClick={() => add(r)} title={on ? 'Tap to remove' : 'Tap to add'} className={cn('relative text-left rounded-lg p-1 transition-colors hover:bg-slate-800', on && 'bg-emerald-600/10')}>
+            <button key={r.id} type="button" onClick={() => add(r)} title={on ? 'Tap to remove' : 'Tap to add'} className={cn('group relative text-left rounded-lg p-1 transition-colors hover:bg-slate-800', on && 'bg-emerald-600/10')}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={cardImage(r.imageUrl, 'thumb') ?? r.imageUrl} alt="" className={cn('w-full aspect-[63/88] object-cover rounded-md', on && 'ring-2 ring-emerald-600')} />
               {on && <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow"><Check size={14} /></span>}
+              <span role="button" tabIndex={0} aria-label={`Look at ${r.name}`} title="Look at the card"
+                onClick={(e) => { e.stopPropagation(); look(e.currentTarget.closest('button')!, r) }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); look(e.currentTarget.closest('button')!, r) } }}
+                className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center shadow opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-black/80 transition-opacity"><Eye size={14} /></span>
               <p className="text-[11px] font-semibold text-ink truncate mt-1">{r.name}</p>
               <p className="text-[10px] text-slate-500 truncate">{r.setName}{r.number ? ` · #${r.number}` : ''}</p>
               {on && <p className="text-[10px] text-emerald-700 font-semibold">Added · tap to remove</p>}
@@ -451,9 +470,11 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
           )
         })}
       </div>
+      {/* On the page itself: inside the panel (animated with a transform) a fixed overlay would be boxed in */}
+      {typeof document !== 'undefined' && createPortal(<CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly />, document.body)}
       {cardex && (
-        <CardexCardPicker game={game} onAdd={addFromCardex} onClose={() => setCardex(false)}
-          title={`Pick ${GAME_LABELS[game]} cards for this badge`}
+        <CardexCardPicker game={game} games={GAMES} onAdd={addFromCardex} onClose={() => setCardex(false)}
+          title="Pick cards for this badge"
           addLabel={(n) => `Add ${n || ''} card${n === 1 ? '' : 's'} to the badge`} />
       )}
     </div>
