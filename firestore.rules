@@ -55,6 +55,35 @@ service cloud.firestore {
       allow delete: if isOwner() && request.auth.uid != uid;
     }
 
+    // Who may make creator things (lib/accountRoles.ts canUseCreatorStudio): a Creator in good
+    // standing, or staff (to try it and help creators). Never a banned account.
+    function canCreate() {
+      return signedIn() && notBanned() && (isAdmin() || (
+        exists(/databases/$(database)/documents/account_roles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/account_roles/$(request.auth.uid)).data.role == 'creator' &&
+        get(/databases/$(database)/documents/account_roles/$(request.auth.uid)).data.get('suspended', false) != true
+      ));
+    }
+
+    // Creator Books (lib/creatorBooks.ts, docs/creators.md): one per creator, at their uid. Every
+    // collector can read them (the app shows a book only while its maker is a Creator); only the
+    // creator writes their own. Deleting stays allowed for them and staff.
+    match /creator_books/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && canCreate()
+        && request.resource.data.owner == uid
+        && request.resource.data.badges is list && request.resource.data.badges.size() <= 200;
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // A creator's community profile (barebones for now): name, tagline, about, colour
+    match /communities/{uid} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == uid && canCreate()
+        && request.resource.data.keys().hasOnly(['name', 'tagline', 'about', 'color', 'updatedAt']);
+      allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
     // Account titles (lib/accountRoles.ts): { role, creatorSince?, formerCreator?, updatedAt }; no
     // doc = Regular. Titles show on profiles, so any signed-in collector can read them; only staff
     // set them (nobody can make themselves Premium or a Creator). The history — who changed it and

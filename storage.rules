@@ -18,6 +18,23 @@ service firebase.storage {
       ) && request.resource.size < 25 * 1024 * 1024;
     }
 
+    // Creators' uploads (Creator Studio — docs/creators.md): their book cover, badge art and Relief
+    // Studio files, each under their own folder. Public read (books are shown to their followers);
+    // only that creator — a Creator in good standing, or staff — writes, 25 MB a file at most.
+    match /creators/{uid}/{path=**} {
+      allow read: if true;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 25 * 1024 * 1024
+        && (
+          request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'] ||
+          firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid)) ||
+          (firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.role == 'creator' &&
+           firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.get('suspended', false) != true &&
+           firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.get('banned', false) != true)
+        );
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
     match /catalog/{game}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null && (

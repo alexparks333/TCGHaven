@@ -17,10 +17,15 @@ closed half-way (the browser gives up on the request) still counts next time.
 Only this computer can reach it (127.0.0.1). Pages allowed to call it: localhost:3000, plus any
 origins in HAVENRELIEF_ORIGINS (comma-separated, e.g. the deployed site). A cloud GPU later runs
 this same analysis behind a URL — the Studio only needs the address changed.
+
+Creators (docs/creators.md): with HAVENRELIEF_SECRET set (the same value as the site's), every
+analysis needs an X-Relief-Ticket header from the site's /api/relief/ticket — "{uid}.{expires}.
+{hmac-sha256}" — so only TCG Haven creators and staff can use the GPU. Unset = no check (this PC).
 """
 import argparse
 import base64
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -37,6 +42,19 @@ ORIGINS = {"http://localhost:3000", "http://127.0.0.1:3000"} | {
     o.strip().rstrip("/") for o in os.environ.get("HAVENRELIEF_ORIGINS", "").split(",") if o.strip()
 }
 MAX_UPLOAD = 40 * 1024 * 1024
+SECRET = os.environ.get("HAVENRELIEF_SECRET", "")
+
+
+def ticket_ok(ticket):
+    """A ticket from the site's /api/relief/ticket: signed by the shared secret and not expired"""
+    if not SECRET:
+        return True
+    try:
+        uid, expires, sig = ticket.split(".")
+        good = hmac.new(SECRET.encode(), f"{uid}.{expires}".encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(good, sig) and int(expires) > time.time()
+    except Exception:
+        return False
 CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
 models = None
 gpu = threading.Lock()  # one analysis at a time — the models share one GPU
@@ -49,7 +67,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Relief-Ticket")
             # Chrome's Private Network Access: a page on the internet calling localhost asks first
             self.send_header("Access-Control-Allow-Private-Network", "true")
 
@@ -79,6 +97,8 @@ class Handler(BaseHTTPRequestHandler):
         just_normals = url.path == "/normals"
         if self.headers.get("Origin") and self.headers.get("Origin") not in ORIGINS:
             return self.reply(403, {"error": "origin not allowed"})
+        if not ticket_ok(self.headers.get("X-Relief-Ticket", "")):
+            return self.reply(401, {"error": "the 3D maker needs a ticket from TCG Haven — reopen the Creator Studio"})
         size = int(self.headers.get("Content-Length") or 0)
         if not 0 < size <= MAX_UPLOAD:
             return self.reply(413, {"error": "send the image as the body (max 40MB)"})

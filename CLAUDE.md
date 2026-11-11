@@ -17,6 +17,7 @@ in that area:**
 | Card search ranking, prices / price history, the Cardex | `docs/search-prices-cardex.md` |
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
+| The Creator Studio, Creator Books, the 3D maker's GPU (tickets, hosting options and costs) | `docs/creators.md` |
 | The iPhone app (Capacitor: `capacitor.config.ts`, `ios/`), the site↔app bridge (`lib/nativeApp.ts`) — how it works, then its status and plan | `docs/ios-app.md` |
 | The Android app (`android/`, Capacitor) — building, the phone over Wi-Fi, its plan | `docs/android-app.md` |
 | The card scanner (`ios/App/App/CardScanner.swift`, `lib/scan/`, `/api/cards/scan`) | `docs/card-scanner.md` |

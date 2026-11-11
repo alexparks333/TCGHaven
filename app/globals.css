@@ -846,3 +846,12 @@
 }
 @keyframes pin-inspector-in { from { opacity: 0; } to { opacity: 1; } }
 .pin-inspector-in { animation: pin-inspector-in 0.25s ease-out both; }
+
+/* Creator Studio: the waiting book floats gently (CreatorPage.tsx StartBook) */
+@keyframes creatorFloat {
+  0%, 100% { transform: translateY(0) rotateY(-14deg) rotateX(4deg); }
+  50% { transform: translateY(-8px) rotateY(-6deg) rotateX(2deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [class*="creatorFloat"] { animation: none !important; }
+}

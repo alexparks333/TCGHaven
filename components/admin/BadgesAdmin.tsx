@@ -279,7 +279,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
       const r = await fetch(badgeAsset(artUrl)!)
       if (!r.ok) throw new Error('couldn’t read the art back')
       const kit = await loadKit(await analyzeArt(await r.blob(), 'high', useAlpha))
-      const reliefKit = await saveKit(staffStorage, id || 'new', kit)
+      const reliefKit = await saveKit(staffStorage, `badges/${id || 'new'}`, kit)
       // piece edits belong to one analysis — keep the rest of the settings
       setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, levelRule: 'borders', pieces: {}, soft: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
       setReliefJob({ state: 'done' })

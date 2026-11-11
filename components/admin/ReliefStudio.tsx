@@ -5,14 +5,14 @@ import { createPortal } from 'react-dom'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage'
 import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffStorage } from '@/lib/firebase/staff'
 import type { BadgeDef } from '@/lib/badges'
 import {
-  BASE_FINISH_IDS, DETAILS, FINISHES, FINISH_HOLE, LENTICULAR_MAX_PER_SET, LENTICULAR_MAX_SETS, LENTICULAR_MAX_TOTAL, RELIEF_SERVER, lenticularPictures,
+  BASE_FINISH_IDS, DETAILS, FINISHES, FINISH_HOLE, LENTICULAR_MAX_PER_SET, LENTICULAR_MAX_SETS, LENTICULAR_MAX_TOTAL, reliefServerUrl, lenticularPictures,
   DEFAULT_METAL, layerLook, withFinishLayers, type FinishLayer,
   type DetailKind, type LenticularSet, analyzeArt, recalculateNormals, compose, detailMap, finishMap, finishPng, heightPng, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
   type Composed, type ReliefKit, type ReliefSettings,
@@ -35,11 +35,16 @@ type View = 'art' | 'pieces' | 'levels' | 'normals'
 // Level colours, lowest → highest (the Levels view and the levels list)
 const LEVEL_COLORS = ['#3b4cc0', '#2f8fd8', '#25b8a6', '#7cc54a', '#e3c735', '#f08a2c', '#e0453a', '#c2307f']
 
-export default function ReliefStudio({ badge, onApply, onClose }: {
+export default function ReliefStudio({ badge, onApply, onClose, storage = staffStorage, folder }: {
   badge: BadgeDef
   onApply: (patch: Partial<BadgeDef>) => void | Promise<void>
   onClose: () => void
+  /** Where its files go: the staff portal's Storage and badges/{id} by default; the Creator Studio
+   *  passes the collector app's Storage and creators/{uid}/badges/{id} (docs/creators.md) */
+  storage?: FirebaseStorage
+  folder?: string
 }) {
+  const fileFolder = folder ?? `badges/${badge.id || 'new'}`
   const mountRef = useRef<HTMLDivElement>(null)
   const stage = useRef<Stage | null>(null)
   // Unsaved work from an earlier visit (this computer) wins over what the badge has saved — but only
@@ -322,7 +327,7 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     try {
       const stamp = Date.now()
       const urls = await Promise.all(Array.from(files).slice(0, room).map(async (f, i) => {
-        const r = ref(staffStorage, `badges/${badge.id || 'new'}/lenticular-${stamp}-${i}.${(f.name.split('.').pop() || 'png').toLowerCase()}`)
+        const r = ref(storage, `${fileFolder}/lenticular-${stamp}-${i}.${(f.name.split('.').pop() || 'png').toLowerCase()}`)
         await uploadBytes(r, f, { contentType: f.type || 'image/png' })
         return getDownloadURL(r)
       }))
@@ -369,13 +374,13 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     setError('')
     try {
       const art = await artBlob()
-      setStatus(`Analyzing on ${new URL(RELIEF_SERVER).host}… (about a minute on the GPU)`)
+      setStatus(`Analyzing on ${new URL(reliefServerUrl()).host}… (about a minute on the GPU)`)
       const k = await loadKit(await analyzeArt(art, quality, settings.artHoles))
       setKit(k); setSelected(0); setOthers([])
       setSettings((s) => ({ ...s, levelRule: 'borders', pieces: {}, soft: {}, flat: {}, materials: {}, finishOpts: {}, details: {}, finishLayers: [], finishOff: [], names: {}, off: [] })) // piece ids belong to one analysis
       // saved straight away, so the analysis survives whatever happens next
       setStatus('Saving the kit…')
-      setKitUrls(await saveKit(staffStorage, badge.id || 'new', k))
+      setKitUrls(await saveKit(storage, fileFolder, k))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setStatus(null) }
@@ -386,11 +391,11 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
     if (!kit) return
     setError('')
     try {
-      setStatus(`Recalculating the normals on ${new URL(RELIEF_SERVER).host}… (about a minute on the GPU)`)
+      setStatus(`Recalculating the normals on ${new URL(reliefServerUrl()).host}… (about a minute on the GPU)`)
       const k = await loadKit({ ...kit.files, ...(await recalculateNormals(kit.art, 'high')) })
       setKit(k)
       setStatus('Saving the kit…')
-      setKitUrls(await saveKit(staffStorage, badge.id || 'new', k))
+      setKitUrls(await saveKit(storage, fileFolder, k))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally { setStatus(null) }
@@ -404,11 +409,10 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
       await new Promise((r) => setTimeout(r, 30)) // let the status paint before the heavy work
       const height = await heightPng(compose(kit.full, settings).h, kit.full.size)
       setStatus('Uploading…')
-      const id = badge.id || 'new'
-      const reliefKit = kitUrls ?? await saveKit(staffStorage, id, kit)
+      const reliefKit = kitUrls ?? await saveKit(storage, fileFolder, kit)
       const stamp = Date.now()
       const put = async (name: string, blob: Blob) => {
-        const r = ref(staffStorage, `badges/${id}/${name}-${stamp}.png`)
+        const r = ref(storage, `${fileFolder}/${name}-${stamp}.png`)
         await uploadBytes(r, blob, { contentType: 'image/png' })
         return getDownloadURL(r)
       }
@@ -423,7 +427,7 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
       setStatus('Building the 3D pin…')
       const buildKey = reliefBuildKey(imageUrl, finishMapUrl, settings.holeSmooth, settings.artHoles)
       const build = await bakeReliefBuild(badgeAsset(imageUrl)!, badgeAsset(finishMapUrl), settings.holeSmooth, settings.artHoles, buildKey)
-      const buildRef = ref(staffStorage, `badges/${id}/build-${stamp}.bin`)
+      const buildRef = ref(storage, `${fileFolder}/build-${stamp}.bin`)
       await uploadBytes(buildRef, build, { contentType: 'application/octet-stream' })
       setStatus('Saving the badge…')
       await onApply({
@@ -644,7 +648,7 @@ export default function ReliefStudio({ badge, onApply, onClose }: {
                 <div className="flex flex-col gap-2 mt-2">
                   <div className="flex items-center gap-2">
                     <span className={cn('w-2 h-2 rounded-full', server === null ? 'bg-slate-600' : server ? 'bg-emerald-500' : 'bg-red-500')} />
-                    {server === null ? 'Checking the analysis server…' : server ? `Server ready (${new URL(RELIEF_SERVER).host})` : 'Analysis server not running'}
+                    {server === null ? 'Checking the analysis server…' : server ? `Server ready (${new URL(reliefServerUrl()).host})` : 'Analysis server not running'}
                     {server === false && <button onClick={() => reliefServerUp().then(setServer)} className="ml-auto underline text-slate-400">Retry</button>}
                   </div>
                   {server === false && <p className="text-[11px] leading-snug text-slate-500">On the GPU PC: <code className="text-slate-300">cd tools\havenrelief</code> then <code className="text-slate-300">.venv\Scripts\python server.py</code></p>}

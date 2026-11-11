@@ -401,10 +401,10 @@ plus two holds that never delete anything: a Creator can be **suspended**, and a
   "This account has been banned" with Sign out; `firestore.rules` `notBanned()` refuses their
   writes (profiles, usernames, shared Cardex/badges, friendships, `users/{uid}`) — deletes stay
   allowed so they can still delete the account. Their profile reads as "not found" to others.
-- **Collector app:** `useAccountRole(uid)` (live). Creators get a **Creator** tab under a line in
-  the desktop sidebar and a wand button in the phone top bar, both to `/creator`
-  (`components/pages/CreatorPage.tsx` — the Creator Studio; tools "coming soon"; suspended /
-  former creators see it paused). Profiles show the title beside the @username (your own always,
+- **Collector app:** `useAccountRole(uid)` (live). Creators — and staff (`canUseCreatorStudio()`) —
+  get a **Creator** tab under a line in the desktop sidebar and a wand button in the phone top bar,
+  both to `/creator` (`components/pages/CreatorPage.tsx` — the Creator Studio: their Creator Book
+  and community; **`docs/creators.md`**; suspended / former creators see it paused). Profiles show the title beside the @username (your own always,
   someone else's unless Regular).
 - Deleting an account leaves its `account_roles` doc (only staff can delete it).
 

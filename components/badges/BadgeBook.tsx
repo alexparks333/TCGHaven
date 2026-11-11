@@ -44,8 +44,10 @@ const TURN_MS = 750
 
 // One Badge Set's book. `full`: the Badges page, where on desktop the book stretches to fill the
 // window; otherwise (a profile's Badges tab) it keeps a book's proportions at full width.
-export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly = false, startSpread = 0, onSpreadChange }: {
+export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly = false, startSpread = 0, onSpreadChange, defs }: {
   set: BadgeSet
+  /** A creator book's badges (lib/creatorBooks.ts) — TCG Haven's own come from the catalog */
+  defs?: BadgeDef[]
   coverOnly?: boolean
   /** The spread to open at (the closing animation draws the page you were on) */
   startSpread?: number
@@ -57,8 +59,9 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   coverRef?: React.Ref<HTMLDivElement>
 }) {
   const { catalog } = useBadgeCatalog()
-  const setBadges = useMemo(() => badgesInSet(catalog, set.id), [catalog, set.id])
-  const chapters = useMemo(() => chaptersOf(catalog, set.id), [catalog, set.id])
+  const setBadges = useMemo(() => defs ?? badgesInSet(catalog, set.id), [defs, catalog, set.id])
+  // A creator book carries its own chapters and badges; TCG Haven's come from the catalog
+  const chapters = useMemo(() => (defs ? chaptersOf({ sets: [set], badges: defs }, set.id) : chaptersOf(catalog, set.id)), [defs, set, catalog])
   const { pages: PAGES, starts } = useMemo(() => buildPages(setBadges, chapters), [setBadges, chapters])
   const SPREADS = PAGES.length / 2
   const [spread, setSpread] = useState(() => Math.min(startSpread, Math.max(0, SPREADS - 1)))

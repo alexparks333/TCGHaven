@@ -69,6 +69,9 @@ export const REGULAR: AccountRoleRecord = { role: 'regular' }
 export const hasPremium = (r: AccountRoleRecord) => r.role !== 'regular' && !r.banned
 /** A Creator whose Studio and work are live */
 export const isCreator = (r: AccountRoleRecord) => r.role === 'creator' && !r.suspended && !r.banned
+/** Who can open the Creator Studio: Creators, plus Staff (and the Owner) — to try it and help
+ *  creators. A staff member's book is a real creator book like any other. */
+export const canUseCreatorStudio = (r: AccountRoleRecord) => isCreator(r) || (r.role === 'staff' && !r.banned)
 
 function millis(v: unknown): number | undefined {
   if (typeof v === 'number') return v

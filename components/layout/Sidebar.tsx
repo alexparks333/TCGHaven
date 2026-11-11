@@ -8,7 +8,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
-import { useAccountRole, isCreator } from '@/lib/accountRoles'
+import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
 
 const BASE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
@@ -32,7 +32,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
   const { me } = useFriends()
-  const creator = isCreator(useAccountRole(user?.uid).record)
+  const creator = canUseCreatorStudio(useAccountRole(user?.uid).record)
 
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   if (isAuthPage) return null
@@ -151,7 +151,7 @@ export function MobileHeader() {
   const pathname = usePathname()
   const { incoming } = useFriends()
   const { user } = useAuth()
-  const creator = isCreator(useAccountRole(user?.uid).record)
+  const creator = canUseCreatorStudio(useAccountRole(user?.uid).record)
   if (pathname === '/login' || pathname === '/signup') return null
   return (
     <header

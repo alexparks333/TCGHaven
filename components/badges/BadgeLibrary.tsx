@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { preloadTrimmedArt } from './trimmedArt'
@@ -501,9 +501,10 @@ export function BookThickness({ style }: { style?: React.CSSProperties }) {
 
 // A Badge Set's closed book: leather cover in the set's colors, stitched spine, strap + snap,
 // embossed title and the set's first pin.
-export function BookCover({ set, badges }: { set: BadgeSet; badges: SharedBadges | null }) {
+export function BookCover({ set, badges, defs }: { set: BadgeSet; badges: SharedBadges | null; defs?: BadgeDef[] }) {
   const { catalog } = useBadgeCatalog()
-  const inSet = badgesInSet(catalog, set.id)
+  // A creator book's badges come with it (lib/creatorBooks.ts); TCG Haven's are in the catalog
+  const inSet = defs ?? badgesInSet(catalog, set.id)
   const first = inSet[0]
   const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
   const { from, to, accent } = set.cover

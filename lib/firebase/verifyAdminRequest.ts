@@ -20,7 +20,7 @@ const VERIFIED_TTL_MS = 5 * 60 * 1000
 const verified = new Map<string, { uid: string; at: number }>()
 
 // Verifies the caller's Firebase ID token and returns their uid, or null if missing/invalid.
-async function callerUid(request: Request): Promise<string | null> {
+export async function callerUid(request: Request): Promise<string | null> {
   const authHeader = request.headers.get('authorization') || ''
   const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
@@ -104,7 +104,7 @@ async function lookupUid(idToken: string, apiKey: string): Promise<string | null
 // alongside the uid, for the same reason.
 const staffChecked = new Map<string, { staff: boolean; at: number }>()
 
-async function isStaff(uid: string, idToken: string): Promise<boolean> {
+export async function isStaff(uid: string, idToken: string): Promise<boolean> {
   if (ADMIN_UID && uid === ADMIN_UID) return true
   const hit = staffChecked.get(idToken)
   if (hit && Date.now() - hit.at < VERIFIED_TTL_MS) return hit.staff
@@ -149,4 +149,27 @@ export async function verifyOwnerRequest(request: Request): Promise<{ uid: strin
   const uid = await callerUid(request)
   if (!uid || uid !== ADMIN_UID) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return { uid }
+}
+
+// Can this caller use the Creator Studio (lib/accountRoles.ts canUseCreatorStudio)? A Creator in
+// good standing, or staff. Their account_roles doc is read with their own token (any signed-in
+// collector may read titles) — no service account needed.
+export async function verifyCreatorRequest(request: Request): Promise<{ uid: string } | NextResponse> {
+  const uid = await callerUid(request)
+  if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const authHeader = request.headers.get('authorization') || ''
+  const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (await isStaff(uid, idToken)) return { uid }
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  try {
+    const res = await fetch(
+      `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/account_roles/${encodeURIComponent(uid)}`,
+      { headers: { Authorization: `Bearer ${idToken}` }, cache: 'no-store' },
+    )
+    if (res.ok) {
+      const f = ((await res.json()) as { fields?: Record<string, { stringValue?: string; booleanValue?: boolean }> }).fields ?? {}
+      if (f.role?.stringValue === 'creator' && !f.suspended?.booleanValue && !f.banned?.booleanValue) return { uid }
+    }
+  } catch { /* treated as not a creator */ }
+  return NextResponse.json({ error: 'Creators only' }, { status: 403 })
 }

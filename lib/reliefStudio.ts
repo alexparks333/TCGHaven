@@ -343,11 +343,12 @@ export function openKit(urls: Record<string, string>, fetchUrl: (u: string) => s
   return hit
 }
 
-/** Uploads a kit's files to Storage under badges/{badgeId}/kit-{time}/; returns name → URL. */
-export async function saveKit(storage: FirebaseStorage, badgeId: string, kit: ReliefKit): Promise<Record<string, string>> {
+/** Uploads a kit's files to Storage under {folder}/kit-{time}/ — badges/{badgeId} for staff
+ *  badges, creators/{uid}/badges/{badgeId} for a creator's (docs/creators.md); returns name → URL. */
+export async function saveKit(storage: FirebaseStorage, folder: string, kit: ReliefKit): Promise<Record<string, string>> {
   const stamp = Date.now()
   const urls = await Promise.all(KIT_FILES.map(async (name) => {
-    const r = ref(storage, `badges/${badgeId}/kit-${stamp}/${name}`)
+    const r = ref(storage, `${folder}/kit-${stamp}/${name}`)
     await uploadBytes(r, kit.files[name], { contentType: kit.files[name].type || 'image/png' })
     return getDownloadURL(r)
   }))
@@ -726,9 +727,17 @@ export async function heightPng(h: Float32Array, size: number): Promise<Blob> {
 
 export const RELIEF_SERVER = process.env.NEXT_PUBLIC_HAVENRELIEF_URL || 'http://127.0.0.1:7861'
 
+// Where analyses go and the ticket that lets this person use it. Staff use RELIEF_SERVER (this PC);
+// the Creator Studio asks /api/relief/ticket first (a Creator's own, time-limited ticket for the
+// hosted GPU — docs/creators.md "The 3D maker's GPU") and sets it here.
+let endpoint = { url: RELIEF_SERVER, ticket: '' }
+export function setReliefEndpoint(url: string, ticket = '') { endpoint = { url: url.replace(/\/$/, ''), ticket } }
+export const reliefServerUrl = () => endpoint.url
+const ticketHeaders = (): Record<string, string> => (endpoint.ticket ? { 'X-Relief-Ticket': endpoint.ticket } : {})
+
 export async function reliefServerUp(): Promise<boolean> {
   try {
-    const r = await fetch(`${RELIEF_SERVER}/health`, { signal: AbortSignal.timeout(2500) })
+    const r = await fetch(`${endpoint.url}/health`, { signal: AbortSignal.timeout(4000), headers: ticketHeaders() })
     return r.ok
   } catch { return false }
 }
@@ -746,7 +755,7 @@ export async function recalculateNormals(kitArt: Blob, quality: 'fast' | 'normal
 }
 
 async function serverFiles(path: string, art: Blob): Promise<Record<string, Blob>> {
-  const r = await fetch(`${RELIEF_SERVER}/${path}`, { method: 'POST', body: art })
+  const r = await fetch(`${endpoint.url}/${path}`, { method: 'POST', body: art, headers: ticketHeaders() })
   const body = await r.json().catch(() => ({ error: `server replied ${r.status}` }))
   if (!r.ok) throw new Error(body.error || `server replied ${r.status}`)
   const files: Record<string, Blob> = {}

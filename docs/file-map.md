@@ -72,6 +72,7 @@ TCGHaven/
 │   ├── stats/aggregate.ts          ← The Statistics totals job (stats_daily); types in stats/types.ts
 │   ├── finance.ts                  ← Finances: the Owner's cost tracker (finance/costs)
 │   ├── premium.ts                  ← Haven Premium prices (premium/config) and promo codes (promo_codes)
+│   ├── creatorBooks.ts             ← Creator Books + communities (creator_books/{uid}, communities/{uid}; docs/creators.md)
 │   ├── scan/                       ← The card scanner's site side (card-scanner.md):
 │   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
 │   │   ├── decide.ts               ←   text score + picture (tiles, AI similarity) → matched / pick / none
@@ -242,6 +243,8 @@ TCGHaven/
     │   │                             scanner; shows the cards arriving (card-scanner.md)
     │   └── ScanReviewDialog.tsx    ← After the iPhone scanner: printing, condition, quantity,
     │                                 then "Add N cards" (saves like AddCardDialog — keep in step)
+    ├── creator/                    ← The Creator Studio's parts (docs/creators.md): CoverDesigner,
+    │                                 BookPlanner (the open book with "+" spots), BadgeMaker
     ├── pages/
     │   ├── ScanLinkPage.tsx        ← /scan — the QR code's page: opens the app's scanner
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
