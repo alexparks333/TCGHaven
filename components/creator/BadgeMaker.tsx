@@ -130,16 +130,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
           <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center drop-shadow-[0_14px_14px_rgba(0,0,0,0.6)]">
             {draft.imageUrl
               ? <BadgePin art={draft.art} imageUrl={draft.imageUrl} size={220} />
-              : (
-                // Before any art: a faint example pin where theirs will go
-                <span className="relative w-full h-full flex items-center justify-center">
-                  <span className="absolute inset-[6%] flex items-center justify-center opacity-25 grayscale-[30%]"><BadgePin art={example?.art ?? 'crest'} imageUrl={example?.imageUrl} size={200} /></span>
-                  <span className="relative w-[70%] aspect-square rounded-full border-2 border-dashed flex flex-col items-center justify-center text-center text-xs px-6 gap-1" style={{ borderColor: accent + 'aa', color: accent }}>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Example</span>
-                    Your pin appears here
-                  </span>
-                </span>
-              )}
+              : <span className="w-[70%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}
           </div>
           <span className="relative pinbook-serif max-w-[90%] truncate rounded px-3 py-1 text-xs font-bold uppercase tracking-wider" style={{ background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>
             {draft.name.trim() || '? ? ?'}
