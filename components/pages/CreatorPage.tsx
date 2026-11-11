@@ -147,7 +147,9 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
       {view === 'cover' ? (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
           {/* While editing, the big book shows the unsaved cover; Save keeps it, ✕ puts it back */}
-          <BookStage book={coverDraft ?? b.book} badges={b.badges} onOpen={() => setView('pages')} editing={!!coverDraft} />
+          <div className="lg:sticky lg:top-4 self-start">
+            <BookStage book={coverDraft ?? b.book} badges={b.badges} onOpen={() => setView('pages')} editing={!!coverDraft} />
+          </div>
           {coverDraft ? (
             <div className="card-glass p-5">
               <div className="flex items-center gap-2 mb-5">

@@ -5,9 +5,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { Check, ImagePlus, Loader2, Trash2, Sparkles } from 'lucide-react'
+import { Check, ImagePlus, Loader2, Trash2, Sparkles, Type, AlignCenter, Palette, BookOpen, ChevronDown } from 'lucide-react'
 import type { BadgeSet, CoverStyle } from '@/lib/badges'
-import { COVER_FONTS, loadCoverFonts } from '@/lib/coverFonts'
+import { COVER_FONTS, FONT_GROUPS, loadCoverFonts } from '@/lib/coverFonts'
 import { LEATHERS, FOILS, monogramOf } from '@/lib/creatorBooks'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
@@ -20,6 +20,7 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
   useEffect(() => { loadCoverFonts(COVER_FONTS.map((f) => f.id)) }, [])
   const fileInput = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [open, setOpen] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   async function uploadCover(file: File | undefined) {
@@ -42,9 +43,14 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
     }
   }
 
+  const font = COVER_FONTS.find((f) => f.id === (st.font ?? 'classic'))
+  const leather = LEATHERS.find((l) => l.from === book.cover.from && l.to === book.cover.to)
+  const foil = FOILS.find((f) => f.color === book.cover.accent)
+  const page = PAGE_COLORS.find((p) => (p.color ?? '') === (st.pageColor ?? ''))
   return (
-    <div className="space-y-6">
-      <Section title="Title">
+    <div className="space-y-2.5">
+      {/* One part at a time: tap a part to open it (the others fold away) */}
+      <Group id="title" open={open} setOpen={setOpen} icon={Type} title="Title" summary={`${font?.name ?? 'Classic'} · ${book.name || 'untitled'}`}>
         <input
           className="input-field text-base font-semibold"
           value={book.name}
@@ -52,26 +58,35 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
           onChange={(e) => set({ name: e.target.value, collection: e.target.value, monogram: book.monogram === monogramOf(book.name) ? monogramOf(e.target.value) : book.monogram })}
           placeholder="e.g. PewDiePie Cuties"
         />
-        {/* 20 fonts, each showing the book's own name */}
-        <div className="mt-3 grid grid-cols-3 gap-1.5 max-h-[220px] overflow-y-auto scroll-themed pr-1">
-          {COVER_FONTS.map((f) => {
-            const on = (st.font ?? 'classic') === f.id
-            return (
-              <button key={f.id} type="button" onClick={() => setStyle({ font: f.id })} title={f.name}
-                className={cn('rounded-lg border px-1.5 py-2 text-center transition-colors', on ? 'border-transparent text-white shadow' : 'border-slate-800 bg-slate-950/40 text-ink hover:border-slate-700')}
-                style={on ? { background: `linear-gradient(135deg, ${book.cover.from}, ${book.cover.to})` } : undefined}>
-                <span className={cn('block truncate text-[15px] leading-tight', f.upper && 'uppercase')} style={{ fontFamily: f.css, fontWeight: f.weight }}>{(book.name || 'Aa').slice(0, 10)}</span>
-                <span className={cn('block text-[9px] mt-0.5 truncate', on ? 'text-white/70' : 'text-slate-500')}>{f.name}</span>
-              </button>
-            )
-          })}
+        {/* Every font, in groups, each showing the book's own name */}
+        <div className="mt-3 max-h-[300px] overflow-y-auto scroll-themed pr-1 space-y-3">
+          {FONT_GROUPS.map((g) => (
+            <div key={g}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {COVER_FONTS.filter((f) => f.group === g).map((f) => {
+                  const on = (st.font ?? 'classic') === f.id
+                  return (
+                    <button key={f.id} type="button" onClick={() => setStyle({ font: f.id })} title={f.name}
+                      className={cn('rounded-lg border px-1.5 py-2 text-center transition-colors', on ? 'border-transparent text-white shadow' : 'border-slate-800 bg-slate-950/40 text-ink hover:border-slate-700')}
+                      style={on ? { background: `linear-gradient(135deg, ${book.cover.from}, ${book.cover.to})` } : undefined}>
+                      <span className={cn('block truncate text-[15px] leading-tight', f.upper && 'uppercase')} style={{ fontFamily: f.css, fontWeight: f.weight }}>{(book.name || 'Aa').slice(0, 10)}</span>
+                      <span className={cn('block text-[9px] mt-0.5 truncate', on ? 'text-white/70' : 'text-slate-500')}>{f.name}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
         <Slider label="Size" min={0.6} max={1.8} step={0.02} value={st.titleSize ?? 1} onChange={(v) => setStyle({ titleSize: v })} />
         <Slider label="Height" hint="up / down the cover" min={8} max={88} step={0.5} value={st.titleY ?? 38} onChange={(v) => setStyle({ titleY: v })} />
         <Colors label="Colour" value={st.titleColor ?? '#fbe9c4'} onChange={(c) => setStyle({ titleColor: c })} />
-      </Section>
+      </Group>
 
-      <Section title="Line above the title">
+      <Group id="text" open={open} setOpen={setOpen} icon={AlignCenter} title="Text & emblem"
+        summary={[st.showSubtitle !== false ? 'Top line' : null, st.showEmblem !== false ? 'Emblem' : null, st.showCount !== false ? 'Count' : null].filter(Boolean).join(' · ') || 'All off'}>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2">Line above the title</p>
         <Toggle on={st.showSubtitle !== false} onChange={(v) => setStyle({ showSubtitle: v })} label="Show it" />
         {st.showSubtitle !== false && (
           <>
@@ -79,9 +94,7 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
             <Colors label="Colour" value={st.subtitleColor ?? book.cover.accent} onChange={(c) => setStyle({ subtitleColor: c })} />
           </>
         )}
-      </Section>
-
-      <Section title="Emblem & count">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mt-5 mb-2">Emblem & count</p>
         <Toggle on={st.showEmblem !== false} onChange={(v) => setStyle({ showEmblem: v })} label="Emblem" hint="your first pin, or your stamp until you have one" />
         {st.showEmblem !== false && (
           <div className="mt-2 flex items-center gap-2">
@@ -90,97 +103,105 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
           </div>
         )}
         <div className="mt-3"><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
-      </Section>
+      </Group>
 
-      <Section title="Leather">
-        <div className="grid grid-cols-6 gap-2.5">
-          {LEATHERS.map((l) => {
-            const on = book.cover.from === l.from && book.cover.to === l.to
-            return (
-              <button
-                key={l.name}
-                type="button"
-                title={l.name}
-                onClick={() => set({ cover: { ...book.cover, from: l.from, to: l.to } })}
-                className={cn('relative aspect-square rounded-full shadow-[inset_0_-3px_6px_rgba(0,0,0,0.45),0_2px_4px_rgba(0,0,0,0.25)] transition-transform hover:scale-110', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                style={{ background: `radial-gradient(circle at 32% 28%, ${l.from}, ${l.to})` }}
-              >
-                {on && <Check size={16} className="absolute inset-0 m-auto text-white drop-shadow" />}
-              </button>
-            )
-          })}
-        </div>
-      </Section>
-
-      <Section title="Foil">
-        <div className="flex flex-wrap gap-2.5">
-          {FOILS.map((f) => {
-            const on = book.cover.accent === f.color
-            return (
-              <button
-                key={f.name}
-                type="button"
-                title={f.name}
-                onClick={() => set({ cover: { ...book.cover, accent: f.color } })}
-                className={cn('w-9 h-9 rounded-xl transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                style={{ background: `linear-gradient(135deg, #fffaf0 0%, ${f.color} 35%, ${f.color} 60%, #00000055 100%)` }}
-              />
-            )
-          })}
-        </div>
-      </Section>
-
-      <Section title="Cover picture" hint="optional — your own artwork instead of leather">
-        {book.coverImage ? (
-          <div>
-            <PlacePicture book={book} onChange={(coverFit) => set({ coverFit })} />
-            <div className="mt-3 flex items-center gap-2">
-              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink text-xs">
-                {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
-              </button>
-              <button type="button" onClick={() => set({ coverImage: undefined, coverFit: undefined })} className="ml-auto p-2 rounded-lg text-slate-500 hover:text-red-600" aria-label="Remove the cover picture"><Trash2 size={16} /></button>
-            </div>
+      <Group id="cover" open={open} setOpen={setOpen} icon={Palette} title="Cover"
+        summary={book.coverImage ? 'Your picture' : `${leather?.name ?? 'Custom'} leather · ${foil?.name ?? 'custom'} foil`}>
+        <Section title="Leather">
+          <div className="grid grid-cols-6 gap-2.5">
+            {LEATHERS.map((l) => {
+              const on = book.cover.from === l.from && book.cover.to === l.to
+              return (
+                <button key={l.name} type="button" title={l.name} onClick={() => set({ cover: { ...book.cover, from: l.from, to: l.to } })}
+                  className={cn('relative aspect-square rounded-full shadow-[inset_0_-3px_6px_rgba(0,0,0,0.45),0_2px_4px_rgba(0,0,0,0.25)] transition-transform hover:scale-110', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                  style={{ background: `radial-gradient(circle at 32% 28%, ${l.from}, ${l.to})` }}>
+                  {on && <Check size={16} className="absolute inset-0 m-auto text-white drop-shadow" />}
+                </button>
+              )
+            })}
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => fileInput.current?.click()}
-            disabled={uploading}
-            className="w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 py-5 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors"
-          >
-            {uploading ? <Loader2 size={22} className="animate-spin" /> : <ImagePlus size={22} />}
-            <span className="text-sm font-semibold">{uploading ? 'Cutting it out…' : 'Upload a cover picture'}</span>
-            <span className="text-[11px]">Then drag it and zoom it to place it on your cover</span>
-          </button>
-        )}
-        <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => uploadCover(e.target.files?.[0])} />
-        {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-      </Section>
+        </Section>
+        <div className="mt-5" />
+        <Section title="Foil">
+          <div className="flex flex-wrap gap-2.5">
+            {FOILS.map((f) => {
+              const on = book.cover.accent === f.color
+              return (
+                <button key={f.name} type="button" title={f.name} onClick={() => set({ cover: { ...book.cover, accent: f.color } })}
+                  className={cn('w-9 h-9 rounded-xl transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                  style={{ background: `linear-gradient(135deg, #fffaf0 0%, ${f.color} 35%, ${f.color} 60%, #00000055 100%)` }} />
+              )
+            })}
+          </div>
+        </Section>
+        <div className="mt-5" />
+        <Section title="Cover picture" hint="optional — your own artwork over the leather">
+          {book.coverImage ? (
+            <div>
+              <PlacePicture book={book} onChange={(coverFit) => set({ coverFit })} />
+              <div className="mt-3 flex items-center gap-2">
+                <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink text-xs">
+                  {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
+                </button>
+                <button type="button" onClick={() => set({ coverImage: undefined, coverFit: undefined })} className="ml-auto p-2 rounded-lg text-slate-500 hover:text-red-600" aria-label="Remove the cover picture"><Trash2 size={16} /></button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading}
+              className="w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 py-5 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
+              {uploading ? <Loader2 size={22} className="animate-spin" /> : <ImagePlus size={22} />}
+              <span className="text-sm font-semibold">{uploading ? 'Uploading…' : 'Upload a cover picture'}</span>
+              <span className="text-[11px]">Then drag it and zoom it to place it on your cover</span>
+            </button>
+          )}
+          <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => uploadCover(e.target.files?.[0])} />
+          {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+        </Section>
+        <button type="button"
+          onClick={() => {
+            const l = LEATHERS[Math.floor(Math.random() * LEATHERS.length)]
+            const f = FOILS[Math.floor(Math.random() * FOILS.length)]
+            set({ cover: { from: l.from, to: l.to, accent: f.color } })
+          }}
+          className="mt-5 w-full rounded-xl border border-slate-800 py-2.5 text-sm font-semibold text-slate-400 hover:text-ink hover:border-slate-700 flex items-center justify-center gap-2">
+          <Sparkles size={15} /> Surprise me
+        </button>
+      </Group>
 
-      <Section title="Page edges" hint="the pages showing at the side">
+      <Group id="pages" open={open} setOpen={setOpen} icon={BookOpen} title="Page edges" summary={page?.name ?? 'Custom'}>
+        <p className="text-xs text-slate-500 mb-3">The pages showing at the side of the closed book.</p>
         <div className="flex flex-wrap gap-2">
           {PAGE_COLORS.map((p) => {
             const on = (st.pageColor ?? '') === (p.color ?? '')
             return (
               <button key={p.name} type="button" title={p.name} onClick={() => setStyle({ pageColor: p.color })}
-                className={cn('w-9 h-9 rounded-lg transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                className={cn('w-10 h-10 rounded-lg transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
                 style={{ background: p.color ? `repeating-linear-gradient(0deg, ${p.color} 0 3px, color-mix(in srgb, ${p.color} 80%, black) 3px 4px)` : '#221d1a' }} />
             )
           })}
         </div>
-      </Section>
+      </Group>
+    </div>
+  )
+}
 
-      <button
-        type="button"
-        onClick={() => {
-          const l = LEATHERS[Math.floor(Math.random() * LEATHERS.length)]
-          const f = FOILS[Math.floor(Math.random() * FOILS.length)]
-          set({ cover: { from: l.from, to: l.to, accent: f.color } })
-        }}
-        className="w-full rounded-xl border border-slate-800 py-2.5 text-sm font-semibold text-slate-400 hover:text-ink hover:border-slate-700 flex items-center justify-center gap-2"
-      >
-        <Sparkles size={15} /> Surprise me
+/** A part of the designer that folds open when tapped — one open at a time */
+function Group({ id, open, setOpen, icon: Icon, title, summary, children }: {
+  id: string; open: string | null; setOpen: (id: string | null) => void
+  icon: typeof Type; title: string; summary: string; children: React.ReactNode
+}) {
+  const on = open === id
+  return (
+    <div className={cn('rounded-2xl border transition-colors', on ? 'border-slate-700 bg-slate-950/30' : 'border-slate-800 hover:border-slate-700')}>
+      <button type="button" onClick={() => setOpen(on ? null : id)} className="w-full flex items-center gap-3 px-4 py-3.5 text-left">
+        <span className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors', on ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-400')}><Icon size={17} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold text-ink">{title}</span>
+          <span className="block text-xs text-slate-500 truncate">{summary}</span>
+        </span>
+        <ChevronDown size={18} className={cn('text-slate-500 transition-transform shrink-0', on && 'rotate-180')} />
       </button>
+      {on && <div className="px-4 pb-4 pt-1 add-card-panel">{children}</div>}
     </div>
   )
 }
