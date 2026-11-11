@@ -130,6 +130,29 @@ with `permission-denied`, and the Studio now says so instead of looking saved.
 - With neither env set, the Studio says the 3D maker is being set up, and the pin gets the
   automatic 3D look from its art. On `localhost` it uses the HavenRelief server on that machine.
 
+**The cloud GPU: Modal (`tools/havenrelief/modal_app.py`, set up 2026-11-11):**
+- **Web half:** a small CPU web app. It answers `/health` and checks the ticket and origin. It
+  answers art it has seen before from the cache, for free.
+- **GPU half:** a `Relief` class on an **L40S**. It's started only for new art, with **at most 3 at
+  once** (`MAX_GPUS`). It stays warm 60 s after a pin (`IDLE_SECONDS`), then scales to zero.
+- **Storage:** model weights (~6 GB, downloaded on the first run) and finished analyses live in the
+  Modal Volume `havenrelief-store`.
+- **Jobs:** Modal ends a web request at 150 s, so new art gets `202 { job }`. The Studio
+  (`lib/reliefStudio.ts` `serverFiles`) then asks `GET /job/{id}` until it's done. `server.py`
+  never returns a job, so the same Studio works with the PC.
+- **Fail-closed:** without `HAVENRELIEF_SECRET` in the Modal secret `havenrelief`, every request is
+  refused. The secret also holds `HAVENRELIEF_ORIGINS`
+  (`https://www.tcghaven.org,https://tcghaven.org`).
+- **Setup:**
+  1. `uv tool install modal` and `modal setup`.
+  2. Create the `havenrelief` secret. The value lives in 1Password; never paste it in chat or git.
+  3. `cd tools/havenrelief && modal deploy modal_app.py` prints the `…-web.modal.run` address.
+  4. In Vercel, set `HAVENRELIEF_URL` = that address and `HAVENRELIEF_SECRET` = the same value,
+     then redeploy.
+- **When `havenrelief.py` changes:** run `modal deploy` again. If `KIT_VERSION` / `ANALYSIS_REV`
+  change, also update the copies in `modal_app.py`'s `web()`.
+- **Watch the bill:** set a monthly budget in Modal's dashboard (Settings → Usage/Billing).
+
 **What an analysis costs:**
 - About **2½ min on an RTX 4090** at `high`. Expect roughly 2½ min on an L40S or 48 GB card, and
   5–6 min on an L4 or A10G.

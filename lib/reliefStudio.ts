@@ -737,7 +737,7 @@ const ticketHeaders = (): Record<string, string> => (endpoint.ticket ? { 'X-Reli
 
 export async function reliefServerUp(): Promise<boolean> {
   try {
-    const r = await fetch(`${endpoint.url}/health`, { signal: AbortSignal.timeout(4000), headers: ticketHeaders() })
+    const r = await fetch(`${endpoint.url}/health`, { signal: AbortSignal.timeout(endpoint.ticket ? 15000 : 4000), headers: ticketHeaders() })
     return r.ok
   } catch { return false }
 }
@@ -755,8 +755,18 @@ export async function recalculateNormals(kitArt: Blob, quality: 'fast' | 'normal
 }
 
 async function serverFiles(path: string, art: Blob): Promise<Record<string, Blob>> {
-  const r = await fetch(`${endpoint.url}/${path}`, { method: 'POST', body: art, headers: ticketHeaders() })
-  const body = await r.json().catch(() => ({ error: `server replied ${r.status}` }))
+  let r = await fetch(`${endpoint.url}/${path}`, { method: 'POST', body: art, headers: ticketHeaders() })
+  let body = await r.json().catch(() => ({ error: `server replied ${r.status}` }))
+  // The cloud GPU (tools/havenrelief/modal_app.py) answers new art with a job, since a web request
+  // there may last only 150 s: ask after it until it's done (each ask waits up to ~25 s itself).
+  // The PC's server.py answers directly, so this is skipped there.
+  for (const started = Date.now(); r.status === 202 && body.job; ) {
+    if (Date.now() - started > 25 * 60_000) throw new Error('the 3D maker took too long — try again')
+    await new Promise((res) => setTimeout(res, 2000))
+    r = await fetch(`${endpoint.url}/job/${encodeURIComponent(body.job)}`, { headers: ticketHeaders() })
+    const next = await r.json().catch(() => ({ error: `server replied ${r.status}` }))
+    body = r.status === 202 ? { ...next, job: body.job } : next
+  }
   if (!r.ok) throw new Error(body.error || `server replied ${r.status}`)
   const files: Record<string, Blob> = {}
   for (const [name, b64] of Object.entries(body.files as Record<string, string>)) {
