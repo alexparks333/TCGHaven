@@ -510,9 +510,16 @@ export function BookCover({ set, badges, defs }: { set: BadgeSet; badges: Shared
   const { from, to, accent } = set.cover
   if (set.coverImage) {
     return (
-      <div className="absolute inset-0 rounded-[10px] overflow-hidden shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+      <div className="absolute inset-0 rounded-[10px] overflow-hidden shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]" style={set.coverFit ? { background: `linear-gradient(150deg, ${from}, ${to})` } : undefined}>
+        {set.coverFit ? (
+          // A creator's picture where they placed it (CoverDesigner), over their leather
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute max-w-none select-none"
+            style={{ left: `${50 + set.coverFit.x}%`, top: `${50 + set.coverFit.y}%`, width: `${set.coverFit.scale * 100}%`, transform: 'translate(-50%, -50%)' }} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+        )}
         {/* A soft shadow fading down from the top, so the name reads over any artwork */}
         <div className="absolute inset-x-0 top-0 h-[34%] pointer-events-none" style={{ background: 'linear-gradient(to bottom, rgba(6,4,12,0.82), rgba(6,4,12,0.55) 45%, transparent)' }} />
         {/* The book's name, engraved in gold across the top of the cover */}

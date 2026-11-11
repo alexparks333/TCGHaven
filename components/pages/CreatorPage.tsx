@@ -107,7 +107,8 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
   }
 
   if (!loaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
-  if (!saved && !draft) return <StartBook onCreate={async (name) => { const b = newCreatorBook(uid, name, creatorName); setDraft(b); await saveCreatorBook(uid, b, true) }} />
+  // Made for good: the book is shown only once it's really saved (refreshing must find it again)
+  if (!saved && !draft) return <StartBook onCreate={async (name) => { const b = newCreatorBook(uid, name, creatorName); await saveCreatorBook(uid, b, true); setDraft(b) }} />
   const b = draft ?? saved!
   const setBook = (book: BadgeSet) => change({ ...b, book })
 
@@ -125,7 +126,7 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
         <h2 className="text-lg font-bold text-ink truncate">{b.book.name}</h2>
         <span className="text-xs text-slate-500">{b.badges.length} badge{b.badges.length === 1 ? '' : 's'}</span>
         <span className={cn('ml-auto text-xs flex items-center gap-1', state === 'error' ? 'text-red-600' : 'text-slate-500')}>
-          {state === 'saving' ? <><Loader2 size={12} className="animate-spin" />Saving…</> : state === 'error' ? 'Couldn’t save — check your connection' : <><Check size={12} className="text-emerald-600" />Saved</>}
+          {state === 'saving' ? <><Loader2 size={12} className="animate-spin" />Saving…</> : state === 'error' ? 'Not saved — check your connection (or the security rules aren’t published yet)' : <><Check size={12} className="text-emerald-600" />Saved</>}
         </span>
         <button type="button" onClick={() => setPreview(true)} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Eye size={15} />Preview</button>
       </div>
@@ -188,6 +189,7 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
 function StartBook({ onCreate }: { onCreate: (name: string) => Promise<void> }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const leather = LEATHERS[0]
   const sample: BadgeSet = {
     id: 'sample', name: name.trim() || 'Your Book', subtitle: 'Creator Book', monogram: (name.trim()[0] || '★').toUpperCase(),
@@ -208,12 +210,22 @@ function StartBook({ onCreate }: { onCreate: (name: string) => Promise<void> }) 
           Design your own Haven Badges — your art, your cards to collect. Your followers fill your book by collecting,
           and every badge they earn shows up in their pin book next to TCG Haven’s.
         </p>
-        <form className="mt-5 flex flex-col sm:flex-row gap-2" onSubmit={async (e) => { e.preventDefault(); if (!name.trim()) return; setBusy(true); try { await onCreate(name) } finally { setBusy(false) } }}>
+        <form className="mt-5 flex flex-col sm:flex-row gap-2" onSubmit={async (e) => {
+          e.preventDefault(); if (!name.trim()) return
+          setBusy(true); setError('')
+          try { await onCreate(name) } catch (err) {
+            const code = (err as { code?: string })?.code
+            setError(code === 'permission-denied'
+              ? 'Couldn’t create your book — creator saving isn’t switched on yet (the new security rules need publishing).'
+              : 'Couldn’t create your book — ' + (err instanceof Error ? err.message : String(err)))
+          } finally { setBusy(false) }
+        }}>
           <input className="input-field text-base font-semibold" autoFocus maxLength={40} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name your book — e.g. PewDiePie Cuties" />
           <button type="submit" disabled={!name.trim() || busy} className="btn-primary justify-center whitespace-nowrap px-5 disabled:opacity-50">
             {busy ? <Loader2 size={16} className="animate-spin" /> : <BookOpen size={16} />}Create my book
           </button>
         </form>
+        {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
       </div>
     </div>
   )

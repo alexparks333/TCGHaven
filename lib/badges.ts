@@ -40,6 +40,11 @@ export interface BadgeSet {
   // A picture of the book's cover (staff upload, background removed): shown on the shelf and as the
   // open book's cover instead of the plain leather in `cover`'s colours
   coverImage?: string
+  // Where a creator placed their cover picture (Creator Studio, docs/creators.md): its centre's
+  // offset from the cover's centre in % of the cover's width / height, and its width as a multiple
+  // of the cover's (1 = as wide as the cover). It may hang past the edges — the leather shows
+  // where it doesn't reach. Unset = the picture fills the cover (staff covers).
+  coverFit?: { x: number; y: number; scale: number }
   // The book's chapters, in order (e.g. "Overnumbers", "Alternative Arts"). Each chapter starts on
   // a fresh page with its own tab on the book's edge, and grows extra pages as it fills (6 pins a
   // page) without moving the chapters after it. A badge's `page` is the chapter it's in.
