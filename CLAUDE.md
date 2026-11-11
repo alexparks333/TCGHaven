@@ -1,6 +1,6 @@
 # TCGHaven
 
-A collector app (web + iPhone) for tracking TCG cards across Pokémon (EN + Japanese), Lorcana,
+A collector app (web + iPhone + Android) for tracking TCG cards across Pokémon (EN + Japanese), Lorcana,
 Riftbound, One Piece, Magic, Yu-Gi-Oh!, Star Wars: Unlimited, Gundam, Flesh and Blood, Digimon,
 Palworld and Cyberpunk, plus a staff portal for the shared card catalog and Haven Badges.
 Next.js 14 App Router · TypeScript · Tailwind v3 · Firebase Auth + Firestore + Storage · Zustand ·
@@ -18,6 +18,7 @@ in that area:**
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
 | The iPhone app (Capacitor: `capacitor.config.ts`, `ios/`), the site↔app bridge (`lib/nativeApp.ts`) — how it works, then its status and plan | `docs/ios-app.md` |
+| The Android app (`android/`, Capacitor) — building, the phone over Wi-Fi, its plan | `docs/android-app.md` |
 | The card scanner (`ios/App/App/CardScanner.swift`, `lib/scan/`, `/api/cards/scan`) | `docs/card-scanner.md` |
 | The scanner's picture AI — the trained model, the fingerprint index, after a training run | `docs/scanner-ai.md` |
 | Training the scanner's picture AI on the RTX 4090 PC | `docs/training-ai.md` |
