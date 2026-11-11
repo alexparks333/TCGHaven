@@ -16,7 +16,8 @@ export interface PictureManifest {
   version: string
   dim: number
   scale: number
-  model: { files: Record<string, string> }
+  model: { files: Record<string, string> }          // iPhone: the Core ML package's files
+  modelAndroid?: { file: string }                    // Android: one ONNX file
   catalogs: Record<string, { count: number; rev: number }>
   updatedAt: string
 }
@@ -49,9 +50,11 @@ export async function pictureManifest(): Promise<PictureManifest | null> {
   return manifestLoading
 }
 
-/** Where the phone downloads the Core ML model from: its version, and each file's public URL */
-export async function pictureModel(): Promise<{ version: string; files: Record<string, string> } | null> {
+/** Where the phone downloads the model from: its version, and each file's public URL — the Core ML
+ *  package's files for the iPhone, { 'model.onnx': … } for Android */
+export async function pictureModel(platform: 'ios' | 'android' = 'ios'): Promise<{ version: string; files: Record<string, string> } | null> {
   const m = await pictureManifest()
+  if (platform === 'android') return m?.modelAndroid?.file ? { version: m.version, files: { 'model.onnx': storageUrl(m.modelAndroid.file) } } : null
   if (!m?.model?.files) return null
   return { version: m.version, files: Object.fromEntries(Object.entries(m.model.files).map(([rel, name]) => [rel, storageUrl(name)])) }
 }

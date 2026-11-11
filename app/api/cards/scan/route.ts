@@ -10,8 +10,8 @@ import { GAME_LABELS, type Game } from '@/lib/types'
 //          scan (lib/scan/picture.ts) }                        → ranked catalog candidates
 //   GET ?warm=1&games=pokemon,mtg                              → loads those catalogs and picture
 //          indexes (as the scanner opens)
-//   GET ?model=1                                               → the picture model the phone should
-//          have: { version, files: { path in the .mlpackage: URL } } (or null)
+//   GET ?model=1[&platform=android]                            → the picture model the phone should
+//          have: { version, files: { path in the .mlpackage (iPhone) / 'model.onnx' (Android): URL } } (or null)
 
 const ALL = Object.keys(GAME_LABELS) as Game[]
 const pickGames = (raw: unknown[]) => {
@@ -20,7 +20,10 @@ const pickGames = (raw: unknown[]) => {
 }
 
 export async function GET(req: NextRequest) {
-  if (req.nextUrl.searchParams.get('model')) return NextResponse.json({ model: await pictureModel().catch(() => null) })
+  if (req.nextUrl.searchParams.get('model')) {
+    const platform = req.nextUrl.searchParams.get('platform') === 'android' ? 'android' : 'ios'
+    return NextResponse.json({ model: await pictureModel(platform).catch(() => null) })
+  }
   const games = pickGames((req.nextUrl.searchParams.get('games') ?? '').split(','))
   await warmScanner(games).catch(() => {})
   return NextResponse.json({ ok: true })

@@ -45,13 +45,13 @@ export default function ScanLinkPage() {
               <Smartphone size={18} />
               Open the scanner in the app
             </a>
-            <p className="mt-3 text-xs text-slate-500">Needs the TCGHaven iPhone app, signed in to your account.</p>
+            <p className="mt-3 text-xs text-slate-500">Needs the TCGHaven app (iPhone or Android), signed in to your account.</p>
           </>
         )}
         {where === 'computer' && (
           <>
             <p className="mt-2 text-sm text-slate-400">
-              Scanning uses your iPhone’s camera. On your computer, go to Inventory → <b>Scan</b> and point your phone’s camera at the code it shows.
+              Scanning uses your phone’s camera. On your computer, go to Inventory → <b>Scan</b> and point your phone’s camera at the code it shows.
             </p>
             <Link href="/inventory" className="btn-primary w-full justify-center py-3 mt-5">Go to Inventory</Link>
           </>

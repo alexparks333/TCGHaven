@@ -88,7 +88,7 @@ export function ScanFromPhoneDialog({ onClose }: { onClose: () => void }) {
 
           <ol className="mt-5 space-y-2.5 text-sm text-ink">
             {[
-              'Open the Camera on your iPhone and point it at the code',
+              'Open your phone’s camera and point it at the code',
               'Tap the link that appears — the TCGHaven app opens straight to the scanner',
               'Scan your cards, then tap Add on your phone',
             ].map((step, i) => (
@@ -100,7 +100,7 @@ export function ScanFromPhoneDialog({ onClose }: { onClose: () => void }) {
           </ol>
           <p className="mt-3 text-xs text-slate-500 flex items-center gap-1.5">
             <Smartphone size={13} className="flex-none" />
-            Needs the TCGHaven iPhone app, signed in to this same account.
+            Needs the TCGHaven app (iPhone or Android), signed in to this same account.
           </p>
 
           {/* What's arrived from the phone */}

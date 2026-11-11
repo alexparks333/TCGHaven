@@ -8,7 +8,7 @@
 // Matching lives here and on the server on purpose: improving it ships with a normal deploy, no
 // new app build. Plan and research: docs/card-scanner.md.
 
-import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { CONDITION_LABELS, type Condition, type Game } from '../types'
 import { cardImage } from '../cardImage'
 import { formatCurrency } from '../utils'
@@ -174,7 +174,7 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`).catch(() => {})
   // The picture AI: the phone downloads the current model once (~41 MB, then only when it changes)
   // and fingerprints every scan with it from then on
-  fetch('/api/cards/scan?model=1')
+  fetch(`/api/cards/scan?model=1&platform=${Capacitor.getPlatform() === 'android' ? 'android' : 'ios'}`)
     .then((r) => (r.ok ? r.json() : null))
     .then((r: { model?: { version: string; files: Record<string, string> } | null } | null) => (r?.model ? CardScanner.prepareModel(r.model) : null))
     .catch(() => {})

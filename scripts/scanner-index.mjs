@@ -10,6 +10,9 @@
  *   npm run scanner-index -- publish <packed dir> [--model <CardFingerprint.mlpackage> --weights <model.pt> --version <name>]
  *       Uploads a full index made on the Mac (tools/scanner-ai/pack.py). With --model, a new
  *       model too — the index must have been made with that same model.
+ *   npm run scanner-index -- publish-android <card-fingerprint.onnx>
+ *       The same model for the Android app (tools/scanner-ai/convert_onnx.py), under the version
+ *       already published — it must be made from the same .pt as that version's Core ML file.
  *   npm run scanner-index -- update [--max 3000]
  *       Fingerprints catalog cards that aren't in the index yet (new sets, photos that arrived
  *       later) and uploads the catalogs that changed. Needs Python with tools/scanner-ai's
@@ -122,6 +125,9 @@ if (cmd === 'publish') {
     const weightsName = `model-${version}.pt`
     await upload(weightsName, fs.readFileSync(weights), 'application/octet-stream', true)
     Object.assign(manifest, { version, model: { files }, weights: weightsName })
+    // The Android copy belongs to the old version — publish-android the new one after this
+    delete manifest.modelAndroid
+    console.log('   (Android model cleared — run publish-android with this version\'s .onnx next)')
   }
   for (const catalog of CATALOGS) {
     const bin = path.join(dir, `index-${catalog}.bin`), ids = path.join(dir, `index-${catalog}.json`)
@@ -135,6 +141,19 @@ if (cmd === 'publish') {
   }
   await saveManifest(manifest)
   console.log(`✅ Published ${manifest.version}: ${Object.entries(manifest.catalogs).map(([k, v]) => `${k} ${v.count}`).join(', ')}`)
+  process.exit(0)
+}
+
+if (cmd === 'publish-android') {
+  const file = args[1]
+  if (!file || !fs.existsSync(file)) throw new Error('publish-android <card-fingerprint.onnx> — made by tools/scanner-ai/convert_onnx.py')
+  const manifest = await readManifest()
+  if (!manifest?.version) throw new Error('Publish the model and index first (publish … --model)')
+  const name = `model-${manifest.version}-android.onnx`
+  await upload(name, fs.readFileSync(file), 'application/octet-stream', true)
+  manifest.modelAndroid = { file: name }
+  await saveManifest(manifest)
+  console.log(`✅ Android model published for ${manifest.version}`)
   process.exit(0)
 }
 
@@ -188,5 +207,5 @@ if (cmd === 'update') {
   process.exit(0)
 }
 
-console.error('Usage: npm run scanner-index -- status | publish <dir> [--model … --weights … --version …] | update [--max N]')
+console.error('Usage: npm run scanner-index -- status | publish <dir> [--model … --weights … --version …] | publish-android <onnx> | update [--max N]')
 process.exit(1)
