@@ -2,8 +2,9 @@
 
 // /scan — the page the website's "Scan with your phone" QR code opens on the phone.
 //   • In the TCGHaven app: straight to the scanner (/inventory?scan=1).
-//   • In Safari: hands over to the app (tcghaven://scan — the app's URL scheme, ios/App/App/Info.plist),
-//     with a button for when iOS asks first.
+//   • On an iPhone: hands over to the app (tcghaven://scan — the app's URL scheme, ios/App/App/Info.plist),
+//     with a button for when iOS asks first, and the App Store for people without the app.
+//   • On Android: an intent link — opens the app if it's installed, else Google Play.
 //   • On a computer: says to scan the code with a phone instead.
 // docs/card-scanner.md "Scanning from the website".
 
@@ -12,12 +13,16 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ScanLine, Smartphone } from 'lucide-react'
 import { inApp } from '@/lib/nativeApp'
+import { APP_STORE_URL, PLAY_STORE_URL, ANDROID_PACKAGE, phoneKind, type PhoneKind } from '@/lib/appLinks'
 
 const APP_LINK = 'tcghaven://scan'
+// Android's own way to open an app from a web page: the app if installed, else the fallback page
+const ANDROID_LINK = `intent://scan#Intent;scheme=tcghaven;package=${ANDROID_PACKAGE};${PLAY_STORE_URL ? `S.browser_fallback_url=${encodeURIComponent(PLAY_STORE_URL)};` : ''}end`
 
 export default function ScanLinkPage() {
   const router = useRouter()
   const [where, setWhere] = useState<'app' | 'phone' | 'computer' | null>(null)
+  const [kind, setKind] = useState<PhoneKind>(null)
 
   useEffect(() => {
     if (inApp()) {
@@ -25,9 +30,10 @@ export default function ScanLinkPage() {
       router.replace('/inventory?scan=1')
       return
     }
-    const phone = /iPhone|iPod|iPad|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))
-    setWhere(phone ? 'phone' : 'computer')
-    if (phone) window.location.href = APP_LINK
+    const k = phoneKind()
+    setKind(k)
+    setWhere(k ? 'phone' : 'computer')
+    if (k) window.location.href = k === 'android' ? ANDROID_LINK : APP_LINK
   }, [router])
 
   return (
@@ -41,11 +47,23 @@ export default function ScanLinkPage() {
         {where === 'phone' && (
           <>
             <p className="mt-2 text-sm text-slate-400">The card scanner is in the TCGHaven app. If it didn’t open, tap below.</p>
-            <a href={APP_LINK} className="btn-primary w-full justify-center py-3 mt-5 text-base">
+            <a href={kind === 'android' ? ANDROID_LINK : APP_LINK} className="btn-primary w-full justify-center py-3 mt-5 text-base">
               <Smartphone size={18} />
               Open the scanner in the app
             </a>
-            <p className="mt-3 text-xs text-slate-500">Needs the TCGHaven app (iPhone or Android), signed in to your account.</p>
+            {/* No app yet: this phone's own store */}
+            {(() => {
+              const store = kind === 'android' ? PLAY_STORE_URL : APP_STORE_URL
+              const name = kind === 'android' ? 'Google Play' : 'the App Store'
+              return store ? (
+                <a href={store} className="btn-secondary w-full justify-center py-3 mt-3 !bg-slate-950 border border-slate-700 !text-ink">
+                  Don’t have the app? Get it on {name}
+                </a>
+              ) : (
+                <p className="mt-3 text-xs text-slate-500">The TCGHaven {kind === 'android' ? 'Android' : 'iPhone'} app is coming soon to {name}.</p>
+              )
+            })()}
+            <p className="mt-2 text-xs text-slate-500">Sign in to the app with the same account as the website.</p>
           </>
         )}
         {where === 'computer' && (
