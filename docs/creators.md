@@ -16,8 +16,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - the title, the line above it, and a stamp (monogram);
      - 12 leathers and 8 foils, each one tap;
      - "Surprise me";
-     - an optional cover picture, cut out of its background in the browser (`lib/coverCutout.ts`),
-       like staff covers.
+     - an optional cover picture, uploaded as is (big ones shrunk to 2400 px). The creator
+       **places it**: drag anywhere, even past the edges, and zoom with the slider or wheel, with
+       Fill cover / Center. It's saved as `BadgeSet.coverFit` `{ x, y, scale }`, and `BookCover`
+       draws it over the leather. Staff covers have no `coverFit` and still fill the cover.
      The big book on the left (`BookStage`) is the real `BookCover`, tilting toward the pointer.
   3. **Open your book** (`components/creator/BookPlanner.tsx`): the open book in its own leather
      and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
@@ -44,6 +46,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 | `creator_books/{uid}` | `{ owner, book: BadgeSet, badges: BadgeDef[], createdAt, updatedAt }`: one doc per creator, so one book each | Any signed-in user reads. Only that uid writes, and only if `canCreate()` (a Creator not suspended or banned, or staff). Badges ≤ 200 |
 | `communities/{uid}` | `{ name, tagline, about, color, updatedAt }` | Same; fixed keys |
 | Storage `creators/{uid}/**` | Cover pictures, badge art, Relief Studio kits, maps and builds | Public read. That creator writes, ≤ 25 MB a file |
+
+Rules deployed 2026-11-11 (`npx firebase-tools deploy --only firestore:rules,storage --project
+tcghaven-85a34`, which needs the owner's OK). Until they're deployed, every creator save fails
+with `permission-denied`, and the Studio now says so instead of looking saved.
 
 - The book and badges use the same shapes as TCG Haven's (`lib/badges.ts`):
   - book id `creator-{uid}`;
