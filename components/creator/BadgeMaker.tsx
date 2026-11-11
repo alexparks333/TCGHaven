@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight } from 'lucide-react'
-import type { BadgeDef, BadgeSet, BadgeSlot } from '@/lib/badges'
+import { DEFAULT_TIERS, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -256,7 +256,12 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
               </div>
             )}
 
-            {step === 3 && <CardPicker slots={draft.slots} onChange={(slots) => set({ slots })} />}
+            {step === 3 && (
+              <>
+                <CardPicker slots={draft.slots} onChange={(slots) => set({ slots })} />
+                {draft.slots.length > 0 && <UnlockEditor def={draft} onChange={set} />}
+              </>
+            )}
 
             {step === 4 && (
               <div>
@@ -432,6 +437,76 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
             </button>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+// When fans' pins change look (BadgeDef.tiers / tiersOff — the same rule as TCG Haven's own badges,
+// lib/badges.ts badgeTier): Grayscale (can be switched off: the pin stays a hole until Full) and
+// Full colour. Set as a % or as a number of cards; stored as a % either way, so it keeps working
+// when cards are added later.
+function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<BadgeDef>) => void }) {
+  const [byCards, setByCards] = useState(false)
+  const total = def.slots.length
+  const [grayPct, fullPct] = tierPercents(def)
+  const grayOn = looksOn(def).includes(1)
+  const grayN = tierNeed(def, 1, total), fullN = tierNeed(def, 3, total)
+  const noun = def.slotNoun || 'cards'
+  const put = (i: 0 | 1, pct: number) => {
+    const next = [grayPct, fullPct] as [number, number]
+    next[i] = Math.min(100, Math.max(1, pct))
+    if (i === 0) next[1] = Math.max(next[1], next[0]); else next[0] = Math.min(next[0], next[1]) // Grayscale ≤ Full
+    onChange({ tiers: next.join() === DEFAULT_TIERS.join() ? undefined : next })
+  }
+  // n cards → the exact % (not rounded: rounding could land a card off, lib/badges.ts tierNeed)
+  const putCards = (i: 0 | 1, n: number) => put(i, (Math.min(total, Math.max(1, n)) * 100) / total)
+
+  // a plain function, not a component: a component defined in here would remount on every change
+  // and drop the slider mid-drag
+  const row = (i: 0 | 1, title: string, hint: string, on: boolean, pct: number, n: number, color: string) => (
+    <div key={i} className={cn('rounded-xl border border-slate-800 bg-slate-950/40 p-3', !on && 'opacity-50')}>
+      <div className="flex items-center gap-2">
+        <span className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
+        <span className="text-sm font-bold text-ink">{title}</span>
+        {i === 0 && (
+          <label className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer">
+            <input type="checkbox" checked={on} onChange={(e) => onChange({ tiersOff: e.target.checked ? undefined : [1] })} />Use it
+          </label>
+        )}
+        <span className={cn('text-xs font-bold tabular-nums text-ink', i === 0 ? '' : 'ml-auto')}>
+          {byCards ? `${n} of ${total}` : `${Math.round(pct)}%`}
+        </span>
+      </div>
+      <input type="range" disabled={!on} className="w-full mt-2 accent-[#7a5a3a]"
+        min={1} max={byCards ? total : 100} step={1} value={byCards ? n : Math.round(pct)}
+        onChange={(e) => (byCards ? putCards(i, Number(e.target.value)) : put(i, Number(e.target.value)))} />
+      <p className="text-[11px] text-slate-500">{on ? (byCards ? `${Math.round(pct)}% of the badge` : `${n} of ${total} ${noun}`) + ' · ' + hint : 'Off — the pin stays an empty spot until Full colour'}</p>
+    </div>
+  )
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2">
+        <h3 className="text-base font-bold text-ink">When fans unlock the pin</h3>
+        <div className="ml-auto flex rounded-lg bg-slate-950/60 border border-slate-800 p-0.5 text-[11px] font-bold">
+          {(['%', 'Cards'] as const).map((m) => (
+            <button key={m} type="button" onClick={() => setByCards(m === 'Cards')}
+              className={cn('px-2.5 py-1 rounded-md', (m === 'Cards') === byCards ? 'bg-violet-600 text-white' : 'text-slate-500 hover:text-ink')}>{m}</button>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-slate-500 mt-1">The pin changes as fans collect — first a grey version, then full colour.</p>
+      {/* The two marks on one bar */}
+      <div className="relative mt-3 h-2 rounded-full bg-slate-800">
+        {grayOn && <span className="absolute inset-y-0 left-0 rounded-l-full bg-slate-500/70" style={{ width: `${(fullN / total) * 100}%` }} />}
+        <span className="absolute inset-y-0 rounded-r-full" style={{ left: `${(fullN / total) * 100}%`, right: 0, background: 'linear-gradient(90deg, #c9a24a, #e8b35a)' }} />
+        {grayOn && <span className="absolute -top-1 w-1 h-4 rounded bg-slate-300 -translate-x-1/2" style={{ left: `${(grayN / total) * 100}%` }} title={`Grayscale at ${grayN}`} />}
+        <span className="absolute -top-1 w-1 h-4 rounded bg-[#e8b35a] -translate-x-1/2" style={{ left: `${(fullN / total) * 100}%` }} title={`Full at ${fullN}`} />
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {row(0, 'Grayscale pin', 'a grey preview of the pin', grayOn, grayPct, grayN, '#94a3b8')}
+        {row(1, 'Full colour pin', fullN === total ? 'every card needed' : 'set to 100% to need every card', true, fullPct, fullN, '#e8b35a')}
       </div>
     </div>
   )
