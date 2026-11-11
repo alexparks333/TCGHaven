@@ -62,7 +62,10 @@ export interface CoverStyle {
   font?: string          // lib/coverFonts.ts COVER_FONTS id
   titleY?: number        // where the title sits, % down the cover (default 38)
   titleSize?: number     // × the usual size (0.6–1.8)
-  titleColor?: string
+  titleColor?: string    // used when the finish is flat
+  titleFinish?: string   // lib/coverFonts.ts TITLE_FINISHES id (metal foil); unset = flat colour
+  titleShine?: boolean   // a light streak gliding across the foil
+  titlePlate?: boolean   // the soft dark glow behind the title, like TCG Haven's covers
   showSubtitle?: boolean // the line above the title (default on)
   subtitleColor?: string // default: the foil
   showEmblem?: boolean   // the stamp / first pin (default on)

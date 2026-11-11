@@ -22,8 +22,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      Cover**. While editing, the big book previews the unsaved cover. **Save Book Cover** keeps it;
      ✕ / Cancel throws the changes away. A just-created book opens straight into editing. The
      designer offers:
-     - **Title:** the name, **58 fonts in groups** (Classic, Clean, Bold, Fun, Script, Retro, Spooky — `lib/coverFonts.ts`; Google Fonts, loaded only when used),
-       size, **height on the cover**, and colour (12 swatches or any colour);
+     - **Title:** the name, **about 60 fonts in groups** (Elegant — including `haven`, TCG Haven's own Cinzel lettering — Classic, Clean, Bold, Fun, Script, Retro, Spooky — `lib/coverFonts.ts`; Google Fonts, loaded only when used),
+       size, **height on the cover**, and a **finish**: a flat colour (12 swatches or any) or metal foil (gold, silver, rose gold, copper, emerald, sapphire, amethyst — `TITLE_FINISHES`), with **Shine** (a glinting streak) and **Glow behind** (the Haven covers' plate). **Haven style** sets the Haven font + gold foil + glow in one tap;
      - **the line above the title:** on/off, its text, its colour;
      - **emblem** (the first pin, or the stamp until there is one) and **earned count**, each on/off;
      - **page edges:** the colour of the page block at the side (`BookThickness pageColor`);

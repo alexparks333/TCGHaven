@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { coverFont, loadCoverFonts } from '@/lib/coverFonts'
+import { coverFont, loadCoverFonts, titleFinish } from '@/lib/coverFonts'
 import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
@@ -508,6 +508,7 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
   const st = set.coverStyle!
   const { from, to, accent } = set.cover
   const font = coverFont(st.font)
+  const finish = titleFinish(st.titleFinish)
   useEffect(() => { loadCoverFonts([st.font]) }, [st.font])
   const first = inSet[0]
   const picture = !!set.coverImage
@@ -537,9 +538,25 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
         {st.showSubtitle !== false && set.subtitle && (
           <div className="font-black tracking-[0.3em] uppercase" style={{ fontSize: 'clamp(6px,3.4cqw,13px)', color: st.subtitleColor ?? accent, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{set.subtitle}</div>
         )}
-        <div className={cn('mt-[2%] leading-[1.05] break-words max-w-full', font.upper && 'uppercase')}
-          style={{ fontFamily: font.css, fontWeight: font.weight, fontSize: `calc(clamp(14px, 11cqw, 44px) * ${st.titleSize ?? 1})`, color: st.titleColor ?? '#fbe9c4', textShadow: '0 2px 0 rgba(0,0,0,0.45), 0 0 12px rgba(0,0,0,0.35)' }}>
-          {set.name}
+        <div className={cn('relative mt-[2%] max-w-full', st.titlePlate && 'cover-title-plate px-[6%] py-[2%] rounded-[4px]')}>
+          <div className={cn('leading-[1.05] [overflow-wrap:normal] [word-break:keep-all]', font.upper && 'uppercase', font.id === 'haven' && 'tracking-[0.12em]', finish && st.titleShine && 'cover-title-shine')}
+            style={{
+              // Wraps only between words; wide all-capitals fonts start a little smaller so names fit
+              fontFamily: font.css, fontWeight: font.weight, fontSize: `calc(clamp(13px, ${font.upper ? 9 : 11}cqw, 44px) * ${st.titleSize ?? 1})`,
+              ...(finish
+                // Metal foil, like TCG Haven's covers: a gradient inside the letters, the shadow as a filter
+                ? {
+                    backgroundImage: st.titleShine
+                      ? `linear-gradient(105deg, transparent 38%, rgba(255,255,255,0.95) 50%, transparent 62%), linear-gradient(180deg, ${finish.gradient})`
+                      : `linear-gradient(180deg, ${finish.gradient})`,
+                    backgroundSize: st.titleShine ? '250% 100%, 100% 100%' : undefined,
+                    WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
+                    filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.95)) drop-shadow(0 0 10px rgba(0,0,0,0.6))',
+                  }
+                : { color: st.titleColor ?? '#fbe9c4', textShadow: '0 2px 0 rgba(0,0,0,0.45), 0 0 12px rgba(0,0,0,0.35)' }),
+            }}>
+            {set.name}
+          </div>
         </div>
       </div>
       {st.showEmblem !== false && (

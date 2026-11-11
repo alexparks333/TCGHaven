@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { Check, ImagePlus, Loader2, Trash2, Sparkles, Type, AlignCenter, Palette, BookOpen, ChevronDown } from 'lucide-react'
 import type { BadgeSet, CoverStyle } from '@/lib/badges'
-import { COVER_FONTS, FONT_GROUPS, loadCoverFonts } from '@/lib/coverFonts'
+import { COVER_FONTS, FONT_GROUPS, TITLE_FINISHES, loadCoverFonts } from '@/lib/coverFonts'
 import { LEATHERS, FOILS, monogramOf } from '@/lib/creatorBooks'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
@@ -50,7 +50,7 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
   return (
     <div className="space-y-2.5">
       {/* One part at a time: tap a part to open it (the others fold away) */}
-      <Group id="title" open={open} setOpen={setOpen} icon={Type} title="Title" summary={`${font?.name ?? 'Classic'} · ${book.name || 'untitled'}`}>
+      <Group id="title" open={open} setOpen={setOpen} icon={Type} title="Title" summary={`${font?.name ?? 'Classic'}${st.titleFinish ? ` · ${TITLE_FINISHES.find((x) => x.id === st.titleFinish)?.name} foil` : ''} · ${book.name || 'untitled'}`}>
         <input
           className="input-field text-base font-semibold"
           value={book.name}
@@ -58,6 +58,13 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
           onChange={(e) => set({ name: e.target.value, collection: e.target.value, monogram: book.monogram === monogramOf(book.name) ? monogramOf(e.target.value) : book.monogram })}
           placeholder="e.g. PewDiePie Cuties"
         />
+        {/* One tap: lettered exactly like TCG Haven's own books */}
+        <button type="button" onClick={() => setStyle({ font: 'haven', titleFinish: 'gold', titlePlate: true, titleShine: false, titleSize: 1 })}
+          className="mt-3 w-full rounded-xl py-2.5 flex items-center justify-center gap-2 text-sm shadow-sm border border-black/20"
+          style={{ background: 'linear-gradient(150deg, #3a2414, #150c06)' }}>
+          <span className="pinbook-serif uppercase tracking-[0.14em] font-bold text-[15px]" style={{ backgroundImage: 'linear-gradient(180deg, #fff6d6 0%, #f6d98c 40%, #d9a948 75%, #f8e2a2 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>Haven style</span>
+          <span className="text-[11px] text-[#d9c39a]/70">engraved gold, like TCG Haven&rsquo;s books</span>
+        </button>
         {/* Every font, in groups, each showing the book's own name */}
         <div className="mt-3 max-h-[300px] overflow-y-auto scroll-themed pr-1 space-y-3">
           {FONT_GROUPS.map((g) => (
@@ -81,7 +88,30 @@ export function CoverDesigner({ uid, book, onChange }: { uid: string; book: Badg
         </div>
         <Slider label="Size" min={0.6} max={1.8} step={0.02} value={st.titleSize ?? 1} onChange={(v) => setStyle({ titleSize: v })} />
         <Slider label="Height" hint="up / down the cover" min={8} max={88} step={0.5} value={st.titleY ?? 38} onChange={(v) => setStyle({ titleY: v })} />
-        <Colors label="Colour" value={st.titleColor ?? '#fbe9c4'} onChange={(c) => setStyle({ titleColor: c })} />
+        {/* Finish: a flat colour, or metal foil like TCG Haven's covers */}
+        <div className="mt-3 flex items-start gap-3">
+          <span className="text-xs font-semibold text-slate-500 w-14 shrink-0 pt-2">Finish</span>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setStyle({ titleFinish: undefined })}
+              className={cn('h-8 px-2.5 rounded-lg border text-xs font-semibold', !st.titleFinish ? 'border-transparent bg-violet-600 text-white' : 'border-slate-800 text-slate-400 hover:text-ink')}>Flat</button>
+            {TITLE_FINISHES.map((x) => (
+              <button key={x.id} type="button" title={x.name} onClick={() => setStyle({ titleFinish: x.id })}
+                className={cn('h-8 w-8 rounded-lg shadow-[inset_0_-2px_3px_rgba(0,0,0,0.3)] transition-transform hover:scale-110', st.titleFinish === x.id && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                style={{ background: `linear-gradient(180deg, ${x.gradient})` }} />
+            ))}
+          </div>
+        </div>
+        {st.titleFinish ? (
+          <div className="mt-3 space-y-2.5">
+            <Toggle on={!!st.titleShine} onChange={(v) => setStyle({ titleShine: v })} label="Shine" hint="a light streak glides across the foil" />
+            <Toggle on={!!st.titlePlate} onChange={(v) => setStyle({ titlePlate: v })} label="Glow behind" hint="a soft shadow behind the title so it reads on anything" />
+          </div>
+        ) : (
+          <>
+            <Colors label="Colour" value={st.titleColor ?? '#fbe9c4'} onChange={(c) => setStyle({ titleColor: c })} />
+            <div className="mt-3"><Toggle on={!!st.titlePlate} onChange={(v) => setStyle({ titlePlate: v })} label="Glow behind" hint="a soft shadow behind the title so it reads on anything" /></div>
+          </>
+        )}
       </Group>
 
       <Group id="text" open={open} setOpen={setOpen} icon={AlignCenter} title="Text & emblem"

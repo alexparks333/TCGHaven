@@ -2,19 +2,27 @@
 // Google Fonts, loaded only when a cover uses one (or the designer shows them all), so the rest of
 // the app never downloads them.
 
-export type FontGroup = 'Classic' | 'Clean' | 'Bold' | 'Fun' | 'Script' | 'Retro' | 'Spooky'
+export type FontGroup = 'Elegant' | 'Classic' | 'Clean' | 'Bold' | 'Fun' | 'Script' | 'Retro' | 'Spooky'
 export interface CoverFont { id: string; name: string; family: string; css: string; weight?: number; upper?: boolean; group: FontGroup }
-export const FONT_GROUPS: FontGroup[] = ['Classic', 'Clean', 'Bold', 'Fun', 'Script', 'Retro', 'Spooky']
+export const FONT_GROUPS: FontGroup[] = ['Elegant', 'Classic', 'Clean', 'Bold', 'Fun', 'Script', 'Retro', 'Spooky']
 
 const f = (id: string, name: string, family: string, css: string, group: FontGroup, weight = 400, upper = false): CoverFont => ({ id, name, family, css, group, weight, upper })
 
 export const COVER_FONTS: CoverFont[] = [
+  // Elegant — TCG Haven's own book lettering (Cinzel, already on every page as --font-engraved)
+  // and other fine engraved / high-contrast serifs; best with a foil finish
+  f('haven', 'Haven', '', 'var(--font-engraved), Georgia, serif', 'Elegant', 700, true),
+  f('cinzel-deco', 'Cinzel Decorative', 'Cinzel+Decorative:wght@700', "'Cinzel Decorative', serif", 'Elegant', 700),
+  f('playfair-sc', 'Playfair SC', 'Playfair+Display+SC:wght@700', "'Playfair Display SC', serif", 'Elegant', 700),
+  f('marcellus', 'Marcellus', 'Marcellus+SC', "'Marcellus SC', serif", 'Elegant'),
+  f('forum', 'Forum', 'Forum', "'Forum', serif", 'Elegant', 400, true),
+  f('italiana', 'Italiana', 'Italiana', "'Italiana', serif", 'Elegant', 400, true),
+  f('bodoni', 'Bodoni', 'Bodoni+Moda:wght@700', "'Bodoni Moda', serif", 'Elegant', 700),
+  f('cormorant', 'Cormorant', 'Cormorant+Garamond:wght@700', "'Cormorant Garamond', serif", 'Elegant', 700),
   // Classic — engraved, bookish
   f('classic', 'Classic', '', 'inherit', 'Classic', 900),
   f('cinzel', 'Cinzel', 'Cinzel:wght@700', "'Cinzel', serif", 'Classic', 700, true),
-  f('cinzel-deco', 'Cinzel Decorative', 'Cinzel+Decorative:wght@700', "'Cinzel Decorative', serif", 'Classic', 700),
   f('playfair', 'Playfair', 'Playfair+Display:wght@800', "'Playfair Display', serif", 'Classic', 800),
-  f('cormorant', 'Cormorant', 'Cormorant+Garamond:wght@700', "'Cormorant Garamond', serif", 'Classic', 700),
   f('abril', 'Abril Fatface', 'Abril+Fatface', "'Abril Fatface', serif", 'Classic'),
   f('dm-serif', 'DM Serif', 'DM+Serif+Display', "'DM Serif Display', serif", 'Classic'),
   f('lora', 'Lora', 'Lora:wght@700', "'Lora', serif", 'Classic', 700),
@@ -85,3 +93,16 @@ export function loadCoverFonts(ids: Array<string | undefined>) {
   link.href = `https://fonts.googleapis.com/css2?${families.map((f) => `family=${f}`).join('&')}&display=swap`
   document.head.appendChild(link)
 }
+
+// The title's finish (CoverStyle.titleFinish): a flat colour, or metal foil like TCG Haven's own
+// covers (a gradient inside the letters — globals.css .cover-title is the gold one)
+export const TITLE_FINISHES: Array<{ id: string; name: string; gradient: string }> = [
+  { id: 'gold', name: 'Gold', gradient: '#fff6d6 0%, #f6d98c 40%, #d9a948 75%, #f8e2a2 100%' },
+  { id: 'silver', name: 'Silver', gradient: '#ffffff 0%, #e3e7ec 40%, #9aa3ad 75%, #eef1f4 100%' },
+  { id: 'rose', name: 'Rose gold', gradient: '#fff1ec 0%, #f2b6a2 40%, #c97a63 75%, #f6cfc2 100%' },
+  { id: 'copper', name: 'Copper', gradient: '#ffe4cc 0%, #e8a066 40%, #a85a2a 75%, #f0b98a 100%' },
+  { id: 'emerald', name: 'Emerald', gradient: '#eafff4 0%, #8fe3b9 40%, #2f9e6a 75%, #b6f0d2 100%' },
+  { id: 'sapphire', name: 'Sapphire', gradient: '#eef4ff 0%, #9fc0ff 40%, #3d6fd1 75%, #c4d8ff 100%' },
+  { id: 'amethyst', name: 'Amethyst', gradient: '#f6eeff 0%, #cfa8ff 40%, #8a4fd6 75%, #e2ccff 100%' },
+]
+export const titleFinish = (id: string | undefined) => TITLE_FINISHES.find((x) => x.id === id)

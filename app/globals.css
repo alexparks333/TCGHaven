@@ -871,3 +871,9 @@
 @media (prefers-reduced-motion: reduce) {
   .creator-bob, .creator-spark, .creator-foil { animation: none !important; }
 }
+
+/* A creator cover's foil title with Shine on (BadgeLibrary StyledCover): a light streak glides
+   across the letters every few seconds */
+@keyframes coverTitleShine { 0%, 55% { background-position: 160% 0, 0 0; } 100% { background-position: -60% 0, 0 0; } }
+.cover-title-shine { animation: coverTitleShine 4.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .cover-title-shine { animation: none; } }
