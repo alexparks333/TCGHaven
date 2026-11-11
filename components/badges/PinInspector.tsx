@@ -116,7 +116,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
 
   if (embedded) {
     return (
-      <div className="relative w-full h-full">
+      <div className="absolute inset-0">{/* fills its parent (which must be positioned and sized) */}
         <div ref={artRef} className="absolute -left-[9999px] top-0" aria-hidden><BadgePin art={def.art} size={100} /></div>
         <div ref={mountRef}
           className={cn('absolute inset-0 cursor-grab active:cursor-grabbing [&>canvas]:transition-opacity [&>canvas]:duration-500', loading ? '[&>canvas]:opacity-0' : '[&>canvas]:opacity-100')}>

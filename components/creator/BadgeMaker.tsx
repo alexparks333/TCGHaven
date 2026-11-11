@@ -56,7 +56,9 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
   const dirty = JSON.stringify(draft) !== savedJson
   const [confirmClose, setConfirmClose] = useState(false)
   const requestClose = () => { if (busy) return; if (dirty) setConfirmClose(true); else onClose() }
-  const sculpted = !!(draft.imageUrl && draft.reliefKit && !studio) // the Studio has its own big view while open
+  // The left side: the flat pin on steps 1–3; on Make it 3D, once it's sculpted, the real 3D pin
+  // (not while the Studio is open — it has its own big view)
+  const sculpted = !!(step === 4 && draft.imageUrl && draft.reliefKit && !studio)
   const fileInput = useRef<HTMLInputElement>(null)
   const folder = `creators/${uid}/badges/${draft.id}`
   // An example to follow: one of TCG Haven's own finished pins (uploaded art, see-through background)
@@ -145,7 +147,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
           <button type="button" onClick={requestClose} className="md:hidden absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 text-white" aria-label="Close"><X size={18} /></button>
           {/* Once it's sculpted: the real 3D pin, to turn over. Before that: the flat art */}
           {sculpted ? (
-            <div className="relative w-full flex-1 min-h-[260px] max-h-[460px]">
+            <div className="relative w-full h-[min(420px,48dvh)]">
               <PinInspector key={draft.reliefBuildKey ?? draft.depthMapUrl} def={draft} embedded onClose={() => {}} />
               <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
             </div>
