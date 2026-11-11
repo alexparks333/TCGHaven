@@ -170,6 +170,25 @@ About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
   - then each card's printing, condition and quantity. A card scanned twice in the same condition
     becomes one row with quantity 2.
 
+## Graded slabs: the cert number (2026-11-11)
+
+Both phones read a slab label's **barcode / QR code**:
+- iPhone: Vision `VNDetectBarcodesRequest`, on slab-shaped captures;
+- Android: ML Kit barcode scanning.
+
+They send it as `barcodes` with the scan. The site's `readSlabLabel` prefers it over the printed
+digits.
+
+`sanitizeCert` (in `scanMatch.ts`, tested by `test:scan`) cleans either source:
+- OCR look-alikes become digits (O/Q/D → 0, I/l → 1, S → 5, B → 8, Z → 2);
+- "Cert #", spaces and dashes go;
+- a lookup link like psacard.com/cert/… or cgccards.com/certlookup/… gives its number;
+- TAG's leading letter is kept;
+- the result must be 7–10 digits.
+
+The review screen shows an editable **Slab ID** on every graded row, filled in from the scan, and
+saves it as the card's `certNumber`.
+
 ## Scanning from the website (2026-11-11)
 
 The website's Inventory → **Scan** button (in the app it opens the camera) shows a QR code

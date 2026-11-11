@@ -18,12 +18,18 @@ first: Android is built the same way, and most of what it says applies here too.
   - `CardScannerPlugin.kt` has the same plugin name, methods and events as the iPhone's, so
     `lib/scan/scanner.ts` drives both unchanged.
   - `ScannerDialog.kt` is the screen:
-    - CameraX, with a card-shaped outline. The part inside it is the card, so there's no edge
-      finding yet.
-    - ML Kit reads the text inside the outline about 4 times a second. On capture it reads again
-      in Latin plus Japanese.
-    - It captures when the phone is still (gyroscope) and the text is new. The next capture waits
-      for different text, or for an empty outline.
+    - **Edges:** `CardFinder.kt` (OpenCV) finds the card, or a graded slab (short/long ≈ 0.58), in
+      every frame, outlines it on screen, and flattens it like the iPhone does. Nothing is read
+      until a card is actually there, so the room is never scanned.
+    - **Auto** (the default; the switch is bottom-left and the choice is remembered): once the
+      card's corners have held still for 3 looks and the gyroscope is calm, it's flattened and ML
+      Kit reads it. A card's worth of new text means capture. The next capture waits for different
+      text or for the card to leave, and a rejected scan isn't retried until the view changes.
+    - **Manual:** only the shutter captures, using the card found or else the faint outline's area.
+    - On capture it reads again in Latin plus Japanese. **A slab** also gets its label barcode
+      read (ML Kit), and the AI fingerprints the card inside it (`CardFinder.cardInsideSlab`).
+    - **OpenCV must stay 4.10.** 4.14's Android build crashes on load (SIGILL: an instruction the
+      emulator's CPU, and some phones', lacks).
     - The tray, the card sheet (other matches, finish, condition, search, remove), and Add N / close.
   - `CardFingerprinter.kt` is the picture AI: the trained model as ONNX, run with ONNX Runtime and
     downloaded once per version (~83 MB, full precision: float16 hung ONNX Runtime and int8 drifted
@@ -76,5 +82,8 @@ App Signing's key, from Play Console → App integrity.
   (`AuthProvider.signInWithGoogle`). The login page has no Apple button, so there's no Apple
   sign-in to port.
 - `ScanLinkPage` and the website's Scan dialog say "the TCGHaven app (iPhone or Android)".
-- **Not on Android yet:** upside-down cards turned round, finding the card's edges, slab reading,
-  debug scans kept on the phone, and the iPhone's zoom and focus tuning. These belong to step 3.
+- **Not on Android yet:** upside-down cards turned round, debug scans kept on the phone, editing a
+  slab's grade in the card sheet, and the iPhone's zoom and focus tuning. These belong to step 3.
+- **The QR page** (`/scan`, `ScanLinkPage`) can tell Android from iPhone. On Android it opens the
+  app with an intent link, which falls back to Google Play. Each phone gets its own store link from
+  `lib/appLinks.ts`, which says "coming soon" until the store URLs are filled in.

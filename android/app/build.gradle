@@ -57,7 +57,7 @@ dependencies {
     implementation "com.google.mlkit:text-recognition-japanese:16.0.1"
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.22.0"
     // Finding the card's edges and flattening it (CardFinder.kt); a slab label's barcode (its cert)
-    implementation "org.opencv:opencv:4.14.0"
+    implementation "org.opencv:opencv:4.10.0"
     implementation "com.google.mlkit:barcode-scanning:17.3.0"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
