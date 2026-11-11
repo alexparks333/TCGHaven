@@ -191,7 +191,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                     <span className="w-16 h-16 shrink-0 rounded-lg bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:12px_12px] flex items-center justify-center p-1.5">
                       {example?.imageUrl
                           // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={badgeArt(example.imageUrl, 192)} alt="" className="max-w-full max-h-full object-contain" />
+                          ? <img src={badgeArt(example.imageUrl, 256)} alt="" className="max-w-full max-h-full object-contain" />
                           : <BadgePin art="crest" size={56} />}
                     </span>
                     <span className="min-w-0">
@@ -203,7 +203,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                     <span className="w-16 h-16 shrink-0 rounded-lg bg-white shadow-inner flex items-center justify-center p-2">
                       {example?.imageUrl
                           // eslint-disable-next-line @next/next/no-img-element
-                          ? <img src={badgeArt(example.imageUrl, 192)} alt="" className="max-w-full max-h-full object-contain" />
+                          ? <img src={badgeArt(example.imageUrl, 256)} alt="" className="max-w-full max-h-full object-contain" />
                           : <BadgePin art="crest" size={56} />}
                     </span>
                     <span className="min-w-0">
