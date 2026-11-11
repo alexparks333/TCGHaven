@@ -14,8 +14,27 @@ first: Android is built the same way, and most of what it says applies here too.
 - **Package name** `com.alexhparks.tcghaven`, the same as the iOS bundle id.
 - **Links:** `tcghaven://scan` opens the app's scanner (an intent filter in
   `AndroidManifest.xml`), like iOS's URL scheme.
-- **The card scanner needs a native Android version** (step 2 below). Until then, Android has
-  everything except the camera scanner.
+- **The card scanner** (step 2, first version built 2026-11-11) is in `android/app/src/main/java/com/alexhparks/tcghaven/`:
+  - `CardScannerPlugin.kt` has the same plugin name, methods and events as the iPhone's, so
+    `lib/scan/scanner.ts` drives both unchanged.
+  - `ScannerDialog.kt` is the screen:
+    - CameraX, with a card-shaped outline. The part inside it is the card, so there's no edge
+      finding yet.
+    - ML Kit reads the text inside the outline about 4 times a second. On capture it reads again
+      in Latin plus Japanese.
+    - It captures when the phone is still (gyroscope) and the text is new. The next capture waits
+      for different text, or for an empty outline.
+    - The tray, the card sheet (other matches, finish, condition, search, remove), and Add N / close.
+  - `CardFingerprinter.kt` is the picture AI: the trained model as ONNX, run with ONNX Runtime and
+    downloaded once per version (~83 MB, full precision: float16 hung ONNX Runtime and int8 drifted
+    to 0.973). Publish it with `npm run scanner-index -- publish-android <onnx>` (made by
+    `tools/scanner-ai/convert_onnx.py`). Each new model version needs it again.
+  - There's no tile comparison on Android (`compare` returns nulls), so the AI's similarity decides.
+- **The emulator:** `TCGHaven_Pixel` (Android 16, Google Play) uses the Mac's webcam as its back
+  camera (`hw.camera.back=webcam0`). Start it with `$ANDROID_HOME/emulator/emulator -avd TCGHaven_Pixel`.
+  - `adb shell am start -a android.intent.action.VIEW -d tcghaven://scan` opens the scanner the way
+    the QR code does.
+  - macOS has to allow the emulator to use the camera.
 
 ## Building on the Mac
 
@@ -44,8 +63,8 @@ App Signing's key, from Play Console → App integrity.
 
 | Step | What | Status |
 |---|---|---|
-| 1 | App shell: shows the site, Google sign-in, QR links | Built 2026-11-11; needs `google-services.json` and a phone to test |
-| 2 | Scanner, first version: CameraX, card outline, ML Kit text recognition (Latin + Japanese, on-device), picture AI (the same model as ONNX, ONNX Runtime), the same plugin interface as iOS (`CardScanner`: open / compare / update / searchResults / prepareModel, `cardScanned` events), so `lib/scan/scanner.ts` works unchanged | Next |
+| 1 | App shell: shows the site, Google sign-in, QR links | Done 2026-11-11 (Firebase Android app registered, sign-in confirmed by the owner on the emulator) |
+| 2 | Scanner, first version: CameraX, card outline, ML Kit text recognition (Latin + Japanese, on-device), picture AI (ONNX), the same plugin interface as iOS | Built 2026-11-11: opens from the app and from the QR link, the model downloads (7 s); scanning real cards not yet tested (the owner has no Android phone yet; the emulator's webcam is the test camera) |
 | 3 | iPhone-level polish: tray, card sheet (Finish / Condition / Grading / search), steadiness, light, slabs | |
 | 4 | (Optional) a scanner in the phone's browser, picture-only, for people with neither app | |
 | 5 | Play Store: developer account ($25 one-time), store listing, privacy, release signing | |
@@ -56,5 +75,6 @@ App Signing's key, from Play Console → App integrity.
   `skipNativeAuth`, the site signs in to Firebase with the token, the same as on iOS
   (`AuthProvider.signInWithGoogle`). The login page has no Apple button, so there's no Apple
   sign-in to port.
-- `ScanLinkPage` and the website's Scan dialog still say "iPhone app". Change them to "the
-  TCGHaven app" once the Android scanner exists.
+- `ScanLinkPage` and the website's Scan dialog say "the TCGHaven app (iPhone or Android)".
+- **Not on Android yet:** upside-down cards turned round, finding the card's edges, slab reading,
+  debug scans kept on the phone, and the iPhone's zoom and focus tuning. These belong to step 3.
