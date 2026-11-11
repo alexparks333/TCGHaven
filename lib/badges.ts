@@ -48,6 +48,10 @@ export interface BadgeSet {
   // A creator's cover lettering and pages (Creator Studio cover designer): unset = the classic
   // cover (staff books). See BookCover in components/badges/BadgeLibrary.tsx.
   coverStyle?: CoverStyle
+  // The inside of the book (Creator Studio's Inside look): the pages' felt colour, the gold trim's
+  // colour (frames, chapter titles, rules), the frame and the felt texture on/off. Unset = TCG
+  // Haven's classic inside. Drawn through insideLook() by BadgeBook and the Studio's BookPlanner.
+  insideStyle?: InsideStyle
   // The book's chapters, in order (e.g. "Overnumbers", "Alternative Arts"). Each chapter starts on
   // a fresh page with its own tab on the book's edge, and grows extra pages as it fills (6 pins a
   // page) without moving the chapters after it. A badge's `page` is the chapter it's in.
@@ -56,6 +60,23 @@ export interface BadgeSet {
   // collection at a time. Unset = HAVEN_COLLECTION, TCG Haven's own books. Later, creators' books
   // (e.g. "PewDiePie Badges") get their own collection name. Read through bookCollection().
   collection?: string
+}
+
+export interface InsideStyle {
+  page?: string      // the felt's colour (its middle; darker toward the edges). Default #2a221c
+  trim?: string      // the gold trim's colour. Default #d6b168
+  frame?: boolean    // the double frame + corner ornaments (default on)
+  texture?: boolean  // the felt's grain (default on)
+}
+export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
+/** The CSS a book with an inside style puts on its root: a class turning the styled rules on, and
+ *  the colours as variables (globals.css `.pinbook-styled`). Unset = nothing (the classic inside). */
+export function insideLook(s: InsideStyle | undefined): { className: string; style: Record<string, string> } {
+  if (!s) return { className: '', style: {} }
+  return {
+    className: ['pinbook-styled', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
+    style: { '--page': s.page || INSIDE_DEFAULTS.page, '--trim': s.trim || INSIDE_DEFAULTS.trim },
+  }
 }
 
 export interface CoverStyle {

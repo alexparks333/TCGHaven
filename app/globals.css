@@ -597,6 +597,28 @@
 .pinbook-edge { border: 1px solid #3a2a12; }
 .pinbook-edge-left { background: linear-gradient(90deg, #8a6420, #e2bd6a 35%, #a37a2c 70%, #5e420f); }
 .pinbook-edge-right { background: linear-gradient(90deg, #5e420f, #a37a2c 30%, #e2bd6a 65%, #8a6420); }
+/* A creator's Inside look (BadgeSet.insideStyle → insideLook()): the felt and trim from variables */
+.pinbook-styled .pinbook-page {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
+  background-color: color-mix(in srgb, var(--page) 40%, black);
+}
+.pinbook-styled.pinbook-no-texture .pinbook-page {
+  background-image: radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
+}
+.pinbook-styled .pinbook-frame {
+  border-color: color-mix(in srgb, var(--trim) 45%, transparent);
+  box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4px color-mix(in srgb, var(--trim) 20%, transparent);
+}
+.pinbook-styled .pinbook-ornament { color: color-mix(in srgb, var(--trim) 65%, transparent); }
+.pinbook-styled.pinbook-no-frame .pinbook-frame { display: none; }
+.pinbook-styled .pinbook-title {
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--trim) 30%, white) 0%, var(--trim) 45%, color-mix(in srgb, var(--trim) 65%, black) 60%, color-mix(in srgb, var(--trim) 55%, white) 100%);
+}
+.pinbook-styled .pinbook-rule { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--trim) 80%, transparent)); }
+.pinbook-styled .pinbook-rule-r { background: linear-gradient(90deg, color-mix(in srgb, var(--trim) 80%, transparent), transparent); }
+.pinbook-styled .pinbook-rule::after { background: linear-gradient(135deg, color-mix(in srgb, var(--trim) 40%, white), color-mix(in srgb, var(--trim) 75%, black)); }
 .pinbook-spine { background: linear-gradient(90deg, #050404, #231d18 50%, #050404); z-index: 20; }
 .pinbook-plate {
   z-index: 20;

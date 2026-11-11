@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, insideLook, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -166,12 +166,14 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   const half = TURN_MS / 2
   const away = leaf?.side === 'right' ? 'left' : 'right' // direction from the spine outward on the leaf's side
 
+  const inside = insideLook(set.insideStyle) // a creator's Inside look (unset: the classic inside)
   const cover = (
     // A thin cover rim — the felt pages fill almost the whole book
     <div
       ref={coverRef}
-      className="pinbook-cover relative rounded-[16px]"
+      className={cn('pinbook-cover relative rounded-[16px]', inside.className)}
       style={{
+        ...inside.style,
         padding: 'clamp(10px, 1.4%, 20px)', ['--leather-from' as string]: set.cover.from, ['--leather-to' as string]: set.cover.to, ['--accent' as string]: set.cover.accent,
         // A cover picture is the open book's cover too: it shows round the pages as the rim
         ...(set.coverImage && { backgroundImage: `url("${badgeAsset(set.coverImage)}")`, backgroundSize: '100% 100%' }),

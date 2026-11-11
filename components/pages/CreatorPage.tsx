@@ -185,6 +185,8 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
             book: { ...b.book, chapters: chaptersFor(b.book, b.badges).map((c) => (c === from ? to : c)) },
             badges: b.badges.map((x) => (x.page === from ? { ...x, page: to } : x)),
           }, true)}
+          onChapters={(next) => change({ ...b, book: { ...b.book, chapters: next } }, true)}
+          onInside={(insideStyle) => change({ ...b, book: { ...b.book, insideStyle } })}
           onAddChapter={() => {
             const list = chaptersFor(b.book, b.badges)
             let n = list.length + 1, name = `Chapter ${n}`

@@ -6,8 +6,8 @@
 // page, 6 pins a page, and always keeps one empty spot to add to. docs/creators.md.
 
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Pencil } from 'lucide-react'
-import type { BadgeDef, BadgeSet } from '@/lib/badges'
+import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye } from 'lucide-react'
+import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { cn } from '@/lib/utils'
 
@@ -36,13 +36,15 @@ function plan(book: BadgeSet, badges: BadgeDef[]): PlannedPage[] {
   return pages
 }
 
-export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAddChapter }: {
+export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAddChapter, onChapters, onInside }: {
   book: BadgeSet
   badges: BadgeDef[]
   onAdd: (chapter: string) => void
   onEdit: (badge: BadgeDef) => void
   onRenameChapter: (from: string, to: string) => void
   onAddChapter: () => void
+  onChapters: (next: string[]) => void          // reordered / one removed (only an empty one)
+  onInside: (style: InsideStyle | undefined) => void
 }) {
   const pages = useMemo(() => plan(book, badges), [book, badges])
   const chapters = chaptersFor(book, badges)
@@ -51,17 +53,21 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
   const at = Math.min(spread, spreads - 1)
   const left = pages[at * 2]
   const right = pages[at * 2 + 1] ?? null
-  const { from, to, accent } = book.cover
+  const { from, to } = book.cover
+  const accent = 'var(--trim)' // the inside's trim (Inside look), not the cover's foil
+  const inside = insideLook(book.insideStyle ?? {})
+  const [panel, setPanel] = useState<'chapters' | 'inside'>('chapters')
   const goTo = (chapter: number) => {
     const i = pages.findIndex((p) => p.chapterIndex === chapter)
     if (i >= 0) setSpread(Math.floor(i / 2))
   }
 
   return (
-    <div>
-      {/* The open book: leather all round, two velvet pages, gold frames */}
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start">
+    <div className={inside.className} style={inside.style}>
+      {/* The open book: leather all round, two felt pages, trim frames */}
       <div className="relative mx-auto max-w-[980px] rounded-[18px] p-[1.6%] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
-        <div className="absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: accent + '70' }} />
+        <div className="absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />
         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-0">
           <Page page={left} accent={accent} side="left" onAdd={onAdd} onEdit={onEdit} onRename={onRenameChapter} />
           <div className="hidden md:block">
@@ -92,24 +98,155 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
         <button type="button" onClick={onAddChapter} className="rounded-full px-3 py-1 text-xs font-semibold border border-dashed border-slate-700 text-slate-500 hover:text-ink inline-flex items-center gap-1"><Plus size={12} />Chapter</button>
       </div>
     </div>
+
+    {/* The side panel: Chapters | Inside look */}
+    <div className="card-glass p-4 xl:sticky xl:top-4">
+      <div className="flex rounded-xl bg-slate-950/60 border border-slate-800 p-1 mb-4">
+        {([['chapters', 'Chapters', BookOpen], ['inside', 'Inside look', Palette]] as const).map(([id, label, Icon]) => (
+          <button key={id} type="button" onClick={() => setPanel(id)}
+            className={cn('flex-1 rounded-lg py-2 text-sm font-bold inline-flex items-center justify-center gap-1.5 transition-colors', panel === id ? 'bg-violet-600 text-white shadow' : 'text-slate-500 hover:text-ink')}>
+            <Icon size={15} />{label}
+          </button>
+        ))}
+      </div>
+      {panel === 'chapters'
+        ? <ChaptersPanel chapters={chapters} badges={badges} showing={[left?.chapterIndex, right?.chapterIndex]} onGo={goTo}
+            onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} />
+        : <InsidePanel style={book.insideStyle} onChange={onInside} />}
+    </div>
+    </div>
+  )
+}
+
+// ── Chapters: rename, reorder, remove an empty one, jump to it ────────────────────────────────
+function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onChapters }: {
+  chapters: string[]
+  badges: BadgeDef[]
+  showing: Array<number | undefined>
+  onGo: (i: number) => void
+  onRename: (from: string, to: string) => void
+  onAdd: () => void
+  onChapters: (next: string[]) => void
+}) {
+  const move = (i: number, by: -1 | 1) => {
+    const next = [...chapters]
+    ;[next[i], next[i + by]] = [next[i + by], next[i]]
+    onChapters(next)
+  }
+  return (
+    <div>
+      <p className="text-xs text-slate-500 mb-3">Each chapter starts on a fresh page. Rename, reorder, or jump to one.</p>
+      <ol className="space-y-2">
+        {chapters.map((c, i) => {
+          const count = badges.filter((b) => b.page === c).length
+          const on = showing.includes(i)
+          return (
+            <li key={c} className={cn('rounded-xl border p-2.5 transition-colors', on ? 'border-violet-500/60 bg-violet-600/5' : 'border-slate-800 bg-slate-950/40')}>
+              <div className="flex items-center gap-2">
+                <span className="pinbook-serif w-7 text-center text-xs font-bold text-slate-500 shrink-0">{romanOf(i)}</span>
+                <ChapterName name={c} onRename={(to) => onRename(c, to)} taken={chapters} />
+                <button type="button" onClick={() => onGo(i)} title="Show this chapter" aria-label={`Show ${c}`} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800"><Eye size={15} /></button>
+              </div>
+              <div className="mt-1.5 flex items-center gap-1 pl-9">
+                <span className="text-[11px] text-slate-500 flex-1">{count} badge{count === 1 ? '' : 's'}</span>
+                <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up" title="Move up" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowUp size={14} /></button>
+                <button type="button" disabled={i === chapters.length - 1} onClick={() => move(i, 1)} aria-label="Move down" title="Move down" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowDown size={14} /></button>
+                <button type="button" disabled={count > 0 || chapters.length < 2}
+                  onClick={() => { if (confirm(`Remove the empty chapter “${c}”?`)) onChapters(chapters.filter((x) => x !== c)) }}
+                  title={count > 0 ? 'Move or delete its badges first — only an empty chapter can be removed' : chapters.length < 2 ? 'A book needs at least one chapter' : 'Remove this empty chapter'}
+                  aria-label="Remove chapter" className="p-1 rounded text-slate-500 hover:text-red-600 hover:bg-slate-800 disabled:opacity-25"><Trash2 size={14} /></button>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+      <button type="button" onClick={onAdd} className="mt-3 w-full rounded-xl border-2 border-dashed border-slate-700 hover:border-violet-500 py-2.5 text-sm font-semibold text-slate-500 hover:text-ink inline-flex items-center justify-center gap-1.5"><Plus size={15} />Add a chapter</button>
+    </div>
+  )
+}
+
+function ChapterName({ name, onRename, taken }: { name: string; onRename: (to: string) => void; taken: string[] }) {
+  const [text, setText] = useState(name)
+  const commit = () => {
+    const t = text.trim()
+    if (!t || (t !== name && taken.includes(t))) return setText(name) // empty or another chapter's name: back
+    if (t !== name) onRename(t)
+  }
+  return (
+    <input value={text} maxLength={28} onChange={(e) => setText(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') { setText(name); (e.target as HTMLInputElement).blur() } }}
+      className="flex-1 min-w-0 bg-transparent border border-transparent hover:border-slate-700 focus:border-violet-500 rounded-lg px-2 py-1 text-sm font-semibold text-ink outline-none" />
+  )
+}
+
+// ── Inside look: felt colour, trim colour, frame, texture ───────────────────────────────────
+const FELTS: Array<[string, string]> = [
+  ['Classic brown', '#2a221c'], ['Midnight purple', '#2c2240'], ['Navy', '#1b2540'], ['Emerald', '#163428'],
+  ['Crimson', '#3a1518'], ['Plum', '#34182f'], ['Teal', '#123336'], ['Charcoal', '#26262a'],
+  ['Forest', '#1f2e18'], ['Wine', '#3b1a26'], ['Sky', '#27425e'], ['Sand', '#4a3f2e'],
+]
+const TRIMS: Array<[string, string]> = [
+  ['Gold', '#d6b168'], ['Silver', '#c7ccd3'], ['Rose gold', '#e0a08c'], ['Copper', '#d08a52'],
+  ['Bronze', '#a8793f'], ['Emerald', '#6fd3a2'], ['Sapphire', '#8fb2ff'], ['Amethyst', '#c49bff'],
+]
+
+function InsidePanel({ style, onChange }: { style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void }) {
+  const s = style ?? {}
+  const set = (p: Partial<InsideStyle>) => onChange({ ...s, ...p })
+  const page = s.page || INSIDE_DEFAULTS.page, trim = s.trim || INSIDE_DEFAULTS.trim
+  const swatches = (list: Array<[string, string]>, value: string, key: 'page' | 'trim') => (
+    <div className="flex flex-wrap gap-2">
+      {list.map(([name, col]) => (
+        <button key={col} type="button" title={name} aria-label={name} onClick={() => set({ [key]: col })}
+          className={cn('w-9 h-9 rounded-xl shadow-sm transition-transform hover:scale-110', value.toLowerCase() === col && 'ring-2 ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+          style={{ background: key === 'page' ? `radial-gradient(circle at 50% 40%, ${col}, color-mix(in srgb, ${col} 35%, black))` : `linear-gradient(135deg, color-mix(in srgb, ${col} 35%, white), ${col} 50%, color-mix(in srgb, ${col} 65%, black))` }} />
+      ))}
+      <label title="Any colour" className="relative w-9 h-9 rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500 hover:text-ink cursor-pointer overflow-hidden">
+        <Palette size={14} />
+        <input type="color" value={value} onChange={(e) => set({ [key]: e.target.value })} className="absolute inset-0 opacity-0 cursor-pointer" />
+      </label>
+    </div>
+  )
+  const toggle = (label: string, on: boolean, flip: () => void) => (
+    <button type="button" onClick={flip} className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2.5 text-sm font-semibold text-ink">
+      {label}
+      <span className={cn('w-9 h-5 rounded-full p-0.5 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
+        <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', on && 'translate-x-4')} />
+      </span>
+    </button>
+  )
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-slate-500">How the inside of your book looks — fans see it exactly like this.</p>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pages</p>
+        {swatches(FELTS, page, 'page')}
+      </div>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Trim <span className="normal-case font-normal tracking-normal">· frames, chapter titles, nameplates</span></p>
+        {swatches(TRIMS, trim, 'trim')}
+      </div>
+      <div className="space-y-2">
+        {toggle('Page frame', s.frame !== false, () => set({ frame: s.frame === false ? undefined : false }))}
+        {toggle('Felt texture', s.texture !== false, () => set({ texture: s.texture === false ? undefined : false }))}
+      </div>
+      {style && (
+        <button type="button" onClick={() => onChange(undefined)} className="text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
+      )}
+    </div>
   )
 }
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 const romanOf = (i: number) => ROMAN[i] ?? String(i + 1)
 
-function Velvet({ children, accent, side }: { children: React.ReactNode; accent: string; side: 'left' | 'right' }) {
+function Velvet({ children, side }: { children: React.ReactNode; accent?: string; side: 'left' | 'right' }) {
   return (
     <div
-      className={cn('relative aspect-[0.78] p-[6%] flex flex-col', side === 'left' ? 'md:rounded-l-[10px]' : 'md:rounded-r-[10px]')}
-      style={{
-        background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 55%, #0f0b18 100%)',
-        boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)',
-      }}
+      className={cn('pinbook-page relative aspect-[0.78] p-[6%] flex flex-col', side === 'left' ? 'pinbook-page-left md:rounded-l-[10px]' : 'pinbook-page-right md:rounded-r-[10px]')}
     >
-      {/* Gold foil double frame */}
-      <div className="absolute inset-[3.2%] rounded-[6px] border pointer-events-none" style={{ borderColor: accent + 'aa' }} />
-      <div className="absolute inset-[4.4%] rounded-[4px] border pointer-events-none" style={{ borderColor: accent + '55' }} />
+      {/* The trim's frame (the same as the real pin book's) */}
+      <div className="pinbook-frame absolute inset-[3.2%] pointer-events-none" />
       {children}
     </div>
   )
@@ -141,7 +278,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
             onBlur={() => { setEditing(false); if (name.trim() && name.trim() !== page.chapter) onRename(page.chapter, name.trim()) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
             className="pinbook-serif bg-black/40 border rounded px-2 py-0.5 text-center text-sm uppercase tracking-[0.18em] outline-none"
-            style={{ color: accent, borderColor: accent + '88' }}
+            style={{ color: accent, borderColor: 'color-mix(in srgb, var(--trim) 55%, transparent)' }}
           />
         ) : (
           <button
@@ -165,14 +302,14 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
               <span className="relative flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105 drop-shadow-[0_6px_6px_rgba(0,0,0,0.55)]">
                 <BadgePin art={b.art} imageUrl={b.imageUrl} size={90} />
               </span>
-              <span className="pinbook-serif max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>{b.name}</span>
+              <span className="pinbook-serif max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
             </button>
           ) : i === plusAt ? (
             <button key={'plus' + i} type="button" onClick={() => onAdd(page.chapter)}
               className="group flex flex-col items-center justify-center gap-[6%]">
               <span
                 className="flex items-center justify-center w-[52%] aspect-square rounded-full border-2 border-dashed transition-all group-hover:scale-110 group-hover:bg-white/5"
-                style={{ borderColor: accent + 'cc', color: accent, boxShadow: `inset 0 3px 10px rgba(0,0,0,0.7), 0 0 0 0 ${accent}` }}
+                style={{ borderColor: 'color-mix(in srgb, var(--trim) 80%, transparent)', color: accent, boxShadow: 'inset 0 3px 10px rgba(0,0,0,0.7)' }}
               >
                 <Plus className="w-[42%] h-[42%] transition-transform group-hover:rotate-90" strokeWidth={2.5} />
               </span>

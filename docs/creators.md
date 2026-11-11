@@ -44,6 +44,15 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
      - Each chapter shows its badges and **one "+ Add a badge" spot**.
+     - **Beside the book, a panel with two tabs.**
+       - **Chapters:** rename, move up or down, jump to one (👁), add. Only an empty chapter can
+         be removed; that asks first.
+       - **Inside look** (`BadgeSet.insideStyle`): the pages' felt colour (12 presets or any),
+         the trim colour (frames, chapter titles, rules), page frame on/off, felt texture on/off,
+         and "Back to the classic inside".
+       - **Where it's drawn:** `insideLook()` (lib/badges.ts) puts the `.pinbook-styled` class and
+         `--page` / `--trim` on the book. The real `BadgeBook` and the Studio's pages share those
+         classes (globals.css), so fans see what the creator sees. Books without it are unchanged.
      - Tap a pin to edit it.
   4. **The badge maker** (`components/creator/BadgeMaker.tsx`): the pin shown big on velvet, and
      four steps.
