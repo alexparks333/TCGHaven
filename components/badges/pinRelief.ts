@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { HOLE_SMOOTH, RELIEF_BUILD_VERSION } from '@/lib/reliefBuild'
+import { hasTransparency, whiteToAlpha } from '@/lib/pinArtCutout'
 
 // Turns a flat piece of pin art (PNG with transparency — or a picture on a plain white
 // background) into a 3D enamel pin, with no hand-made model:
@@ -1221,39 +1222,6 @@ function readPixels(img: HTMLImageElement, size: number) {
     return { rgba: ctx.getImageData(0, 0, size, size).data }
   }
   return { rgba: data }
-}
-
-function hasTransparency(rgba: Uint8ClampedArray): boolean {
-  for (let i = 3; i < rgba.length; i += 4 * 97) if (rgba[i] < 250) return true
-  return false
-}
-
-// Background removal for art on white: flood-fill near-white from the borders to transparent.
-function whiteToAlpha(ctx: CanvasRenderingContext2D) {
-  const { width: w, height: h } = ctx.canvas
-  const img = ctx.getImageData(0, 0, w, h)
-  const d = img.data
-  const isBg = (i: number) => {
-    const r = d[i], g = d[i + 1], b = d[i + 2]
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b)
-    return mn > 225 && mx - mn < 22
-  }
-  const seen = new Uint8Array(w * h)
-  const stack: number[] = []
-  for (let x = 0; x < w; x++) { stack.push(x, (h - 1) * w + x) }
-  for (let y = 0; y < h; y++) { stack.push(y * w, y * w + w - 1) }
-  while (stack.length) {
-    const p = stack.pop()!
-    if (seen[p] || !isBg(p * 4)) continue
-    seen[p] = 1
-    d[p * 4 + 3] = 0
-    const x = p % w, y = (p / w) | 0
-    if (x > 0) stack.push(p - 1)
-    if (x < w - 1) stack.push(p + 1)
-    if (y > 0) stack.push(p - w)
-    if (y < h - 1) stack.push(p + w)
-  }
-  ctx.putImageData(img, 0, 0)
 }
 
 // Transparent pixels in a PNG still carry a colour (often the white the art was cut from). Texture

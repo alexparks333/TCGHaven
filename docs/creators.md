@@ -48,6 +48,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   4. **The badge maker** (`components/creator/BadgeMaker.tsx`): the pin shown big on velvet, and
      four steps.
      - **Pin art:** uploaded to `creators/{uid}/badges/{id}/`.
+       Cut out **or on plain white**: art with no see-through pixels has the white touching its
+       edges cut away in the browser before upload (`lib/pinArtCutout.ts` `cutOutWhite`, the same
+       flood fill the 3D pin uses), saved as a PNG. Needed because the flat pin (book, shelf, cover
+       emblem) draws the picture as is; the 3D pin and HavenRelief would cope either way. Photos or
+       coloured backgrounds aren't removed.
      - **Name it:** name, how to earn it, what the cards are called.
      - **Cards to collect:** search the catalog in any game; each card is one slot.
      - **Make it 3D:** the staff Relief Studio itself (`components/admin/ReliefStudio.tsx`, given

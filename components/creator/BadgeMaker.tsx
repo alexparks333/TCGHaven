@@ -2,7 +2,8 @@
 
 // Making (or editing) one of a creator's badges — opened from a "+" in their book (BookPlanner).
 // Four friendly steps, with the pin shown big on velvet the whole time:
-//   1. Pin art — upload the artwork (a PNG with a see-through background is best)
+//   1. Pin art — upload the artwork, cut out or on plain white (the white is cut away on upload —
+//      lib/pinArtCutout.ts — because the flat pin draws the picture as is)
 //   2. Name it — the name on its brass plate, and how fans earn it
 //   3. What fans collect — cards from the catalog; owning one of each earns the badge
 //   4. Make it 3D — the Relief Studio (the same one staff use) sculpts the pin from the art, on a
@@ -19,6 +20,7 @@ import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
 import { appStorage } from '@/lib/firebase/appStorage'
+import { cutOutWhite } from '@/lib/pinArtCutout'
 import { auth } from '@/lib/firebase/config'
 import { RELIEF_SERVER, setReliefEndpoint } from '@/lib/reliefStudio'
 import { GAME_LABELS, type Game } from '@/lib/types'
@@ -56,10 +58,14 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
 
   async function uploadArt(file: File | undefined) {
     if (!file) return
-    setBusy('Uploading your art…'); setError('')
+    setBusy('Getting your art ready…'); setError('')
     try {
-      const r = ref(appStorage, `${folder}/art-${Date.now()}.${(file.name.split('.').pop() || 'png').toLowerCase()}`)
-      await uploadBytes(r, file, { contentType: file.type || 'image/png' })
+      // On white (or a JPG)? Cut the white away first, so the flat pin has no box around it
+      const { blob, cut } = await cutOutWhite(file).catch(() => ({ blob: file as Blob, cut: false }))
+      setBusy('Uploading your art…')
+      const ext = cut ? 'png' : (file.name.split('.').pop() || 'png').toLowerCase()
+      const r = ref(appStorage, `${folder}/art-${Date.now()}.${ext}`)
+      await uploadBytes(r, blob, { contentType: cut ? 'image/png' : file.type || 'image/png' })
       const url = await getDownloadURL(r)
       // New art: any 3D work made from the old picture no longer fits it
       set({ imageUrl: url, reliefKit: undefined, relief: undefined, depthMapUrl: undefined, normalMapUrl: undefined, finishMapUrl: undefined, detailMapUrl: undefined, reliefBuildUrl: undefined, reliefBuildKey: undefined })
@@ -157,8 +163,8 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
             {step === 1 && (
               <div>
                 <h3 className="text-lg font-bold text-ink">Your pin art</h3>
-                <p className="text-sm text-slate-400 mt-1">Upload the artwork for this badge — just the pin itself, cut out, with a see-through background. It becomes the enamel pin in your book.</p>
-                {/* What to upload: a real pin as it should be, and the same art done wrong */}
+                <p className="text-sm text-slate-400 mt-1">Upload the artwork for this badge — just the pin itself. Already cut out, or on a plain white background: we take the white away for you. It becomes the enamel pin in your book.</p>
+                {/* What to upload: a real pin cut out, and the same art on white (cut out for you on upload) */}
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border-2 border-emerald-600/50 bg-slate-950/40 p-3">
                     <div className="aspect-square rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:18px_18px] flex items-center justify-center p-[10%]">
@@ -168,9 +174,9 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                         : <BadgePin art="crest" size={120} />}
                     </div>
                     <p className="mt-2 text-xs font-bold text-emerald-700 flex items-center gap-1"><Check size={13} />Like this</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">Just the pin, see-through around it (the checks)</p>
+                    <p className="text-[11px] text-slate-500 leading-snug">Already cut out (see-through around it)</p>
                   </div>
-                  <div className="rounded-2xl border-2 border-red-500/40 bg-slate-950/40 p-3">
+                  <div className="rounded-2xl border-2 border-emerald-600/50 bg-slate-950/40 p-3">
                     <div className="aspect-square rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:18px_18px] flex items-center justify-center p-[6%]">
                       <span className="w-full h-full bg-white rounded-md shadow-inner flex items-center justify-center p-[12%] relative">
                         {example?.imageUrl
@@ -179,15 +185,16 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                           : <BadgePin art="crest" size={100} />}
                       </span>
                     </div>
-                    <p className="mt-2 text-xs font-bold text-red-600 flex items-center gap-1"><X size={13} />Not like this</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">A box or photo behind it shows up on the pin</p>
+                    <p className="mt-2 text-xs font-bold text-emerald-700 flex items-center gap-1"><Check size={13} />This works too</p>
+                    <p className="text-[11px] text-slate-500 leading-snug">On plain white — we cut the white away</p>
                   </div>
                 </div>
                 <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-slate-400">
-                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />PNG with a transparent background</li>
+                  <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Cut out, or on plain white</li>
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />The pin&rsquo;s own shape — any shape works</li>
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />At least 1000 × 1000 px</li>
                   <li className="flex gap-1.5"><Check size={13} className="text-emerald-700 shrink-0 mt-0.5" />Bold shapes and colours read best small</li>
+                  <li className="flex gap-1.5 col-span-2"><X size={13} className="text-red-600 shrink-0 mt-0.5" />Not a photo or a coloured background — those stay on the pin</li>
                 </ul>
                 <button type="button" disabled={!!busy} onClick={() => fileInput.current?.click()}
                   className="mt-4 w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 py-10 flex flex-col items-center gap-2 text-slate-500 hover:text-ink transition-colors">
