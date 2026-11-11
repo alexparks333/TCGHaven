@@ -30,6 +30,7 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import { cn } from '@/lib/utils'
 
 const ReliefStudio = dynamic(() => import('@/components/admin/ReliefStudio'), { ssr: false })
+const PinInspector = dynamic(() => import('@/components/badges/PinInspector'), { ssr: false }) // the sculpted pin, in 3D
 
 const GAMES = Object.keys(GAME_LABELS) as Game[]
 
@@ -50,6 +51,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
   const [studio, setStudio] = useState(false)
   const [studioNote, setStudioNote] = useState('')
   const [artName, setArtName] = useState('')
+  const sculpted = !!(draft.imageUrl && draft.reliefKit && !studio) // the Studio has its own big view while open
   const fileInput = useRef<HTMLInputElement>(null)
   const folder = `creators/${uid}/badges/${draft.id}`
   // An example to follow: one of TCG Haven's own finished pins (uploaded art, see-through background)
@@ -135,11 +137,19 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
           <div className="absolute inset-[10px] rounded-xl pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 60%, #0f0b18 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)' }} />
           <div className="absolute inset-[18px] rounded-lg border pointer-events-none" style={{ borderColor: accent + '88' }} />
           <button type="button" onClick={onClose} className="md:hidden absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 text-white" aria-label="Close"><X size={18} /></button>
+          {/* Once it's sculpted: the real 3D pin, to turn over. Before that: the flat art */}
+          {sculpted ? (
+            <div className="relative w-full flex-1 min-h-[260px] max-h-[460px]">
+              <PinInspector key={draft.reliefBuildKey ?? draft.depthMapUrl} def={draft} embedded onClose={() => {}} />
+              <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
+            </div>
+          ) : (
           <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center drop-shadow-[0_14px_14px_rgba(0,0,0,0.6)]">
             {draft.imageUrl
               ? <BadgePin art={draft.art} imageUrl={draft.imageUrl} size={220} />
               : <span className="w-[70%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}
           </div>
+          )}
           <span className="relative pinbook-serif max-w-[90%] truncate rounded px-3 py-1 text-xs font-bold uppercase tracking-wider" style={{ background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>
             {draft.name.trim() || '? ? ?'}
           </span>

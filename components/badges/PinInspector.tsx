@@ -33,11 +33,14 @@ import { haptic } from '@/lib/nativeApp'
 const TEX_W = 1000
 const TEX_H = 1120 // the art's 100 × 112 viewBox
 
-export default function PinInspector({ def, earnedAt, progress, onClose, mystery = false }: {
+export default function PinInspector({ def, earnedAt, progress, onClose, mystery = false, embedded = false }: {
   def: BadgeDef
   earnedAt?: number
   progress?: [number, number]
   onClose: () => void
+  /** Just the turnable pin, filling its parent (no full-screen overlay, name or close button) —
+   *  the Creator Studio's badge maker shows the creator's 3D pin this way */
+  embedded?: boolean
   /** Not earned yet: the pin is shown as a pitch-black mystery shape — you can turn it over and
    *  see its silhouette against the light, but none of its design */
   mystery?: boolean
@@ -53,9 +56,10 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
   const [prog, setProg] = useState(0)
   const [error, setError] = useState('')
 
-  useEffect(() => { haptic('light') }, []) // the pin lifted out of the book (iPhone app)
+  useEffect(() => { if (!embedded) haptic('light') }, [embedded]) // the pin lifted out of the book (iPhone app)
 
   useEffect(() => {
+    if (embedded) return
     // Escape closes just this viewer — caught first (capture) and stopped, so a dialog underneath
     // (e.g. the staff portal's badge editor) doesn't close too.
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose() } }
@@ -63,7 +67,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { window.removeEventListener('keydown', onKey, true); document.body.style.overflow = prev }
-  }, [onClose])
+  }, [onClose, embedded])
 
   // Build the 3D stage once the (hidden) 2D art has rendered — its SVG becomes the face texture.
   useEffect(() => {
@@ -109,6 +113,19 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
 
   const [have, total] = progress ?? [0, def.slots.length]
   const mastered = isMastered(def, progress, !!earnedAt)
+
+  if (embedded) {
+    return (
+      <div className="relative w-full h-full">
+        <div ref={artRef} className="absolute -left-[9999px] top-0" aria-hidden><BadgePin art={def.art} size={100} /></div>
+        <div ref={mountRef}
+          className={cn('absolute inset-0 cursor-grab active:cursor-grabbing [&>canvas]:transition-opacity [&>canvas]:duration-500', loading ? '[&>canvas]:opacity-0' : '[&>canvas]:opacity-100')}>
+          {loading && !error && <PolishingBar value={prog} />}
+        </div>
+        {error && <p className="absolute bottom-2 inset-x-0 text-center text-xs text-red-300">{error}</p>}
+      </div>
+    )
+  }
 
   return createPortal(
     // The blur lives on this outermost layer: an ancestor that fades in (opacity) cuts a child's
