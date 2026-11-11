@@ -153,6 +153,9 @@ with `permission-denied`, and the Studio now says so instead of looking saved.
   change, also update the copies in `modal_app.py`'s `web()`.
 - **Live:** deployed 2026-11-11 to the owner's Modal workspace as app `havenrelief`, at
   `https://alexparks333--havenrelief-web.us-east.modal.run`. Starter plan: $30 of free credit a month, then the card.
+- **Changing the secret:** `modal secret create --force havenrelief …`, then `modal deploy`. Also stop
+  any running web container (`modal container list`, then `modal container stop -y <id>`): a warm one
+  keeps the old secret. Then update Vercel and `.env.local` and redeploy Vercel.
 - **Watch the bill:** set a monthly budget in Modal's dashboard (Settings → Usage/Billing).
 
 **What an analysis costs:**
