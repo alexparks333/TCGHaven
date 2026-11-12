@@ -13,6 +13,7 @@ import { Avatar } from '@/components/friends/Avatar'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
 import { getCommunity, joinCommunity, leaveCommunity, memberCount, useMyCommunities, type CommunityEntry } from '@/lib/communities'
 import { useCreatorBook } from '@/lib/creatorBooks'
+import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
@@ -28,6 +29,7 @@ export default function CommunityPage({ uid }: { uid: string }) {
 }
 
 function Body({ uid }: { uid: string }) {
+  const studio = useStudioDevice()
   const { user } = useAuth()
   const [community, setCommunity] = useState<CommunityEntry | null | undefined>(undefined)
   const [creator, setCreator] = useState<Profile | null>(null)
@@ -101,7 +103,8 @@ function Body({ uid }: { uid: string }) {
           </div>
           <div className="shrink-0">
             {mine ? (
-              <Link href="/creator" className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link>
+              // the Studio is computers-only — no link to it in the app or on a phone
+              studio === 'computer' ? <Link href="/creator" className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
             ) : (
               <button type="button" onClick={toggle} disabled={busy}
                 className={isMember ? 'group btn-secondary !bg-slate-950 border border-slate-700 !text-ink' : 'btn-primary px-6'}>

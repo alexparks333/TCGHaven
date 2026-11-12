@@ -9,6 +9,7 @@ import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
+import { useStudioLinks } from '@/lib/studioDevice'
 
 const BASE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
@@ -33,6 +34,7 @@ export function Sidebar() {
   const { user } = useAuth()
   const { me } = useFriends()
   const creator = canUseCreatorStudio(useAccountRole(user?.uid).record)
+  const studioLinks = useStudioLinks() // the Creator Studio is computers-only — no link in the app
 
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   if (isAuthPage) return null
@@ -66,8 +68,8 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Creators only, set apart under a line: their tools (CreatorPage.tsx) */}
-        {creator && (
+        {/* Creators only, set apart under a line: their tools (CreatorPage.tsx) — on a computer, never in the app */}
+        {creator && studioLinks && (
           <div className="mt-3 pt-3 border-t border-slate-800">
             <Link
               href="/creator"
@@ -150,8 +152,6 @@ export function Sidebar() {
 export function MobileHeader() {
   const pathname = usePathname()
   const { incoming } = useFriends()
-  const { user } = useAuth()
-  const creator = canUseCreatorStudio(useAccountRole(user?.uid).record)
   if (pathname === '/login' || pathname === '/signup') return null
   return (
     <header
@@ -164,20 +164,10 @@ export function MobileHeader() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-text.png" alt="TCGHaven" className="h-6 w-auto object-contain" />
       </Link>
-      {/* Creators only — on phones the sidebar's Creator tab is this button */}
-      {creator && (
-        <Link
-          href="/creator"
-          aria-label="Creator Studio"
-          className={cn('ml-auto w-9 h-9 flex items-center justify-center rounded-xl border text-violet-700', pathname.startsWith('/creator') ? 'bg-violet-600/15 border-violet-500/40' : 'border-violet-500/30')}
-        >
-          <Wand2 size={17} />
-        </Link>
-      )}
       {/* Friends — on phones the sidebar's Friends card lives behind this button */}
       <Link
         href={incoming.length ? '/friends?tab=requests' : '/friends'}
-        className={cn(!creator && 'ml-auto', 'relative w-9 h-9 flex items-center justify-center rounded-xl border text-slate-300', pathname === '/friends' ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800')}
+        className={cn('ml-auto relative w-9 h-9 flex items-center justify-center rounded-xl border text-slate-300', pathname === '/friends' ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800')}
         aria-label={incoming.length ? `Friends — ${incoming.length} new request${incoming.length === 1 ? '' : 's'}` : 'Friends'}
       >
         <Users size={17} />

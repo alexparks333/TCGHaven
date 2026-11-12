@@ -14,6 +14,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   - two paper doors, with the Studio's seal stamped over the seam. Its rim lettering ("✦ CREATOR STUDIO ✦ TCG HAVEN") turns slowly;
   - "Entering Creator Studio";
   - once loaded, the doors part, the seal zooms past, and the Studio rises in (`.studio-reveal`). Animations live in globals.css (`.studio-*`), and reduced motion gets a simple fade.
+- **Computers only** (2026-11-12). The Creator Studio is a web-on-a-computer tool: never in the iPhone or
+  Android app — even for creators — and not on a phone or a window under 1024 px (`lib/studioDevice.ts`
+  `useStudioDevice()`). There `/creator` shows "The Creator Studio is on computers" with the link to copy;
+  links to it (the sidebar's Creator tab, the community page's "Edit in Creator Studio") show only on a
+  computer, and the phone header has no Studio button. Fans see creators' books everywhere, the app included.
 - **Full screen, with its own way out** (2026-11-12). On `/creator`, `ClientWrapper` drops the app's
   sidebar, phone header and bottom nav. The Studio's own sticky top bar (`components/creator/StudioBar.tsx`)
   is always there, with **Exit Creator Studio** on the right. Exit goes back to the last page outside the Studio

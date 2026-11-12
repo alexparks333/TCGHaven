@@ -12,7 +12,7 @@
 // (creator_books/{uid}, communities/{uid}).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ImagePlus, Loader2, PauseCircle, BookOpen, Eye, X, Check, Sparkles, Palette, RotateCcw, ArrowRight } from 'lucide-react'
+import { Copy, Monitor, ImagePlus, Loader2, PauseCircle, BookOpen, Eye, X, Check, Sparkles, Palette, RotateCcw, ArrowRight } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
@@ -31,15 +31,46 @@ import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { useStudioDevice } from '@/lib/studioDevice'
+import Link from 'next/link'
 import { useStickyCenter } from '@/lib/useStickyCenter'
 import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
 
 export default function CreatorPage() {
+  // Computers only: never in the iPhone / Android app (even for creators), not on a phone
+  const device = useStudioDevice()
+  if (device !== 'computer') return <ComputerOnly inApp={device === 'app'} />
   return (
     <AuthGuard>
       <Body />
     </AuthGuard>
+  )
+}
+
+/** Opening the Studio in the app or on a phone: it's made for a computer */
+function ComputerOnly({ inApp }: { inApp: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const link = 'tcghaven.org/creator'
+  return (
+    <div className="min-h-[80dvh] flex items-center justify-center py-10">
+      <div className="haven-panel haven-grain relative w-full max-w-md !p-7 text-center">
+        <Corners inset={8} size={34} />
+        <span className="haven-medallion w-14 h-14 mx-auto"><Monitor size={24} /></span>
+        <h1 className="pinbook-serif mt-4 text-2xl font-bold text-ink">The Creator Studio is on computers</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          {inApp ? 'The app is for collecting.' : 'It needs a bigger screen.'} Open the Studio in a web browser on your computer to make your book, design its pages and publish badges — everything you make shows up here for your fans.
+        </p>
+        <div className="mt-5 haven-label justify-center !py-2.5">
+          <span className="pinbook-serif font-bold text-ink tracking-wide">{link}</span>
+        </div>
+        <div className="mt-4 flex flex-col gap-2">
+          <button type="button" onClick={async () => { try { await navigator.clipboard.writeText('https://www.' + link); setCopied(true); setTimeout(() => setCopied(false), 1600) } catch { /* the link is shown above */ } }}
+            className="btn-primary justify-center"><Copy size={15} />{copied ? 'Copied' : 'Copy the link'}</button>
+          <Link href="/" className="py-1.5 text-sm font-semibold text-slate-500 hover:text-ink">Back to TCG Haven</Link>
+        </div>
+      </div>
+    </div>
   )
 }
 
