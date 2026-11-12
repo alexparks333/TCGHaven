@@ -246,11 +246,11 @@ export default function PortfolioPage() {
             {/* Opens the FilterPanel above the page (ClientWrapper) */}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              // A real button: raised cream with a shadow; filled when the panel is open
+              // A real button in the same colour as the cards around it: a soft shadow that lifts on hover; filled when the panel is open
               className={`md:order-last shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[13px] font-semibold transition-all active:translate-y-px ${
                 showFilters
                   ? 'bg-violet-600 border-violet-600 text-white shadow-inner'
-                  : 'bg-[#f6eedb] border-[#c9b48c] text-ink shadow-[0_2px_0_#c9b48c] hover:bg-[#fbf5e8] hover:-translate-y-px'
+                  : 'bg-slate-900/70 border-slate-800 text-ink shadow-[0_2px_4px_rgba(90,60,20,0.18)] hover:shadow-[0_4px_8px_rgba(90,60,20,0.22)] hover:border-slate-700 hover:-translate-y-px'
               }`}
               aria-expanded={showFilters}
             >
