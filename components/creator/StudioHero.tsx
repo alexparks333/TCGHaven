@@ -9,6 +9,7 @@ import { BookOpen, Check, Palette, Users, Wand2, ArrowRight, Trophy } from 'luci
 import { memberCount } from '@/lib/communities'
 import { LEATHERS, FOILS, type Community, type CreatorBook } from '@/lib/creatorBooks'
 import { chaptersFor } from '@/components/creator/BookPlanner'
+import { Corners, Divider, Ribbon, Seal } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
 
 export type StudioTab = 'cover' | 'pages' | 'community'
@@ -57,24 +58,22 @@ export function StudioHero({ uid, community, book, since, tab, onTab, dirtyTabs 
   const next = steps.find((s) => !s.done)
 
   return (
-    <div className="relative rounded-t-[22px] border border-b-0 border-slate-800 bg-[#efe4cc]"
-      style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(122, 101, 74, 0.08) 1px, transparent 0)', backgroundSize: '16px 16px' }}>
-      {/* A thin inner rule, like the binder pages */}
+    <div className="haven-grain relative rounded-t-[22px] border border-b-0 border-slate-800">
+      {/* A thin inner rule, like the binder pages, flourishes in its top corners, and a ribbon */}
       <div className="absolute inset-[6px] bottom-0 rounded-t-[17px] border border-b-0 border-[#d6c49f] pointer-events-none" />
+      <div className="absolute inset-x-0 top-0 h-16 pointer-events-none"><Corners inset={12} size={30} /></div>
+      <Ribbon className="right-12 hidden md:block" />
 
-      <div className="relative px-5 md:px-8 pt-6 md:pt-7">
+      <div className="relative px-5 md:px-10 pt-7 md:pt-8">
         <div className="flex flex-wrap items-center gap-4 md:gap-5">
           {/* The community's stamp, pressed into the paper */}
-          <span className="haven-medallion w-16 h-16 md:w-[72px] md:h-[72px] shrink-0 pinbook-serif text-3xl md:text-[34px] font-bold"
-            style={{ boxShadow: 'inset 0 0 0 4px #f3e9d3, inset 0 0 0 5px rgba(148, 128, 95, 0.35)' }}>
-            {(community.name.trim()[0] || '★').toUpperCase()}
-          </span>
+          <Seal letter={(community.name.trim()[0] || '★').toUpperCase()} ring={`✦ CREATOR STUDIO ✦ ${(since ?? '').match(/\d{4}/)?.[0] ?? new Date().getFullYear()} `} />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7a5230] flex items-center gap-1.5"><Wand2 size={13} />Creator Studio</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7a5230] flex items-center gap-1.5"><Wand2 size={13} />The Creator Studio of</p>
             <h1 className="pinbook-serif text-[26px] md:text-[32px] font-bold text-ink leading-tight truncate">{community.name || 'Your community'}</h1>
-            <p className="text-sm text-slate-500 truncate">{since ? `Creator since ${since} · Premium included` : community.tagline || 'Make something fans will want to collect'}</p>
+            <p className="text-sm text-slate-500 italic truncate" style={{ fontFamily: 'Georgia, serif' }}>{since ? `Creator since ${since} · Premium included` : community.tagline || 'Make something fans will want to collect'}</p>
           </div>
-          <div className="flex w-full sm:w-auto divide-x divide-[#d6c49f] rounded-xl border border-[#d6c49f] bg-[#f6eedb]">
+          <div className="flex w-full sm:w-auto md:mr-14 divide-x divide-[#d6c49f] rounded-xl border border-[#d6c49f] bg-[#f6eedb] shadow-[inset_0_0_0_3px_#f6eedb,inset_0_0_0_4px_rgba(148,128,95,0.22)]">
             {([['Badges', badges], ['Chapters', chapters], ['Members', members ?? '–']] as const).map(([label, value]) => (
               <div key={label} className="flex-1 sm:flex-none sm:min-w-[84px] px-3 py-2 text-center">
                 <div className="pinbook-serif text-xl md:text-2xl font-bold text-ink tabular-nums leading-none">{value}</div>
@@ -85,7 +84,7 @@ export function StudioHero({ uid, community, book, since, tab, onTab, dirtyTabs 
         </div>
 
         {/* The checklist: a ring per step, and the next thing to do */}
-        <div className="haven-rule mt-5" />
+        <Divider className="mt-5" />
         <div className="py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className="text-xs font-semibold text-slate-500 tabular-nums">Checklist {done}/{steps.length}</span>
           <div className="flex items-center gap-1.5">

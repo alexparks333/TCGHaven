@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
+import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
 
 const PER_PAGE = 6
@@ -64,9 +65,10 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start" style={inside.style /* the trim colour for the side panel too */}>
-    <div className={cn(inside.className, 'haven-panel relative !px-3 !py-6 md:!px-8 md:!py-8')} style={inside.style}>
-      {/* It lies open on the binder paper, inside a thin rule */}
+    <div className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10')} style={inside.style}>
+      {/* It lies open on the binder paper, inside a thin rule with engraved corners */}
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
+      <Corners inset={12} size={30} />
       {/* The open book: leather all round, two felt pages, trim frames */}
       <div className="relative mx-auto max-w-[980px] rounded-[18px] p-[1.6%] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
         <div className="absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />
@@ -152,19 +154,19 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
                 <ChapterName name={c} onRename={(to) => onRename(c, to)} taken={chapters} />
                 <button type="button" onClick={() => onGo(i)} title="Show this chapter" aria-label={`Show ${c}`} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800"><Eye size={15} /></button>
               </div>
-              {/* Its pins so far, small (the six spots of its last page) */}
-              <div className="mt-2 pl-10 flex items-center gap-1">
+              {/* Its pins so far, small (the six spots of its last page), as pinholes in the paper */}
+              <div className="mt-2 pl-10 flex items-center gap-1.5">
                 {Array.from({ length: PER_PAGE }, (_, k) => {
                   const inCh = badges.filter((b) => b.page === c)
                   const lastPage = Math.floor(Math.max(0, inCh.length - 1) / PER_PAGE)
                   const pin = inCh[lastPage * PER_PAGE + k]
                   return pin
                     ? <span key={k} className="w-6 h-6 flex items-center justify-center" title={pin.name}><BadgePin art={pin.art} imageUrl={pin.imageUrl} size={24} /></span>
-                    : <span key={k} className="w-6 h-6 rounded-full border border-dashed border-[#c4ae83]" />
+                    : <span key={k} className="w-6 h-6 rounded-full bg-[#ebdfc3] shadow-[inset_0_1px_3px_rgba(60,35,15,0.28)]" />
                 })}
               </div>
               <div className="mt-1.5 flex items-center gap-1 pl-10">
-                <span className="text-[11px] text-slate-500 flex-1">{count} badge{count === 1 ? '' : 's'} · {Math.max(1, Math.ceil((count + 1) / PER_PAGE))} page{Math.ceil((count + 1) / PER_PAGE) > 1 ? 's' : ''}</span>
+                <span className="text-[11px] text-slate-500 flex-1 whitespace-nowrap italic" style={{ fontFamily: 'Georgia, serif' }}>{count} badge{count === 1 ? '' : 's'} · {Math.max(1, Math.ceil((count + 1) / PER_PAGE))} page{Math.ceil((count + 1) / PER_PAGE) > 1 ? 's' : ''}</span>
                 <button type="button" onClick={() => onAddBadge(c)} title={`Make a new badge in ${c}`}
                   className="mr-1 haven-chip haven-chip-on px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-0.5"><Plus size={11} />Badge</button>
                 <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up" title="Move up" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowUp size={14} /></button>

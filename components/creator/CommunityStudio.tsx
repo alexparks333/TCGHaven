@@ -60,7 +60,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
       {/* ── The page, editable in place ── */}
-      <div className="haven-panel !p-0 overflow-hidden">
+      <div className="haven-panel haven-grain !p-0 overflow-hidden relative">
         <div className="relative h-40 md:h-48 border-b border-[#d6c49f]" style={{ background: c.color, transition: 'background 0.5s' }}>
           <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '16px 16px' }} />
           <span className="haven-plate absolute left-4 top-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5">
@@ -82,7 +82,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
             {(c.name.trim()[0] || '★').toUpperCase()}
           </div>
 
-          <input value={c.name} maxLength={40} onChange={(e) => set({ name: e.target.value })} placeholder="Your community’s name" aria-label="Community name"
+          <input value={c.name} maxLength={40} style={{ fontFamily: 'var(--font-engraved), Georgia, serif' }} onChange={(e) => set({ name: e.target.value })} placeholder="Your community’s name" aria-label="Community name"
             className={cn(inline, 'mt-4 py-1 text-[26px] md:text-[32px] font-bold text-ink leading-tight')} />
           {state === 'name' && <p className="text-xs text-red-600 mt-0.5">Give it a name of at least 2 letters to save.</p>}
           <input value={c.tagline} maxLength={80} onChange={(e) => set({ tagline: e.target.value })} placeholder="Add a one-line tagline…" aria-label="Tagline"

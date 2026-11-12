@@ -27,6 +27,7 @@ import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
 
 export default function CreatorPage() {
@@ -162,7 +163,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
           {view === 'cover' ? <Palette size={16} /> : <BookOpen size={16} />}
         </span>
         <div className="min-w-0">
-          <h2 className="text-lg font-bold text-ink truncate leading-tight">{view === 'cover' ? 'Design your cover' : b.book.name}</h2>
+          <h2 className="pinbook-serif text-xl font-bold text-ink truncate leading-tight">{view === 'cover' ? 'Design your cover' : b.book.name}</h2>
           <p className="text-xs text-slate-500">
             {view === 'cover' ? 'Every change shows on the book as you go' : `${b.badges.length} badge${b.badges.length === 1 ? '' : 's'} · ${chaptersFor(b.book, b.badges).length} chapter${chaptersFor(b.book, b.badges).length === 1 ? '' : 's'} · tap a “+” to make a badge`}
           </p>
@@ -383,7 +384,7 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   return (
     <div
-      className="haven-panel relative overflow-hidden min-h-[520px] md:min-h-[600px] flex flex-col items-center justify-center gap-7 !py-10"
+      className="haven-panel haven-grain relative overflow-hidden min-h-[520px] md:min-h-[600px] flex flex-col items-center justify-center gap-7 !py-10"
       onPointerMove={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -12, y: ((e.clientX - r.left) / r.width - 0.5) * 18 })
@@ -391,6 +392,7 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
       onPointerLeave={() => setTilt({ x: 0, y: 0 })}
     >
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
+      <Corners inset={12} size={30} />
       {dirty && <span className="haven-plate absolute top-4 left-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" />Preview — not saved yet</span>}
       <div className="absolute bottom-[16%] w-[40%] max-w-[260px] h-5 rounded-[50%] bg-[#5a3c1e]/30 blur-lg" />
       <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>

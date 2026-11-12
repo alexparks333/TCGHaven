@@ -10,7 +10,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   steps: name, bio (tagline + about), **games** (`Community.games`), colour. The community's card
   (`CommunityCard`) fills in live beside it. **Launch community** saves it, and only then does the
   Studio itself appear.
-- **The Studio's layout** (redesigned 2026-11-12, in the app's paper: `haven-panel` / `haven-chip` / `haven-medallion`, flat walnut, no gradients or glows). **`StudioHero`** (`components/creator/StudioHero.tsx`)
+- **The Studio's layout** (redesigned 2026-11-12, in the app's paper: `haven-panel` / `haven-chip` / `haven-medallion`, flat walnut, no gradients or glows; hand-made touches from `components/creator/Ornaments.tsx` — corner flourishes, a fleuron divider, a lettered seal, a ribbon — over `.haven-grain` paper). **`StudioHero`** (`components/creator/StudioHero.tsx`)
   is a paper header with the community's stamp, with:
   - stats: badges, chapters and members;
   - a **checklist** of 7 steps (`studioSteps()`), with dots, a progress bar and a "Next: …" link.
