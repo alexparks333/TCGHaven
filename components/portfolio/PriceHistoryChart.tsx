@@ -45,7 +45,7 @@ export function PriceHistoryChart({ data, color }: Props) {
           tick={{ fill: '#7a654a', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
-          tickFormatter={(v) => `$${v}`}
+          tickFormatter={(v) => formatCurrency(v).replace(/\.00$/, '')}
           width={50}
         />
         <Tooltip

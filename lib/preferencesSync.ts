@@ -1,5 +1,6 @@
 import { onSnapshot } from 'firebase/firestore'
 import { useStore } from './store'
+import { isCurrency } from './currency'
 import { preferencesDoc, parseFilterPrefs, parseTrackedGames, saveFilterPrefs, type FilterPrefs } from './firebase/preferences'
 
 // Keeps Portfolio's settings — the Filters panel (value floor, game toggles, hidden groups), the
@@ -37,6 +38,8 @@ export function startPreferencesSync(userId: string): () => void {
   const unsubDoc = onSnapshot(preferencesDoc(userId), (snap) => {
     if (snap.metadata.hasPendingWrites) return // our own write coming back
     const data = snap.data()
+    // The display currency (Settings → Currency): follow the account's choice
+    if (isCurrency(data?.currency) && data.currency !== useStore.getState().currency) useStore.getState().setCurrency(data.currency, false)
     const tracked = parseTrackedGames(data?.trackedGames)
     if (tracked && !sameGames(tracked, useStore.getState().trackedGames)) useStore.getState().applyAccountTrackedGames(tracked)
     const remote = parseFilterPrefs(data?.filters)

@@ -10,12 +10,13 @@ import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
 import type { CardSearchResult, SetOption } from '@/lib/api/search'
-import { cn, localDateString, isFirstCopyOfCard, printingText, nameWithPrinting } from '@/lib/utils'
+import { cn, localDateString, isFirstCopyOfCard, printingText, nameWithPrinting, formatCurrency } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
 import { FullSlab } from '@/components/SlabCase'
 import { GRADER_CHOICES, graderOf, gradeWord, isValidGrade, SUBGRADE_KEYS, type GradeTier, type Subgrades } from '@/lib/grading'
 import { CardName } from '@/components/CardName'
+import { displayCurrency } from '@/lib/currency'
 
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
@@ -577,7 +578,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                       const displayPrice = result.marketPrice
                       return displayPrice > 0 ? (
                         <div className="text-xs text-emerald-600 font-medium flex-shrink-0 text-right">
-                          <div>${displayPrice.toFixed(2)}</div>
+                          <div>{formatCurrency(displayPrice)}</div>
                         </div>
                       ) : null
                     })()}
@@ -702,7 +703,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
               {(() => {
                 const mp = catalogMarketPrice()
                 return mp > 0
-                  ? <span className="text-emerald-600 font-medium">${mp.toFixed(2)}</span>
+                  ? <span className="text-emerald-600 font-medium">{formatCurrency(mp)}</span>
                   : <span className="text-slate-500">No market price yet</span>
               })()}
             </div>
@@ -711,7 +712,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           {/* How Much Paid + Date — one per row on phones, where a date field runs out of room beside another */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="field-label">How Much Paid ($)</label>
+              <label className="field-label">How Much Paid (US$){displayCurrency().code !== "USD" && <span className="font-normal normal-case"> · tracked in US dollars</span>}</label>
               <input
                 type="number"
                 min={0}
@@ -743,7 +744,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             const edition = (form.edition ?? defaultEdition(vp)) as Edition
             const editions = editionsOf(vp) as Edition[]
             const finishes = finishesOf(vp, edition) as Finish[]
-            const priceTag = (p: number) => p > 0 ? <span className="block text-[10px] opacity-80">${p.toFixed(2)}</span> : <span className="block text-[10px] opacity-60">no price</span>
+            const priceTag = (p: number) => p > 0 ? <span className="block text-[10px] opacity-80">{formatCurrency(p)}</span> : <span className="block text-[10px] opacity-60">no price</span>
             const chip = (active: boolean) => cn(
               'flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all border leading-tight',
               active ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
@@ -1101,7 +1102,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
               <div className="text-[13px] font-semibold text-ink leading-snug line-clamp-2"><CardName name={nameWithPrinting(form.name, form)} /></div>
               <div className="text-[11px] text-slate-500 mt-0.5 truncate">{[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}</div>
               {catalogMarketPrice() > 0 && (
-                <div className="mt-1 text-sm font-semibold text-emerald-600">${catalogMarketPrice().toFixed(2)}</div>
+                <div className="mt-1 text-sm font-semibold text-emerald-600">{formatCurrency(catalogMarketPrice())}</div>
               )}
             </div>
           </div>

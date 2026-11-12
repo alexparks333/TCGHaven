@@ -24,6 +24,7 @@ const RENDER_STEP = 50
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
+import { displayCurrency } from '@/lib/currency'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
@@ -1040,7 +1041,7 @@ export default function InventoryPage() {
 
                 {/* Sale Price */}
                 <div className="mb-3">
-                  <label className="field-label">Sale Price ($)</label>
+                  <label className="field-label">Sale Price (US$){displayCurrency().code !== "USD" && <span className="font-normal normal-case"> · tracked in US dollars</span>}</label>
                   <input
                     type="number"
                     min={0}

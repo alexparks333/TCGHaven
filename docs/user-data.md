@@ -246,3 +246,20 @@ calls ran at all, landing the user on a fully empty Inventory/Portfolio/Spending
 back to `[]` and logs its own specific error, so one flaky read no longer blanks the other three.
 
 ---
+
+## Display currency (2026-11-11)
+
+- **What's stored:** every amount stays in **US dollars**: catalog prices, purchase and sale
+  prices, history. Settings → **Prices → Currency** only changes what's *shown*.
+- **Where the choice lives:** `users/{uid}/settings/preferences.currency`, followed live by
+  `lib/preferencesSync.ts`. It's also kept in the store (persisted) and in localStorage, so the
+  first paint is already converted.
+- **How it converts:** `formatCurrency()` (`lib/utils.ts`) multiplies by today's rate from
+  `/api/fx`. That's the ECB reference rates via Frankfurter, cached 6 h on the server and at the
+  edge. `lib/currency.ts` holds the list and the current choice. A currency whose rate isn't
+  known yet shows USD, never a guess.
+- **Redrawing:** changing the currency remounts the app shell (`ClientWrapper`
+  `useCurrencyRedraw`), because `formatCurrency` is a plain function.
+- **Entering prices:** "How Much Paid" and "Sale Price" are still entered in US dollars and are
+  labelled so.
+- **Staff portal:** always USD. Use `formatUSD()` there, and anywhere that must not convert.

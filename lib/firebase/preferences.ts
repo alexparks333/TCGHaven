@@ -59,6 +59,11 @@ export function parseFilterPrefs(raw: unknown): Partial<FilterPrefs> | null {
   return Object.keys(out).length > 0 ? out : null
 }
 
+// The currency prices are shown in (lib/currency.ts). null = never chosen (US dollars).
+export async function saveCurrency(userId: string, currency: string): Promise<void> {
+  await setDoc(prefsRef(userId), { currency }, { merge: true })
+}
+
 export function preferencesDoc(userId: string) {
   return prefsRef(userId)
 }

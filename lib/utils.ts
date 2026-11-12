@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { isTcgplayerSourced, type Card, type Game } from './types'
+import { displayCurrency } from './currency'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -82,10 +83,22 @@ export function isFirstCopyOfCard(newCard: Card, existingCards: Card[]): boolean
   })
 }
 
-// Constructing Intl.NumberFormat is expensive — build it once, reuse everywhere
+// Constructing Intl.NumberFormat is expensive — build each once, reuse everywhere
 const USD = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const formats = new Map<string, Intl.NumberFormat>()
 
+/** A US-dollar amount as the collector sees money: in their chosen currency (Settings →
+ *  Currency, lib/currency.ts), converted at today's rate. Everything is stored in USD. */
 export function formatCurrency(value: number): string {
+  const { code, rate } = displayCurrency()
+  if (code === 'USD') return USD.format(value)
+  let f = formats.get(code)
+  if (!f) formats.set(code, (f = new Intl.NumberFormat(undefined, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })))
+  return f.format(value * rate)
+}
+
+/** Always US dollars (staff finances, anything that must not be converted) */
+export function formatUSD(value: number): string {
   return USD.format(value)
 }
 

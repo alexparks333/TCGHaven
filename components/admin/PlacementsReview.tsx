@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatUSD as formatCurrency } from '@/lib/utils'
 import { GAME_COLORS } from '@/lib/types'
 
 // One per game with promo review: Riftbound, Lorcana and Pokémon (see ReviewGame). Only odd cards

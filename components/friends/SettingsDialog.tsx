@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2 } from 'lucide-react'
+import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins } from 'lucide-react'
+import { useStore } from '@/lib/store'
+import { CURRENCIES, type CurrencyCode } from '@/lib/currency'
+import { saveCurrency } from '@/lib/firebase/preferences'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends } from './FriendsProvider'
 import { Avatar } from './Avatar'
@@ -22,6 +25,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   const [signingOut, setSigningOut] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const currency = useStore((s) => s.currency)
+  const setCurrency = useStore((s) => s.setCurrency)
+  const chooseCurrency = (code: CurrencyCode) => {
+    setCurrency(code)
+    if (user) saveCurrency(user.uid, code).catch((e) => console.error('Failed to save the currency:', e))
+  }
 
   useEffect(() => {
     // Not on the Delete account screen: Escape mustn't hide a deletion that's under way
@@ -137,6 +146,26 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </div>
             </div>
             <p className="text-[11px] text-slate-500 mt-1.5 px-1">Your profile link uses your username. Your last 3 old usernames stay yours, so links with them still work; older ones are freed up.</p>
+          </section>
+
+          {/* Currency: what prices are shown in (lib/currency.ts) — everything is still tracked in USD */}
+          <section>
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Prices</div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/60">
+              <label className={row}>
+                <Coins size={16} className="text-slate-500 shrink-0" />
+                <span className="text-sm text-slate-400 w-20 shrink-0">Currency</span>
+                <select value={currency} onChange={(e) => chooseCurrency(e.target.value as CurrencyCode)} aria-label="Currency"
+                  className="flex-1 min-w-0 bg-slate-900 border border-slate-700 focus:border-violet-600 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink outline-none">
+                  {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.flag} {c.code} — {c.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1.5 px-1">
+              {currency === 'USD'
+                ? 'Card prices come in US dollars. Pick your own currency to see them converted at today’s rate.'
+                : `Prices are tracked in US dollars and shown in ${currency} at today’s exchange rate (updated daily), on every device you sign in to.`}
+            </p>
           </section>
 
           <button

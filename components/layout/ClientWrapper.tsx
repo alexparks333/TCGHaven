@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useStore } from '@/lib/store'
+import { applyCurrency, displayCurrency, refreshRates } from '@/lib/currency'
 import { usePathname, useRouter } from 'next/navigation'
 import { originalImage, isCardImageUrl, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { AuthProvider } from '@/components/auth/AuthProvider'
@@ -16,7 +18,24 @@ import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
 import { DevPanel } from '@/components/dev/DevPanel'
 import { hideLaunchScreen, onScanLink } from '@/lib/nativeApp'
 
+// Prices in the collector's currency (lib/currency.ts): today's rates fetched once a visit, and
+// the app redrawn when the currency shown changes (formatCurrency is a plain function — nothing
+// else would make every price on screen draw again)
+function useCurrencyRedraw(): string {
+  const currency = useStore((s) => s.currency)
+  const [shown, setShown] = useState(() => displayCurrency().code)
+  useEffect(() => {
+    let live = true
+    const show = () => { if (live && applyCurrency(currency)) setShown(displayCurrency().code) }
+    show() // known rate (or USD): at once
+    refreshRates().then((ok) => { if (ok) show() })
+    return () => { live = false }
+  }, [currency])
+  return shown
+}
+
 export default function ClientWrapper({ children }: { children: React.ReactNode }) {
+  const currencyKey = useCurrencyRedraw()
   // The iPhone app's launch screen comes down once the site has drawn (no-op in a browser)
   useEffect(() => { hideLaunchScreen() }, [])
   // The app opened from the website's "Scan with your phone" QR code: straight to the scanner
@@ -51,7 +70,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
       <FriendsProvider>
         {/* 100dvh = the height actually visible right now (h-screen's 100vh is taller on iPhone — see
             the html/body note in globals.css). */}
-        <div className="flex h-dvh overflow-hidden">
+        <div key={currencyKey} className="flex h-dvh overflow-hidden">
           <Sidebar />
           <div className="flex-1 flex flex-col overflow-hidden">
             <MobileHeader />

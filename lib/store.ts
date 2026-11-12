@@ -4,6 +4,7 @@ import { Card, Game, SoldCard } from './types'
 import type { PriceStatus } from './api/priceStatus'
 import { sharpImageUrl } from './utils'
 import type { PortfolioSort } from './firebase/preferences'
+import type { CurrencyCode } from './currency'
 
 interface TCGStore {
   cards: Card[]
@@ -40,6 +41,10 @@ interface TCGStore {
   // panel (lib/preferencesSync.ts), so they never reset on a page visit or another device.
   portfolioSort: PortfolioSort
   includeSold: boolean
+  // The currency prices are shown in (Settings → Currency, lib/currency.ts); everything is stored
+  // in USD. Account-wide (lib/preferencesSync.ts) and persisted below.
+  currency: CurrencyCode
+  setCurrency: (code: CurrencyCode, fromUser?: boolean) => void
   cardUnlocks: { id: string; card: Card }[]
 
   // Populated by AuthProvider on login
@@ -123,6 +128,8 @@ export const useStore = create<TCGStore>()(
   hiddenGroups: [] as string[],
   portfolioSort: 'pnl' as PortfolioSort,
   includeSold: false,
+  currency: 'USD',
+  setCurrency: (currency) => set({ currency }),
   cardUnlocks: [] as { id: string; card: Card }[],
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
@@ -200,6 +207,7 @@ export const useStore = create<TCGStore>()(
         hiddenGroups: state.hiddenGroups,
         portfolioSort: state.portfolioSort,
         includeSold: state.includeSold,
+        currency: state.currency,
         lastPriceRefresh: state.lastPriceRefresh,
       }),
     }
