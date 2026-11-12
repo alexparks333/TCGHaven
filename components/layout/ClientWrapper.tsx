@@ -59,17 +59,33 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   // The staff portal (/admin) has its own sign-in and layout (app/admin/layout.tsx) — none of the
   // collector app's shell, session or background price loading applies there.
   const pathname = usePathname()
+  // The last page of the app outside the Creator Studio — where "Exit Creator Studio" goes back to
+  useEffect(() => {
+    if (pathname && !pathname.startsWith('/creator')) {
+      try { sessionStorage.setItem('haven:beforeStudio', location.pathname + location.search) } catch { /* private mode */ }
+    }
+  }, [pathname])
   if (pathname?.startsWith('/admin')) return <>{children}</>
   // The privacy policy is public and stands alone (linked from the App Store listing)
   if (pathname === '/privacy') return <>{children}</>
   // The Badges pin book fills the whole window, so that page drops the usual content-width cap.
   const fullWidth = pathname === '/badges'
+  // The Creator Studio takes the whole screen — no sidebar or phone nav; it has its own top bar
+  // with "Exit Creator Studio" (CreatorPage StudioBar)
+  const studio = !!pathname?.startsWith('/creator')
   return (
     <AuthProvider>
       <BanGate>
       <FriendsProvider>
         {/* 100dvh = the height actually visible right now (h-screen's 100vh is taller on iPhone — see
             the html/body note in globals.css). */}
+        {studio ? (
+          <main key={currencyKey} className="h-dvh overflow-y-auto overflow-x-hidden overscroll-x-none">
+            <div className="max-w-[1600px] mx-auto w-full px-3 sm:px-6 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+              {children}
+            </div>
+          </main>
+        ) : (
         <div key={currencyKey} className="flex h-dvh overflow-hidden">
           <Sidebar />
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -87,6 +103,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
             </main>
           </div>
         </div>
+        )}
         <CardUnlockToast />
         <PriceAutoUpdater />
         <UsageTracker />

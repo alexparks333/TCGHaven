@@ -14,6 +14,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   - two paper doors, with the Studio's seal stamped over the seam. Its rim lettering ("✦ CREATOR STUDIO ✦ TCG HAVEN") turns slowly;
   - "Entering Creator Studio";
   - once loaded, the doors part, the seal zooms past, and the Studio rises in (`.studio-reveal`). Animations live in globals.css (`.studio-*`), and reduced motion gets a simple fade.
+- **Full screen, with its own way out** (2026-11-12). On `/creator`, `ClientWrapper` drops the app's
+  sidebar, phone header and bottom nav. The Studio's own sticky top bar (`components/creator/StudioBar.tsx`)
+  is always there, with **Exit Creator Studio** on the right. Exit goes back to the last page outside the Studio
+  (`ClientWrapper` keeps it in sessionStorage `haven:beforeStudio`, else `/`) and asks first if the cover has unsaved changes.
 - **The Studio's layout** (redesigned 2026-11-12, in the app's paper: `haven-panel` / `haven-chip` / `haven-medallion`, flat walnut, no gradients or glows; hand-made touches from `components/creator/Ornaments.tsx` — corner flourishes, a fleuron divider, a lettered seal, a ribbon — over `.haven-grain` paper). **`StudioHero`** (`components/creator/StudioHero.tsx`)
   is a paper header with the community's stamp, with:
   - stats: badges, chapters and members;

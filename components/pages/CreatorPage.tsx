@@ -23,6 +23,7 @@ import { CreateCommunity } from '@/components/creator/CreateCommunity'
 import { CommunityStudio } from '@/components/creator/CommunityStudio'
 import { StudioHero, type StudioTab } from '@/components/creator/StudioHero'
 import { StudioEntrance } from '@/components/creator/StudioEntrance'
+import { StudioBar } from '@/components/creator/StudioBar'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
 import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -53,7 +54,8 @@ function Body() {
   const onOpen = useCallback(() => setOpening(true), [])
   const onDone = useCallback(() => setEntered(true), [])
   const ready = loaded && communityLoaded && bookLoaded
-  const entrance = !entered && <StudioEntrance ready={ready} onOpen={onOpen} onDone={onDone} />
+  // The Studio fills the screen (ClientWrapper drops the app's sidebar here); its bar has the way out
+  const entrance = <>{!entered && <StudioEntrance ready={ready} onOpen={onOpen} onDone={onDone} />}<StudioBar unsaved={coverDirty} /></>
 
   if (!ready) return <>{entrance}</>
 
