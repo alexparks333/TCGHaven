@@ -1111,13 +1111,16 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     <MaybeAuthGuard guard={!picker}>
       <div>
         {!readOnly && (
-          <div className="mb-6">
+          <div className="mb-6 flex items-start justify-between gap-4">
             <h1 className="text-2xl font-bold text-ink">Cardex</h1>
-            {/* The click shortcuts (computers only — a phone has no keys): Shift adds, Ctrl / ⌘ looks up the price */}
-            <div className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-500">
-              <span className="inline-flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd>+<kbd className="cardex-kbd">Left click</kbd>Adds the card</span>
-              <span className="inline-flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘' : 'Ctrl'}</kbd>+<kbd className="cardex-kbd">Left click</kbd>Searches its price in a new tab</span>
-            </div>
+            {/* The click shortcuts, top right (computers only — a phone has no keys) */}
+            <dl className="hidden md:grid grid-cols-[auto_auto] items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-800 bg-slate-950/50 px-3.5 py-2.5 text-xs">
+              <dt className="flex items-center gap-1 justify-end"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span></dt>
+              <dd className="font-semibold text-ink">Add card</dd>
+              <dt className="flex items-center gap-1 justify-end"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span></dt>
+              <dd className="font-semibold text-ink">Look up price <span className="font-normal text-slate-500">(new tab)</span></dd>
+            </dl>
+          </div>
           </div>
         )}
 
