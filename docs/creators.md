@@ -115,8 +115,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      rings too, like the fan view.
      **Pin size — one rule everywhere:** `pagePin(w, h)` (lib/badges.ts) is a 100% pin on a page that big, and
      `pinDrawSize(def, pin)` applies its Size on the page — used by the pin book, the Studio's pages and the badge
-     maker, so they all match. The badge maker's velvet side is treated as a page: the pin shows at true scale,
-     with a faint dashed outline of its spot (100%). **Size on the page** (Pin art step) sets
+     maker, so they all match. The badge maker's velvet side shows the pin in its spot zoomed to fill the side: a
+     faint dashed outline of the spot (100%) with the pin at its Size on the page inside it (the same comparison). **Size on the page** (Pin art step) sets
      `BadgeDef.displayScale`, 30–150%: creators' badges (`set` starts `creator-`) may grow past their spot
      (`CREATOR_MAX_SCALE`); TCG Haven's stay capped at their spot as before.
      **Pop-ups** (BadgeMaker, Preview as a fan, the Studio's prompts) render into `<body>` through

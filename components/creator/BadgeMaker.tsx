@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye } from 'lucide-react'
-import { DEFAULT_TIERS, CREATOR_MAX_SCALE, pagePin, pinDrawSize, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
+import { DEFAULT_TIERS, CREATOR_MAX_SCALE, pinDrawSize, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -70,14 +70,16 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
   const { catalog } = useBadgeCatalog()
   const example = catalog.badges.find((b) => b.imageUrl && !b.set.startsWith('creator-'))
   const { accent, from, to } = book.cover
-  // The velvet side is a page: the pin's 100% size there, by the pin book's own rule (lib/badges.ts pagePin)
+  // The velvet side shows the pin in its spot, zoomed to fill: `pin` = the spot's (100%) size on screen
   const [pane, setPane] = useState<HTMLDivElement | null>(null)
   const [pin, setPin] = useState(120)
   useEffect(() => {
     if (!pane) return
+    // Zoomed in to fill the side: the spot (100%) as big as fits with room for a 150% pin, the pin drawn
+    // at its Size on the page within it — the same pin-to-spot comparison as on the page, just bigger
     const fit = () => {
-      const w = pane.clientWidth - 20 // the velvet is inset 10px all round
-      setPin(pagePin(w, Math.max(pane.clientHeight - 20, w / 0.71)))
+      const w = pane.clientWidth - 20, h = pane.clientHeight - 20 // the velvet is inset 10px all round
+      setPin(Math.max(120, Math.min(w * 0.6, (h - 90) / (1.12 * CREATOR_MAX_SCALE))))
     }
     const ro = new ResizeObserver(fit)
     ro.observe(pane)
@@ -172,17 +174,17 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
               <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
             </div>
           ) : (
-          // The pin at its true size on a page: this velvet side is the page, and the pin is drawn by the
-          // pin book's own rule for a page this big. The faint dashed outline is its spot (100%)
+          // The pin in its spot, zoomed to fill the side: the faint dashed outline is its spot (100%), the pin
+          // drawn at its Size on the page inside it — exactly how it compares on the page
           <div className="relative flex items-center justify-center" style={{ width: pin, height: pin * 1.12 }}>
             {draft.imageUrl && (
               <>
                 <span className="absolute inset-[-6px] rounded-2xl border border-dashed border-white/25 pointer-events-none" aria-hidden />
-                <span className="absolute -top-6 inset-x-0 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40 pointer-events-none">Its spot on the page</span>
+                <span style={{ top: -22 - Math.max(0, (pinDrawSize(draft, pin) - pin) * 0.56) /* above a pin that's grown past its spot */ }} className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40 pointer-events-none">Its spot on the page</span>
               </>
             )}
             {draft.imageUrl
-              ? <span className="flex items-center justify-center" style={{ filter: pinShadowCss(book.insideStyle ?? {}) }}><BadgePin art={draft.art} imageUrl={draft.imageUrl} size={Math.round(pinDrawSize(draft, pin))} /></span>
+              ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center" style={{ width: pinDrawSize(draft, pin), height: pinDrawSize(draft, pin) * 1.12, filter: pinShadowCss(book.insideStyle ?? {}) }}><BadgePin art={draft.art} imageUrl={draft.imageUrl} size={Math.round(pinDrawSize(draft, pin))} /></span>
               : <span className="w-[76%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}
           </div>
           )}
@@ -272,7 +274,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
                     </div>
                     <input type="range" min={0.3} max={CREATOR_MAX_SCALE} step={0.01} value={draft.displayScale ?? 1} className="mt-2 w-full accent-violet-600"
                       onChange={(e) => { const v = Number(e.target.value); set({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
-                    <p className="mt-1 text-[11px] text-slate-500">The left side is a page at true scale: the pin is exactly as big as it will be in your book. The dashed outline is its spot (100%) — go over to let it grow past it.</p>
+                    <p className="mt-1 text-[11px] text-slate-500">The dashed outline on the left is its spot on the page, shown big — the pin compares to it exactly as it will in your book. Go over 100% to let it grow past it.</p>
                   </div>
                 )}
               </div>

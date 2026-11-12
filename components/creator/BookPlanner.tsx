@@ -602,7 +602,7 @@ const romanOf = (i: number) => ROMAN[i] ?? String(i + 1)
 function Velvet({ children, side, boxRef }: { children: React.ReactNode; accent?: string; side: 'left' | 'right'; boxRef?: (el: HTMLDivElement | null) => void }) {
   return (
     <div ref={boxRef}
-      className={cn('pinbook-page relative aspect-[0.78] p-[6%] flex flex-col', side === 'left' ? 'pinbook-page-left md:rounded-l-[10px]' : 'pinbook-page-right md:rounded-r-[10px]')}
+      className={cn('pinbook-page relative aspect-[0.78] min-h-0 p-[6%] flex flex-col', /* min-h-0: the page keeps its shape whatever's on it */ side === 'left' ? 'pinbook-page-left md:rounded-l-[10px]' : 'pinbook-page-right md:rounded-r-[10px]')}
     >
       <div className="pinbook-page-art" /><div className="pinbook-page-pattern" />
       {/* The trim's frame (the same as the real pin book's) */}
@@ -629,7 +629,9 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
   const [pin, setPin] = useState(90)
   useEffect(() => {
     if (!box) return
-    const fit = () => setPin(pagePin(box.clientWidth, box.clientHeight))
+    // from the width only (the height follows the page's shape) — sizing by a height the pins themselves
+    // push on made the page and its pins grow each other
+    const fit = () => setPin(pagePin(box.clientWidth, box.clientWidth / 0.78))
     const ro = new ResizeObserver(fit)
     ro.observe(box)
     fit()
@@ -666,18 +668,23 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
         <span className="flex-1 h-px" style={{ background: `linear-gradient(270deg, transparent, ${accent})` }} />
       </div>
       {/* 2 × 3 pin spots */}
-      <div className="relative flex-1 grid grid-cols-2 grid-rows-3 gap-[5%] px-[4%] pb-[2%]">
+      {/* Laid out like the pin book's page (BadgeBook PinPage): a fixed area, 2 × 3, that never resizes the page */}
+      <div className="absolute inset-x-[7%] top-[15%] bottom-[4%] grid grid-cols-2 grid-rows-3 gap-x-[4%]">
         {page.spots.map((b, i) =>
           b ? (
-            <button key={b.id} type="button" onClick={() => onEdit(b)} className="group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
-              <span className="pinbook-pin-shadow relative !flex items-center justify-center transition-transform group-hover:scale-105" style={{ width: pin, height: pin * 1.12 }} /* !flex: .pinbook-pin-shadow is inline-block in the pin book */>
-                <BadgePin art={b.art} imageUrl={b.imageUrl} size={pinDrawSize(b, pin) /* its Size on the page, as the pin book draws it */} />
+            <button key={b.id} type="button" onClick={() => onEdit(b)} className="group min-h-0 min-w-0 flex flex-col items-center justify-center gap-1.5 rounded-xl hover:bg-white/5 transition-colors">
+              <span className="pinbook-pin-shadow relative !flex shrink-0 items-center justify-center transition-transform group-hover:scale-105" style={{ width: pin, height: pin * 1.12 }} /* !flex: .pinbook-pin-shadow is inline-block in the pin book */>
+                {/* its Size on the page, as the pin book draws it — in its own box, centred, so a pin over 100%
+                    isn't held to the spot's width (an <img> never grows past its parent) */}
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center" style={{ width: pinDrawSize(b, pin), height: pinDrawSize(b, pin) * 1.12 }}>
+                  <BadgePin art={b.art} imageUrl={b.imageUrl} size={pinDrawSize(b, pin)} />
+                </span>
               </span>
-              <span className="pinbook-serif max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
+              <span className="pinbook-serif shrink-0 max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
             </button>
           ) : i === plusAt ? (
             <button key={'plus' + i} type="button" onClick={() => onAdd(page.chapter)}
-              className="group flex flex-col items-center justify-center gap-[6%]">
+              className="group min-h-0 min-w-0 flex flex-col items-center justify-center gap-1.5">
               <span
                 className="flex items-center justify-center w-[52%] aspect-square rounded-full border-2 border-dashed transition-all group-hover:scale-110 group-hover:bg-white/5"
                 style={{ borderColor: 'color-mix(in srgb, var(--trim) 80%, transparent)', color: accent, background: 'var(--page-solid)' /* plain page inside the ring — no pattern, no shadow */ }}
