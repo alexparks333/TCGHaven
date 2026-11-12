@@ -96,8 +96,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        Silver rings, Brass D-rings, Spiral coil, Leather lacing, Chain links, Ribbon & clasps, Jewelled hinge;
        each with up to three colours (`bindingColor`/`2`/`3`, any colour) and its own sliders
        (`bindingParams[binding]`), Surprise and Reset. **Shown to fans only** (the pin book and Preview as a
-       fan) — the Studio's editing pages leave it out; the panel has a live mini preview. Unset `binding` =
+       fan) and on the Studio's pages; the panel has a live mini preview. Unset `binding` =
        TCG Haven's original silver rings, drawn exactly as before. (The phone book keeps its own rings.)
+     **Saving the look of the pages:** Inside look edits are a draft (CreatorPage `insideDraft`) until **Save
+     page changes** (the bar under the panel; Undo all). Chapters and badges still save themselves. Changing
+     tab with unsaved cover or page changes opens `LeaveDialog` (Save & continue / Discard / Keep editing);
+     Exit Creator Studio and closing the browser tab ask too. **Back to the classic inside** warns that it
+     can't be undone, then clears `insideStyle` and saves at once. The Studio's pages now show the Center
+     rings too, like the fan view.
      Every page draws two layers over the felt for these — `.pinbook-page-art` (picture) then
      `.pinbook-page-pattern` — under the page's content. With a pattern, an empty badge's silhouette is solid
      felt (`.pinbook-hole-felt`, `--page-solid`): the pattern stops at its outline, no halo. Empty Studio spots

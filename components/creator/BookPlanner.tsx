@@ -13,10 +13,10 @@ import { EDGE_COLORS, EDGE_TEXTURES, edgeBackground } from '@/lib/bookEdges'
 import { badgeArt, badgeAsset } from '@/lib/badgeAssets'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStickyCenter } from '@/lib/useStickyCenter'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
-import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
@@ -47,7 +47,7 @@ export function plan(book: BadgeSet, badges: BadgeDef[]): PlannedPage[] {
   return pages
 }
 
-export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter, onAddChapter, onChapters, onInside }: {
+export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter, onAddChapter, onChapters, onInside, insideDirty = false, onSaveInside, onUndoInside, onRevertInside }: {
   book: BadgeSet
   badges: BadgeDef[]
   onAdd: (chapter: string) => void
@@ -57,6 +57,10 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
   onChapters: (next: string[]) => void          // reordered / one removed (only an empty one)
   onInside: (style: InsideStyle | undefined) => void
   uid: string
+  insideDirty?: boolean          // the Inside look has changes not saved yet ("Save page changes")
+  onSaveInside?: () => void
+  onUndoInside?: () => void
+  onRevertInside?: () => void   // back to the classic inside, saved at once (after a warning)
 }) {
   const pages = useMemo(() => plan(book, badges), [book, badges])
   const chapters = chaptersFor(book, badges)
@@ -90,8 +94,8 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
           <div className="hidden md:block">
             {right ? <Page page={right} accent={accent} side="right" onAdd={onAdd} onEdit={onEdit} onRename={onRenameChapter} /> : <EmptyPage accent={accent} onAddChapter={onAddChapter} />}
           </div>
-          {/* The spine */}
-          <div className="hidden md:block absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3%] pointer-events-none" style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.45), rgba(0,0,0,0.05) 45%, rgba(0,0,0,0.05) 55%, rgba(0,0,0,0.45))' }} />
+          {/* The spine and the Center rings, as fans will see them */}
+          <div className="hidden md:block absolute inset-0 pointer-events-none z-20"><BookBinding st={book.insideStyle} /></div>
         </div>
       </div>
 
@@ -116,7 +120,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
     </div>
 
     {/* The side panel: Chapters | Inside look */}
-    <div className="haven-panel !p-0 overflow-hidden xl:sticky xl:top-4">
+    <div className="haven-panel !p-0 overflow-clip">
       {/* Two tabs */}
       <div className="grid grid-cols-2 gap-1.5 p-2 border-b border-[#d6c49f]">
         {([['chapters', 'Chapters', BookOpen], ['inside', 'Inside look', Palette]] as const).map(([id, label, Icon]) => (
@@ -130,7 +134,19 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
       {panel === 'chapters'
         ? <ChaptersPanel chapters={chapters} badges={badges} showing={[left?.chapterIndex, right?.chapterIndex]} onGo={goTo}
             onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} onAddBadge={onAdd} />
-        : <InsidePanel uid={uid} style={book.insideStyle} onChange={onInside} coverImage={book.coverImage} />}
+        : <InsidePanel uid={uid} style={book.insideStyle} onChange={onInside} onRevert={onRevertInside} coverImage={book.coverImage} />}
+      </div>
+      {/* The look of the pages is kept only when saved */}
+      <div className={cn('haven-label sticky bottom-3 mx-4 mb-4 !py-2 !pr-2', insideDirty && 'shadow-[0_10px_20px_-12px_rgba(60,35,15,0.5)]')}>
+        <span className="text-xs font-semibold flex-1 flex items-center gap-1.5 text-slate-500">
+          {insideDirty ? <><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" /><span className="text-ink">Unsaved page changes</span></> : <><Check size={13} className="text-emerald-600" />Page look saved</>}
+        </span>
+        {insideDirty && (
+          <>
+            <button type="button" onClick={onUndoInside} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
+            <button type="button" onClick={onSaveInside} className="btn-primary !py-1.5"><Check size={15} />Save page changes</button>
+          </>
+        )}
       </div>
     </div>
     </div>
@@ -223,7 +239,8 @@ const TRIMS: Array<[string, string]> = [
   ['Bronze', '#a8793f'], ['Emerald', '#6fd3a2'], ['Sapphire', '#8fb2ff'], ['Amethyst', '#c49bff'],
 ]
 
-function InsidePanel({ uid, style, onChange, coverImage }: { uid: string; style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void; coverImage?: string }) {
+function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: string; style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void; onRevert?: () => void; coverImage?: string }) {
+  const [reverting, setReverting] = useState(false)
   const s = style ?? {}
   const set = (p: Partial<InsideStyle>) => onChange({ ...s, ...p })
   const page = s.page || INSIDE_DEFAULTS.page, trim = s.trim || INSIDE_DEFAULTS.trim
@@ -277,7 +294,17 @@ function InsidePanel({ uid, style, onChange, coverImage }: { uid: string; style:
         <EdgePicker s={s} set={set} coverImage={coverImage} />
       </Group>
       {style && (
-        <button type="button" onClick={() => onChange(undefined)} className="pt-2 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
+        <button type="button" onClick={() => setReverting(true)} className="pt-2 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
+      )}
+      {reverting && (
+        <PaperDialog title="Back to the classic inside?" onClose={() => setReverting(false)}>
+          <p className="text-sm text-ink font-semibold">This can not be undone.</p>
+          <p className="mt-1 text-sm text-slate-500">This will revert all pages back to the default — the felt, pattern, page picture, border, book edge and center rings. Are you sure?</p>
+          <div className="mt-5 flex flex-col gap-2">
+            <button type="button" onClick={() => { setReverting(false); (onRevert ?? (() => onChange(undefined)))() }} className="btn-primary justify-center !bg-[#a8452a]"><RotateCcw size={15} />Yes, revert all pages</button>
+            <button type="button" onClick={() => setReverting(false)} className="py-1.5 text-sm font-semibold text-slate-500 hover:text-ink">Cancel</button>
+          </div>
+        </PaperDialog>
       )}
     </div>
   )
@@ -631,5 +658,25 @@ function EmptyPage({ accent, onAddChapter }: { accent: string; onAddChapter: () 
         </button>
       </div>
     </Velvet>
+  )
+}
+
+/** A paper dialog over the Studio (Escape or a click outside closes it) */
+export function PaperDialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [onClose])
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#2b2014]/45 backdrop-blur-[2px] p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}
+        className="haven-panel haven-grain relative w-full max-w-md !p-6 text-center shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
+        <Corners inset={8} size={34} />
+        <span className="haven-medallion w-12 h-12 mx-auto"><RotateCcw size={20} /></span>
+        <h2 className="pinbook-serif mt-3 mb-2 text-xl font-bold text-ink">{title}</h2>
+        {children}
+      </div>
+    </div>
   )
 }

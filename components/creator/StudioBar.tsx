@@ -10,7 +10,7 @@ import { LogOut, Wand2 } from 'lucide-react'
 export function StudioBar({ unsaved = false }: { unsaved?: boolean }) {
   const router = useRouter()
   function exit() {
-    if (unsaved && !window.confirm('Your cover has changes that aren’t saved yet. Leave the Studio and lose them?')) return
+    if (unsaved && !window.confirm('You have changes that aren’t saved yet (your cover or the look of your pages). If you leave now, they go back to how they were. Leave the Studio anyway?')) return
     let back = '/'
     try { back = sessionStorage.getItem('haven:beforeStudio') || '/' } catch { /* private mode */ }
     router.push(back)

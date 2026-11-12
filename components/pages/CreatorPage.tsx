@@ -17,7 +17,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
 import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, monogramOf, LEATHERS, FOILS, type CreatorBook } from '@/lib/creatorBooks'
-import { DEFAULT_TIERS, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { DEFAULT_TIERS, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { CoverDesigner } from '@/components/creator/CoverDesigner'
 import { CreateCommunity } from '@/components/creator/CreateCommunity'
 import { CommunityStudio } from '@/components/creator/CommunityStudio'
@@ -48,7 +48,11 @@ function Body() {
   const { community, loaded: communityLoaded } = useCommunity(user?.uid)
   const { book, loaded: bookLoaded } = useCreatorBook(user?.uid)
   const [picked, setPicked] = useState<StudioTab | null>(null)
-  const [coverDirty, setCoverDirty] = useState(false)
+  // Tabs with changes not saved yet (the cover; the look of the pages) — leaving one asks first
+  const [dirty, setDirty] = useState<StudioTab[]>([])
+  const onDirty = useCallback((t: StudioTab, on: boolean) => setDirty((d) => (on ? (d.includes(t) ? d : [...d, t]) : d.filter((x) => x !== t))), [])
+  const guard = useRef<BookGuard>()
+  const [leaving, setLeaving] = useState<{ from: StudioTab; to: StudioTab } | null>(null)
   // The loading screen (StudioEntrance): shown on every visit until it has opened its doors
   const [entered, setEntered] = useState(false)
   const [opening, setOpening] = useState(false)
@@ -56,7 +60,7 @@ function Body() {
   const onDone = useCallback(() => setEntered(true), [])
   const ready = loaded && communityLoaded && bookLoaded
   // The Studio fills the screen (ClientWrapper drops the app's sidebar here); its bar has the way out
-  const entrance = <>{!entered && <StudioEntrance ready={ready} onOpen={onOpen} onDone={onDone} />}<StudioBar unsaved={coverDirty} /></>
+  const entrance = <>{!entered && <StudioEntrance ready={ready} onOpen={onOpen} onDone={onDone} />}<StudioBar unsaved={dirty.length > 0} /></>
 
   if (!ready) return <>{entrance}</>
 
@@ -79,23 +83,62 @@ function Body() {
 
   // No book yet: the book tabs are where it's made
   const tab: StudioTab = picked ?? 'cover'
+  // Changing tab with unsaved changes on this one: ask first (save / discard / keep editing)
+  const goTab = (to: StudioTab) => { if (to !== tab && dirty.includes(tab)) setLeaving({ from: tab, to }); else setPicked(to) }
   const since = record.role === 'creator'
     ? (record.creatorSince ? new Date(record.creatorSince).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'today')
     : null
 
   return (
     <>{entrance}<div className={cn('pb-6', opening && 'studio-reveal')}>
-      <StudioHero uid={user.uid} community={community} book={book} since={since} tab={tab} onTab={setPicked} dirtyTabs={coverDirty ? ['cover'] : []} />
+      <StudioHero uid={user.uid} community={community} book={book} since={since} tab={tab} onTab={goTab} dirtyTabs={dirty} />
       {/* The parchment panel the tabs open onto (both halves stay mounted, so nothing's lost switching) */}
       <div className="rounded-b-[22px] rounded-tr-[22px] bg-slate-950 border border-slate-800 p-4 md:p-6">
         <div hidden={tab === 'community'}>
-          <BookTab uid={user.uid} creatorName={creatorName} saved={book} view={tab === 'cover' ? 'cover' : 'pages'} onView={setPicked} onCoverDirty={setCoverDirty} />
+          <BookTab uid={user.uid} creatorName={creatorName} saved={book} view={tab === 'cover' ? 'cover' : 'pages'} onView={goTab} onDirty={onDirty} guard={guard} />
         </div>
         <div hidden={tab !== 'community'}>
-          <CommunityStudio uid={user.uid} book={book} onEditBook={() => setPicked(book ? 'pages' : 'cover')} />
+          <CommunityStudio uid={user.uid} book={book} onEditBook={() => goTab(book ? 'pages' : 'cover')} />
         </div>
       </div>
+      {leaving && (
+        <LeaveDialog what={leaving.from === 'cover' ? 'cover' : 'pages'}
+          onSave={async () => { const l = leaving; setLeaving(null); await guard.current?.save(l.from); setPicked(l.to) }}
+          onDiscard={() => { const l = leaving; setLeaving(null); guard.current?.discard(l.from); setPicked(l.to) }}
+          onStay={() => setLeaving(null)} />
+      )}
     </div></>
+  )
+}
+
+/** What the Studio can ask the book tab to do with unsaved changes when you leave them */
+interface BookGuard { save: (t: StudioTab) => void | Promise<void>; discard: (t: StudioTab) => void }
+
+/** "You have unsaved changes" — asked when leaving a tab with changes not saved yet */
+function LeaveDialog({ what, onSave, onDiscard, onStay }: { what: 'cover' | 'pages'; onSave: () => void; onDiscard: () => void; onStay: () => void }) {
+  useScrollLock(true)
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onStay() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [onStay])
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#2b2014]/45 backdrop-blur-[2px] p-4" onClick={onStay}>
+      <div role="dialog" aria-modal="true" aria-labelledby="leave-title" onClick={(e) => e.stopPropagation()}
+        className="haven-panel haven-grain relative w-full max-w-md !p-6 text-center shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
+        <Corners inset={8} size={34} />
+        <span className="haven-medallion w-12 h-12 mx-auto"><RotateCcw size={20} /></span>
+        <h2 id="leave-title" className="pinbook-serif mt-3 text-xl font-bold text-ink">Unsaved {what === 'cover' ? 'cover' : 'page'} changes</h2>
+        <p className="mt-2 text-sm text-slate-500">
+          You changed the look of your {what === 'cover' ? 'cover' : 'pages'} but haven’t saved it. If you leave without saving, every change goes back to how it was.
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          <button type="button" onClick={onSave} className="btn-primary justify-center"><Check size={15} />Save {what === 'cover' ? 'cover' : 'page changes'} &amp; continue</button>
+          <button type="button" onClick={onDiscard} className="haven-chip py-2 text-sm font-semibold text-[#a8452a]">Discard changes</button>
+          <button type="button" onClick={onStay} className="py-1.5 text-sm font-semibold text-slate-500 hover:text-ink">Keep editing</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -106,13 +149,14 @@ function Body() {
 const COVER_KEYS = ['name', 'collection', 'subtitle', 'monogram', 'cover', 'coverStyle', 'coverImage', 'coverFit'] as const
 const coverPart = (b: BadgeSet) => JSON.stringify(COVER_KEYS.map((k) => b[k] ?? null))
 
-function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
+function BookTab({ uid, creatorName, saved, view, onView, onDirty, guard }: {
   uid: string
   creatorName: string
   saved: CreatorBook | null
   view: 'cover' | 'pages'
   onView: (v: StudioTab) => void
-  onCoverDirty: (dirty: boolean) => void
+  onDirty: (tab: StudioTab, dirty: boolean) => void
+  guard: React.MutableRefObject<BookGuard | undefined>
 }) {
   const [draft, setDraft] = useState<CreatorBook | null>(null)
   const [state, setState] = useState<'saved' | 'saving' | 'error'>('saved')
@@ -120,6 +164,8 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
   const [preview, setPreview] = useState(false)
   // The cover being designed: unsaved until "Save cover" (null = no changes)
   const [coverDraft, setCoverDraft] = useState<BadgeSet | null>(null)
+  // The look of the pages being designed (Inside look): unsaved until "Save page changes" (null = no changes)
+  const [insideDraft, setInsideDraft] = useState<{ v: InsideStyle | undefined } | null>(null)
   const stick = useStickyCenter()
   const timer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -128,14 +174,16 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
 
   const b0 = draft ?? saved
   const coverDirty = !!coverDraft && !!b0 && coverPart(coverDraft) !== coverPart(b0.book)
-  useEffect(() => { onCoverDirty(coverDirty) }, [coverDirty, onCoverDirty])
-  // Don't lose an unsaved cover to a closed tab
+  const pagesDirty = !!insideDraft && !!b0 && JSON.stringify(insideDraft.v ?? null) !== JSON.stringify(b0.book.insideStyle ?? null)
+  useEffect(() => { onDirty('cover', coverDirty) }, [coverDirty, onDirty])
+  useEffect(() => { onDirty('pages', pagesDirty) }, [pagesDirty, onDirty])
+  // Don't lose unsaved changes to a closed tab
   useEffect(() => {
-    if (!coverDirty) return
+    if (!coverDirty && !pagesDirty) return
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [coverDirty])
+  }, [coverDirty, pagesDirty])
 
   // Saves a moment after the last change (typing a title doesn't save every letter)
   function change(next: CreatorBook, now = false) {
@@ -161,6 +209,24 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
   const b = b0
   const setBook = (book: BadgeSet) => change({ ...b, book })
   const designing = coverDraft ?? { ...b.book, coverStyle: b.book.coverStyle ?? {} }
+
+  // Keep the cover / the look of the pages (only those fields — everything else stays as saved)
+  const saveCover = () => {
+    if (!designing.coverImage) return
+    const keep: Partial<BadgeSet> = {}
+    for (const k of COVER_KEYS) (keep as Record<string, unknown>)[k] = designing[k]
+    setBook({ ...b.book, ...keep }); setCoverDraft(null)
+  }
+  const saveInside = () => {
+    if (!insideDraft) return
+    change({ ...b, book: { ...b.book, insideStyle: insideDraft.v } }, true); setInsideDraft(null)
+  }
+  // What the Studio asks of this tab when you leave it with changes (LeaveDialog)
+  guard.current = {
+    save: (t) => (t === 'cover' ? saveCover() : saveInside()),
+    discard: (t) => (t === 'cover' ? setCoverDraft(null) : setInsideDraft(null)),
+  }
+  const shown: BadgeSet = insideDraft ? { ...b.book, insideStyle: insideDraft.v } : b.book
 
   const blankBadge = (chapter: string): BadgeDef => ({
     id: newBadgeId(uid, 'badge'), set: b.book.id, page: chapter, name: '', description: '', game: 'pokemon',
@@ -204,11 +270,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
                   <button type="button" onClick={() => setCoverDraft(null)} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
                   {!designing.coverImage ? (
                     <span className="text-[11px] font-semibold text-[#a8452a] px-1">Add a cover picture to save</span>
-                  ) : <button type="button" onClick={() => {
-                    const keep: Partial<BadgeSet> = {}
-                    for (const k of COVER_KEYS) (keep as Record<string, unknown>)[k] = designing[k]
-                    setBook({ ...b.book, ...keep }); setCoverDraft(null)
-                  }} className="btn-primary !py-1.5">
+                  ) : <button type="button" onClick={saveCover} className="btn-primary !py-1.5">
                     <Check size={15} />Save cover
                   </button>}
                 </>
@@ -219,7 +281,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
       ) : (
         <BookPlanner
           uid={uid}
-          book={b.book}
+          book={shown}
           badges={b.badges}
           onAdd={(chapter) => setMaking({ badge: blankBadge(chapter), isNew: true })}
           onEdit={(badge) => setMaking({ badge, isNew: false })}
@@ -229,7 +291,11 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
             badges: b.badges.map((x) => (x.page === from ? { ...x, page: to } : x)),
           }, true)}
           onChapters={(next) => change({ ...b, book: { ...b.book, chapters: next } }, true)}
-          onInside={(insideStyle) => change({ ...b, book: { ...b.book, insideStyle } })}
+          onInside={(insideStyle) => setInsideDraft({ v: insideStyle })}
+          insideDirty={pagesDirty}
+          onSaveInside={saveInside}
+          onUndoInside={() => setInsideDraft(null)}
+          onRevertInside={() => { change({ ...b, book: { ...b.book, insideStyle: undefined } }, true); setInsideDraft(null) }}
           onAddChapter={() => {
             const list = chaptersFor(b.book, b.badges)
             let n = list.length + 1, name = `Chapter ${n}`
@@ -261,7 +327,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
           }}
         />
       )}
-      {preview && <Preview book={coverDraft ? { ...b.book, ...designing } : b.book} badges={b.badges} onClose={() => setPreview(false)} />}
+      {preview && <Preview book={coverDraft ? { ...shown, ...designing, insideStyle: shown.insideStyle } : shown} badges={b.badges} onClose={() => setPreview(false)} />}
     </div>
   )
 }
