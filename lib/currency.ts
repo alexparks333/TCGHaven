@@ -47,6 +47,19 @@ if (typeof window !== 'undefined' && !location.pathname.startsWith('/admin')) re
 
 export const displayCurrency = () => current
 
+// Typed amounts (what you paid, what you sold for, the value floor) are in the collector's currency
+// too; they're stored in USD. Rounded to the cent (whole units for currencies without cents).
+const round = (n: number) => { const d = current.code === 'JPY' || current.code === 'KRW' ? 1 : 100; return Math.round(n * d) / d }
+/** A stored USD amount as the collector types it: in their currency, rounded */
+export const toDisplay = (usd: number) => round(usd * current.rate)
+/** What the collector typed (their currency) → USD to store */
+export const toUSD = (amount: number) => amount / current.rate
+/** The currency's symbol, e.g. "$", "€", "¥" */
+export function currencySymbol(): string {
+  const parts = new Intl.NumberFormat(undefined, { style: 'currency', currency: current.code, currencyDisplay: 'narrowSymbol' }).formatToParts(0)
+  return parts.find((p) => p.type === 'currency')?.value ?? '$'
+}
+
 /** Sets the currency shown; true if it took (USD, or a currency whose rate is known). */
 export function applyCurrency(code: CurrencyCode): boolean {
   try { localStorage.setItem(CHOICE_KEY, code) } catch { /* fine */ }

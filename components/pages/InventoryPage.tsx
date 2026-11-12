@@ -24,7 +24,7 @@ const RENDER_STEP = 50
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
-import { displayCurrency } from '@/lib/currency'
+import { displayCurrency, toDisplay, toUSD } from '@/lib/currency'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
@@ -193,7 +193,7 @@ export default function InventoryPage() {
 
   function openSell(card: Card) {
     setSellCard(card)
-    setSalePrice(card.currentPrice ? String(card.currentPrice) : String(card.purchasePrice || ''))
+    setSalePrice(card.currentPrice ? String(toDisplay(card.currentPrice)) : card.purchasePrice ? String(toDisplay(card.purchasePrice)) : '') // typed in the collector's currency
     setSaleDate(todayISO())
     setHoldProgress(0)
     setSellError(null)
@@ -234,7 +234,7 @@ export default function InventoryPage() {
     const soldCard: SoldCard = {
       ...sellCard,
       soldDate: saleDate,
-      soldPrice: parseFloat(salePrice) || 0,
+      soldPrice: toUSD(parseFloat(salePrice) || 0), // stored in USD
       soldAt,
     }
     const { id: cardId, ...soldCardData } = soldCard
@@ -991,7 +991,7 @@ export default function InventoryPage() {
         {sellCard && (() => {
           const paid = sellCard.purchasePrice
           const market = sellCard.currentPrice ?? 0
-          const salePriceNum = parseFloat(salePrice) || 0
+          const salePriceNum = toUSD(parseFloat(salePrice) || 0) // USD, like paid
           const pnl = salePriceNum > 0 ? salePriceNum - paid : null
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1041,7 +1041,7 @@ export default function InventoryPage() {
 
                 {/* Sale Price */}
                 <div className="mb-3">
-                  <label className="field-label">Sale Price (US$){displayCurrency().code !== "USD" && <span className="font-normal normal-case"> · tracked in US dollars</span>}</label>
+                  <label className="field-label">Sale Price ({displayCurrency().code})</label>
                   <input
                     type="number"
                     min={0}

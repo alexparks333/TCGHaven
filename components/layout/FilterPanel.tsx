@@ -6,6 +6,7 @@ import { X, SlidersHorizontal } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { formatCurrency, cn } from '@/lib/utils'
 import { GAME_LABELS, type Game } from '@/lib/types'
+import { toDisplay, toUSD, currencySymbol } from '@/lib/currency'
 
 const ALL_GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
@@ -31,15 +32,16 @@ export function FilterPanel() {
     () => Array.from(new Set(cards.map((c) => c.group).filter(Boolean) as string[])).sort(),
     [cards],
   )
-  const [floorInput, setFloorInput] = useState(calcFloor > 0 ? String(calcFloor) : '')
+  // The floor is stored in USD and typed / shown in the collector's currency (lib/currency.ts)
+  const [floorInput, setFloorInput] = useState(calcFloor > 0 ? String(toDisplay(calcFloor)) : '')
 
   // Follow calcFloor when it changes from elsewhere (another device, via lib/preferencesSync.ts)
   // — but leave the box alone while what's typed already means the same number ("1.50", "2.").
   useEffect(() => {
     setFloorInput((typed) => {
       const n = parseFloat(typed)
-      if ((isNaN(n) ? 0 : n) === calcFloor) return typed
-      return calcFloor === 0 ? '' : String(calcFloor)
+      if (Math.abs(toUSD(isNaN(n) ? 0 : n) - calcFloor) < 1e-6) return typed
+      return calcFloor === 0 ? '' : String(toDisplay(calcFloor))
     })
   }, [calcFloor])
 
@@ -50,8 +52,8 @@ export function FilterPanel() {
     [cards, calcFloor],
   )
 
-  function applyFloor(val: number) {
-    setCalcFloor(val)
+  function applyFloor(val: number) { // val in the collector's currency
+    setCalcFloor(toUSD(val))
     setFloorInput(val === 0 ? '' : String(val))
   }
 
@@ -131,18 +133,19 @@ export function FilterPanel() {
                   <button
                     key={val}
                     onClick={() => applyFloor(val)}
+                    data-on={Math.abs(toDisplay(calcFloor) - val) < 0.005}
                     className={cn(
                       'text-xs px-3 py-1.5 rounded-full border font-medium transition-all',
-                      calcFloor === val
+                      Math.abs(toDisplay(calcFloor) - val) < 0.005
                         ? 'bg-violet-600/20 border-violet-500/40 text-violet-700 hover:bg-violet-600/30'
                         : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600',
                     )}
                   >
-                    {val === 0 ? 'Off' : `$${val}`}
+                    {val === 0 ? 'Off' : `${currencySymbol()}${val}`}
                   </button>
                 ))}
                 <div className="relative">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none">$</span>
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none">{currencySymbol()}</span>
                   <input
                     type="number"
                     min="0"
@@ -152,7 +155,7 @@ export function FilterPanel() {
                     onChange={(e) => {
                       setFloorInput(e.target.value)
                       const n = parseFloat(e.target.value)
-                      setCalcFloor(isNaN(n) || n < 0 ? 0 : n)
+                      setCalcFloor(isNaN(n) || n < 0 ? 0 : toUSD(n))
                     }}
                     className="w-24 bg-slate-800 border border-slate-700 rounded-full pl-6 pr-3 py-1.5 text-xs text-ink placeholder-slate-600 focus:outline-none focus:border-violet-500"
                   />

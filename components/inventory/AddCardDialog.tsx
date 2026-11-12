@@ -16,7 +16,7 @@ import { cardImage } from '@/lib/cardImage'
 import { FullSlab } from '@/components/SlabCase'
 import { GRADER_CHOICES, graderOf, gradeWord, isValidGrade, SUBGRADE_KEYS, type GradeTier, type Subgrades } from '@/lib/grading'
 import { CardName } from '@/components/CardName'
-import { displayCurrency } from '@/lib/currency'
+import { displayCurrency, toDisplay, toUSD } from '@/lib/currency'
 
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
@@ -113,6 +113,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   const existingGroups = Array.from(new Set(allCards.map((c) => c.group).filter(Boolean) as string[]))
 
   const [form, setForm] = useState<CardForm>(editCard ? { ...editCard } : emptyForm(prefill?.game ?? defaultGame))
+
+  const [paidText, setPaidText] = useState(() => (form.purchasePrice ? String(toDisplay(form.purchasePrice)) : ''))
   // Only offer the games this user tracks — a card added to an untracked game would vanish from
   // Inventory the moment it saved. An edited card's own game always stays selectable.
   const gameChoices = GAMES.filter((g) => trackedGames.includes(g) || g === form.game)
@@ -447,6 +449,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
   // When game tab changes, reset form but keep condition/date/quantity
   function changeGame(game: Game, language?: Language) {
     setForm((f) => ({ ...emptyForm(game), condition: f.condition, quantity: f.quantity, purchaseDate: f.purchaseDate, group: f.group, ...(language === 'ja' && { language }) }))
+    setPaidText('') // the form's price was just cleared
     setVariantPrices(null)
     setMarketPrices({ regular: 0, foil: 0 })
     setCardQuery('')
@@ -712,13 +715,14 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           {/* How Much Paid + Date — one per row on phones, where a date field runs out of room beside another */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="field-label">How Much Paid (US$){displayCurrency().code !== "USD" && <span className="font-normal normal-case"> · tracked in US dollars</span>}</label>
+              <label className="field-label">How Much Paid ({displayCurrency().code})</label>
               <input
                 type="number"
                 min={0}
                 step={0.01}
-                value={form.purchasePrice}
-                onChange={(e) => setField('purchasePrice', parseFloat(e.target.value) || 0)}
+                // Typed in the collector's currency (Settings → Currency); stored in USD
+                value={paidText}
+                onChange={(e) => { setPaidText(e.target.value); setField('purchasePrice', toUSD(parseFloat(e.target.value) || 0)) }}
                 className="input-field"
               />
             </div>

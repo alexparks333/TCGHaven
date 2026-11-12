@@ -268,7 +268,7 @@ export default function PortfolioPage() {
             onClick={() => router.push('/portfolio/analytics?metric=value')}
           >
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Collection Value</span>
-            <span className="text-2xl md:text-3xl font-bold text-ink">{formatCurrency(totals.value)}<span className="ml-1 align-baseline text-[11px] font-semibold tracking-wide text-slate-500/70">{displayCurrency().code}</span></span>
+            <span className="text-2xl md:text-3xl font-bold text-ink">{formatCurrency(totals.value)}<span className="ml-1 align-baseline text-xs font-semibold uppercase tracking-wide text-slate-500">{displayCurrency().code}</span></span>
             {calcFloor > 0 && <span className="text-[10px] text-slate-600">floor {formatCurrency(calcFloor)}</span>}
           </div>
           <div
