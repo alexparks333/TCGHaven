@@ -771,7 +771,7 @@ export default function InventoryPage() {
                       <button
                         onClick={(e) => { e.stopPropagation(); openSell(lots[0]) }}
                         title="Sell"
-                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-40 hover:opacity-100"
                       >
                         <DollarSign size={13} strokeWidth={2.5} />
                       </button>
@@ -849,7 +849,7 @@ export default function InventoryPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); openSell(lot) }}
                             title="Sell"
-                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-40 hover:opacity-100"
                           >
                             <DollarSign size={12} strokeWidth={2.5} />
                           </button>
@@ -953,7 +953,7 @@ export default function InventoryPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); openSell(card) }}
                     title="Sell"
-                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-10 hover:opacity-100"
+                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-40 hover:opacity-100"
                   >
                     <DollarSign size={13} strokeWidth={2.5} />
                   </button>
