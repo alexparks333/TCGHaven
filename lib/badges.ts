@@ -79,24 +79,30 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   pinShadow?: boolean       // a shadow under every badge (default on)
   pinShadowColor?: string   // default black
   pinShadowStrength?: number // 0–1 (default 0.55)
-  pinShadowBlur?: number    // px of softness — how far the even shadow spreads round the pin (0–30, default 12)
+  pinShadowSpread?: number  // px the shadow's border grows out from the pin's outline (0–24, default 3)
+  pinShadowBlur?: number    // px of softness on that border (0–30, default 10)
   binding?: string          // the center rings (components/badges/BookBinding.tsx BINDINGS id, or 'none'); unset = the classic silver rings. Shown to fans only
   bindingColor?: string; bindingColor2?: string; bindingColor3?: string // its colour parts (BindingDef.colors)
   bindingParams?: Record<string, Record<string, number>>             // per binding: its own sliders
   pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
-export const PIN_SHADOW = { strength: 0.55, blur: 12 }
-/** The CSS filter for the shadow behind a creator's badges (InsideStyle.pinShadow*): straight on,
- *  even all round the pin — no direction */
-export function pinShadowCss(s: InsideStyle): string {
-  if (s.pinShadow === false) return 'none'
-  const a = Math.max(0, Math.min(1, s.pinShadowStrength ?? PIN_SHADOW.strength))
+export const PIN_SHADOW = { strength: 0.6, blur: 10, spread: 3 }
+/** The shadow behind a creator's badges (InsideStyle.pinShadow*): straight on, a border round the
+ *  pin's own outline — grown out by `spread`, softened by `blur`. It's an SVG filter (PinShadowFilter
+ *  in BadgeBook draws it; its id comes from the settings), since CSS shadows can't spread. */
+export function pinShadowSpec(s: InsideStyle): { id: string; color: string; strength: number; blur: number; spread: number } | null {
+  if (s.pinShadow === false) return null
+  const strength = Math.max(0, Math.min(1, s.pinShadowStrength ?? PIN_SHADOW.strength))
   const blur = Math.max(0, Math.min(30, s.pinShadowBlur ?? PIN_SHADOW.blur))
-  const h = (s.pinShadowColor ?? '#000000').replace('#', '').padEnd(6, '0')
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) || 0)
-  // a tight edge right round the pin, and the soft even spread behind it
-  return `drop-shadow(0 0 1.5px rgba(${r},${g},${b},${Math.min(1, a * 1.35).toFixed(2)})) drop-shadow(0 0 ${blur}px rgba(${r},${g},${b},${a.toFixed(2)}))`
+  const spread = Math.max(0, Math.min(24, s.pinShadowSpread ?? PIN_SHADOW.spread))
+  const color = s.pinShadowColor ?? '#000000'
+  const id = `pinsh-${color.replace('#', '')}-${Math.round(strength * 100)}-${Math.round(blur * 10)}-${Math.round(spread * 10)}`
+  return { id, color, strength, blur, spread }
+}
+export function pinShadowCss(s: InsideStyle): string {
+  const p = pinShadowSpec(s)
+  return p ? `url(#${p.id})` : 'none'
 }
 /** The CSS a book with an inside style puts on its root: classes turning the styled rules on, and
  *  the colours, pattern, border, page picture and edge as variables (globals.css `.pinbook-styled`

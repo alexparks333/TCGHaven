@@ -4,7 +4,7 @@ import { BookBinding } from '@/components/badges/BookBinding'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, insideLook, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, insideLook, pinShadowSpec, type InsideStyle, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -181,6 +181,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       }}
     >
       <PinholeFilter />
+      <PinShadowFilter st={set.insideStyle} />
       {/* Saddle stitching around the cover, and gold corner protectors */}
       {/* (a cover picture brings its own frame) */}
       {(!set.coverImage || set.insideStyle?.edgeTexture) && <div className="pinbook-stitch absolute inset-[5px] rounded-[12px] pointer-events-none" />}
@@ -592,6 +593,24 @@ function TierRise({ size, imageUrl, art, progress }: { size: number; imageUrl?: 
 // The filter behind PinHole — an inset shadow cut to any shape (its alpha), like a pin pressed into velvet
 // (a translucent dark floor; a soft inner shadow, offset down; a faint warm highlight inside the
 // bottom edge). Rendered once per book.
+/** A creator's badge shadow (lib/badges.ts pinShadowSpec): the pin's outline grown by `spread`,
+ *  softened by `blur`, in their colour, behind the pin — referenced from CSS as url(#id) */
+export function PinShadowFilter({ st }: { st?: InsideStyle }) {
+  const p = st ? pinShadowSpec(st) : null
+  if (!p) return null
+  return (
+    <svg width="0" height="0" className="absolute pointer-events-none" aria-hidden focusable="false">
+      <filter id={p.id} x="-60%" y="-60%" width="220%" height="220%" colorInterpolationFilters="sRGB">
+        {p.spread > 0 ? <feMorphology in="SourceAlpha" operator="dilate" radius={p.spread} result="grown" /> : <feOffset in="SourceAlpha" result="grown" />}
+        <feGaussianBlur in="grown" stdDeviation={p.blur / 2} result="soft" />
+        <feFlood floodColor={p.color} floodOpacity={p.strength} />
+        <feComposite in2="soft" operator="in" result="shadow" />
+        <feMerge><feMergeNode in="shadow" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </svg>
+  )
+}
+
 export function PinholeFilter() {
   return (
     <svg width="0" height="0" className="absolute" aria-hidden focusable="false">

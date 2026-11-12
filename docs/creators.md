@@ -96,9 +96,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - **Book edge** (`lib/bookEdges.ts`): the rim round the open book — Leather, Suede, Linen, Wood, Velvet,
        Brushed metal, Carbon fibre, Marble, Smooth or the Cover picture, any colour, texture strength, edge
        width and stitching on/off with its thread colour (`edge*`). Rims carry `.pinbook-rim`.
-     - **Badge shadow:** an even shadow straight behind every badge (no direction), on by default — colour
-       (any), strength and softness (`pinShadow*`, `pinShadowCss()` → `--pin-shadow` on `.pinbook-pin-shadow`, in the
-       Studio and the pin book).
+     - **Badge shadow** (Badge Accessories tab): a shadow border straight behind every badge, following its
+       outline — on by default; colour (any), strength, **spread** (how far the border grows out) and softness
+       (`pinShadow*`). It's an SVG filter (`pinShadowSpec()` → `PinShadowFilter` in BadgeBook, referenced as
+       `--pin-shadow: url(#id)` on `.pinbook-pin-shadow`), since CSS shadows can't spread.
      - **Center rings** (`components/badges/BookBinding.tsx`): what binds the pages down the middle — None,
        Silver rings, Brass D-rings, Spiral coil, Leather lacing, Chain links, Ribbon & clasps, Jewelled hinge;
        each with up to three colours (`bindingColor`/`2`/`3`, any colour) and its own sliders

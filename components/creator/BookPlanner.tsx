@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStickyCenter } from '@/lib/useStickyCenter'
 import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
+import { PinShadowFilter } from '@/components/badges/BadgeBook'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
 import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, pinShadowCss, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
@@ -83,6 +84,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start" style={inside.style /* the trim colour for the side panel too */}>
+    <PinShadowFilter st={book.insideStyle ?? {}} />
     {/* The book stays in the middle of the window while the edit panel beside it scrolls */}
     <div ref={stick.ref} className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10 xl:sticky xl:self-start')} style={{ ...inside.style, top: stick.top }}>
       {/* It lies open on the binder paper, inside a thin rule with engraved corners */}
@@ -325,15 +327,23 @@ function ShadowPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p:
       </button>
       {/* A pin on the felt, lit the way it'll be */}
       <div className="mt-3 h-28 rounded-xl flex items-center justify-center" style={{ background: `radial-gradient(120% 90% at 50% 42%, ${page}, color-mix(in srgb, ${page} 40%, black))` }}>
-        <span className="w-16 h-16 rounded-full" style={{ filter: pinShadowCss(s), background: 'radial-gradient(circle at 35% 30%, #fff3cf, #d6b168 45%, #8a6420 80%)', boxShadow: 'inset 0 0 0 4px rgba(120,80,20,0.6), inset 0 0 0 9px #f2d38a' }} />
+        <PinShadowFilter st={s} />
+        <span className="w-16 h-[72px]" style={{ filter: pinShadowCss(s) }}>
+          <svg viewBox="0 0 64 72" className="w-full h-full" aria-hidden>
+            <defs><radialGradient id="shadow-demo-pin" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stopColor="#fff3cf" /><stop offset="0.45" stopColor="#d6b168" /><stop offset="1" stopColor="#7a5a20" /></radialGradient></defs>
+            <path d="M32 2 L58 14 L58 44 Q58 60 32 70 Q6 60 6 44 L6 14 Z" fill="url(#shadow-demo-pin)" stroke="#8a6420" strokeWidth="2" />
+            <path d="M32 12 L49 20 L49 42 Q49 53 32 60 Q15 53 15 42 L15 20 Z" fill="none" stroke="#fff3cf" strokeOpacity="0.6" strokeWidth="1.5" />
+          </svg>
+        </span>
       </div>
       {on && (
         <div className="mt-1">
           <ColorPick label="Colour" value={s.pinShadowColor ?? '#000000'} palette={[{ name: 'Black', color: '#000000' }, { name: 'Brown', color: '#2b1a0f' }, { name: 'Navy', color: '#0b1430' }, { name: 'Plum', color: '#2a0f26' }, { name: 'Gold glow', color: '#d6b168' }, { name: 'White glow', color: '#ffffff' }]} onChange={(c) => set({ pinShadowColor: c })} />
           <ValueSlider label="Strength" min={0} max={1} step={0.05} value={s.pinShadowStrength ?? PIN_SHADOW.strength} onChange={(v) => set({ pinShadowStrength: v })} />
+          <ValueSlider label="Spread" min={0} max={24} step={0.5} value={s.pinShadowSpread ?? PIN_SHADOW.spread} unit="px" onChange={(v) => set({ pinShadowSpread: v })} />
           <ValueSlider label="Softness" min={0} max={30} step={0.5} value={s.pinShadowBlur ?? PIN_SHADOW.blur} unit="px" onChange={(v) => set({ pinShadowBlur: v })} />
-          {(s.pinShadowColor || s.pinShadowStrength !== undefined || s.pinShadowBlur !== undefined) && (
-            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
+          {(s.pinShadowColor || s.pinShadowStrength !== undefined || s.pinShadowBlur !== undefined || s.pinShadowSpread !== undefined) && (
+            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined, pinShadowSpread: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
           )}
         </div>
       )}
