@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye } from 'lucide-react'
-import { DEFAULT_TIERS, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
+import { DEFAULT_TIERS, insideLook, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -28,6 +28,8 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage } from '@/lib/cardImage'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { PinPage, PinholeFilter, type Page } from '@/components/badges/BadgeBook'
+import type { SharedBadges } from '@/lib/firebase/badges'
 import { Portal } from '@/components/creator/Portal'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { CardZoomOverlay, RARITY_COLORS, type ZoomCardData } from '@/components/pages/CardexPage'
@@ -38,9 +40,10 @@ const PinInspector = dynamic(() => import('@/components/badges/PinInspector'), {
 
 const GAMES = Object.keys(GAME_LABELS) as Game[]
 
-export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
+export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, onClose }: {
   uid: string
   book: BadgeSet
+  badges?: BadgeDef[]      // the book's other badges — the left side shows this one on its real page among them
   badge: BadgeDef          // a new one (no art yet) or the one being edited
   onSave: (b: BadgeDef) => Promise<void>
   onDelete?: () => Promise<void>
@@ -156,16 +159,20 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
               <PinInspector key={draft.reliefBuildKey ?? draft.depthMapUrl} def={draft} embedded onClose={() => {}} />
               <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
             </div>
+          ) : draft.imageUrl ? (
+            // Exactly as fans will see it: this badge in its spot on its real page (the pin book's own
+            // page, size and page design), its neighbours beside it
+            <PagePreview book={book} badges={badges} draft={draft} />
           ) : (
-          <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center" style={{ filter: pinShadowCss(book.insideStyle ?? {}) /* the book's own badge shadow (Badge Accessories) */ }}>
-            {draft.imageUrl
-              ? <BadgePin art={draft.art} imageUrl={draft.imageUrl} size={220} />
-              : <span className="w-[70%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}
+          <>
+          <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center">
+            <span className="w-[70%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>
           </div>
-          )}
           <span className="relative pinbook-serif max-w-[90%] truncate rounded px-3 py-1 text-xs font-bold uppercase tracking-wider" style={{ background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>
             {draft.name.trim() || '? ? ?'}
           </span>
+          </>
+          )}
           {draft.slots.length > 0 && (
             <span className="relative text-[11px] text-[#e9dcc3]/80">Collect {draft.slots.length} {draft.slotNoun || 'cards'} to earn it</span>
           )}
@@ -239,6 +246,19 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
                 </button>
                 )}
                 <input ref={fileInput} type="file" accept="image/png,image/webp,image/jpeg" hidden onChange={(e) => uploadArt(e.target.files?.[0])} />
+                {/* How big the pin sits in its spot on the page (BadgeDef.displayScale — the page on the left shows it) */}
+                {draft.imageUrl && (
+                  <div className="rounded-2xl border border-slate-800 p-4">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-ink flex-1">Size on the page</p>
+                      <span className="text-xs tabular-nums text-slate-500">{Math.round((draft.displayScale ?? 1) * 100)}%</span>
+                      {(draft.displayScale ?? 1) !== 1 && <button type="button" onClick={() => set({ displayScale: undefined })} className="text-[11px] font-semibold text-slate-500 hover:text-ink">Reset</button>}
+                    </div>
+                    <input type="range" min={0.3} max={1} step={0.01} value={draft.displayScale ?? 1} className="mt-2 w-full accent-violet-600"
+                      onChange={(e) => { const v = Number(e.target.value); set({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
+                    <p className="mt-1 text-[11px] text-slate-500">100% fills its spot on the page. The page on the left is exactly how fans see it.</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -549,6 +569,48 @@ function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {row(0, 'Grayscale pin', 'a grey preview of the pin', grayOn, grayPct, grayN, '#94a3b8')}
         {row(1, 'Full colour pin', fullN === total ? 'every card needed' : 'set to 100% to need every card', true, fullPct, fullN, '#e8b35a')}
+      </div>
+    </div>
+  )
+}
+
+/** This badge on its real page, as fans see it: the pin book's own page (PinPage — its page design,
+ *  frame, title and spots), pins sized by the pin book's own rule, this badge earned in full, the
+ *  others in its chapter beside it as the outlines fans see before earning them */
+function PagePreview({ book, badges, draft }: { book: BadgeSet; badges: BadgeDef[]; draft: BadgeDef }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const fit = () => setSize({ w: el.clientWidth, h: el.clientHeight })
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    fit()
+    return () => ro.disconnect()
+  }, [])
+  // Its chapter's badges in book order, this one in its place (a new one goes at the end)
+  const chapter = badges.filter((b) => b.page === draft.page)
+  const at = chapter.findIndex((b) => b.id === draft.id)
+  const list = at >= 0 ? chapter.map((b) => (b.id === draft.id ? draft : b)) : [...chapter, draft]
+  const i = list.findIndex((b) => b.id === draft.id)
+  const start = Math.floor(i / 6) * 6
+  const chapters = book.chapters ?? []
+  const page: Page = { kind: 'badges', title: draft.page, badges: list.slice(start, start + 6), chapter: Math.max(0, chapters.indexOf(draft.page)) }
+  // This badge shown earned in its full look; the rest as fans first see them
+  const shared: SharedBadges = { earned: { [draft.id]: 1 }, progress: { [draft.id]: [1, 1] } }
+  const preview: BadgeDef = { ...draft, tiers: [1, 1] as [number, number] }
+  page.badges = page.badges.map((b) => (b.id === draft.id ? preview : b))
+  const inside = insideLook(book.insideStyle ?? {}, book.coverImage)
+  // the pin book's own rule for a pin's size on a page this big (BadgeBook)
+  const pin = size ? Math.max(44, Math.min(200, size.w * 0.33, size.h * 0.215)) : 0
+  return (
+    <div className="relative w-full h-[min(56dvh,480px)] md:h-full flex items-center justify-center">
+      <div className={cn('relative h-full max-h-full aspect-[0.71] max-w-full rounded-xl', inside.className)} style={inside.style}>
+        <PinholeFilter />
+        <div ref={box} className="absolute inset-0">
+          {size && <PinPage page={page} side="right" badges={shared} isMe={false} pin={pin} onInspect={() => {}} turning />}
+        </div>
       </div>
     </div>
   )

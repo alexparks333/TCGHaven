@@ -300,6 +300,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onDirty, guard }: {
         <BadgeMaker
           uid={uid}
           book={shown /* with the page design being worked on, so its badge shadow shows */}
+          badges={b.badges}
           badge={making.badge}
           onClose={() => setMaking(null)}
           onSave={async (badge) => {

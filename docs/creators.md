@@ -113,6 +113,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      Exit Creator Studio and closing the browser tab ask too. **Back to the classic inside** warns that it
      can't be undone, then clears `insideStyle` and saves at once. The Studio's pages now show the Center
      rings too, like the fan view.
+     **The badge maker's left side** shows the badge on its real page (`PagePreview` → BadgeBook's `PinPage`):
+     the book's page design, frame and title, the pin sized by the pin book's own rule, this badge earned, the
+     rest of its chapter's page as fans first see them. **Size on the page** (Pin art step) sets
+     `BadgeDef.displayScale` (30–100%; the pin book caps a pin at its spot, so it only shrinks); the Studio's
+     pages follow it too.
      **Pop-ups** (BadgeMaker, Preview as a fan, the Studio's prompts) render into `<body>` through
      `components/creator/Portal.tsx`, so no transformed or sticky parent can push them off screen; the
      entrance's `.studio-reveal` uses `backwards` fill so it leaves no transform behind. Center rings are drawn
