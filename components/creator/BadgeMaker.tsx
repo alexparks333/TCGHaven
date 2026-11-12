@@ -429,7 +429,7 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
     setZoom({
       imageUrl: r.imageUrl, name: r.name, number: r.number, setName: r.setName,
       rarityLabel: rarity.replace('_', ' '), rarityColor: (r.rarity && RARITY_COLORS[r.rarity]) || '#7a6a55',
-      marketPrice: r.marketPrice, owned: false, quantity: 0,
+      marketPrice: r.marketPrice, owned: true, quantity: 0,
       glowColor: zoomGlowColor(r.game, r.rarity ?? '', GAME_COLORS[r.game]),
       originRect: el.getBoundingClientRect(),
     } as ZoomCardData)
@@ -643,14 +643,32 @@ export function CardsReview({ slots, onSave, onClose }: { slots: BadgeSlot[]; on
     .sort((a, b) => sort === 'name' ? a.sl.label.localeCompare(b.sl.label)
       : sort === 'set' ? (a.c?.setName ?? '').localeCompare(b.c?.setName ?? '') || (a.c?.number ?? '').localeCompare(b.c?.number ?? '', undefined, { numeric: true })
       : a.i - b.i)
+  // The eye: the card big, in full colour, with everything about it — what was saved when it was picked
+  // straight away, then its rarity and price from the catalog
   const look = (el: HTMLElement, sl: BadgeSlot) => {
     const c = sl.cards?.[0]
     const g = gameOf(sl)
-    setZoom({
-      imageUrl: c?.imageUrl, name: c?.name ?? sl.label, number: c?.number, setName: c?.setName,
-      rarityLabel: '', rarityColor: '#7a6a55', owned: false, quantity: 0,
+    const base = {
+      imageUrl: c?.imageUrl ?? '', name: c?.name ?? sl.label, number: c?.number ?? '', setName: c?.setName,
+      rarityLabel: '', rarityColor: '#7a6a55', marketPrice: 0, owned: true, quantity: 0,
       glowColor: g ? GAME_COLORS[g] : '#d6b168', originRect: el.getBoundingClientRect(),
-    } as ZoomCardData)
+    } as ZoomCardData
+    setZoom(base)
+    const id = sl.cardIds[0]
+    if (!id || !g) return
+    fetch(`/api/cards/search?${new URLSearchParams({ game: g, id, q: c?.name ?? sl.label })}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: CardSearchResult[]) => {
+        const r = rows.find((x) => x.id === id) ?? rows[0]
+        if (!r) return
+        const rarity = r.rarity ? (RARITY_LABELS_BY_GAME[r.game]?.[r.rarity] ?? r.rarity) : ''
+        setZoom((z) => z && z.name === base.name ? {
+          ...z, name: r.name, number: r.number, setName: r.setName, marketPrice: r.marketPrice,
+          rarityLabel: rarity.replace('_', ' '), rarityColor: (r.rarity && RARITY_COLORS[r.rarity]) || '#7a6a55',
+          glowColor: zoomGlowColor(r.game, r.rarity ?? '', GAME_COLORS[r.game]),
+        } : z)
+      })
+      .catch(() => {})
   }
   const keep = slots.length - removing.size
   return (
@@ -720,7 +738,8 @@ export function CardsReview({ slots, onSave, onClose }: { slots: BadgeSlot[]; on
           </div>
         </div>
       </div>
-      {createPortal(<CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly />, document.body)}
+      {/* the card view goes over this window — its own layer above it */}
+      {createPortal(<div className="relative z-[85]"><CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly /></div>, document.body)}
     </Portal>
   )
 }

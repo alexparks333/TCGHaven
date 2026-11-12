@@ -2115,6 +2115,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
         {visible && (
           <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
             <div className="text-base font-bold text-ink leading-tight"><CardName name={d.name} /></div>
+            {d.setName && <div className="text-xs font-medium text-slate-400">{d.setName}</div>}
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-xs text-slate-500">#{d.number}</span>
               {d.rarityLabel && (
