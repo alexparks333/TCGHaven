@@ -74,7 +74,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - Book saves use `mergeFields` (not `merge`), so a setting switched off (a missing key) really goes.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
   3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder
-     **Inside look** (2026-11-12) is five folding sections (BookPlanner `InsidePanel`), all stored on
+     The side panel's tabs: **Chapters**, **Page Design** and **Badge Accessories** (the badge shadow).
+     **Page Design** (2026-11-12, was "Inside look") is folding sections (BookPlanner `InsidePanel`), all stored on
      `BadgeSet.insideStyle` and drawn through `insideLook(style, coverImage)` → classes + CSS variables
      (globals.css `.pinbook-styled` and friends), so the Studio and fans' pin book look the same:
      - **Pages:** felt colour, trim, felt texture.

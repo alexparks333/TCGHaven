@@ -74,7 +74,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
   const { from, to } = book.cover
   const accent = 'var(--trim)' // the inside's trim (Inside look), not the cover's foil
   const inside = insideLook(book.insideStyle ?? {}, book.coverImage)
-  const [panel, setPanel] = useState<'chapters' | 'inside'>('chapters')
+  const [panel, setPanel] = useState<'chapters' | 'inside' | 'accessories'>('chapters')
   const stick = useStickyCenter()
   const goTo = (chapter: number) => {
     const i = pages.findIndex((p) => p.chapterIndex === chapter)
@@ -124,11 +124,11 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
     {/* The side panel: Chapters | Inside look */}
     <div className="haven-panel !p-0 overflow-clip">
       {/* Two tabs */}
-      <div className="grid grid-cols-2 gap-1.5 p-2 border-b border-[#d6c49f]">
-        {([['chapters', 'Chapters', BookOpen], ['inside', 'Inside look', Palette]] as const).map(([id, label, Icon]) => (
+      <div className="grid grid-cols-3 gap-1.5 p-2 border-b border-[#d6c49f]">
+        {([['chapters', 'Chapters', BookOpen], ['inside', 'Page Design', Palette], ['accessories', 'Badge Accessories', Sun]] as const).map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => setPanel(id)}
-            className={cn('haven-chip py-2 text-sm font-semibold inline-flex items-center justify-center gap-1.5', panel === id && 'haven-chip-on')}>
-            <Icon size={15} />{label}
+            className={cn('haven-chip px-1.5 py-2 text-[12px] leading-tight font-semibold inline-flex items-center justify-center gap-1.5 text-center', panel === id && 'haven-chip-on')}>
+            <Icon size={14} className="shrink-0" />{label}
           </button>
         ))}
       </div>
@@ -136,7 +136,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
       {panel === 'chapters'
         ? <ChaptersPanel chapters={chapters} badges={badges} showing={[left?.chapterIndex, right?.chapterIndex]} onGo={goTo}
             onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} onAddBadge={onAdd} />
-        : <InsidePanel uid={uid} style={book.insideStyle} onChange={onInside} onRevert={onRevertInside} coverImage={book.coverImage} />}
+        : <InsidePanel uid={uid} part={panel === 'accessories' ? 'badge' : 'page'} style={book.insideStyle} onChange={onInside} onRevert={onRevertInside} coverImage={book.coverImage} />}
       </div>
       {/* The look of the pages is kept only when saved */}
       <SaveBar dirty={insideDirty} onSave={() => onSaveInside?.()} onUndo={() => onUndoInside?.()} saveLabel="Save pages" savedLabel="Page look saved" className="mx-4 mb-4" />
@@ -231,7 +231,7 @@ const TRIMS: Array<[string, string]> = [
   ['Bronze', '#a8793f'], ['Emerald', '#6fd3a2'], ['Sapphire', '#8fb2ff'], ['Amethyst', '#c49bff'],
 ]
 
-function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: string; style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void; onRevert?: () => void; coverImage?: string }) {
+function InsidePanel({ uid, part, style, onChange, onRevert, coverImage }: { uid: string; part: 'page' | 'badge'; style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void; onRevert?: () => void; coverImage?: string }) {
   const [reverting, setReverting] = useState(false)
   const s = style ?? {}
   const set = (p: Partial<InsideStyle>) => onChange({ ...s, ...p })
@@ -262,16 +262,22 @@ function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: stri
   const edgeName = EDGE_TEXTURES.find((t) => t.id === s.edgeTexture)?.name
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-500 mb-3">How the inside of your book looks — fans see it exactly like this.</p>
+      {part === 'badge' ? (
+        <>
+          <p className="text-xs text-slate-500 mb-3">How every badge sits on your pages — fans see it exactly like this.</p>
+          <div className="rounded-2xl border border-slate-700 bg-slate-950/30 p-4">
+            <p className="flex items-center gap-2 font-bold text-ink mb-3"><span className="haven-medallion w-8 h-8"><Sun size={15} /></span>Badge shadow</p>
+            <ShadowPicker s={s} page={page} set={set} />
+          </div>
+        </>
+      ) : (<>
+      <p className="text-xs text-slate-500 mb-3">How the pages of your book look — fans see it exactly like this.</p>
       <Group id="pages" open={open} setOpen={setOpen} icon={Palette} title="Pages" summary="Felt colour, trim and texture">
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Felt</p>
         {swatches(FELTS, page, 'page')}
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-2">Trim <span className="normal-case font-normal tracking-normal">· titles, nameplates, the classic border</span></p>
         {swatches(TRIMS, trim, 'trim')}
         <div className="mt-4">{toggle('Felt texture', s.texture !== false, () => set({ texture: s.texture === false ? undefined : false }))}</div>
-      </Group>
-      <Group id="shadow" open={open} setOpen={setOpen} icon={Sun} title="Badge shadow" summary={s.pinShadow === false ? 'Off' : 'On'}>
-        <ShadowPicker s={s} page={page} set={set} />
       </Group>
       <Group id="picture" open={open} setOpen={setOpen} icon={ImagePlus} title="Page picture" summary={s.pageImage ? 'Your picture on every page' : 'Add your own background'}>
         <PagePicture uid={uid} s={s} set={set} />
@@ -288,6 +294,7 @@ function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: stri
       <Group id="edge" open={open} setOpen={setOpen} icon={BookOpen} title="Book edge" summary={edgeName ? `${edgeName}${s.edgeStitch === false ? '' : ' · stitched'}` : 'The book’s usual rim'}>
         <EdgePicker s={s} set={set} coverImage={coverImage} />
       </Group>
+      </>)}
       {style && (
         <button type="button" onClick={() => setReverting(true)} className="pt-2 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
       )}
