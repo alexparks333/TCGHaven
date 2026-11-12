@@ -30,7 +30,29 @@ export interface Community {
   about: string
   color: string       // its banner colour
   games?: Game[]       // the games it collects (set up when the community is created)
+  page?: CommunityLook // how its page looks (the Studio's Community tab) — unset = the plain page
 }
+
+/** A community page's sections a creator switches on and off (CommunityPage) */
+export type CommunitySection = 'about' | 'members' | 'badgeBoard' | 'discussion'
+export const COMMUNITY_SECTIONS: Array<{ id: CommunitySection; name: string; hint: string; ready: boolean }> = [
+  { id: 'about', name: 'About', hint: 'Who you are and what members get', ready: true },
+  { id: 'members', name: 'Newest members', hint: 'The latest collectors to join', ready: true },
+  { id: 'badgeBoard', name: 'Achievement Badge Board', hint: 'The newest members to earn one of your badges', ready: false },
+  { id: 'discussion', name: 'Community Discussion Board', hint: 'Posts members upvote, like a forum', ready: false },
+]
+/** Whether a section shows: what the creator chose, else on for the ready ones */
+export const sectionOn = (c: Pick<Community, 'page'>, id: CommunitySection) =>
+  (COMMUNITY_SECTIONS.find((s) => s.id === id)?.ready ?? false) && (c.page?.sections?.[id] ?? true)
+
+export interface CommunityLook {
+  header?: string                                         // the header picture (Storage URL)
+  headerFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (PicturePlacer); unset = fills it
+  headerShade?: number                                    // 0–1: darkens it toward the bottom so the text reads (default 0.35)
+  sections?: Partial<Record<CommunitySection, boolean>>   // sections switched on / off
+}
+/** The header's shape — fixed, so a placed picture looks the same on every screen */
+export const HEADER_ASPECT = 4
 
 /** Leather and foil a creator picks for their cover (CoverDesigner) */
 export const LEATHERS: Array<{ name: string; from: string; to: string }> = [
@@ -134,5 +156,8 @@ export function useCommunity(uid: string | null | undefined): { community: Commu
 
 export async function saveCommunity(uid: string, c: Community) {
   // nameLower: for searching by name (lib/communities.ts searchCommunities)
-  await setDoc(doc(db, 'communities', uid), { ...clean(c), nameLower: c.name.trim().toLowerCase(), updatedAt: serverTimestamp() }, { merge: true })
+  // mergeFields: these fields are replaced whole, so something removed from the page's look (a header
+  // picture, a section) really goes; anything else on the doc is kept
+  await setDoc(doc(db, 'communities', uid), { ...clean(c), nameLower: c.name.trim().toLowerCase(), updatedAt: serverTimestamp() },
+    { mergeFields: ['name', 'nameLower', 'tagline', 'about', 'color', 'games', 'updatedAt', ...(c.page ? ['page'] : [])] })
 }

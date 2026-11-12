@@ -86,7 +86,7 @@ service cloud.firestore {
     match /communities/{uid} {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == uid && canCreate()
-        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'tagline', 'about', 'color', 'games', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'tagline', 'about', 'color', 'games', 'page', 'updatedAt']);
       allow delete: if signedIn() && (request.auth.uid == uid || isAdmin());
     }
 

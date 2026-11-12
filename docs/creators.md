@@ -14,6 +14,15 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   - two paper doors, with the Studio's seal stamped over the seam. Its rim lettering ("✦ CREATOR STUDIO ✦ TCG HAVEN") turns slowly;
   - "Entering Creator Studio";
   - once loaded, the doors part, the seal zooms past, and the Studio rises in (`.studio-reveal`). Animations live in globals.css (`.studio-*`), and reduced motion gets a simple fade.
+- **The community page** (`/c/{uid}`, components/pages/CommunityPage.tsx — `CommunityView` draws it from its data).
+  A header picture (`CommunityHeader`, a fixed 4 : 1 shape so a placement looks the same on any screen;
+  `Community.page.header` / `headerFit` / `headerShade`, else the banner colour), the creator's book pinned
+  in the top right over the header's corner (after the name on a phone), the name, tagline, members and
+  Join, then the sections the creator switched on (`page.sections`, `COMMUNITY_SECTIONS` / `sectionOn()`):
+  About and Newest members now (`newestMembers()`, sorted in the browser — no extra index); the
+  Achievement Badge Board and the Community Discussion Board are listed as Coming soon. Edited in the
+  Studio's Community tab: Change header (upload, drag and zoom with `PicturePlacer`, Darken) and Page
+  sections. `saveCommunity` uses `mergeFields`; firestore.rules lets `communities` carry `page`.
 - **Computers only** (2026-11-12). The Creator Studio is a web-on-a-computer tool: never in the iPhone or
   Android app — even for creators — and not on a phone or a window under 1024 px (`lib/studioDevice.ts`
   `useStudioDevice()`). There `/creator` shows "The Creator Studio is on computers" with the link to copy;

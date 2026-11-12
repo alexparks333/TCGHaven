@@ -76,3 +76,14 @@ export function useMyCommunities(uid: string | null | undefined): { communities:
   const mine = uid && state.uid === uid
   return { communities: mine ? state.list : [], joined: new Set(mine ? state.ids : []), ready: !!mine && state.ready }
 }
+
+/** The newest members (the community page's "Newest members"): sorted here rather than in the
+ *  query, so no extra Firestore index is needed */
+export async function newestMembers(community: string, n = 12): Promise<Array<{ uid: string; joinedAt: number }>> {
+  const snap = await getDocs(query(collection(db, 'community_members'), where('community', '==', community), limit(300)))
+  return snap.docs
+    .map((d) => d.data() as { member: string; joinedAt?: { toMillis?: () => number } })
+    .map((r) => ({ uid: r.member, joinedAt: r.joinedAt?.toMillis?.() ?? 0 }))
+    .sort((a, b) => b.joinedAt - a.joinedAt)
+    .slice(0, n)
+}

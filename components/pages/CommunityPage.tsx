@@ -1,8 +1,9 @@
 'use client'
 
-// /c/{uid} — a community: the creator's banner, name, tagline and about; Join / Leave and the member
-// count; the creator; and their Creator Book — its cover, opened into the real pin book. Shown only
-// while its creator can still run one (lib/communities.ts getCommunity). docs/creators.md.
+// /c/{uid} — a community: the creator's header picture (CommunityHeader), their book pinned in the top
+// right (opened into the real pin book), name, tagline, Join / Leave and the member count, then the
+// sections the creator switched on (About, Newest members — lib/creatorBooks.ts COMMUNITY_SECTIONS).
+// Shown only while its creator can still run one (lib/communities.ts getCommunity). docs/creators.md.
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -11,8 +12,9 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
-import { getCommunity, joinCommunity, leaveCommunity, memberCount, useMyCommunities, type CommunityEntry } from '@/lib/communities'
-import { useCreatorBook } from '@/lib/creatorBooks'
+import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestMembers, useMyCommunities, type CommunityEntry } from '@/lib/communities'
+import { CommunityHeader } from '@/components/creator/CommunityHeader'
+import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -73,82 +75,124 @@ function Body({ uid }: { uid: string }) {
     } finally { setBusy(false) }
   }
 
+  return <CommunityView {...{ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen }} />
+}
+
+/** The page itself, from its data — split from Body so it can be drawn without signing in (dev checks) */
+export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen }: {
+  uid: string; community: CommunityEntry; creator: Profile | null; members: number | null; mine: boolean
+  studio: ReturnType<typeof useStudioDevice>; isMember: boolean; busy: boolean; error: string; toggle: () => void
+  book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
+}) {
   return (
-    <div className="flex flex-col gap-6">
-      {/* Banner + who it is */}
-      <div className="card-glass overflow-hidden">
-        <div className="h-40 md:h-52 relative" style={{ background: `linear-gradient(135deg, ${community.color}, #0b0b12)` }}>
-          <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.35) 0, transparent 40%), radial-gradient(circle at 85% 70%, rgba(255,255,255,0.18) 0, transparent 35%)' }} />
-        </div>
-        <div className="px-5 md:px-8 pb-6 -mt-12 relative flex flex-col md:flex-row md:items-end gap-4">
-          <div className="w-24 h-24 rounded-3xl border-4 border-[#f3e9d3] shadow-lg flex items-center justify-center text-4xl font-black text-white shrink-0" style={{ background: community.color }}>
-            {(community.name.trim()[0] || '★').toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl md:text-3xl font-bold text-ink leading-tight">{community.name}</h1>
-            {community.tagline && <p className="text-sm text-slate-500 mt-1">{community.tagline}</p>}
-            {(community.games?.length ?? 0) > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {community.games!.map((g) => <span key={g} className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>)}
+    <div className="flex flex-col pb-10">
+      {/* The header — the creator's picture (or colour) */}
+      <CommunityHeader community={community} className="rounded-2xl shadow-[0_18px_40px_-24px_rgba(40,25,10,0.7)]" />
+
+      {/* Who it is · the book (top right on a computer; after the name on a phone) · the sections */}
+      <div className="grid gap-x-6 gap-y-5 lg:grid-cols-[minmax(0,1fr)_260px] items-start">
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <div className="relative px-4 md:px-6 flex flex-col md:flex-row md:items-end gap-x-5 gap-y-3">
+            {/* only the badge-like initial hangs over the header — the text sits below it */}
+            <div className="-mt-10 md:-mt-12 w-20 h-20 md:w-24 md:h-24 rounded-3xl border-4 border-[#f3e9d3] shadow-lg flex items-center justify-center text-4xl font-black text-white shrink-0" style={{ background: community.color }}>
+              {(community.name.trim()[0] || '★').toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1 md:pt-4">
+              <h1 className="pinbook-serif text-2xl md:text-3xl font-bold text-ink leading-tight">{community.name}</h1>
+              {community.tagline && <p className="text-sm text-slate-500 mt-1">{community.tagline}</p>}
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+                <span className="flex items-center gap-1.5"><Users size={14} /><b className="text-ink">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
+                {creator && (
+                  <Link href={profilePath(uid, creator.username)} className="flex items-center gap-1.5 hover:text-ink">
+                    <Avatar seed={uid} name={creator.displayName} photoURL={creator.photoURL} size={20} />by {creator.displayName}
+                  </Link>
+                )}
               </div>
-            )}
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
-              <span className="flex items-center gap-1.5"><Users size={14} /><b className="text-ink">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
-              {creator && (
-                <Link href={profilePath(uid, creator.username)} className="flex items-center gap-1.5 hover:text-ink">
-                  <Avatar seed={uid} name={creator.displayName} photoURL={creator.photoURL} size={20} />by {creator.displayName}
-                </Link>
+              {(community.games?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {community.games!.map((g) => <span key={g} className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>)}
+                </div>
+              )}
+            </div>
+            <div className="shrink-0">
+              {mine ? (
+                // the Studio is computers-only — no link to it in the app or on a phone
+                studio === 'computer' ? <Link href="/creator" className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
+              ) : (
+                <button type="button" onClick={toggle} disabled={busy}
+                  className={isMember ? 'group btn-secondary !bg-slate-950 border border-slate-700 !text-ink' : 'btn-primary px-6'}>
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : isMember ? <><Check size={16} className="group-hover:hidden" /><LogOut size={16} className="hidden group-hover:block" /></> : <Sparkles size={16} />}
+                  {isMember ? <><span className="group-hover:hidden">Joined</span><span className="hidden group-hover:inline">Leave</span></> : 'Join community'}
+                </button>
               )}
             </div>
           </div>
-          <div className="shrink-0">
-            {mine ? (
-              // the Studio is computers-only — no link to it in the app or on a phone
-              studio === 'computer' ? <Link href="/creator" className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
-            ) : (
-              <button type="button" onClick={toggle} disabled={busy}
-                className={isMember ? 'group btn-secondary !bg-slate-950 border border-slate-700 !text-ink' : 'btn-primary px-6'}>
-                {busy ? <Loader2 size={16} className="animate-spin" /> : isMember ? <><Check size={16} className="group-hover:hidden" /><LogOut size={16} className="hidden group-hover:block" /></> : <Sparkles size={16} />}
-                {isMember ? <><span className="group-hover:hidden">Joined</span><span className="hidden group-hover:inline">Leave</span></> : 'Join community'}
-              </button>
-            )}
-          </div>
+          {error && <p className="px-6 mt-2 text-xs text-red-600">{error}</p>}
         </div>
-        {error && <p className="px-8 pb-4 text-xs text-red-600">{error}</p>}
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
-        {/* Their Creator Book */}
-        <section className="card-glass p-5 md:p-6">
-          <h2 className="text-base font-bold text-ink flex items-center gap-2"><BookOpen size={16} className="text-slate-400" />Creator Book</h2>
+        {/* The book: top right, hanging over the header's corner (on a phone: right after the name) */}
+        <aside className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:-mt-28 relative z-10 flex flex-col items-center">
           {book ? (
-            <div className="mt-4 flex flex-col sm:flex-row items-center gap-6">
-              <button type="button" onClick={() => setOpen(true)} className="relative w-[200px] aspect-[0.71] shrink-0 transition-transform hover:-translate-y-1" style={{ containerType: 'inline-size' }} aria-label={`Open ${book.book.name}`}>
+            <div className="w-full rounded-2xl card-glass p-4 flex lg:flex-col items-center gap-4 shadow-[0_20px_40px_-20px_rgba(40,25,10,0.6)]">
+              <button type="button" onClick={() => setOpen(true)} className="relative w-[110px] lg:w-[180px] aspect-[0.71] shrink-0 transition-transform hover:-translate-y-1" style={{ containerType: 'inline-size' }} aria-label={`Open ${book.book.name}`}>
                 <BookThickness look={book.book.coverStyle} />
                 <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
               </button>
-              <div className="text-center sm:text-left">
-                <p className="text-xl font-bold text-ink">{book.book.name}</p>
-                <p className="text-sm text-slate-500 mt-1">{book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect</p>
-                <p className="text-sm text-slate-400 mt-3 max-w-sm">
-                  {isMember || mine ? 'Collect the cards to earn these pins — your progress shows in your pin book.' : 'Join to collect these pins — they’ll show up in your own pin book as you earn them.'}
+              <div className="min-w-0 flex-1 lg:text-center">
+                <p className="pinbook-serif font-bold text-ink truncate">{book.book.name}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect</p>
+                <button type="button" onClick={() => setOpen(true)} className="btn-primary mt-3 lg:w-full justify-center"><BookOpen size={15} />Open the book</button>
+                <p className="text-[11px] text-slate-500 mt-2">
+                  {isMember || mine ? 'Collect the cards to earn these pins.' : 'Join to collect these pins in your own pin book.'}
                 </p>
-                <button type="button" onClick={() => setOpen(true)} className="btn-primary mt-4"><BookOpen size={15} />Open the book</button>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-500 mt-3">{community.name} hasn&rsquo;t made their book yet.</p>
+            <div className="w-full rounded-2xl card-glass p-4 text-sm text-slate-500 text-center">{community.name} hasn&rsquo;t made their book yet.</div>
           )}
-        </section>
-
-        <aside className="card-glass p-5">
-          <h2 className="text-base font-bold text-ink mb-2">About</h2>
-          <p className="text-sm text-slate-400 whitespace-pre-line">{community.about || 'No description yet.'}</p>
         </aside>
+
+        <div className="min-w-0 flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
+          {sectionOn(community, 'about') && (
+            <section className="card-glass p-5 md:p-6">
+              <h2 className="pinbook-serif text-lg font-bold text-ink mb-2">About</h2>
+              <p className="text-sm text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
+            </section>
+          )}
+          {sectionOn(community, 'members') && <NewestMembers community={uid} members={members} />}
+        </div>
+
       </div>
 
       {open && book && <BookViewer book={book.book} defs={book.badges} onClose={() => setOpen(false)} />}
     </div>
+  )
+}
+
+/** The newest collectors to join */
+function NewestMembers({ community, members }: { community: string; members: number | null }) {
+  const [list, setList] = useState<Array<{ uid: string; profile: Profile | null }> | null>(null)
+  useEffect(() => {
+    newestMembers(community, 12)
+      .then((rows) => Promise.all(rows.map(async (r) => ({ uid: r.uid, profile: await getProfile(r.uid).catch(() => null) }))))
+      .then(setList).catch(() => setList([]))
+  }, [community, members])
+  return (
+    <section className="card-glass p-5 md:p-6">
+      <h2 className="pinbook-serif text-lg font-bold text-ink mb-3">Newest members</h2>
+      {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
+        : list.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
+        : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-3">
+            {list.map(({ uid, profile }) => (
+              <Link key={uid} href={profile ? profilePath(uid, profile.username) : '#'} className="flex flex-col items-center gap-1.5 rounded-xl p-2 hover:bg-slate-900/60 text-center">
+                <Avatar seed={uid} name={profile?.displayName ?? 'Collector'} photoURL={profile?.photoURL} size={44} />
+                <span className="text-xs font-semibold text-ink truncate w-full">{profile?.displayName ?? 'Collector'}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+    </section>
   )
 }
 

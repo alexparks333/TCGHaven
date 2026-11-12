@@ -7,8 +7,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, Copy, ExternalLink, Loader2, MousePointerClick, Pencil, Users, Megaphone, CalendarDays, BookOpen } from 'lucide-react'
-import { useCommunity, saveCommunity, type Community, type CreatorBook } from '@/lib/creatorBooks'
+import { Check, Copy, ExternalLink, Loader2, MousePointerClick, Pencil, Users, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
+import { useCommunity, saveCommunity, COMMUNITY_SECTIONS, HEADER_ASPECT, type Community, type CommunityLook, type CreatorBook } from '@/lib/creatorBooks'
+import { CommunityHeader } from '@/components/creator/CommunityHeader'
+import { PicturePlacer, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
+import { Portal } from '@/components/creator/Portal'
+import { appStorage } from '@/lib/firebase/appStorage'
+import { badgeArt } from '@/lib/badgeAssets'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { communityPath, memberCount } from '@/lib/communities'
 import { BANNERS } from '@/components/creator/CreateCommunity'
 import { BookCover } from '@/components/badges/BadgeLibrary'
@@ -25,6 +31,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   const [state, setState] = useState<'saved' | 'saving' | 'error' | 'name'>('saved')
   const [members, setMembers] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
+  const [headerOpen, setHeaderOpen] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const pending = useRef<() => void>()
   useEffect(() => { if (loaded && community && !draft) setDraft(community) }, [loaded, community, draft])
@@ -61,11 +68,14 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
       {/* ── The page, editable in place ── */}
       <div className="haven-panel haven-grain !p-0 overflow-hidden relative">
-        <div className="relative h-40 md:h-48 border-b border-[#d6c49f]" style={{ background: c.color, transition: 'background 0.5s' }}>
-          <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '16px 16px' }} />
+        {/* The header, exactly as fans see it (CommunityHeader) — your picture, placed, or your colour */}
+        <CommunityHeader community={c} className="border-b border-[#d6c49f]">
           <span className="haven-plate absolute left-4 top-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5">
             <MousePointerClick size={13} />Click anything to edit · it saves itself
           </span>
+          <button type="button" onClick={() => setHeaderOpen(true)} className="haven-chip absolute right-3 top-3 px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm">
+            <ImagePlus size={14} />{c.page?.header ? 'Change header' : 'Add a header picture'}
+          </button>
           {/* The banner's colour, picked right on it */}
           <div className="haven-plate absolute right-3 bottom-3 flex flex-wrap justify-end gap-1.5 !p-1.5 max-w-[70%]">
             {BANNERS.map((col) => (
@@ -74,7 +84,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
                 style={{ background: col }} />
             ))}
           </div>
-        </div>
+        </CommunityHeader>
 
         <div className="px-5 md:px-8 pb-7 -mt-11 relative">
           <div className="w-[84px] h-[84px] rounded-[22px] border-4 border-[#efe4cc] flex items-center justify-center pinbook-serif text-4xl font-bold text-white"
@@ -157,6 +167,31 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
           )}
         </div>
 
+        {/* Which sections fans see on the page */}
+        <div className="haven-panel">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Page sections</p>
+          <div className="mt-2.5 space-y-2">
+            {COMMUNITY_SECTIONS.map((sec) => {
+              const on = sec.ready && (c.page?.sections?.[sec.id] ?? true)
+              return (
+                <button key={sec.id} type="button" disabled={!sec.ready}
+                  onClick={() => set({ page: { ...(c.page ?? {}), sections: { ...(c.page?.sections ?? {}), [sec.id]: !on } } })}
+                  className="w-full flex items-center gap-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] px-3 py-2 text-left disabled:opacity-60 disabled:cursor-default">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-ink">{sec.name}</span>
+                    <span className="block text-[11px] text-slate-500 leading-snug">{sec.hint}</span>
+                  </span>
+                  {sec.ready ? (
+                    <span className={cn('w-9 h-5 shrink-0 rounded-full p-0.5 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
+                      <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', on && 'translate-x-4')} />
+                    </span>
+                  ) : <span className="shrink-0 rounded-full bg-[#e6d7b6] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Coming soon</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         {/* What's coming */}
         <div className="rounded-[0.875rem] border border-dashed border-[#c4ae83] p-4">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Coming soon</p>
@@ -170,6 +205,78 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
           </div>
         </div>
       </div>
+      {headerOpen && <HeaderEditor uid={uid} c={c} onChange={(page) => set({ page })} onClose={() => setHeaderOpen(false)} />}
     </div>
+  )
+}
+
+/** The header picture: upload it, then drag and zoom it into the 4 : 1 header (like the cover picture),
+ *  and choose how much it darkens toward the bottom so the page's text reads */
+function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community; onChange: (page: CommunityLook) => void; onClose: () => void }) {
+  const look = c.page ?? {}
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose])
+  async function upload(file: File | undefined) {
+    if (!file) return
+    setBusy(true); setError('')
+    try {
+      const blob = await shrink(file)
+      const r = ref(appStorage, `creators/${uid}/header-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`)
+      await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
+      onChange({ ...look, header: await getDownloadURL(r), headerFit: undefined })
+    } catch (e) {
+      setError('Couldn’t upload that picture — ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-[#2b2014]/50 backdrop-blur-[2px]" onClick={onClose} />
+        <div role="dialog" aria-modal="true" aria-label="Header picture" className="haven-panel haven-grain relative w-full max-w-xl !p-6 shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
+          <div className="flex items-center gap-3">
+            <span className="haven-medallion w-10 h-10"><ImagePlus size={18} /></span>
+            <div className="min-w-0 flex-1">
+              <h2 className="pinbook-serif text-lg font-bold text-ink">Header picture</h2>
+              <p className="text-xs text-slate-500">Across the top of your community page — it saves itself.</p>
+            </div>
+            <button type="button" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-ink" aria-label="Close"><X size={18} /></button>
+          </div>
+          <div className="mt-4">
+            {look.header ? (
+              <>
+                <PicturePlacer src={badgeArt(look.header, 1920)!} fit={look.headerFit} onChange={(headerFit) => onChange({ ...look, headerFit })}
+                  aspect={HEADER_ASPECT} base={`linear-gradient(135deg, ${c.color}, #0b0b12)`} fillLabel="Fill header" />
+                <ValueSlider label="Darken" min={0} max={1} step={0.05} value={look.headerShade ?? 0.35} onChange={(v) => onChange({ ...look, headerShade: v })} />
+                <p className="mt-1 text-[11px] text-slate-500">Darkens it toward the bottom so your page&rsquo;s name and text read on top.</p>
+                <div className="mt-4 flex items-center gap-2">
+                  <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
+                    {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
+                  </button>
+                  <button type="button" onClick={() => onChange({ ...look, header: undefined, headerFit: undefined })} className="ml-auto haven-chip px-3 py-1.5 text-xs font-semibold">Remove — use my colour</button>
+                </div>
+              </>
+            ) : (
+              <button type="button" onClick={() => input.current?.click()} disabled={busy}
+                className="w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] bg-[#f6eedb] py-10 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
+                <span className="haven-medallion w-11 h-11">{busy ? <Loader2 size={20} className="animate-spin" /> : <ImagePlus size={20} />}</span>
+                <span className="mt-1 text-sm font-bold text-ink">{busy ? 'Uploading…' : 'Upload a header picture'}</span>
+                <span className="text-[11px] px-6 text-center">Wide pictures work best (about 4 × as wide as tall). Then drag and zoom it into place.</span>
+              </button>
+            )}
+            <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
+            {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+          </div>
+        </div>
+      </div>
+    </Portal>
   )
 }
