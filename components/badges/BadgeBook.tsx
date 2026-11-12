@@ -372,7 +372,8 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
           {Array.from({ length: PER_PAGE }, (_, i) => {
             const def = page.badges[i]
             return def
-              ? <BadgeSpot key={def.id} def={def} badges={badges} pin={pin} isMe={isMe} interactive={!turning} below={i < 2} onInspect={onInspect} />
+              // pinbook-clear: a page pattern stays out from under the badge (globals.css)
+              ? <div key={def.id} className="pinbook-clear"><BadgeSpot def={def} badges={badges} pin={pin} isMe={isMe} interactive={!turning} below={i < 2} onInspect={onInspect} /></div>
               : <EmptySpot key={i} size={pin} />
           })}
         </div>

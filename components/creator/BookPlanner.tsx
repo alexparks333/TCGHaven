@@ -338,7 +338,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(page.chapter)
-  // The first empty spot is the "+"; the rest of the page stays quiet velvet
+  // The first empty spot is the "+"; the rest of the page stays blank
   const plusAt = page.spots.findIndex((s) => !s)
   return (
     <Velvet accent={accent} side={side}>
@@ -374,7 +374,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
       <div className="relative flex-1 grid grid-cols-2 grid-rows-3 gap-[5%] px-[4%] pb-[2%]">
         {page.spots.map((b, i) =>
           b ? (
-            <button key={b.id} type="button" onClick={() => onEdit(b)} className="group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
+            <button key={b.id} type="button" onClick={() => onEdit(b)} className="pinbook-clear group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
               <span className="relative flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105 drop-shadow-[0_6px_6px_rgba(0,0,0,0.55)]">
                 <BadgePin art={b.art} imageUrl={b.imageUrl} size={90} />
               </span>
@@ -382,7 +382,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
             </button>
           ) : i === plusAt ? (
             <button key={'plus' + i} type="button" onClick={() => onAdd(page.chapter)}
-              className="group flex flex-col items-center justify-center gap-[6%]">
+              className="pinbook-clear group flex flex-col items-center justify-center gap-[6%]">
               <span
                 className="flex items-center justify-center w-[52%] aspect-square rounded-full border-2 border-dashed transition-all group-hover:scale-110 group-hover:bg-white/5"
                 style={{ borderColor: 'color-mix(in srgb, var(--trim) 80%, transparent)', color: accent, boxShadow: 'inset 0 3px 10px rgba(0,0,0,0.7)' }}
@@ -392,10 +392,8 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
               <span className="text-[clamp(8px,1.05vw,11px)] font-semibold uppercase tracking-wider opacity-80" style={{ color: accent }}>Add a badge</span>
             </button>
           ) : (
-            // An empty felt pinhole — the spots after the "+" fill in as badges are added
-            <span key={'empty' + i} className="flex items-center justify-center">
-              <span className="w-[40%] aspect-square rounded-full" style={{ background: 'radial-gradient(circle, rgba(0,0,0,0.5), rgba(0,0,0,0.15) 65%, transparent 70%)' }} />
-            </span>
+            // Blank page until a badge goes here (only the next "+" shows)
+            <span key={'empty' + i} aria-hidden />
           ),
         )}
       </div>

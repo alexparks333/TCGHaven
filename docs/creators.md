@@ -78,6 +78,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      any colour), plus Strength (`patternOpacity`), Fade edges (`patternFade`), Surprise and Reset.
      `insideLook()` puts it in `--pattern`; globals.css layers it over the felt's grain and colour
      (`.pinbook-styled .pinbook-page`), so the Studio and fans' pin book both show it.
+     Each badge (and the Studio's "+") sits in a soft clearing of plain felt (`.pinbook-clear`, only with a
+     pattern: `.pinbook-patterned`), so the pattern never runs under a pin. Empty spots are blank page — no dots.
      paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
      - Each chapter shows its badges and **one "+ Add a badge" spot**.

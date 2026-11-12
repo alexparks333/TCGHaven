@@ -77,7 +77,7 @@ export function insideLook(s: InsideStyle | undefined): { className: string; sty
   if (!s) return { className: '', style: {} }
   const pattern = patternCss(s)
   return {
-    className: ['pinbook-styled', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
+    className: ['pinbook-styled', pattern && 'pinbook-patterned', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
     style: {
       '--page': s.page || INSIDE_DEFAULTS.page, '--trim': s.trim || INSIDE_DEFAULTS.trim,
       ...(pattern && { '--pattern': pattern }),

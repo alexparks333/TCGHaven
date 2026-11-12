@@ -622,6 +622,22 @@
   background-repeat: no-repeat;
   background-image: var(--pattern, none), radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
 }
+/* With a page pattern, each badge sits in a soft clearing of plain felt (BadgeBook, BookPlanner) */
+.pinbook-patterned .pinbook-clear { position: relative; }
+/* its contents paint above the clearing (positioned, in order) — no z-index, so a badge's hover card isn't trapped */
+.pinbook-patterned .pinbook-clear > * { position: relative; }
+.pinbook-patterned .pinbook-clear::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 125%; /* the spot's height sets the circle; a cell is wider than it is tall */
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--page) 72%, black) 55%, color-mix(in srgb, var(--page) 60%, transparent) 78%, transparent);
+  pointer-events: none;
+}
 .pinbook-styled .pinbook-frame {
   border-color: color-mix(in srgb, var(--trim) 45%, transparent);
   box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4px color-mix(in srgb, var(--trim) 20%, transparent);
