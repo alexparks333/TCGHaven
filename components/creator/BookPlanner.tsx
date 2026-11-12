@@ -659,7 +659,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
         {page.spots.map((b, i) =>
           b ? (
             <button key={b.id} type="button" onClick={() => onEdit(b)} className="group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
-              <span className="pinbook-pin-shadow relative flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105">
+              <span className="pinbook-pin-shadow relative !flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105" /* !flex: .pinbook-pin-shadow is inline-block in the pin book */>
                 <BadgePin art={b.art} imageUrl={b.imageUrl} size={90} />
               </span>
               <span className="pinbook-serif max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
