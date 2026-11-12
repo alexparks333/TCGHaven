@@ -460,6 +460,12 @@ export default function InventoryPage() {
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <div className="flex items-center gap-2 shrink-0">
+              {/* The click shortcuts, like the Cardex's (computers only), left of Scan */}
+              <div className="hidden lg:flex mr-1 items-center gap-4 rounded-full border border-slate-800 bg-slate-950/50 pl-1.5 pr-4 py-1 text-xs whitespace-nowrap">
+                <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">See in Cardex</span></span>
+                <span className="w-px h-4 bg-slate-700" />
+                <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Recently sold</span></span>
+              </div>
               {/* In the app: the camera. On the website: a QR code that opens the scanner on the phone */}
               <button onClick={canScan ? startScan : () => setShowPhoneScan(true)} className="btn-secondary whitespace-nowrap !bg-slate-950 hover:!bg-slate-900 border border-slate-700 !text-ink shadow-sm">
                 <ScanLine size={16} />
@@ -472,18 +478,10 @@ export default function InventoryPage() {
             </div>
           </div>
           {/* Its own line under the buttons, so it never gets squeezed into two */}
-          <div className="mt-1 flex items-center justify-between gap-4">
-            <p className="text-slate-400 text-sm whitespace-nowrap">
-              {displayCount} cards
-              {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
-            </p>
-            {/* The click shortcuts, like the Cardex's (computers only) */}
-            <div className="hidden md:flex items-center gap-4 rounded-full border border-slate-800 bg-slate-950/50 pl-1.5 pr-4 py-1 text-xs whitespace-nowrap">
-              <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">See in Cardex</span></span>
-              <span className="w-px h-4 bg-slate-700" />
-              <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Recently sold</span></span>
-            </div>
-          </div>
+          <p className="text-slate-400 text-sm mt-1 whitespace-nowrap">
+            {displayCount} cards
+            {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
+          </p>
         </div>
 
         {/* Game bubbles — only the games this user tracks. Phone: the "+" menu adds and removes them.
