@@ -25,6 +25,14 @@
      any swipe iOS latched to the page instead of <main> (e.g. one started while the Cardex zoom
      overlay was fading out) lifted the entire app, header and all, and cropped the bottom.
      Locking html/body to the visible viewport makes such a swipe a no-op instead. */
+  /* Big monitors: the whole app grows with the window instead of sitting small in the middle.
+     Everything is sized in rem (Tailwind), so the root size scales text, spacing and the content's
+     width cap (max-w-7xl = 80rem) together — 16px up to ~1700px wide (laptops, unchanged), then
+     about 18px at 1920, 24px at 2560, at most 26px. */
+  @media (min-width: 1700px) {
+    html { font-size: clamp(16px, 0.9375vw, 26px); }
+  }
+
   html,
   body {
     height: 100%;

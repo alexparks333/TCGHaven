@@ -2020,10 +2020,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           style={d.slab
             // A real slab is the card plus a case: sized so the card inside comes out about as big
             // as a raw card's own zoom (300px), with the label and acrylic border on top of that
-            ? { width: 'min(86vw, 370px, calc(68vh * 0.64))', aspectRatio: '0.64', perspective: '1200px' }
+            ? { width: 'min(86vw, calc(68vh * 0.64), max(370px, calc(56vh * 0.64)))', aspectRatio: '0.64', perspective: '1200px' }
             : d.landscape
-            ? { width: 'min(90vw, 460px)', aspectRatio: '7 / 5', perspective: '1200px' }
-            : { width: 'min(80vw, 300px)', aspectRatio: '5 / 7', perspective: '1200px' }}
+            ? { width: 'min(90vw, max(460px, 64vh))', aspectRatio: '7 / 5', perspective: '1200px' }
+            : { width: 'min(80vw, calc(70vh * 5 / 7), max(300px, calc(54vh * 5 / 7)))', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
           {/* Inspect layer — drag to turn the card in 3D (useCardInspect). Its own element because
               the flip animation below owns the flipper's transform. */}
