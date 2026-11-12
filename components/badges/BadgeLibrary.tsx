@@ -510,7 +510,6 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
   const font = coverFont(st.font)
   const finish = titleFinish(st.titleFinish)
   useEffect(() => { loadCoverFonts([st.font]) }, [st.font])
-  const first = inSet[0]
   const picture = !!set.coverImage
   return (
     <div className={cn('absolute inset-0 overflow-hidden', picture ? 'rounded-[10px] shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]' : 'badge-cover rounded-[14px]')} style={{ background: `linear-gradient(150deg, ${from}, ${to})`, containerType: 'inline-size' }}>
@@ -539,17 +538,14 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
           <div className="font-black tracking-[0.3em] uppercase" style={{ fontSize: 'clamp(6px,3.4cqw,13px)', color: st.subtitleColor ?? COVER_TEXT_GOLD, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{set.subtitle}</div>
         )}
         <div className={cn('relative mt-[2%] max-w-full', st.titlePlate && 'cover-title-plate px-[6%] py-[2%] rounded-[4px]')}>
-          <div className={cn('leading-[1.05] [overflow-wrap:normal] [word-break:keep-all]', font.upper && 'uppercase', font.id === 'haven' && 'tracking-[0.12em]', finish && st.titleShine && 'cover-title-shine')}
+          <div className={cn('leading-[1.05] [overflow-wrap:normal] [word-break:keep-all]', font.upper && 'uppercase', font.id === 'haven' && 'tracking-[0.12em]')}
             style={{
               // Wraps only between words; wide all-capitals fonts start a little smaller so names fit
               fontFamily: font.css, fontWeight: font.weight, fontSize: `calc(clamp(13px, ${font.upper ? 9 : 11}cqw, 44px) * ${st.titleSize ?? 1})`,
               ...(finish
                 // Metal foil, like TCG Haven's covers: a gradient inside the letters, the shadow as a filter
                 ? {
-                    backgroundImage: st.titleShine
-                      ? `linear-gradient(105deg, transparent 38%, rgba(255,255,255,0.95) 50%, transparent 62%), linear-gradient(180deg, ${finish.gradient})`
-                      : `linear-gradient(180deg, ${finish.gradient})`,
-                    backgroundSize: st.titleShine ? '250% 100%, 100% 100%' : undefined,
+                    backgroundImage: `linear-gradient(180deg, ${finish.gradient})`,
                     WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent',
                     filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.95)) drop-shadow(0 0 10px rgba(0,0,0,0.6))',
                   }
@@ -559,17 +555,7 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
           </div>
         </div>
       </div>
-      {st.showEmblem !== false && (
-        <div className={cn('absolute top-[66%] -translate-y-1/2 flex justify-center drop-shadow-[0_6px_6px_rgba(0,0,0,0.5)]', picture ? 'inset-x-0' : 'left-[15%] right-[5%]')}>
-          {first ? (
-            <span className="flex items-center justify-center" style={{ width: '24cqw', height: '27cqw' }}><BadgePin art={first.art} imageUrl={first.imageUrl} size={pinSize(first, 70)} ghost={badgeTier(first, badges?.progress[first.id]) === 0} /></span>
-          ) : (
-            <span className="flex items-center justify-center rounded-full font-black" style={{ width: '24cqw', height: '24cqw', fontSize: '9cqw', border: `2px solid ${(st.emblemColor ?? COVER_TEXT_GOLD)}99`, color: st.emblemColor ?? COVER_TEXT_GOLD, background: 'rgba(0,0,0,0.25)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.5)' }}>
-              {set.monogram}
-            </span>
-          )}
-        </div>
-      )}
+      {/* No emblem on creator covers any more (2026-11-12) — old showEmblem / emblemColor are ignored */}
       {st.showCount !== false && (
         <div className={cn('absolute bottom-[8%] flex justify-center', picture ? 'inset-x-0' : 'left-[15%] right-[5%]')}>
           <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: st.countColor ?? COVER_TEXT_GOLD }}>

@@ -11,7 +11,7 @@
 // "Preview" shows the book exactly as fans will see it. Everything saves through lib/creatorBooks.ts
 // (creator_books/{uid}, communities/{uid}).
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, PauseCircle, BookOpen, Eye, X, Check, Sparkles, Palette, RotateCcw, ArrowRight } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -22,6 +22,7 @@ import { CoverDesigner } from '@/components/creator/CoverDesigner'
 import { CreateCommunity } from '@/components/creator/CreateCommunity'
 import { CommunityStudio } from '@/components/creator/CommunityStudio'
 import { StudioHero, type StudioTab } from '@/components/creator/StudioHero'
+import { StudioEntrance } from '@/components/creator/StudioEntrance'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
 import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -46,12 +47,19 @@ function Body() {
   const { book, loaded: bookLoaded } = useCreatorBook(user?.uid)
   const [picked, setPicked] = useState<StudioTab | null>(null)
   const [coverDirty, setCoverDirty] = useState(false)
+  // The loading screen (StudioEntrance): shown on every visit until it has opened its doors
+  const [entered, setEntered] = useState(false)
+  const [opening, setOpening] = useState(false)
+  const onOpen = useCallback(() => setOpening(true), [])
+  const onDone = useCallback(() => setEntered(true), [])
+  const ready = loaded && communityLoaded && bookLoaded
+  const entrance = !entered && <StudioEntrance ready={ready} onOpen={onOpen} onDone={onDone} />
 
-  if (!loaded || !communityLoaded || !bookLoaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+  if (!ready) return <>{entrance}</>
 
   if (!canUseCreatorStudio(record)) {
     return (
-      <div className="card-glass max-w-lg mx-auto mt-10 p-6 text-center">
+      <>{entrance}<div className="card-glass max-w-lg mx-auto mt-10 p-6 text-center">
         <PauseCircle size={32} className="mx-auto text-slate-500 mb-3" />
         <h1 className="text-lg font-bold text-ink">{record.suspended ? 'Your Creator Studio is suspended' : record.formerCreator ? 'Your Creator Studio is paused' : 'Creator Studio'}</h1>
         <p className="text-sm text-slate-400 mt-2">
@@ -59,21 +67,21 @@ function Body() {
             ? 'Your Creator status is off for now, so your community and badges are hidden. Nothing has been deleted — it all comes back if your status is restored.'
             : 'The Creator Studio is for TCG Haven creators.'}
         </p>
-      </div>
+      </div></>
     )
   }
   if (!user) return null
   const creatorName = user.displayName || 'Creator'
-  if (!community) return <CreateCommunity uid={user.uid} creatorName={creatorName} onLaunched={() => setPicked('cover')} />
+  if (!community) return <>{entrance}<div className={cn(opening && 'studio-reveal')}><CreateCommunity uid={user.uid} creatorName={creatorName} onLaunched={() => setPicked('cover')} /></div></>
 
   // No book yet: the book tabs are where it's made
-  const tab: StudioTab = picked ?? (book ? 'pages' : 'cover')
+  const tab: StudioTab = picked ?? 'cover'
   const since = record.role === 'creator'
     ? (record.creatorSince ? new Date(record.creatorSince).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'today')
     : null
 
   return (
-    <div className="pb-6">
+    <>{entrance}<div className={cn('pb-6', opening && 'studio-reveal')}>
       <StudioHero uid={user.uid} community={community} book={book} since={since} tab={tab} onTab={setPicked} dirtyTabs={coverDirty ? ['cover'] : []} />
       {/* The parchment panel the tabs open onto (both halves stay mounted, so nothing's lost switching) */}
       <div className="rounded-b-[22px] rounded-tr-[22px] bg-slate-950 border border-slate-800 p-4 md:p-6">
@@ -84,7 +92,7 @@ function Body() {
           <CommunityStudio uid={user.uid} book={book} onEditBook={() => setPicked(book ? 'pages' : 'cover')} />
         </div>
       </div>
-    </div>
+    </div></>
   )
 }
 
@@ -392,7 +400,7 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
       onPointerLeave={() => setTilt({ x: 0, y: 0 })}
     >
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
-      <Corners inset={12} size={30} />
+      <Corners inset={12} size={44} />
       {dirty && <span className="haven-plate absolute top-4 left-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" />Preview — not saved yet</span>}
       <div className="absolute bottom-[16%] w-[40%] max-w-[260px] h-5 rounded-[50%] bg-[#5a3c1e]/30 blur-lg" />
       <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>

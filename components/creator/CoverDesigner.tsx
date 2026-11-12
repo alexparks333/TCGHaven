@@ -108,7 +108,6 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
               ))}
             </div>
             <div className="mt-4 space-y-2.5">
-              <Toggle on={!!st.titleShine} onChange={(v) => setStyle({ titleShine: v })} label="Shine" hint="a light streak glides across the foil" />
               <Toggle on={!!st.titlePlate} onChange={(v) => setStyle({ titlePlate: v })} label="Glow behind" hint="a soft shadow behind the title so it reads on anything" />
             </div>
           </>
@@ -131,8 +130,8 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
         <Slider label="Height" hint="up / down the cover" min={8} max={88} step={0.5} value={st.titleY ?? 38} onChange={(v) => setStyle({ titleY: v })} />
       </Group>
 
-      <Group id="text" open={open} setOpen={setOpen} icon={AlignCenter} title="Text & emblem"
-        summary={[st.showSubtitle !== false ? 'Top line' : null, st.showEmblem !== false ? 'Emblem' : null, st.showCount !== false ? 'Count' : null].filter(Boolean).join(' · ') || 'All off'}>
+      <Group id="text" open={open} setOpen={setOpen} icon={AlignCenter} title="Text"
+        summary={[st.showSubtitle !== false ? 'Top line' : null, st.showCount !== false ? 'Count' : null].filter(Boolean).join(' · ') || 'All off'}>
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2">Line above the title</p>
         <Toggle on={st.showSubtitle !== false} onChange={(v) => setStyle({ showSubtitle: v })} label="Show it" />
         {st.showSubtitle !== false && (
@@ -141,18 +140,8 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
             <Colors label="Colour" value={st.subtitleColor ?? '#e8b35a'} onChange={(c) => setStyle({ subtitleColor: c })} />
           </>
         )}
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mt-5 mb-2">Emblem & count</p>
-        <Toggle on={st.showEmblem !== false} onChange={(v) => setStyle({ showEmblem: v })} label="Emblem" hint="your first pin, or your stamp until you have one" />
-        {st.showEmblem !== false && (
-          <>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 w-14 shrink-0">Stamp</span>
-              <input className="input-field !w-20 text-sm text-center font-black tracking-widest uppercase" value={book.monogram} maxLength={3} onChange={(e) => set({ monogram: e.target.value.toUpperCase() })} placeholder="★" />
-            </div>
-            <Colors label="Colour" value={st.emblemColor ?? '#e8b35a'} onChange={(c) => setStyle({ emblemColor: c })} />
-          </>
-        )}
-        <div className="mt-4"><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mt-5 mb-2">Count</p>
+        <div><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
         {st.showCount !== false && <Colors label="Colour" value={st.countColor ?? '#e8b35a'} onChange={(c) => setStyle({ countColor: c })} />}
       </Group>
 

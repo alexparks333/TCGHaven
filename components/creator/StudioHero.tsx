@@ -15,8 +15,8 @@ import { cn } from '@/lib/utils'
 export type StudioTab = 'cover' | 'pages' | 'community'
 
 export const STUDIO_TABS: Array<[StudioTab, string, typeof BookOpen]> = [
-  ['pages', 'Pages & badges', BookOpen],
   ['cover', 'Cover', Palette],
+  ['pages', 'Pages & badges', BookOpen],
   ['community', 'Community', Users],
 ]
 
@@ -61,7 +61,7 @@ export function StudioHero({ uid, community, book, since, tab, onTab, dirtyTabs 
     <div className="haven-grain relative rounded-t-[22px] border border-b-0 border-slate-800">
       {/* A thin inner rule, like the binder pages, flourishes in its top corners, and a ribbon */}
       <div className="absolute inset-[6px] bottom-0 rounded-t-[17px] border border-b-0 border-[#d6c49f] pointer-events-none" />
-      <div className="absolute inset-x-0 top-0 h-16 pointer-events-none"><Corners inset={12} size={30} /></div>
+      <Corners inset={12} size={44} top />
       <Ribbon className="right-12 hidden md:block" />
 
       <div className="relative px-5 md:px-10 pt-7 md:pt-8">

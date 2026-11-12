@@ -85,11 +85,11 @@ export interface CoverStyle {
   titleSize?: number     // × the usual size (0.6–1.8)
   titleColor?: string    // used when the finish is flat
   titleFinish?: string   // lib/coverFonts.ts TITLE_FINISHES id (metal foil); unset = flat colour
-  titleShine?: boolean   // a light streak gliding across the foil
+  titleShine?: boolean   // removed 2026-11-12 (ignored) — was a light streak across the foil
   titlePlate?: boolean   // the soft dark glow behind the title, like TCG Haven's covers
   showSubtitle?: boolean // the line above the title (default on)
   subtitleColor?: string // default gold — the cover's colours never change the text or emblem
-  showEmblem?: boolean   // the stamp / first pin (default on)
+  showEmblem?: boolean   // removed 2026-11-12 (ignored) — the cover's emblem is gone
   emblemColor?: string   // the stamp's ring and letters (default gold)
   showCount?: boolean    // "3 / 10 earned" (default on)
   countColor?: string    // its text (default gold)

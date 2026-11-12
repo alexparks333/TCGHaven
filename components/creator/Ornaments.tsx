@@ -8,7 +8,7 @@ import { useId } from 'react'
 import { cn } from '@/lib/utils'
 
 /** A flourish in each corner of the nearest `relative` box */
-export function Corners({ inset = 10, size = 34, className }: { inset?: number; size?: number; className?: string }) {
+export function Corners({ inset = 10, size = 40, top = false, className }: { inset?: number; size?: number; top?: boolean /* only the top two */; className?: string }) {
   const at = [
     { top: inset, left: inset, transform: undefined },
     { top: inset, right: inset, transform: 'scaleX(-1)' },
@@ -17,16 +17,16 @@ export function Corners({ inset = 10, size = 34, className }: { inset?: number; 
   ]
   return (
     <>
-      {at.map((pos, i) => (
-        <svg key={i} viewBox="0 0 48 48" width={size} height={size} fill="none" stroke="currentColor" aria-hidden
-          className={cn('absolute pointer-events-none text-[#a8875c] opacity-70', className)} style={pos}>
-          <path d="M2 46 V15 Q2 2 15 2 H46" strokeWidth="1.2" />
-          <path d="M7 46 V19 Q7 7 19 7 H46" strokeWidth="0.7" opacity="0.6" />
-          {/* a small curl and leaf in the corner */}
-          <path d="M13 24 C13 17 17 13 24 13" strokeWidth="1" />
-          <path d="M24 13 c3 -3 7 -2 8 1 c-3 2 -6 1 -8 -1 Z" fill="currentColor" fillOpacity="0.35" strokeWidth="0.8" />
-          <path d="M13 24 c-3 3 -2 7 1 8 c2 -3 1 -6 -1 -8 Z" fill="currentColor" fillOpacity="0.35" strokeWidth="0.8" />
-          <circle cx="13" cy="13" r="1.8" fill="currentColor" stroke="none" />
+      {at.slice(0, top ? 2 : 4).map((pos, i) => (
+        // The pin book's engraved corner (BadgeBook FrameOrnament): a bracket, and a curl swept
+        // diagonally in from the corner
+        <svg key={i} viewBox="0 0 40 40" width={size} height={size} fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden
+          className={cn('absolute pointer-events-none text-[#a8875c] opacity-80', className)} style={pos}>
+          <path d="M2 2 L16 2 M2 2 L2 16" strokeWidth="1.6" />
+          <path d="M6 6 C14 6 16 9 16 14 C16 18 13 19 11 17 C9 15 11 12 13.5 13" strokeWidth="1" />
+          <path d="M6 6 C6 14 9 16 14 16" strokeWidth="1" />
+          <path d="M22 2 L25 2 M2 22 L2 25" strokeWidth="1.2" />
+          <circle cx="6" cy="6" r="1.4" fill="currentColor" stroke="none" />
         </svg>
       ))}
     </>

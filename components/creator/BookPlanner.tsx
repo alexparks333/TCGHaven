@@ -68,7 +68,7 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
     <div className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10')} style={inside.style}>
       {/* It lies open on the binder paper, inside a thin rule with engraved corners */}
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
-      <Corners inset={12} size={30} />
+      <Corners inset={12} size={44} />
       {/* The open book: leather all round, two felt pages, trim frames */}
       <div className="relative mx-auto max-w-[980px] rounded-[18px] p-[1.6%] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
         <div className="absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />

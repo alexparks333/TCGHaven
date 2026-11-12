@@ -10,13 +10,17 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   steps: name, bio (tagline + about), **games** (`Community.games`), colour. The community's card
   (`CommunityCard`) fills in live beside it. **Launch community** saves it, and only then does the
   Studio itself appear.
+- **The loading screen** (`components/creator/StudioEntrance.tsx`). It shows on every visit for at least 1.7 s:
+  - two paper doors, with the Studio's seal stamped over the seam. Its rim lettering ("✦ CREATOR STUDIO ✦ TCG HAVEN") turns slowly;
+  - "Entering Creator Studio";
+  - once loaded, the doors part, the seal zooms past, and the Studio rises in (`.studio-reveal`). Animations live in globals.css (`.studio-*`), and reduced motion gets a simple fade.
 - **The Studio's layout** (redesigned 2026-11-12, in the app's paper: `haven-panel` / `haven-chip` / `haven-medallion`, flat walnut, no gradients or glows; hand-made touches from `components/creator/Ornaments.tsx` — corner flourishes, a fleuron divider, a lettered seal, a ribbon — over `.haven-grain` paper). **`StudioHero`** (`components/creator/StudioHero.tsx`)
   is a paper header with the community's stamp, with:
   - stats: badges, chapters and members;
   - a **checklist** of 7 steps (`studioSteps()`), with dots, a progress bar and a "Next: …" link.
     Each step jumps to its tab;
-  - three **bookmark tabs** hanging into the parchment panel below: **Pages & badges** (the
-    default once a book exists), **Cover** and **Community**. Both halves stay mounted (`hidden`),
+  - three paper index tabs into the panel below: **Cover** (first, and where the Studio opens), **Pages &
+    badges** and **Community**. Both halves stay mounted (`hidden`),
     so switching tabs loses nothing. The Cover tab shows an amber dot while the cover is unsaved.
 
 - **The Creator tab** (`/creator`, `components/pages/CreatorPage.tsx`) sits under a line in the
@@ -33,12 +37,13 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      fields (`COVER_KEYS` in CreatorPage.tsx), so chapter or inside changes made meanwhile on the
      Pages tab stay. The designer offers:
      - **Title:** the name, **about 60 fonts in groups** (Elegant — including `haven`, TCG Haven's own Cinzel lettering — Classic, Clean, Bold, Fun, Script, Retro, Spooky — `lib/coverFonts.ts`; Google Fonts, loaded only when used),
-       size, **height on the cover**, and a **finish**: a flat colour (12 swatches or any) or metal foil (gold, silver, rose gold, copper, emerald, sapphire, amethyst — `TITLE_FINISHES`), with **Shine** (a glinting streak) and **Glow behind** (the Haven covers' plate). **Haven style** sets the Haven font + gold foil + glow in one tap;
+       size, **height on the cover**, and a **finish**: a flat colour (12 swatches or any) or metal foil (gold, silver, rose gold, copper, emerald, sapphire, amethyst — `TITLE_FINISHES`), with **Glow behind** (the Haven covers' plate). **Haven style** sets the Haven font + gold foil + glow in one tap;
      - **the line above the title:** on/off, its text, its colour;
-     - **emblem** (the first pin, or the stamp until there is one) and **earned count**, each on/off
+     - **earned count**, on/off (the cover's emblem and the title's Shine were removed 2026-11-12; old
+       `showEmblem` / `emblemColor` / `titleShine` settings are ignored)
        with its own colour. **The cover's colours (leather, "Stitching & clasp" = `cover.accent`)
-       never change the text or emblem.** Those start gold (`COVER_TEXT_GOLD`) and are set in
-       Text & emblem;
+       never change the text.** It starts gold (`COVER_TEXT_GOLD`) and is set in
+       Text;
      - **page edges:** the colour of the page block at the side (`BookThickness pageColor`);
      - these are stored as `BadgeSet.coverStyle` (`CoverStyle` in `lib/badges.ts`). A book with a
        `coverStyle` is drawn by `StyledCover` in BadgeLibrary.tsx; creator books always have one,
