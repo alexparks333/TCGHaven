@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BLANK_COVER, CoverSpine, coverArea, spineOf } from '@/components/badges/CoverSpine'
 import { coverFont, loadCoverFonts, titleFinish } from '@/lib/coverFonts'
 import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -502,38 +503,35 @@ export function BookThickness({ style, pageColor }: { style?: React.CSSPropertie
   )
 }
 
-/** A creator's cover (Creator Studio): their leather or picture, and their lettering — the title's
- *  font, size, colour and height; the line above it, the emblem and the earned count each on or off */
-function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet; inSet: BadgeDef[]; earned: number; badges: SharedBadges | null; emptyLabel: string }) {
+/** A creator's cover (Creator Studio): their picture (a creator cover always has one — until then it's
+ *  plain tan), an optional spine down the left that the picture sits beside (CoverSpine), and their
+ *  lettering — the title's font, size, colour and height, the line above it and the earned count */
+function StyledCover({ set, inSet, earned, emptyLabel }: { set: BadgeSet; inSet: BadgeDef[]; earned: number; emptyLabel: string }) {
   const st = set.coverStyle!
-  const { from, to, accent } = set.cover
   const font = coverFont(st.font)
   const finish = titleFinish(st.titleFinish)
   useEffect(() => { loadCoverFonts([st.font]) }, [st.font])
-  const picture = !!set.coverImage
+  const spine = spineOf(st)
+  const area = coverArea(st)
+  const inArea = { left: `${area.left}%`, width: `${area.width}%` }
   return (
-    <div className={cn('absolute inset-0 overflow-hidden', picture ? 'rounded-[10px] shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]' : 'badge-cover rounded-[14px]')} style={{ background: `linear-gradient(150deg, ${from}, ${to})`, containerType: 'inline-size' }}>
-      {picture && (set.coverFit ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute max-w-none select-none"
-          style={{ left: `${50 + set.coverFit.x}%`, top: `${50 + set.coverFit.y}%`, width: `${set.coverFit.scale * 100}%`, transform: 'translate(-50%, -50%)' }} />
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
-      ))}
-      {!picture && (
-        <>
-          <div className="absolute inset-y-0 left-0 w-[11%] bg-black/35 border-r border-black/40">
-            <div className="absolute inset-y-[6%] right-[22%] border-r border-dashed" style={{ borderColor: accent + '66' }} />
-          </div>
-          <div className="absolute top-[5%] bottom-[5%] left-[15%] right-[5%] rounded-[10px] border-[1.5px] border-dashed" style={{ borderColor: accent + '80' }} />
-          <div className="absolute right-0 top-[40%] h-[20%] w-[13%] rounded-l-md bg-black/45 border-y border-l border-black/50 flex items-center justify-center">
-            <span className="w-[42%] aspect-square rounded-full" style={{ background: `radial-gradient(circle at 35% 35%, #fff6dc, ${accent} 55%, #6b4a17)` }} />
-          </div>
-        </>
-      )}
+    <div className="absolute inset-0 overflow-hidden rounded-[10px] shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]" style={{ background: BLANK_COVER, containerType: 'inline-size' }}>
+      {/* The picture, where the creator placed it in the space beside the spine */}
+      <div className="absolute inset-y-0 overflow-hidden" style={inArea}>
+        {set.coverImage && (set.coverFit ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute max-w-none select-none"
+            style={{ left: `${50 + set.coverFit.x}%`, top: `${50 + set.coverFit.y}%`, width: `${set.coverFit.scale * 100}%`, transform: 'translate(-50%, -50%)' }} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={badgeAsset(set.coverImage)} alt="" draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+        ))}
+        {/* The hinge's shadow falling on the cover */}
+        {spine && <div className="absolute inset-y-0 left-0 w-[7%] bg-gradient-to-r from-black/35 to-transparent pointer-events-none" />}
+      </div>
+      {spine && <CoverSpine look={spine.id} color={st.spineColor} />}
       {/* The title (and the line above it), where the creator put it */}
-      <div className={cn('absolute flex flex-col items-center text-center -translate-y-1/2 pointer-events-none', picture ? 'inset-x-[7%]' : 'left-[15%] right-[5%] px-[6%]')} style={{ top: `${st.titleY ?? 38}%` }}>
+      <div className="absolute flex flex-col items-center text-center -translate-y-1/2 pointer-events-none px-[5%]" style={{ ...inArea, top: `${st.titleY ?? 38}%` }}>
         {st.showSubtitle !== false && set.subtitle && (
           <div className="font-black tracking-[0.3em] uppercase" style={{ fontSize: 'clamp(6px,3.4cqw,13px)', color: st.subtitleColor ?? COVER_TEXT_GOLD, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{set.subtitle}</div>
         )}
@@ -557,7 +555,7 @@ function StyledCover({ set, inSet, earned, badges, emptyLabel }: { set: BadgeSet
       </div>
       {/* No emblem on creator covers any more (2026-11-12) — old showEmblem / emblemColor are ignored */}
       {st.showCount !== false && (
-        <div className={cn('absolute bottom-[8%] flex justify-center', picture ? 'inset-x-0' : 'left-[15%] right-[5%]')}>
+        <div className="absolute bottom-[8%] flex justify-center" style={inArea}>
           <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: st.countColor ?? COVER_TEXT_GOLD }}>
             {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
           </span>
@@ -579,7 +577,7 @@ export function BookCover({ set, badges, defs, emptyLabel = 'Coming soon' }: { s
   const first = inSet[0]
   const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
   const { from, to, accent } = set.cover
-  if (set.coverStyle) return <StyledCover set={set} inSet={inSet} earned={earned} badges={badges} emptyLabel={emptyLabel} />
+  if (set.coverStyle) return <StyledCover set={set} inSet={inSet} earned={earned} emptyLabel={emptyLabel} />
   if (set.coverImage) {
     return (
       <div className="absolute inset-0 rounded-[10px] overflow-hidden shadow-[0_14px_30px_-12px_rgba(0,0,0,0.7)]" style={set.coverFit ? { background: `linear-gradient(150deg, ${from}, ${to})` } : undefined}>

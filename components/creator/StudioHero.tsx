@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { BookOpen, Check, Palette, Users, Wand2, ArrowRight, Trophy } from 'lucide-react'
 import { memberCount } from '@/lib/communities'
-import { LEATHERS, FOILS, type Community, type CreatorBook } from '@/lib/creatorBooks'
+import type { Community, CreatorBook } from '@/lib/creatorBooks'
 import { chaptersFor } from '@/components/creator/BookPlanner'
 import { Corners, Divider, Ribbon, Seal } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
@@ -26,13 +26,12 @@ interface Step { label: string; done: boolean; tab: StudioTab }
 export function studioSteps(community: Community, book: CreatorBook | null): Step[] {
   const badges = book?.badges ?? []
   const b = book?.book
-  const dressed = !!b && (!!b.coverImage || Object.keys(b.coverStyle ?? {}).length > 0
-    || b.cover.from !== LEATHERS[0].from || b.cover.accent !== FOILS[0].color)
+  const dressed = !!b?.coverImage
   const fullChapter = !!b && chaptersFor(b, badges).some((c) => badges.filter((x) => x.page === c).length >= 6)
   return [
     { label: 'Launch your community', done: true, tab: 'community' },
     { label: 'Make your book', done: !!book, tab: 'cover' },
-    { label: 'Dress up the cover', done: dressed, tab: 'cover' },
+    { label: 'Add your cover picture', done: dressed, tab: 'cover' },
     { label: 'Make your first badge', done: badges.length > 0, tab: 'pages' },
     { label: 'Give a badge a 3D pin', done: badges.some((x) => !!x.reliefKit || !!x.relief), tab: 'pages' },
     { label: 'Fill a whole chapter (6)', done: fullChapter, tab: 'pages' },

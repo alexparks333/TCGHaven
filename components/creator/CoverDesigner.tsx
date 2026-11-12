@@ -1,14 +1,16 @@
 'use client'
 
-// The Creator Book's cover, designed by tapping: its title, a leather, a foil, a stamp, and (if they
-// like) their own cover picture — all shown live on the book beside it (BookStage). docs/creators.md.
+// The Creator Book's cover, designed by tapping: its title and lettering, its cover picture (required —
+// a creator cover is always their artwork) and a spine — all shown live on the book beside it
+// (CreatorPage CoverStage). docs/creators.md.
 
 import { useEffect, useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { Check, ImagePlus, Loader2, Trash2, Sparkles, Type, AlignCenter, Palette, BookOpen, ChevronDown } from 'lucide-react'
+import { ImagePlus, Loader2, Type, AlignCenter, Palette, BookOpen, ChevronDown } from 'lucide-react'
 import type { BadgeSet, CoverStyle } from '@/lib/badges'
 import { COVER_FONTS, FONT_GROUPS, TITLE_FINISHES, loadCoverFonts } from '@/lib/coverFonts'
-import { LEATHERS, FOILS, monogramOf } from '@/lib/creatorBooks'
+import { monogramOf } from '@/lib/creatorBooks'
+import { BLANK_COVER, CoverSpine, SPINES, SPINE_COLORS, coverArea, spineOf } from '@/components/badges/CoverSpine'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
 
@@ -57,7 +59,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
         return (
           <button key={f.id} type="button" onClick={() => setStyle({ font: f.id })} title={f.name}
             className={cn('rounded-lg border px-1.5 py-2 text-center transition-colors', on ? 'border-transparent text-white shadow' : 'border-slate-800 bg-slate-950/40 text-ink hover:border-slate-700')}
-            style={on ? { background: `linear-gradient(135deg, ${book.cover.from}, ${book.cover.to})` } : undefined}>
+            style={on ? { background: '#7a5230' } : undefined}>
             <span className={cn('block truncate text-[15px] leading-tight', f.upper && 'uppercase')} style={{ fontFamily: f.css, fontWeight: f.weight }}>{(book.name || 'Aa').slice(0, 10)}</span>
             <span className={cn('block text-[9px] mt-0.5 truncate', on ? 'text-white/70' : 'text-slate-500')}>{f.name}</span>
           </button>
@@ -65,8 +67,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
       })}
     </div>
   )
-  const leather = LEATHERS.find((l) => l.from === book.cover.from && l.to === book.cover.to)
-  const foil = FOILS.find((f) => f.color === book.cover.accent)
+  const spine = spineOf(st)
   const page = PAGE_COLORS.find((p) => (p.color ?? '') === (st.pageColor ?? ''))
   return (
     <div className="space-y-2.5">
@@ -146,66 +147,60 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
       </Group>
 
       <Group id="cover" open={open} setOpen={setOpen} icon={Palette} title="Cover"
-        summary={book.coverImage ? 'Your picture' : `${leather?.name ?? 'Custom'} leather · ${foil?.name ?? 'custom'} stitching`}>
-        <Section title="Leather">
-          <div className="grid grid-cols-6 gap-2.5">
-            {LEATHERS.map((l) => {
-              const on = book.cover.from === l.from && book.cover.to === l.to
-              return (
-                <button key={l.name} type="button" title={l.name} onClick={() => set({ cover: { ...book.cover, from: l.from, to: l.to } })}
-                  className={cn('relative aspect-square rounded-full shadow-[inset_0_-3px_6px_rgba(0,0,0,0.45),0_2px_4px_rgba(0,0,0,0.25)] transition-transform hover:scale-110', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                  style={{ background: `radial-gradient(circle at 32% 28%, ${l.from}, ${l.to})` }}>
-                  {on && <Check size={16} className="absolute inset-0 m-auto text-white drop-shadow" />}
-                </button>
-              )
-            })}
-          </div>
-        </Section>
-        <div className="mt-5" />
-        <Section title="Stitching & clasp" hint="the leather's trim — not the text">
-          <div className="flex flex-wrap gap-2.5">
-            {FOILS.map((f) => {
-              const on = book.cover.accent === f.color
-              return (
-                <button key={f.name} type="button" title={f.name} onClick={() => set({ cover: { ...book.cover, accent: f.color } })}
-                  className={cn('w-9 h-9 rounded-xl transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                  style={{ background: `linear-gradient(135deg, #fffaf0 0%, ${f.color} 35%, ${f.color} 60%, #00000055 100%)` }} />
-              )
-            })}
-          </div>
-        </Section>
-        <div className="mt-5" />
-        <Section title="Cover picture" hint="optional — your own artwork over the leather">
+        summary={!book.coverImage ? 'Needs a picture' : `Your picture · ${spine ? `${spine.name} spine` : 'no spine'}`}>
+        {/* A creator cover is always a picture — until there is one the book is plain tan */}
+        <Section title="Cover picture" hint="your artwork is the cover">
           {book.coverImage ? (
             <div>
               <PlacePicture book={book} onChange={(coverFit) => set({ coverFit })} />
               <div className="mt-3 flex items-center gap-2">
-                <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink text-xs">
+                <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
                   {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
                 </button>
-                <button type="button" onClick={() => set({ coverImage: undefined, coverFit: undefined })} className="ml-auto p-2 rounded-lg text-slate-500 hover:text-red-600" aria-label="Remove the cover picture"><Trash2 size={16} /></button>
               </div>
             </div>
           ) : (
             <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading}
-              className="w-full rounded-2xl border-2 border-dashed border-slate-700 hover:border-violet-500 bg-slate-950/40 py-5 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
-              {uploading ? <Loader2 size={22} className="animate-spin" /> : <ImagePlus size={22} />}
-              <span className="text-sm font-semibold">{uploading ? 'Uploading…' : 'Upload a cover picture'}</span>
-              <span className="text-[11px]">Then drag it and zoom it to place it on your cover</span>
+              className="w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] bg-[#f6eedb] py-7 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
+              <span className="haven-medallion w-11 h-11">{uploading ? <Loader2 size={20} className="animate-spin" /> : <ImagePlus size={20} />}</span>
+              <span className="mt-1 text-sm font-bold text-ink">{uploading ? 'Uploading…' : 'Upload your cover picture'}</span>
+              <span className="text-[11px] px-6 text-center">Every Creator Book is covered in its own artwork. Then drag and zoom it into place.</span>
             </button>
           )}
           <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => uploadCover(e.target.files?.[0])} />
           {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
         </Section>
-        <button type="button"
-          onClick={() => {
-            const l = LEATHERS[Math.floor(Math.random() * LEATHERS.length)]
-            const f = FOILS[Math.floor(Math.random() * FOILS.length)]
-            set({ cover: { from: l.from, to: l.to, accent: f.color } })
-          }}
-          className="mt-5 w-full rounded-xl border border-slate-800 py-2.5 text-sm font-semibold text-slate-400 hover:text-ink hover:border-slate-700 flex items-center justify-center gap-2">
-          <Sparkles size={15} /> Surprise me
-        </button>
+
+        <div className="mt-6" />
+        <Section title="Spine" hint="bound down the left edge — the book stays the same size">
+          <div className="grid grid-cols-5 gap-2">
+            {[undefined, ...SPINES].map((sp) => {
+              const on = (spine?.id) === sp?.id
+              return (
+                <button key={sp?.id ?? 'none'} type="button" onClick={() => setStyle({ spine: sp?.id })} title={sp?.name ?? 'No spine'}
+                  className={cn('rounded-xl border p-1.5 transition-colors', on ? 'border-[#7a5230] bg-[#f6eedb] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+                  {/* A little book showing the look */}
+                  <span className="relative block mx-auto w-full aspect-[0.71] rounded-[4px] overflow-hidden" style={{ background: BLANK_COVER }}>
+                    {sp && <CoverSpine look={sp.id} color={st.spineColor} width={30} />}
+                  </span>
+                  <span className={cn('block mt-1 text-[10px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{sp ? sp.name.replace('Raised ', '') : 'None'}</span>
+                </button>
+              )
+            })}
+          </div>
+          {spine && (
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-xs font-semibold text-slate-500 w-14 shrink-0">Colour</span>
+              <div className="flex flex-wrap gap-1.5">
+                {SPINE_COLORS.map((c) => (
+                  <button key={c.color} type="button" title={c.name} aria-label={`${c.name} spine`} onClick={() => setStyle({ spineColor: c.color })}
+                    className={cn('w-7 h-7 rounded-full border border-black/20 transition-transform hover:scale-110', (st.spineColor ?? SPINE_COLORS[0].color) === c.color && 'ring-2 ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+                    style={{ background: c.color }} />
+                ))}
+              </div>
+            </div>
+          )}
+        </Section>
       </Group>
 
       <Group id="pages" open={open} setOpen={setOpen} icon={BookOpen} title="Page edges" summary={page?.name ?? 'Custom'}>
@@ -261,15 +256,18 @@ async function shrink(file: File): Promise<Blob> {
 
 type Fit = NonNullable<BadgeSet['coverFit']>
 
-/** Place the cover picture: drag it anywhere (even past the edges — the faded part is off the
- *  cover, the leather shows where it doesn't reach), zoom with the slider or the scroll wheel */
+/** Place the cover picture: drag it anywhere (the faded part is off the cover; plain tan shows
+ *  where it doesn't reach), zoom with the slider or the scroll wheel */
 function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit) => void }) {
   const fit: Fit = book.coverFit ?? { x: 0, y: 0, scale: 1 }
   const coverRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; fit: Fit } | null>(null)
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
-  // The zoom at which the picture just covers the whole cover (cover = 0.71 wide : 1 tall)
-  const fillScale = natural ? Math.max(1, natural.w / (natural.h * 0.71)) : 1
+  // The picture goes in the space beside the spine (or the whole cover); the zoom at which it just
+  // covers that space (the cover is 0.71 wide : 1 tall)
+  const area = coverArea(book.coverStyle)
+  const spine = spineOf(book.coverStyle)
+  const fillScale = natural ? Math.max(1, natural.w / (natural.h * 0.71 * area.width / 100)) : 1
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
   const img = (ghost: boolean) => (
     // eslint-disable-next-line @next/next/no-img-element
@@ -298,13 +296,14 @@ function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit)
         onPointerCancel={() => { drag.current = null }}
         onWheel={(e) => onChange({ ...fit, scale: clamp(fit.scale * (e.deltaY < 0 ? 1.06 : 1 / 1.06), 0.2, 6) })}
       >
-        {/* The cover area, in the middle */}
-        <div ref={coverRef} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[86%] aspect-[0.71]">
+        {/* The cover, in the middle */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[86%] aspect-[0.71]">
           {/* What's off the cover, faded */}
-          <div className="absolute inset-0">{img(true)}</div>
-          {/* What's on it: leather, then the picture, clipped to the cover */}
-          <div className="absolute inset-0 rounded-[8px] overflow-hidden shadow-[0_6px_18px_rgba(0,0,0,0.35)]" style={{ background: `linear-gradient(150deg, ${book.cover.from}, ${book.cover.to})` }}>
-            {img(false)}
+          <div className="absolute inset-y-0" style={{ left: `${area.left}%`, width: `${area.width}%` }}>{img(true)}</div>
+          {/* What's on it: the picture clipped to the space beside the spine, then the spine */}
+          <div className="absolute inset-0 rounded-[8px] overflow-hidden shadow-[0_6px_18px_rgba(0,0,0,0.35)]" style={{ background: BLANK_COVER }}>
+            <div ref={coverRef} className="absolute inset-y-0 overflow-hidden" style={{ left: `${area.left}%`, width: `${area.width}%` }}>{img(false)}</div>
+            {spine && <CoverSpine look={spine.id} color={book.coverStyle?.spineColor} />}
           </div>
           <div className="absolute inset-0 rounded-[8px] ring-2 ring-white/80 ring-offset-0 pointer-events-none" />
         </div>
@@ -317,7 +316,7 @@ function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit)
         <button type="button" onClick={() => onChange({ x: 0, y: 0, scale: fillScale })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">Fill cover</button>
         <button type="button" onClick={() => onChange({ ...fit, x: 0, y: 0 })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">Center</button>
       </div>
-      <p className="text-[11px] text-slate-500 mt-2 text-center">Drag to move · scroll or slide to zoom · it can hang past the edges</p>
+      <p className="text-[11px] text-slate-500 mt-2 text-center">Drag to move · scroll or slide to zoom</p>
     </div>
   )
 }

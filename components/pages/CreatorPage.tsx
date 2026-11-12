@@ -12,7 +12,7 @@
 // (creator_books/{uid}, communities/{uid}).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Loader2, PauseCircle, BookOpen, Eye, X, Check, Sparkles, Palette, RotateCcw, ArrowRight } from 'lucide-react'
+import { ImagePlus, Loader2, PauseCircle, BookOpen, Eye, X, Check, Sparkles, Palette, RotateCcw, ArrowRight } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
@@ -200,13 +200,15 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
               {coverDirty && (
                 <>
                   <button type="button" onClick={() => setCoverDraft(null)} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
-                  <button type="button" onClick={() => {
+                  {!designing.coverImage ? (
+                    <span className="text-[11px] font-semibold text-[#a8452a] px-1">Add a cover picture to save</span>
+                  ) : <button type="button" onClick={() => {
                     const keep: Partial<BadgeSet> = {}
                     for (const k of COVER_KEYS) (keep as Record<string, unknown>)[k] = designing[k]
                     setBook({ ...b.book, ...keep }); setCoverDraft(null)
                   }} className="btn-primary !py-1.5">
                     <Check size={15} />Save cover
-                  </button>
+                  </button>}
                 </>
               )}
             </div>
@@ -403,6 +405,8 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
     >
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
       <Corners inset={12} size={44} />
+      {/* No picture yet: the book is plain tan until one's added */}
+      {!book.coverImage && <span className="haven-plate absolute top-4 right-4 !py-1 text-[11px] font-semibold text-[#a8452a] inline-flex items-center gap-1.5"><ImagePlus size={13} />Add your cover picture →</span>}
       {dirty && <span className="haven-plate absolute top-4 left-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" />Preview — not saved yet</span>}
       <div className="absolute bottom-[16%] w-[40%] max-w-[260px] h-5 rounded-[50%] bg-[#5a3c1e]/30 blur-lg" />
       <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>

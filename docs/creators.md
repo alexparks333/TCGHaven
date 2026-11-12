@@ -45,19 +45,23 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - **the line above the title:** on/off, its text, its colour;
      - **earned count**, on/off (the cover's emblem and the title's Shine were removed 2026-11-12; old
        `showEmblem` / `emblemColor` / `titleShine` settings are ignored)
-       with its own colour. **The cover's colours (leather, "Stitching & clasp" = `cover.accent`)
-       never change the text.** It starts gold (`COVER_TEXT_GOLD`) and is set in
+       with its own colour. It starts gold (`COVER_TEXT_GOLD`) and is set in
        Text;
      - **page edges:** the colour of the page block at the side (`BookThickness pageColor`);
      - these are stored as `BadgeSet.coverStyle` (`CoverStyle` in `lib/badges.ts`). A book with a
        `coverStyle` is drawn by `StyledCover` in BadgeLibrary.tsx; creator books always have one,
        and staff books (none) keep the classic cover;
-     - 12 leathers and 8 foils, each one tap;
-     - "Surprise me";
-     - an optional cover picture, uploaded as is (big ones shrunk to 2400 px). The creator
-       **places it**: drag anywhere, even past the edges, and zoom with the slider or wheel, with
-       Fill cover / Center. It's saved as `BadgeSet.coverFit` `{ x, y, scale }`, and `BookCover`
-       draws it over the leather. Staff covers have no `coverFit` and still fill the cover.
+     - **the cover picture — required** (2026-11-12). A creator cover is always their artwork; the
+       leather and "Stitching & clasp" pickers and "Surprise me" are gone. With no picture the book is
+       plain tan (`BLANK_COVER`), the Studio says "Add your cover picture", and **Save cover** waits
+       for one. Old `cover.from/to/accent` stay in the data (tabs, progress bar) but aren't picked any more.
+       The picture is uploaded as is (big ones shrunk to 2400 px), then **placed**: drag and zoom
+       (slider or wheel), Fill cover / Center. It's saved as `BadgeSet.coverFit` `{ x, y, scale }`, in %
+       of the picture's space. Staff covers have no `coverFit` and still fill the cover;
+     - **a spine** (`components/badges/CoverSpine.tsx`): None, Raised bands, Stitched, Gilded or
+       Bookcloth, in 6 colours (`CoverStyle.spine` / `spineColor`). It **eats into the cover**:
+       it takes the left `SPINE_W` (13%), and the picture, title and count sit in what's left
+       (`coverArea()`), so every book stays the same size.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
   3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder
      paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
