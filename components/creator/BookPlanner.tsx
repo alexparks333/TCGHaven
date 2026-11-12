@@ -15,7 +15,8 @@ import { appStorage } from '@/lib/firebase/appStorage'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useMemo, useRef, useState } from 'react'
 import { useStickyCenter } from '@/lib/useStickyCenter'
-import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame } from 'lucide-react'
+import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
+import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2 } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
@@ -269,6 +270,9 @@ function InsidePanel({ uid, style, onChange, coverImage }: { uid: string; style:
       <Group id="border" open={open} setOpen={setOpen} icon={Frame} title="Border" summary={s.frame === false ? 'None' : frameDef?.name ?? 'Classic'}>
         <FramePicker s={s} page={page} trim={trim} set={set} />
       </Group>
+      <Group id="rings" open={open} setOpen={setOpen} icon={Link2} title="Center rings" summary={s.binding === 'none' ? 'None' : bindingOf(s.binding)?.name ?? 'Silver rings (classic)'}>
+        <RingsPicker s={s} page={page} set={set} />
+      </Group>
       <Group id="edge" open={open} setOpen={setOpen} icon={BookOpen} title="Book edge" summary={edgeName ? `${edgeName}${s.edgeStitch === false ? '' : ' · stitched'}` : 'The book’s usual rim'}>
         <EdgePicker s={s} set={set} coverImage={coverImage} />
       </Group>
@@ -365,6 +369,68 @@ function FramePicker({ s, page, trim, set }: { s: InsideStyle; page: string; tri
           {(s.frameColor || s.frameColor2) && (
             <button type="button" onClick={() => set({ frameColor: undefined, frameColor2: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />This border’s own colours</button>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The center rings (shown to fans only): tiles with a mini spread each, then a bigger live
+ *  preview and the chosen binding's colours and sliders */
+function RingsPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p: Partial<InsideStyle>) => void }) {
+  const def = s.binding === 'none' ? undefined : bindingOf(s.binding)
+  const spreadBg = `linear-gradient(90deg, color-mix(in srgb, ${page} 45%, black), ${page} 40%, color-mix(in srgb, ${page} 55%, black) 50%, ${page} 60%, color-mix(in srgb, ${page} 45%, black))`
+  const mini = (st: InsideStyle, big = false) => (
+    <span className={cn('relative block w-full rounded-[5px] overflow-hidden', big ? 'aspect-[1.5]' : 'aspect-[1.3]')} style={{ background: spreadBg }}>
+      <BookBinding st={st} />
+    </span>
+  )
+  const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
+  const surprise = (d: BindingDef) => set({
+    bindingColor: pick(ACCENT_COLORS).color, bindingColor2: pick([...ACCENT_COLORS, ...EDGE_COLORS]).color, bindingColor3: pick(ACCENT_COLORS).color,
+    bindingParams: { ...(s.bindingParams ?? {}), [d.id]: Object.fromEntries(d.sliders.map((x) => [x.key, x.min + Math.round((Math.random() * (x.max - x.min)) / x.step) * x.step])) },
+  })
+  const reset = (d: BindingDef) => set({
+    bindingColor: undefined, bindingColor2: undefined, bindingColor3: undefined,
+    bindingParams: { ...(s.bindingParams ?? {}), [d.id]: Object.fromEntries(d.sliders.map((x) => [x.key, x.def])) },
+  })
+  const tiles: Array<[string, string, InsideStyle]> = [
+    ['none', 'None', { ...s, binding: 'none' }],
+    ...BINDINGS.map((b): [string, string, InsideStyle] => [b.id, b.name, { ...s, binding: b.id }]),
+  ]
+  return (
+    <div>
+      <p className="text-xs text-slate-500 mb-3">What holds your pages together down the middle. It shows when fans open your book — try <b>Preview as a fan</b>.</p>
+      <div className="grid grid-cols-4 gap-1.5">
+        {tiles.map(([id, name, st]) => {
+          const on = (s.binding ?? 'classic') === id
+          return (
+            <button key={id} type="button" onClick={() => set({ binding: id })} title={name}
+              className={cn('rounded-lg border p-0.5 transition-colors', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+              {mini(st)}
+              <span className={cn('block mt-0.5 text-[9px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{name}</span>
+            </button>
+          )
+        })}
+      </div>
+      {def && (
+        <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
+          <div className="flex items-center gap-2">
+            <p className="pinbook-serif font-bold text-ink flex-1 truncate">{def.name}</p>
+            <button type="button" onClick={() => surprise(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1"><Dices size={12} />Surprise</button>
+            <button type="button" onClick={() => reset(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1" title="Back to this binding's defaults"><RotateCcw size={12} />Reset</button>
+          </div>
+          {/* A bigger live look at it */}
+          <div className="mt-2.5">{mini({ ...s, binding: def.id }, true)}</div>
+          {def.colors.map(([label, d], i) => {
+            const key = (['bindingColor', 'bindingColor2', 'bindingColor3'] as const)[i]
+            return <ColorPick key={key} label={label} value={s[key] ?? d} palette={i === 0 ? ACCENT_COLORS : [...ACCENT_COLORS, ...EDGE_COLORS]} onChange={(c) => set({ [key]: c })} />
+          })}
+          <div className="mt-1" />
+          {def.sliders.map((x) => (
+            <ValueSlider key={x.key} label={x.label} min={x.min} max={x.max} step={x.step} value={bindingParams(def, s)[x.key]}
+              onChange={(v) => set({ bindingParams: { ...(s.bindingParams ?? {}), [def.id]: { ...bindingParams(def, s), [x.key]: v } } })} />
+          ))}
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { BookBinding } from '@/components/badges/BookBinding'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -253,15 +254,8 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
           </>
         )}
 
-        {/* Spine + binder rings */}
-        <div className="pinbook-spine absolute inset-y-0 left-1/2 -translate-x-1/2 w-[3%]" />
-        {/* Brushed-metal ring mechanism, riveted, with polished rings */}
-        <div className="pinbook-plate absolute left-1/2 -translate-x-1/2 top-[5%] bottom-[5%] w-[2.1%] rounded-[3px]">
-          {[2.5, 97.5].map((t) => <span key={t} className="pinbook-rivet absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-[46%] aspect-square rounded-full" style={{ top: `${t}%` }} />)}
-        </div>
-        {[10, 24, 38, 62, 76, 90].map((top) => (
-          <div key={top} className="pinbook-ring absolute left-1/2 -translate-x-1/2 w-[5.5%] h-[2.6%] rounded-full" style={{ top: `${top}%` }} />
-        ))}
+        {/* Spine + what binds the pages: TCG Haven's silver rings, or a creator's Center rings (BookBinding) */}
+        <BookBinding st={set.insideStyle} />
       </div>
     </div>
   )

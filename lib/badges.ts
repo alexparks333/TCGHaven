@@ -76,6 +76,9 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   pageImage?: string        // the creator's own picture on every page (Storage URL)
   pageImageOpacity?: number // its strength, 0.05–1 (default 0.5)
   pageImageFade?: number    // how much it fades toward the page's edges, 0–1 (default 0.4)
+  binding?: string          // the center rings (components/badges/BookBinding.tsx BINDINGS id, or 'none'); unset = the classic silver rings. Shown to fans only
+  bindingColor?: string; bindingColor2?: string; bindingColor3?: string // its colour parts (BindingDef.colors)
+  bindingParams?: Record<string, Record<string, number>>             // per binding: its own sliders
   pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }

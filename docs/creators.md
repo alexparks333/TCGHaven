@@ -92,6 +92,12 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - **Book edge** (`lib/bookEdges.ts`): the rim round the open book — Leather, Suede, Linen, Wood, Velvet,
        Brushed metal, Carbon fibre, Marble, Smooth or the Cover picture, any colour, texture strength, edge
        width and stitching on/off with its thread colour (`edge*`). Rims carry `.pinbook-rim`.
+     - **Center rings** (`components/badges/BookBinding.tsx`): what binds the pages down the middle — None,
+       Silver rings, Brass D-rings, Spiral coil, Leather lacing, Chain links, Ribbon & clasps, Jewelled hinge;
+       each with up to three colours (`bindingColor`/`2`/`3`, any colour) and its own sliders
+       (`bindingParams[binding]`), Surprise and Reset. **Shown to fans only** (the pin book and Preview as a
+       fan) — the Studio's editing pages leave it out; the panel has a live mini preview. Unset `binding` =
+       TCG Haven's original silver rings, drawn exactly as before. (The phone book keeps its own rings.)
      Every page draws two layers over the felt for these — `.pinbook-page-art` (picture) then
      `.pinbook-page-pattern` — under the page's content. With a pattern, an empty badge's silhouette is solid
      felt (`.pinbook-hole-felt`, `--page-solid`): the pattern stops at its outline, no halo. Empty Studio spots
