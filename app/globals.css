@@ -909,3 +909,9 @@
 @keyframes coverTitleShine { 0%, 55% { background-position: 160% 0, 0 0; } 100% { background-position: -60% 0, 0 0; } }
 .cover-title-shine { animation: coverTitleShine 4.5s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .cover-title-shine { animation: none; } }
+
+/* The Cardex's click shortcuts (CardexPage header) */
+.cardex-kbd {
+  display: inline-block; padding: 1px 6px; border-radius: 5px; font: 600 10.5px/1.5 inherit;
+  color: #5a4630; background: #f3e9d3; border: 1px solid #cdb994; box-shadow: 0 1px 0 #cdb994;
+}

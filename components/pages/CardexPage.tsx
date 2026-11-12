@@ -1103,12 +1103,21 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   const activeCategoryGroup = categories.find((g) => g.label === activeCategoryLabel) ?? categories[0]
   const setsLoading = catalogGame === 'pokemon' ? pokemonSetsLoading : catalogGame === 'pokemon-jp' ? jpSetsLoading : catalogGame === 'onepiece' ? onepieceSetsLoading : catalogGame === 'mtg' ? mtgSetsLoading : isMetaSetGame(catalogGame) ? metaSetsLoading[catalogGame] : registryLoading
 
+  // Mac keyboards say ⌘ for the price-lookup click (it takes Ctrl or ⌘)
+  // (read after the first render, so the server's HTML and the browser's agree)
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => { setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) }, [])
   return (
     <MaybeAuthGuard guard={!picker}>
       <div>
         {!readOnly && (
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-ink">Cardex</h1>
+            {/* The click shortcuts (computers only — a phone has no keys): Shift adds, Ctrl / ⌘ looks up the price */}
+            <div className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd>+<kbd className="cardex-kbd">Left click</kbd>Adds the card</span>
+              <span className="inline-flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘' : 'Ctrl'}</kbd>+<kbd className="cardex-kbd">Left click</kbd>Searches its price in a new tab</span>
+            </div>
           </div>
         )}
 
