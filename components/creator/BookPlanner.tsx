@@ -15,6 +15,7 @@ import { appStorage } from '@/lib/firebase/appStorage'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStickyCenter } from '@/lib/useStickyCenter'
+import { SaveBar } from '@/components/creator/SaveBar'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
@@ -137,17 +138,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
         : <InsidePanel uid={uid} style={book.insideStyle} onChange={onInside} onRevert={onRevertInside} coverImage={book.coverImage} />}
       </div>
       {/* The look of the pages is kept only when saved */}
-      <div className={cn('haven-label sticky bottom-3 mx-4 mb-4 !py-2 !pr-2', insideDirty && 'shadow-[0_10px_20px_-12px_rgba(60,35,15,0.5)]')}>
-        <span className="text-xs font-semibold flex-1 flex items-center gap-1.5 text-slate-500">
-          {insideDirty ? <><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" /><span className="text-ink">Unsaved page changes</span></> : <><Check size={13} className="text-emerald-600" />Page look saved</>}
-        </span>
-        {insideDirty && (
-          <>
-            <button type="button" onClick={onUndoInside} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
-            <button type="button" onClick={onSaveInside} className="btn-primary !py-1.5"><Check size={15} />Save page changes</button>
-          </>
-        )}
-      </div>
+      <SaveBar dirty={insideDirty} onSave={() => onSaveInside?.()} onUndo={() => onUndoInside?.()} saveLabel="Save pages" savedLabel="Page look saved" className="mx-4 mb-4" />
     </div>
     </div>
   )

@@ -24,6 +24,7 @@ import { CommunityStudio } from '@/components/creator/CommunityStudio'
 import { StudioHero, type StudioTab } from '@/components/creator/StudioHero'
 import { StudioEntrance } from '@/components/creator/StudioEntrance'
 import { StudioBar } from '@/components/creator/StudioBar'
+import { SaveBar } from '@/components/creator/SaveBar'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
 import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -261,21 +262,8 @@ function BookTab({ uid, creatorName, saved, view, onView, onDirty, guard }: {
           <div className="haven-panel !p-4 md:!p-5">
             <CoverDesigner uid={uid} book={designing} onChange={setCoverDraft} initialOpen="cover" />
             {/* Unsaved changes: keep them or put the saved cover back */}
-            <div className={cn('haven-label sticky bottom-3 mt-5 !py-2 !pr-2', coverDirty && 'shadow-[0_10px_20px_-12px_rgba(60,35,15,0.5)]')}>
-              <span className="text-xs font-semibold flex-1 flex items-center gap-1.5 text-slate-500">
-                {coverDirty ? <><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" /><span className="text-ink">Unsaved cover changes</span></> : <><Check size={13} className="text-emerald-600" />Cover saved</>}
-              </span>
-              {coverDirty && (
-                <>
-                  <button type="button" onClick={() => setCoverDraft(null)} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
-                  {!designing.coverImage ? (
-                    <span className="text-[11px] font-semibold text-[#a8452a] px-1">Add a cover picture to save</span>
-                  ) : <button type="button" onClick={saveCover} className="btn-primary !py-1.5">
-                    <Check size={15} />Save cover
-                  </button>}
-                </>
-              )}
-            </div>
+            <SaveBar dirty={coverDirty} onSave={saveCover} onUndo={() => setCoverDraft(null)} saveLabel="Save cover" savedLabel="Cover saved"
+              blocked={designing.coverImage ? undefined : 'Add a picture first'} className="mt-5" />
           </div>
         </div>
       ) : (
