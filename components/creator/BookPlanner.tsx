@@ -16,6 +16,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStickyCenter } from '@/lib/useStickyCenter'
 import { SaveBar } from '@/components/creator/SaveBar'
+import { Portal } from '@/components/creator/Portal'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
@@ -660,6 +661,7 @@ export function PaperDialog({ title, onClose, children }: { title: string; onClo
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
   return (
+    <Portal>
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#2b2014]/45 backdrop-blur-[2px] p-4" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}
         className="haven-panel haven-grain relative w-full max-w-md !p-6 text-center shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
@@ -669,5 +671,6 @@ export function PaperDialog({ title, onClose, children }: { title: string; onClo
         {children}
       </div>
     </div>
+    </Portal>
   )
 }

@@ -28,6 +28,7 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage } from '@/lib/cardImage'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { Portal } from '@/components/creator/Portal'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { CardZoomOverlay, RARITY_COLORS, type ZoomCardData } from '@/components/pages/CardexPage'
 
@@ -139,6 +140,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
   ]
 
   return (
+    <Portal>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
       {/* No close on an outside click: a pin in progress would be lost to a stray click — only ✕ closes */}
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -333,6 +335,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
         />
       )}
     </div>
+    </Portal>
   )
 }
 

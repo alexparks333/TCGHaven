@@ -25,6 +25,7 @@ import { StudioHero, type StudioTab } from '@/components/creator/StudioHero'
 import { StudioEntrance } from '@/components/creator/StudioEntrance'
 import { StudioBar } from '@/components/creator/StudioBar'
 import { SaveBar } from '@/components/creator/SaveBar'
+import { Portal } from '@/components/creator/Portal'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
 import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -124,6 +125,7 @@ function LeaveDialog({ what, onSave, onDiscard, onStay }: { what: 'cover' | 'pag
     return () => window.removeEventListener('keydown', esc)
   }, [onStay])
   return (
+    <Portal>
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#2b2014]/45 backdrop-blur-[2px] p-4" onClick={onStay}>
       <div role="dialog" aria-modal="true" aria-labelledby="leave-title" onClick={(e) => e.stopPropagation()}
         className="haven-panel haven-grain relative w-full max-w-md !p-6 text-center shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
@@ -140,6 +142,7 @@ function LeaveDialog({ what, onSave, onDiscard, onStay }: { what: 'cover' | 'pag
         </div>
       </div>
     </div>
+    </Portal>
   )
 }
 
@@ -486,6 +489,7 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
 function Preview({ book, badges, onClose }: { book: BadgeSet; badges: BadgeDef[]; onClose: () => void }) {
   useScrollLock(true)
   return (
+    <Portal>
     <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm">
       <div className="flex items-center gap-3 px-5 py-3 text-white">
         <Eye size={18} />
@@ -501,5 +505,6 @@ function Preview({ book, badges, onClose }: { book: BadgeSet; badges: BadgeDef[]
         </div>
       </div>
     </div>
+    </Portal>
   )
 }

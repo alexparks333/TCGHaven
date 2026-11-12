@@ -1007,7 +1007,8 @@
 @keyframes studioFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .studio-fade { animation: studioFade 0.8s 0.9s ease-out both; }
 @keyframes studioReveal { from { opacity: 0; transform: scale(0.97) translateY(10px); } to { opacity: 1; transform: none; } }
-.studio-reveal { animation: studioReveal 0.9s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+/* backwards, not both: once it's done no transform is left on the Studio (a transform would trap fixed pop-ups) */
+.studio-reveal { animation: studioReveal 0.9s 0.1s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 @media (prefers-reduced-motion: reduce) {
   .studio-stamp, .studio-spin, .studio-draw, .studio-title, .studio-rule, .studio-fade, .studio-reveal { animation: none !important; }
   .studio-door, .studio-center { transition: opacity 0.4s ease !important; }
