@@ -349,9 +349,14 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
             {step < 4 && <button type="button" onClick={() => setStep(step + 1)} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink">Next</button>}
             {live ? (
               // Already live: saving puts the changes live
+              <>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-600/40 bg-emerald-600/10 px-3 py-1.5 text-xs font-bold text-emerald-700" title="Fans can see and collect this badge">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shadow-[0_0_0_3px_rgba(5,150,105,0.2)]" />Live
+              </span>
               <button type="button" disabled={!!busy} onClick={() => save()} className="btn-primary">
                 {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Save changes
               </button>
+              </>
             ) : (
               <>
                 <button type="button" disabled={!!busy} onClick={() => save()} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink">
