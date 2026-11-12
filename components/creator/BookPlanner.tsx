@@ -19,7 +19,7 @@ import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
-import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, pinShadowCss, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
+import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
@@ -599,9 +599,9 @@ function PatternPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII']
 const romanOf = (i: number) => ROMAN[i] ?? String(i + 1)
 
-function Velvet({ children, side }: { children: React.ReactNode; accent?: string; side: 'left' | 'right' }) {
+function Velvet({ children, side, boxRef }: { children: React.ReactNode; accent?: string; side: 'left' | 'right'; boxRef?: (el: HTMLDivElement | null) => void }) {
   return (
-    <div
+    <div ref={boxRef}
       className={cn('pinbook-page relative aspect-[0.78] p-[6%] flex flex-col', side === 'left' ? 'pinbook-page-left md:rounded-l-[10px]' : 'pinbook-page-right md:rounded-r-[10px]')}
     >
       <div className="pinbook-page-art" /><div className="pinbook-page-pattern" />
@@ -624,8 +624,19 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
   const [name, setName] = useState(page.chapter)
   // The first empty spot is the "+"; the rest of the page stays blank
   const plusAt = page.spots.findIndex((s) => !s)
+  // Pins sized by the pin book's own rule for a page this big, so the Studio matches what fans see
+  const [box, setBox] = useState<HTMLDivElement | null>(null)
+  const [pin, setPin] = useState(90)
+  useEffect(() => {
+    if (!box) return
+    const fit = () => setPin(pagePin(box.clientWidth, box.clientHeight))
+    const ro = new ResizeObserver(fit)
+    ro.observe(box)
+    fit()
+    return () => ro.disconnect()
+  }, [box])
   return (
-    <Velvet accent={accent} side={side}>
+    <Velvet accent={accent} side={side} boxRef={setBox}>
       {/* The chapter's title, engraved in gold between rules — tap to rename */}
       <div className="relative flex items-center gap-[4%] px-[4%] mb-[5%] min-h-[9%]">
         <span className="flex-1 h-px" style={{ background: `linear-gradient(90deg, transparent, ${accent})` }} />
@@ -659,8 +670,8 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
         {page.spots.map((b, i) =>
           b ? (
             <button key={b.id} type="button" onClick={() => onEdit(b)} className="group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
-              <span className="pinbook-pin-shadow relative !flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105" /* !flex: .pinbook-pin-shadow is inline-block in the pin book */>
-                <BadgePin art={b.art} imageUrl={b.imageUrl} size={90 * Math.min(1, b.displayScale ?? 1) /* its Size on the page */} />
+              <span className="pinbook-pin-shadow relative !flex items-center justify-center transition-transform group-hover:scale-105" style={{ width: pin, height: pin * 1.12 }} /* !flex: .pinbook-pin-shadow is inline-block in the pin book */>
+                <BadgePin art={b.art} imageUrl={b.imageUrl} size={pinDrawSize(b, pin) /* its Size on the page, as the pin book draws it */} />
               </span>
               <span className="pinbook-serif max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
             </button>

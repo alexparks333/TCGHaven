@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye } from 'lucide-react'
-import { DEFAULT_TIERS, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
+import { DEFAULT_TIERS, CREATOR_MAX_SCALE, pagePin, pinDrawSize, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -70,6 +70,20 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
   const { catalog } = useBadgeCatalog()
   const example = catalog.badges.find((b) => b.imageUrl && !b.set.startsWith('creator-'))
   const { accent, from, to } = book.cover
+  // The velvet side is a page: the pin's 100% size there, by the pin book's own rule (lib/badges.ts pagePin)
+  const [pane, setPane] = useState<HTMLDivElement | null>(null)
+  const [pin, setPin] = useState(120)
+  useEffect(() => {
+    if (!pane) return
+    const fit = () => {
+      const w = pane.clientWidth - 20 // the velvet is inset 10px all round
+      setPin(pagePin(w, Math.max(pane.clientHeight - 20, w / 0.71)))
+    }
+    const ro = new ResizeObserver(fit)
+    ro.observe(pane)
+    fit()
+    return () => ro.disconnect()
+  }, [pane])
 
   async function uploadArt(file: File | undefined) {
     if (!file) return
@@ -147,7 +161,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="add-card-panel relative w-full max-w-[920px] card-glass rounded-t-2xl sm:rounded-2xl h-[94dvh] md:h-[min(94dvh,760px)] flex flex-col md:flex-row overflow-hidden">
         {/* The pin, big, on the book's velvet */}
-        <div className="relative md:w-[42%] shrink-0 flex flex-col items-center justify-center gap-4 p-6 md:p-8" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
+        <div ref={setPane} className="relative md:w-[42%] shrink-0 flex flex-col items-center justify-center gap-4 p-6 md:p-8" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
           <div className="absolute inset-[10px] rounded-xl pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 60%, #0f0b18 100%)', boxShadow: 'inset 0 0 40px rgba(0,0,0,0.6)' }} />
           <div className="absolute inset-[18px] rounded-lg border pointer-events-none" style={{ borderColor: accent + '88' }} />
           <button type="button" onClick={requestClose} className="md:hidden absolute top-4 right-4 z-10 p-2 rounded-full bg-black/40 text-white" aria-label="Close"><X size={18} /></button>
@@ -158,9 +172,9 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
               <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
             </div>
           ) : (
-          // The pin, big. Its faint dashed outline is its whole spot on the page at the same scale: at
-          // 100% the pin fills it; "Size on the page" shrinks the pin inside it
-          <div className="relative w-[min(220px,48vw)] aspect-[1/1.12] flex items-center justify-center">
+          // The pin at its true size on a page: this velvet side is the page, and the pin is drawn by the
+          // pin book's own rule for a page this big. The faint dashed outline is its spot (100%)
+          <div className="relative flex items-center justify-center" style={{ width: pin, height: pin * 1.12 }}>
             {draft.imageUrl && (
               <>
                 <span className="absolute inset-[-6px] rounded-2xl border border-dashed border-white/25 pointer-events-none" aria-hidden />
@@ -168,11 +182,11 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
               </>
             )}
             {draft.imageUrl
-              ? <span className="flex items-center justify-center transition-[width] duration-150" style={{ width: `${(draft.displayScale ?? 1) * 100}%`, filter: pinShadowCss(book.insideStyle ?? {}) }}><BadgePin art={draft.art} imageUrl={draft.imageUrl} size={Math.round(220 * (draft.displayScale ?? 1))} /></span>
+              ? <span className="flex items-center justify-center" style={{ filter: pinShadowCss(book.insideStyle ?? {}) }}><BadgePin art={draft.art} imageUrl={draft.imageUrl} size={Math.round(pinDrawSize(draft, pin))} /></span>
               : <span className="w-[76%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}
           </div>
           )}
-          <span className="relative pinbook-serif max-w-[90%] truncate rounded px-3 py-1 text-xs font-bold uppercase tracking-wider" style={{ background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>
+          <span className="relative pinbook-serif max-w-[90%] truncate rounded px-2 py-0.5 font-bold uppercase tracking-wider" style={{ fontSize: Math.max(8, pin * 0.075), background: `linear-gradient(180deg, ${accent}, #6b4a17)`, color: '#1c1206' }}>
             {draft.name.trim() || '? ? ?'}
           </span>
           {draft.slots.length > 0 && (
@@ -256,9 +270,9 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
                       <span className="text-xs tabular-nums text-slate-500">{Math.round((draft.displayScale ?? 1) * 100)}%</span>
                       {(draft.displayScale ?? 1) !== 1 && <button type="button" onClick={() => set({ displayScale: undefined })} className="text-[11px] font-semibold text-slate-500 hover:text-ink">Reset</button>}
                     </div>
-                    <input type="range" min={0.3} max={1} step={0.01} value={draft.displayScale ?? 1} className="mt-2 w-full accent-violet-600"
+                    <input type="range" min={0.3} max={CREATOR_MAX_SCALE} step={0.01} value={draft.displayScale ?? 1} className="mt-2 w-full accent-violet-600"
                       onChange={(e) => { const v = Number(e.target.value); set({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
-                    <p className="mt-1 text-[11px] text-slate-500">The dashed outline on the left is its spot on the page — at 100% the pin fills it.</p>
+                    <p className="mt-1 text-[11px] text-slate-500">The left side is a page at true scale: the pin is exactly as big as it will be in your book. The dashed outline is its spot (100%) — go over to let it grow past it.</p>
                   </div>
                 )}
               </div>

@@ -279,6 +279,15 @@ export function looksOn(def: Pick<BadgeDef, 'tiersOff'>): BadgeLook[] {
 }
 /** The size to draw a badge's pin at, for a slot made for `size` (its Display size applied). */
 export const pinSize = (def: Pick<BadgeDef, 'displayScale'>, size: number) => size * (def.displayScale ?? 1)
+/** A 100% pin on a page this big (px) — the pin book's one rule, used everywhere a page is drawn (the pin
+ *  book, the Studio's pages, the badge maker): 2 × 3 pins, by whichever of width or height is tighter,
+ *  leaving room for each spot's nameplate */
+export const pagePin = (w: number, h: number) => Math.max(44, Math.min(200, w * 0.33, h * 0.215))
+/** How big a pin may be drawn: creators' badges may grow past their spot (up to 150%, "Size on the
+ *  page"); TCG Haven's stay within it (Display size over 100% once made them huge) */
+export const CREATOR_MAX_SCALE = 1.5
+export const pinDrawSize = (def: Pick<BadgeDef, 'displayScale' | 'set'>, pin: number) =>
+  Math.min(pinSize(def, pin), pin * (def.set?.startsWith('creator-') ? CREATOR_MAX_SCALE : 1))
 export const TIER_NAMES: Record<BadgeTier, string> = { 0: 'Locked', 1: 'Grayscale', 3: 'Full' }
 export function badgeTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
   const [have, total] = progress ?? [0, def.slots.length]

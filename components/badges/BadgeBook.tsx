@@ -4,7 +4,7 @@ import { BookBinding } from '@/components/badges/BookBinding'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, insideLook, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, insideLook, pagePin, pinDrawSize, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -151,7 +151,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
 
   // A page holds 2 × 3 pins: size them by whichever of its width or height is tighter.
   // Each page is a 2 × 3 grid: a pin (≈1.12× as tall as wide) fills most of its cell.
-  const pin = Math.max(44, Math.min(200, pageSize.w * 0.33, pageSize.h * 0.215)) // leaves room for each spot's nameplate
+  const pin = pagePin(pageSize.w, pageSize.h) // leaves room for each spot's nameplate
   const [inspect, setInspect] = useState<BadgeDef | null>(null)
   const props = { badges, isMe, pin, onInspect: setInspect, flash }
   // Page edges peeking out on each side: more on whichever side has more pages left. They move to
@@ -389,9 +389,9 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
-  // Display size, but never bigger than the slot: the book always capped it there (the image's
-  // max-width), and the look wrapper's shrink-0 for lining up the next look's layer dropped that cap
-  const size = Math.min(pinSize(def, pin), pin)
+  // Display size, but never bigger than the slot for TCG Haven's badges (the book always capped it
+  // there); a creator's may grow to 150% (lib/badges.ts pinDrawSize)
+  const size = pinDrawSize(def, pin)
   const art = useTrimmedArt(def.imageUrl) // the art cropped to the pin, as BadgePin draws it — the masks follow it
   useEffect(() => { preloadPinInspector() }, []) // the 3D view's code, so a click opens it at once
   // The pin shows once its first tier is reached, in that tier's look (Grayscale / Full)
