@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter, ScanLine } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore } from '@/lib/store'
-import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RARITY_LABELS_BY_GAME } from '@/lib/utils'
+import { formatCurrency, openEbaySearch, localDateString, cardIdentityKey, RARITY_LABELS_BY_GAME, cardexHref } from '@/lib/utils'
 import { conditionLabel, GAME_COLORS, GAME_LABELS, type Game, type Card, type SoldCard } from '@/lib/types'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { GamePicker } from '@/components/GamePicker'
@@ -62,6 +62,9 @@ export default function InventoryPage() {
   } = useStore()
   const { user, dataLoading } = useAuth()
   const router = useRouter()
+  // Mac keyboards say ⌘ for the recently-sold click (read after the first render, so server and browser agree)
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => { setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) }, [])
   const [search, setSearch] = useState('')
   const [showGamePicker, setShowGamePicker] = useState(false)
   const gamePickerRef = useRef<HTMLDivElement>(null)
@@ -469,10 +472,18 @@ export default function InventoryPage() {
             </div>
           </div>
           {/* Its own line under the buttons, so it never gets squeezed into two */}
-          <p className="text-slate-400 text-sm mt-1 whitespace-nowrap">
-            {displayCount} cards
-            {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
-          </p>
+          <div className="mt-1 flex items-center justify-between gap-4">
+            <p className="text-slate-400 text-sm whitespace-nowrap">
+              {displayCount} cards
+              {totalMarket > 0 && <> · market {formatCurrency(totalMarket)}</>}
+            </p>
+            {/* The click shortcuts, like the Cardex's (computers only) */}
+            <div className="hidden md:flex items-center gap-4 rounded-full border border-slate-800 bg-slate-950/50 pl-1.5 pr-4 py-1 text-xs whitespace-nowrap">
+              <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">See in Cardex</span></span>
+              <span className="w-px h-4 bg-slate-700" />
+              <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Recently sold</span></span>
+            </div>
+          </div>
         </div>
 
         {/* Game bubbles — only the games this user tracks. Phone: the "+" menu adds and removes them.
@@ -713,9 +724,10 @@ export default function InventoryPage() {
                     className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
                     onClick={(e) => {
                       if (e.ctrlKey || e.metaKey) { openEbaySearch(rep); return }
+                      if (e.shiftKey) { router.push(cardexHref(rep)); return }
                       router.push(`/portfolio/${lots[0].id}`)
                     }}
-                    title="Click to view card detail · ⌘/Ctrl+Click to search eBay"
+                    title="Click to view card detail · Shift+Click to see it in the Cardex · ⌘/Ctrl+Click to search recently sold listings"
                   >
                     <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                       <div className="relative shrink-0">
@@ -818,6 +830,7 @@ export default function InventoryPage() {
                           onClick={(e) => {
                             if ((e.target as HTMLElement).closest('button')) return
                             if (e.ctrlKey || e.metaKey) { openEbaySearch(lot); return }
+                            if (e.shiftKey) { router.push(cardexHref(lot)); return }
                             router.push(`/portfolio/${lot.id}`)
                           }}
                           className="relative flex items-center gap-4 py-2.5 border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 cursor-pointer rounded transition-colors"
@@ -895,9 +908,10 @@ export default function InventoryPage() {
                   key={card.id}
                   onClick={(e) => {
                     if (e.ctrlKey || e.metaKey) { openEbaySearch(card); return }
+                    if (e.shiftKey) { router.push(cardexHref(card)); return }
                     router.push(`/portfolio/${card.id}`)
                   }}
-                  title="Click to view card detail · ⌘/Ctrl+Click to search eBay sold listings"
+                  title="Click to view card detail · Shift+Click to see it in the Cardex · ⌘/Ctrl+Click to search recently sold listings"
                   className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">

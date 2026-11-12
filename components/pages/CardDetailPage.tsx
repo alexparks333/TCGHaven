@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, BookOpen, TrendingUp, TrendingDown } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch } from '@/lib/utils'
+import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch, cardexHref } from '@/lib/utils'
 import { conditionLabel, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 import { authFetch } from '@/lib/firebase/authFetch'
@@ -83,8 +83,7 @@ export default function CardDetailPage() {
   const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0
   // Opens this card's set in the Cardex and goes to the card there (CardexPage's ?card= effect).
   // Japanese Pokémon has its own Cardex tab.
-  const cardexTab = card.game === 'pokemon' && card.language === 'ja' ? 'pokemon-jp' : card.game
-  const cardexHref = `/cardex?game=${cardexTab}&set=${encodeURIComponent(card.set)}&card=${encodeURIComponent(card.id)}`
+  const cardexLink = cardexHref(card)
 
   return (
     <AuthGuard>
@@ -122,7 +121,7 @@ export default function CardDetailPage() {
               <div className="text-xs text-slate-500">Qty: {card.quantity}</div>
               <div className="text-xs text-slate-500">Bought: {formatDate(card.purchaseDate)}</div>
               <Link
-                href={cardexHref}
+                href={cardexLink}
                 onClick={(e) => e.stopPropagation()}
                 className="btn-secondary w-fit mt-1 whitespace-nowrap"
               >

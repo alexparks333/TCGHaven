@@ -310,3 +310,9 @@ export function nameWithPrinting(name: string, card: { game?: string; edition?: 
   return p ? `${baseCardName(name)} - ${p}` : baseCardName(name)
 }
 
+/** A collected card's place in the Cardex: its set opened and the page taken to the card (CardexPage's
+ *  ?card=). Japanese Pokémon has its own Cardex tab. */
+export function cardexHref(card: { id: string; game: string; set: string; language?: string }): string {
+  const tab = card.game === 'pokemon' && card.language === 'ja' ? 'pokemon-jp' : card.game
+  return `/cardex?game=${tab}&set=${encodeURIComponent(card.set)}&card=${encodeURIComponent(card.id)}`
+}
