@@ -19,10 +19,20 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   `Community.page.header` / `headerFit` / `headerShade`, else the banner colour), the creator's book pinned
   in the top right over the header's corner (after the name on a phone), the name, tagline, members and
   Join, then the sections the creator switched on (`page.sections`, `COMMUNITY_SECTIONS` / `sectionOn()`):
-  About and Newest members now (`newestMembers()`, sorted in the browser — no extra index); the
-  Achievement Badge Board and the Community Discussion Board are listed as Coming soon. Edited in the
+  About, the Achievement Badge Board and Newest members (`newestMembers()`, sorted in the browser — no
+  extra index); the Community Discussion Board is listed as Coming soon. Edited in the
   Studio's Community tab: Change header (upload, drag and zoom with `PicturePlacer`, Darken) and Page
   sections. `saveCommunity` uses `mergeFields`; firestore.rules lets `communities` carry `page`.
+- **Earning creator badges** (2026-11-12, `lib/creatorShelf.ts`). Joining a community makes its creator's
+  published badges yours to earn: FriendsProvider checks the collection against TCG Haven's catalog plus
+  every joined community's book (`useJoinedCreatorBooks`), into the same `shared_badges/{uid}` (badge ids
+  are unique, `c-…`), with the same looks. Leaving keeps what was earned. The Badges shelf shows joined
+  books too, each its own collection (`ExtraBooksProvider` in lib/badgeCatalog.ts — only there, so the staff
+  portal and other people's profiles see TCG Haven's catalog only). On a community page, a member opening
+  the book sees their own progress. Each creator badge newly earned is recorded for the community's
+  **Achievement Badge Board** — `community_achievements/{community}_{member}_{badge}` (`recordAchievement`;
+  skipped while the member's badges are private; rules: only the member, only while a member) — shown
+  newest first (`newestAchievements`, sorted in the browser).
 - **Computers only** (2026-11-12). The Creator Studio is a web-on-a-computer tool: never in the iPhone or
   Android app — even for creators — and not on a phone or a window under 1024 px (`lib/studioDevice.ts`
   `useStudioDevice()`). There `/creator` shows "The Creator Studio is on computers" with the link to copy;

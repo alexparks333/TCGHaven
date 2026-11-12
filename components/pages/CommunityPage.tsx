@@ -7,12 +7,16 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2 } from 'lucide-react'
+import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Trophy } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
-import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestMembers, useMyCommunities, type CommunityEntry } from '@/lib/communities'
+import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestAchievements, newestMembers, useMyCommunities, type Achievement, type CommunityEntry } from '@/lib/communities'
+import { useFriends } from '@/components/friends/FriendsProvider'
+import { BadgePin } from '@/components/badges/BadgePin'
+import type { SharedBadges } from '@/lib/firebase/badges'
+import { cn } from '@/lib/utils'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
 import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
@@ -84,6 +88,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   studio: ReturnType<typeof useStudioDevice>; isMember: boolean; busy: boolean; error: string; toggle: () => void
   book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
 }) {
+  const { myBadges: progress } = useFriends()
   return (
     <div className="flex flex-col pb-10">
       {/* The header — the creator's picture (or colour) */}
@@ -159,14 +164,68 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
               <p className="text-sm text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
             </section>
           )}
+          {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
           {sectionOn(community, 'members') && <NewestMembers community={uid} members={members} />}
         </div>
 
       </div>
 
-      {open && book && <BookViewer book={book.book} defs={book.badges} onClose={() => setOpen(false)} />}
+      {open && book && <BookViewer book={book.book} defs={book.badges} badges={isMember || mine ? progress : null} onClose={() => setOpen(false)} />}
     </div>
   )
+}
+
+/** The Achievement Badge Board: the newest members to earn one of this creator's badges */
+export function AchievementBoard({ community, book, sample }: { community: string; book: CreatorBook | null; sample?: Array<Achievement & { profile: Profile | null }> /* dev checks */ }) {
+  const [list, setList] = useState<Array<Achievement & { profile: Profile | null }> | null>(sample ?? null)
+  useEffect(() => {
+    if (sample) return
+    newestAchievements(community, 10)
+      .then((rows) => Promise.all(rows.map(async (r) => ({ ...r, profile: await getProfile(r.member).catch(() => null) }))))
+      .then(setList).catch(() => setList([]))
+  }, [community, sample])
+  const defOf = (id: string) => book?.badges.find((b) => b.id === id)
+  const shown = (list ?? []).filter((a) => defOf(a.badge)) // badges still in the book
+  return (
+    <section className="card-glass p-5 md:p-6">
+      <h2 className="pinbook-serif text-lg font-bold text-ink mb-1 flex items-center gap-2"><Trophy size={17} className="text-[#b8862b]" />Achievement Badge Board</h2>
+      <p className="text-xs text-slate-500 mb-4">The newest members to earn a badge from this book.</p>
+      {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
+        : shown.length === 0 ? <p className="text-sm text-slate-500">No one has earned a badge yet — collect the cards and be the first.</p>
+        : (
+          <ol className="space-y-2">
+            {shown.map((a, i) => {
+              const def = defOf(a.badge)!
+              return (
+                <li key={a.member + a.badge} className={cn('flex items-center gap-3 rounded-xl p-2.5', i === 0 ? 'bg-[#f6e7c4] border border-[#d6b168]/60' : 'hover:bg-slate-900/50')}>
+                  <span className="relative shrink-0 w-12 h-[54px] flex items-center justify-center drop-shadow-[0_3px_4px_rgba(0,0,0,0.35)]">
+                    <BadgePin art={def.art} imageUrl={def.imageUrl} size={46} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-ink truncate">
+                      <Link href={a.profile ? profilePath(a.member, a.profile.username) : '#'} className="font-bold hover:underline">{a.profile?.displayName ?? 'A collector'}</Link>
+                      <span className="text-slate-500"> earned </span><b className="pinbook-serif">{def.name}</b>
+                    </span>
+                    <span className="block text-[11px] text-slate-500">{timeAgo(a.earnedAt)}{i === 0 && ' · newest'}</span>
+                  </span>
+                  <Avatar seed={a.member} name={a.profile?.displayName ?? 'Collector'} photoURL={a.profile?.photoURL} size={32} />
+                </li>
+              )
+            })}
+          </ol>
+        )}
+    </section>
+  )
+}
+
+function timeAgo(ms: number) {
+  const m = Math.round((Date.now() - ms) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m} min ago`
+  const h = Math.round(m / 60)
+  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
+  const d = Math.round(h / 24)
+  return d < 30 ? `${d} day${d === 1 ? '' : 's'} ago` : new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 /** The newest collectors to join */
@@ -196,7 +255,7 @@ function NewestMembers({ community, members }: { community: string; members: num
   )
 }
 
-function BookViewer({ book, defs, onClose }: { book: Parameters<typeof BadgeBook>[0]['set']; defs: Parameters<typeof BookCover>[0]['defs']; onClose: () => void }) {
+function BookViewer({ book, defs, badges, onClose }: { book: Parameters<typeof BadgeBook>[0]['set']; defs: Parameters<typeof BookCover>[0]['defs']; badges: SharedBadges | null; onClose: () => void }) {
   useScrollLock(true)
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm">
@@ -206,7 +265,8 @@ function BookViewer({ book, defs, onClose }: { book: Parameters<typeof BadgeBook
         <button type="button" onClick={onClose} className="ml-auto p-2 rounded-full bg-white/10 hover:bg-white/20" aria-label="Close"><X size={18} /></button>
       </div>
       <div className="flex-1 overflow-auto px-3 pb-6 flex items-start justify-center">
-        <div className="w-full max-w-[1100px]"><BadgeBook set={book} defs={defs} badges={null} isMe={false} /></div>
+        {/* a member's own progress fills it in (their badges include this community's — lib/creatorShelf.ts) */}
+        <div className="w-full max-w-[1100px]"><BadgeBook set={book} defs={defs} badges={badges} isMe={!!badges} /></div>
       </div>
     </div>
   )

@@ -83,6 +83,19 @@ service cloud.firestore {
     }
 
     // A creator's community profile (barebones for now): name, tagline, about, colour
+    // The Achievement Badge Board (lib/communities.ts recordAchievement): a member's own app records each
+    // badge they earn from a community they belong to; anyone signed in reads; the member, the community's
+    // creator or staff can remove one.
+    match /community_achievements/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && notBanned()
+        && request.resource.data.member == request.auth.uid
+        && id == request.resource.data.community + '_' + request.auth.uid + '_' + request.resource.data.badge
+        && exists(/databases/$(database)/documents/community_members/$(request.resource.data.community + '_' + request.auth.uid))
+        && request.resource.data.keys().hasOnly(['community', 'member', 'badge', 'earnedAt']);
+      allow delete: if signedIn() && (request.auth.uid == resource.data.member || request.auth.uid == resource.data.community || isAdmin());
+    }
+
     match /communities/{uid} {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == uid && canCreate()

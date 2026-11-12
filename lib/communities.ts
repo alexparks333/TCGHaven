@@ -87,3 +87,24 @@ export async function newestMembers(community: string, n = 12): Promise<Array<{ 
     .sort((a, b) => b.joinedAt - a.joinedAt)
     .slice(0, n)
 }
+
+// ── The Achievement Badge Board ──
+//   community_achievements/{community}_{member}_{badge}  { community, member, badge, earnedAt }
+// Written by the member's own app when they earn one of that community's creator's badges (FriendsProvider
+// — not while their badges are private); readable by anyone signed in (firestore.rules).
+
+export interface Achievement { member: string; badge: string; earnedAt: number }
+
+export async function recordAchievement(community: string, member: string, badge: string) {
+  await setDoc(doc(db, 'community_achievements', `${community}_${member}_${badge}`), { community, member, badge, earnedAt: serverTimestamp() })
+}
+
+/** The newest badges earned in a community (sorted here, so no extra Firestore index is needed) */
+export async function newestAchievements(community: string, n = 12): Promise<Achievement[]> {
+  const snap = await getDocs(query(collection(db, 'community_achievements'), where('community', '==', community), limit(500)))
+  return snap.docs
+    .map((d) => d.data() as { member: string; badge: string; earnedAt?: { toMillis?: () => number } })
+    .map((r) => ({ member: r.member, badge: r.badge, earnedAt: r.earnedAt?.toMillis?.() ?? Date.now() }))
+    .sort((a, b) => b.earnedAt - a.earnedAt)
+    .slice(0, n)
+}

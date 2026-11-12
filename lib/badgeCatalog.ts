@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
 import { doc, getDoc, onSnapshot, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore'
 import { db } from './firebase/config'
 import { DEFAULT_BADGE_CATALOG, type BadgeCatalog } from './badges'
@@ -71,6 +71,14 @@ function start() {
   }, (err) => console.error('Badge catalog listener failed:', err))
 }
 
+/** Extra books a part of the app adds to the catalog it reads — the collector's own Badges shelf adds
+ *  the creator books of the communities they've joined (lib/creatorShelf.ts). Unset everywhere else,
+ *  so the staff portal and other people's profiles see only TCG Haven's catalog. */
+const ExtraBooksContext = createContext<BadgeCatalog | null>(null)
+export function ExtraBooksProvider({ books, children }: { books: BadgeCatalog; children: React.ReactNode }) {
+  return createElement(ExtraBooksContext.Provider, { value: books }, children)
+}
+
 export function useBadgeCatalog(): { catalog: BadgeCatalog; loaded: boolean } {
   const [state, setState] = useState({ catalog: current, loaded })
   useEffect(() => {
@@ -80,7 +88,11 @@ export function useBadgeCatalog(): { catalog: BadgeCatalog; loaded: boolean } {
     if (loaded) setState({ catalog: current, loaded: true })
     return () => { listeners.delete(l) }
   }, [])
-  return state
+  const extra = useContext(ExtraBooksContext)
+  const catalog = useMemo(() => (extra && (extra.sets.length || extra.badges.length)
+    ? { sets: [...state.catalog.sets, ...extra.sets], badges: [...state.catalog.badges, ...extra.badges] }
+    : state.catalog), [state.catalog, extra])
+  return useMemo(() => ({ catalog, loaded: state.loaded }), [catalog, state.loaded])
 }
 
 /** Staff portal: save an edit (pass the staff session's Firestore). `base` is the catalog the edit

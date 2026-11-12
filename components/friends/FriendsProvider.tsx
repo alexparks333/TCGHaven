@@ -5,6 +5,8 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { loadBadges, computeBadges, saveBadges, sameBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
+import { useJoinedCreatorBooks, communityOfSet } from '@/lib/creatorShelf'
+import { recordAchievement } from '@/lib/communities'
 import {
   ensureProfile, getProfile, watchFriendships, otherUid, DEFAULT_PRIVACY, toPinDisplay, readSharedCardexRaw, writeSharedCardex, toSharedCards,
   type Friendship, type Profile,
@@ -108,7 +110,13 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
 
   // Haven Badges (lib/badges.ts): recomputed whenever the collection changes; anything newly earned
   // is saved to shared_badges/{uid} (earned badges are kept for good). Skips writes when unchanged.
-  const { catalog: badgeCatalog, loaded: badgeCatalogLoaded } = useBadgeCatalog()
+  const meRef = useRef(me)
+  meRef.current = me
+  const { catalog: havenCatalog, loaded: badgeCatalogLoaded } = useBadgeCatalog()
+  // …plus the published badges of every community you've joined: joining makes them yours to earn
+  // (lib/creatorShelf.ts). Leaving keeps what you earned.
+  const { catalog: joinedBooks, ready: joinedReady } = useJoinedCreatorBooks(user?.uid)
+  const badgeCatalog = useMemo(() => ({ sets: [...havenCatalog.sets, ...joinedBooks.sets], badges: [...havenCatalog.badges, ...joinedBooks.badges] }), [havenCatalog, joinedBooks])
   const [myBadges, setMyBadgesState] = useState<SharedBadges | null>(null)
   const savedBadges = useRef<SharedBadges | null>(null)
   // The last badges are kept on this device, so the pin books (and their progress) show at once
@@ -131,7 +139,7 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     setMyBadgesState(stored)
   }, [badgesKey])
   useEffect(() => {
-    if (!user || dataLoading || !badgeCatalogLoaded) return
+    if (!user || dataLoading || !badgeCatalogLoaded || !joinedReady) return
     let cancelled = false
     // Progress straight from the collection, now (badges earned before join it once loaded)
     setMyBadges(computeBadges(cards, savedBadges.current ?? { earned: (shown.current.key === badgesKey && shown.current.badges?.earned) || {}, progress: {} }, badgeCatalog))
@@ -145,15 +153,26 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return
         setMyBadges(next)
         if (!sameBadges(next, savedBadges.current)) {
+          const before = savedBadges.current.earned
           await saveBadges(user.uid, next)
           savedBadges.current = next
+          // A creator's badge just earned: onto that community's Achievement Badge Board — unless you
+          // keep your badges private (profile privacy)
+          if (meRef.current?.privacy.badges !== false) {
+            for (const id of Object.keys(next.earned)) {
+              if (before[id]) continue
+              const def = joinedBooks.badges.find((b) => b.id === id)
+              const community = def && communityOfSet(def.set)
+              if (community) recordAchievement(community, user.uid, id).catch((e) => console.error('Recording the achievement failed:', e))
+            }
+          }
         }
       } catch (e) {
         console.error('Updating your badges failed:', e)
       }
     }, 800)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [user, cards, dataLoading, badgeCatalog, badgeCatalogLoaded, setMyBadges, badgesKey])
+  }, [user, cards, dataLoading, badgeCatalog, badgeCatalogLoaded, joinedReady, joinedBooks, setMyBadges, badgesKey])
 
   const value = useMemo<FriendsContextValue>(() => {
     const uid = user?.uid ?? ''
