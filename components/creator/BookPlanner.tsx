@@ -63,8 +63,13 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start">
-    <div className={inside.className} style={inside.style}>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start" style={inside.style /* the trim colour for the side panel too */}>
+    <div className={cn(inside.className, 'relative overflow-hidden rounded-[24px] px-3 py-6 md:px-8 md:py-9')}
+      style={{ ...inside.style, background: 'radial-gradient(ellipse at 50% 35%, #6a4a32 0%, #3a281b 55%, #1d140d 100%)' }}>
+      {/* The desk it lies open on: walnut grain and a lamp's pool of light */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.22] mix-blend-overlay"
+        style={{ backgroundImage: 'repeating-linear-gradient(92deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 7px), repeating-linear-gradient(88deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 19px)' }} />
+      <div className="absolute inset-x-[10%] top-0 h-2/3 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(255,226,170,0.22), transparent 70%)' }} />
       {/* The open book: leather all round, two felt pages, trim frames */}
       <div className="relative mx-auto max-w-[980px] rounded-[18px] p-[1.6%] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
         <div className="absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />
@@ -79,40 +84,43 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
       </div>
 
       {/* Turning pages + chapters */}
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <button type="button" onClick={() => setSpread(Math.max(0, at - 1))} disabled={at === 0} className="p-2 rounded-full bg-slate-900 border border-slate-800 text-ink disabled:opacity-30" aria-label="Previous pages"><ChevronLeft size={18} /></button>
-        <span className="text-xs text-slate-500 tabular-nums px-1">Pages {at * 2 + 1}{right ? `–${at * 2 + 2}` : ''} of {pages.length}</span>
-        <button type="button" onClick={() => setSpread(Math.min(spreads - 1, at + 1))} disabled={at >= spreads - 1} className="p-2 rounded-full bg-slate-900 border border-slate-800 text-ink disabled:opacity-30" aria-label="Next pages"><ChevronRight size={18} /></button>
+      <div className="relative mt-5 mx-auto w-fit flex items-center gap-1 rounded-full bg-black/35 border border-white/10 backdrop-blur p-1">
+        <button type="button" onClick={() => setSpread(Math.max(0, at - 1))} disabled={at === 0} className="p-2 rounded-full text-white hover:bg-white/10 disabled:opacity-25" aria-label="Previous pages"><ChevronLeft size={18} /></button>
+        <span className="text-xs font-semibold text-white/75 tabular-nums px-2">Pages {at * 2 + 1}{right ? `–${at * 2 + 2}` : ''} of {pages.length}</span>
+        <button type="button" onClick={() => setSpread(Math.min(spreads - 1, at + 1))} disabled={at >= spreads - 1} className="p-2 rounded-full text-white hover:bg-white/10 disabled:opacity-25" aria-label="Next pages"><ChevronRight size={18} /></button>
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+      <div className="relative mt-3 flex flex-wrap items-center justify-center gap-1.5">
         {chapters.map((c, i) => {
           const on = left?.chapterIndex === i || right?.chapterIndex === i
           return (
             <button key={c + i} type="button" onClick={() => goTo(i)}
-              className={cn('rounded-full px-3 py-1 text-xs font-semibold border transition-colors', on ? 'text-white border-transparent' : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-ink')}
-              style={on ? { background: `linear-gradient(135deg, ${from}, ${to})` } : undefined}>
+              className={cn('rounded-full px-3 py-1 text-xs font-semibold border transition-colors', on ? 'border-transparent' : 'bg-black/20 border-white/10 text-white/60 hover:text-white')}
+              style={on ? { background: 'var(--trim)', color: '#1c1206' } : undefined}>
               {romanOf(i)} · {c}
             </button>
           )
         })}
-        <button type="button" onClick={onAddChapter} className="rounded-full px-3 py-1 text-xs font-semibold border border-dashed border-slate-700 text-slate-500 hover:text-ink inline-flex items-center gap-1"><Plus size={12} />Chapter</button>
+        <button type="button" onClick={onAddChapter} className="rounded-full px-3 py-1 text-xs font-semibold border border-dashed border-white/25 text-white/60 hover:text-white inline-flex items-center gap-1"><Plus size={12} />Chapter</button>
       </div>
     </div>
 
     {/* The side panel: Chapters | Inside look */}
-    <div className="card-glass p-4 xl:sticky xl:top-4">
-      <div className="flex rounded-xl bg-slate-950/60 border border-slate-800 p-1 mb-4">
+    <div className="card-glass !bg-slate-900 overflow-hidden xl:sticky xl:top-4">
+      {/* Two tabs, in the book's own leather */}
+      <div className="grid grid-cols-2 gap-1 p-1.5" style={{ background: `linear-gradient(135deg, ${from}, ${to})` }}>
         {([['chapters', 'Chapters', BookOpen], ['inside', 'Inside look', Palette]] as const).map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => setPanel(id)}
-            className={cn('flex-1 rounded-lg py-2 text-sm font-bold inline-flex items-center justify-center gap-1.5 transition-colors', panel === id ? 'bg-violet-600 text-white shadow' : 'text-slate-500 hover:text-ink')}>
+            className={cn('rounded-xl py-2.5 text-sm font-bold inline-flex items-center justify-center gap-1.5 transition-all', panel === id ? 'bg-slate-900 text-ink shadow' : 'text-white/75 hover:text-white hover:bg-white/10')}>
             <Icon size={15} />{label}
           </button>
         ))}
       </div>
+      <div className="p-4">
       {panel === 'chapters'
         ? <ChaptersPanel chapters={chapters} badges={badges} showing={[left?.chapterIndex, right?.chapterIndex]} onGo={goTo}
             onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} onAddBadge={onAdd} />
         : <InsidePanel style={book.insideStyle} onChange={onInside} />}
+      </div>
     </div>
     </div>
   )
@@ -136,19 +144,32 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
   }
   return (
     <div>
-      <p className="text-xs text-slate-500 mb-3">Each chapter starts on a fresh page and grows another page when its 6 spots fill — the next chapter moves along. Rename, reorder, jump to one, or add a badge straight to it.</p>
+      <p className="text-xs text-slate-500 mb-3">Click a name to rename it. Each chapter starts on a fresh page and grows another when its 6 spots fill.</p>
       <ol className="space-y-2">
         {chapters.map((c, i) => {
           const count = badges.filter((b) => b.page === c).length
           const on = showing.includes(i)
           return (
-            <li key={c} className={cn('rounded-xl border p-2.5 transition-colors', on ? 'border-violet-500/60 bg-violet-600/5' : 'border-slate-800 bg-slate-950/40')}>
+            <li key={c} className={cn('relative rounded-2xl border p-2.5 pl-3 transition-all overflow-hidden', on ? 'border-violet-500/50 bg-violet-600/5 shadow-sm' : 'border-slate-800 bg-slate-950/50 hover:border-slate-700')}>
+              {on && <span className="absolute left-0 inset-y-2 w-1 rounded-r-full bg-violet-600" />}
               <div className="flex items-center gap-2">
-                <span className="pinbook-serif w-7 text-center text-xs font-bold text-slate-500 shrink-0">{romanOf(i)}</span>
+                <span className="pinbook-serif w-8 h-8 rounded-full text-[11px] font-bold shrink-0 flex items-center justify-center shadow-[inset_0_-2px_3px_rgba(0,0,0,0.3)]"
+                  style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--trim) 70%, white), var(--trim))', color: '#1c1206' }}>{romanOf(i)}</span>
                 <ChapterName name={c} onRename={(to) => onRename(c, to)} taken={chapters} />
                 <button type="button" onClick={() => onGo(i)} title="Show this chapter" aria-label={`Show ${c}`} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800"><Eye size={15} /></button>
               </div>
-              <div className="mt-1.5 flex items-center gap-1 pl-9">
+              {/* Its pins so far, small (the six spots of its last page) */}
+              <div className="mt-2 pl-10 flex items-center gap-1">
+                {Array.from({ length: PER_PAGE }, (_, k) => {
+                  const inCh = badges.filter((b) => b.page === c)
+                  const lastPage = Math.floor(Math.max(0, inCh.length - 1) / PER_PAGE)
+                  const pin = inCh[lastPage * PER_PAGE + k]
+                  return pin
+                    ? <span key={k} className="w-6 h-6 flex items-center justify-center" title={pin.name}><BadgePin art={pin.art} imageUrl={pin.imageUrl} size={24} /></span>
+                    : <span key={k} className="w-6 h-6 rounded-full border border-dashed border-slate-700" />
+                })}
+              </div>
+              <div className="mt-1.5 flex items-center gap-1 pl-10">
                 <span className="text-[11px] text-slate-500 flex-1">{count} badge{count === 1 ? '' : 's'} · {Math.max(1, Math.ceil((count + 1) / PER_PAGE))} page{Math.ceil((count + 1) / PER_PAGE) > 1 ? 's' : ''}</span>
                 <button type="button" onClick={() => onAddBadge(c)} title={`Make a new badge in ${c}`}
                   className="mr-1 rounded-full px-2 py-0.5 text-[11px] font-bold bg-violet-600 text-white hover:bg-violet-500 inline-flex items-center gap-0.5"><Plus size={11} />Badge</button>

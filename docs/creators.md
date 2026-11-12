@@ -8,20 +8,30 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 - **First, Create Community** (`components/creator/CreateCommunity.tsx`). Until a creator's
   `communities/{uid}` exists, the Studio shows only a big **Create Community** start, then four
   steps: name, bio (tagline + about), **games** (`Community.games`), colour. The community's card
-  (`CommunityCard`) fills in live beside it. **Launch community** saves it, and only then do the
-  Your Book / Community tabs appear.
+  (`CommunityCard`) fills in live beside it. **Launch community** saves it, and only then does the
+  Studio itself appear.
+- **The Studio's layout** (redesigned 2026-11-12). **`StudioHero`** (`components/creator/StudioHero.tsx`)
+  is a leather header in the creator's book leather + community colour, with:
+  - stats: badges, chapters and members;
+  - a **checklist** of 7 steps (`studioSteps()`), with dots, a progress bar and a "Next: …" link.
+    Each step jumps to its tab;
+  - three **bookmark tabs** hanging into the parchment panel below: **Pages & badges** (the
+    default once a book exists), **Cover** and **Community**. Both halves stay mounted (`hidden`),
+    so switching tabs loses nothing. The Cover tab shows an amber dot while the cover is unsaved.
 
 - **The Creator tab** (`/creator`, `components/pages/CreatorPage.tsx`) sits under a line in the
   sidebar, with a wand button on phones. It's for Creators in good standing and for **Staff**
   (`canUseCreatorStudio()` in `lib/accountRoles.ts`), so the Owner and staff can try it and help
   creators. A staff member's book is a real creator book like anyone else's.
-- **Your Book** tab:
+- **The book tabs** (Pages & badges, Cover):
   1. **No book yet:** name it ("PewDiePie Cuties") and it's made, with a random leather and gold
      foil, chapter "Chapter One", and collection = its name.
-  2. **The cover** (`components/creator/CoverDesigner.tsx`). It's saved as is until **Edit Book
-     Cover**. While editing, the big book previews the unsaved cover. **Save Book Cover** keeps it;
-     ✕ / Cancel throws the changes away. A just-created book opens straight into editing. The
-     designer offers:
+  2. **The Cover tab** (`components/creator/CoverDesigner.tsx`, always open beside the book).
+     Every change shows on the big book (`CoverStage`, under a spotlight in its leather) but stays
+     unsaved until **Save cover** in the bar at the bottom of the designer. **Undo all** puts the
+     saved cover back, and closing the browser tab asks first. A save writes only the cover's own
+     fields (`COVER_KEYS` in CreatorPage.tsx), so chapter or inside changes made meanwhile on the
+     Pages tab stay. The designer offers:
      - **Title:** the name, **about 60 fonts in groups** (Elegant — including `haven`, TCG Haven's own Cinzel lettering — Classic, Clean, Bold, Fun, Script, Retro, Spooky — `lib/coverFonts.ts`; Google Fonts, loaded only when used),
        size, **height on the cover**, and a **finish**: a flat colour (12 swatches or any) or metal foil (gold, silver, rose gold, copper, emerald, sapphire, amethyst — `TITLE_FINISHES`), with **Shine** (a glinting streak) and **Glow behind** (the Haven covers' plate). **Haven style** sets the Haven font + gold foil + glow in one tap;
      - **the line above the title:** on/off, its text, its colour;
@@ -39,13 +49,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        **places it**: drag anywhere, even past the edges, and zoom with the slider or wheel, with
        Fill cover / Center. It's saved as `BadgeSet.coverFit` `{ x, y, scale }`, and `BookCover`
        draws it over the leather. Staff covers have no `coverFit` and still fill the cover.
-     The big book on the left (`BookStage`) is the real `BookCover`, tilting toward the pointer.
-  3. **Open your book** (`components/creator/BookPlanner.tsx`): the open book in its own leather
-     and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
+     The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
+  3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on a walnut
+     desk, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
      - Each chapter shows its badges and **one "+ Add a badge" spot**.
      - **Beside the book, a panel with two tabs.**
-       - **Chapters:** rename, move up or down, jump to one (👁), add. Only an empty chapter can
+       - **Chapters:** each with a trim-coloured numeral and its last page's six spots in miniature.
+         Rename, move up or down, jump to one (👁), add. Only an empty chapter can
          be removed; that asks first.
        - **Inside look** (`BadgeSet.insideStyle`): the pages' felt colour (12 presets or any),
          the trim colour (frames, chapter titles, rules), page frame on/off, felt texture on/off,
@@ -72,8 +83,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   5. **Preview:** the real `BadgeBook`, given the creator's own badges (`defs`), exactly as
      followers will see it.
   - Everything saves as you go: the cover about 0.7 s after the last change, badges on Save.
-- **Community** tab: a barebones community profile (name, tagline, about, banner colour) with a
-  live preview. Followers, news posts and the public community page come next.
+- **Community** tab (`components/creator/CommunityStudio.tsx`): the community page, edited right on it.
+  - Click the name, tagline or about and type. Tap a banner colour on the banner, and tap games on or off.
+  - It saves itself 0.8 s after the last change, and saves straight away when leaving. A name needs 2+ letters before it saves.
+  - Beside it: the save state, View page, Copy link, the book fans collect there (with Edit the book), and a "Coming soon" card (news posts, events).
 
 ## Data
 

@@ -1,29 +1,32 @@
 'use client'
 
 // /creator — the Creator Studio (docs/creators.md). For Creators (lib/accountRoles.ts) and staff.
-//   • Your Book: name your Creator Book, design its cover (CoverDesigner — leather, foil, stamp, your
-//     own picture), open it (BookPlanner) and tap "+" on an empty spot to make a badge (BadgeMaker,
-//     with the Relief Studio for 3D). "Preview" shows it exactly as fans will see it.
-//   • Community: the community profile — barebones for now.
-// Everything saves as you go (lib/creatorBooks.ts → creator_books/{uid}, communities/{uid}).
+// A leather header in the creator's own colours (StudioHero: stats, a what-to-do-next checklist)
+// with three bookmark tabs into the parchment panel below:
+//   • Pages & badges: the open book (BookPlanner) on a desk — tap "+" on an empty spot to make a
+//     badge (BadgeMaker, with the Relief Studio for 3D); chapters and the inside look beside it.
+//   • Cover: the closed book under a spotlight, the cover designer always open beside it — changes
+//     show live; "Save cover" keeps them (a dot on the tab while they're unsaved).
+//   • Community: the community page, edited right on it (CommunityStudio), saving itself.
+// "Preview" shows the book exactly as fans will see it. Everything saves through lib/creatorBooks.ts
+// (creator_books/{uid}, communities/{uid}).
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import { communityPath } from '@/lib/communities'
-import { Loader2, Wand2, PauseCircle, BookOpen, Users, Eye, X, Check, Sparkles, ArrowLeft, Pencil, Palette } from 'lucide-react'
+import { Loader2, PauseCircle, BookOpen, Eye, X, Check, Sparkles, Palette, RotateCcw, ArrowRight } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
-import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, saveCommunity, monogramOf, LEATHERS, FOILS, type CreatorBook, type Community } from '@/lib/creatorBooks'
+import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, monogramOf, LEATHERS, FOILS, type CreatorBook } from '@/lib/creatorBooks'
 import { DEFAULT_TIERS, type BadgeDef, type BadgeSet } from '@/lib/badges'
 import { CoverDesigner } from '@/components/creator/CoverDesigner'
-import { CreateCommunity, CommunityCard, BANNERS } from '@/components/creator/CreateCommunity'
+import { CreateCommunity } from '@/components/creator/CreateCommunity'
+import { CommunityStudio } from '@/components/creator/CommunityStudio'
+import { StudioHero, type StudioTab } from '@/components/creator/StudioHero'
 import { BookPlanner, chaptersFor } from '@/components/creator/BookPlanner'
 import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 export default function CreatorPage() {
@@ -37,11 +40,13 @@ export default function CreatorPage() {
 function Body() {
   const { user } = useAuth()
   const { record, loaded } = useAccountRole(user?.uid)
-  const [tab, setTab] = useState<'book' | 'community'>('book')
   // The community comes first: until it's launched, the Studio is the "Create Community" set-up
   const { community, loaded: communityLoaded } = useCommunity(user?.uid)
+  const { book, loaded: bookLoaded } = useCreatorBook(user?.uid)
+  const [picked, setPicked] = useState<StudioTab | null>(null)
+  const [coverDirty, setCoverDirty] = useState(false)
 
-  if (!loaded || !communityLoaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+  if (!loaded || !communityLoaded || !bookLoaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
 
   if (!canUseCreatorStudio(record)) {
     return (
@@ -56,49 +61,68 @@ function Body() {
       </div>
     )
   }
+  if (!user) return null
+  const creatorName = user.displayName || 'Creator'
+  if (!community) return <CreateCommunity uid={user.uid} creatorName={creatorName} onLaunched={() => setPicked('cover')} />
+
+  // No book yet: the book tabs are where it's made
+  const tab: StudioTab = picked ?? (book ? 'pages' : 'cover')
+  const since = record.role === 'creator'
+    ? (record.creatorSince ? new Date(record.creatorSince).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'today')
+    : null
 
   return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <span className="w-11 h-11 rounded-2xl bg-violet-600/15 text-violet-700 flex items-center justify-center"><Wand2 size={22} /></span>
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-ink">Creator Studio</h1>
-          {record.role === 'creator' && (
-            <p className="text-sm text-slate-500">
-              Creator since {record.creatorSince ? new Date(record.creatorSince).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'today'} · Premium included
-            </p>
-          )}
+    <div className="pb-6">
+      <StudioHero uid={user.uid} community={community} book={book} since={since} tab={tab} onTab={setPicked} dirtyTabs={coverDirty ? ['cover'] : []} />
+      {/* The parchment panel the tabs open onto (both halves stay mounted, so nothing's lost switching) */}
+      <div className="rounded-b-[28px] bg-slate-950 border border-t-0 border-slate-800 shadow-[0_24px_40px_-30px_rgba(40,20,5,0.6)] p-4 md:p-6">
+        <div hidden={tab === 'community'}>
+          <BookTab uid={user.uid} creatorName={creatorName} saved={book} view={tab === 'cover' ? 'cover' : 'pages'} onView={setPicked} onCoverDirty={setCoverDirty} />
         </div>
-        {community && <div className="ml-auto flex rounded-xl bg-slate-900 border border-slate-800 p-1">
-          {([['book', 'Your Book', BookOpen], ['community', 'Community', Users]] as const).map(([id, label, Icon]) => (
-            <button key={id} type="button" onClick={() => setTab(id)}
-              className={cn('flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors', tab === id ? 'bg-violet-600 text-white shadow' : 'text-slate-400 hover:text-ink')}>
-              <Icon size={15} />{label}
-            </button>
-          ))}
-        </div>}
+        <div hidden={tab !== 'community'}>
+          <CommunityStudio uid={user.uid} book={book} onEditBook={() => setPicked(book ? 'pages' : 'cover')} />
+        </div>
       </div>
-      {user && !community && <CreateCommunity uid={user.uid} creatorName={user.displayName || 'Creator'} onLaunched={() => setTab('book')} />}
-      {user && community && (tab === 'book' ? <BookTab uid={user.uid} creatorName={user.displayName || 'Creator'} /> : <CommunityTab uid={user.uid} creatorName={user.displayName || 'Creator'} />)}
     </div>
   )
 }
 
 // ── Your Book ─────────────────────────────────────────────────────────────
 
-function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
-  const { book: saved, loaded } = useCreatorBook(uid)
+// The parts of the book the cover designer changes — a cover save writes only these, so chapters or
+// the inside look changed meanwhile on the Pages tab aren't put back
+const COVER_KEYS = ['name', 'collection', 'subtitle', 'monogram', 'cover', 'coverStyle', 'coverImage', 'coverFit'] as const
+const coverPart = (b: BadgeSet) => JSON.stringify(COVER_KEYS.map((k) => b[k] ?? null))
+
+function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
+  uid: string
+  creatorName: string
+  saved: CreatorBook | null
+  view: 'cover' | 'pages'
+  onView: (v: StudioTab) => void
+  onCoverDirty: (dirty: boolean) => void
+}) {
   const [draft, setDraft] = useState<CreatorBook | null>(null)
   const [state, setState] = useState<'saved' | 'saving' | 'error'>('saved')
-  const [view, setView] = useState<'cover' | 'pages'>('cover')
   const [making, setMaking] = useState<{ badge: BadgeDef; isNew: boolean } | null>(null)
   const [preview, setPreview] = useState(false)
-  // The cover being edited (not saved until "Save Book Cover"; ✕ throws it away)
+  // The cover being designed: unsaved until "Save cover" (null = no changes)
   const [coverDraft, setCoverDraft] = useState<BadgeSet | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>()
 
   // The saved book arrives (and later changes elsewhere) — take it unless there are unsaved edits
   useEffect(() => { if (saved && state === 'saved' && !timer.current) setDraft(saved) }, [saved, state])
+
+  const b0 = draft ?? saved
+  const coverDirty = !!coverDraft && !!b0 && coverPart(coverDraft) !== coverPart(b0.book)
+  useEffect(() => { onCoverDirty(coverDirty) }, [coverDirty, onCoverDirty])
+  // Don't lose an unsaved cover to a closed tab
+  useEffect(() => {
+    if (!coverDirty) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [coverDirty])
 
   // Saves a moment after the last change (typing a title doesn't save every letter)
   function change(next: CreatorBook, now = false) {
@@ -113,17 +137,17 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
     else timer.current = setTimeout(run, 700)
   }
 
-  if (!loaded) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
   // Made for good: the book is shown only once it's really saved (refreshing must find it again)
-  if (!saved && !draft) return (
+  if (!b0) return (
     <StartBook
       creatorName={creatorName}
       onCreate={async (name, cover) => { const b = newCreatorBook(uid, name, creatorName); b.book.cover = cover; await saveCreatorBook(uid, b, true); return b }}
-      onOpened={(b) => { setDraft(b); setView('cover'); setCoverDraft(b.book) }}
+      onOpened={(b) => { setDraft(b); onView('cover') }}
     />
   )
-  const b = draft ?? saved!
+  const b = b0
   const setBook = (book: BadgeSet) => change({ ...b, book })
+  const designing = coverDraft ?? { ...b.book, coverStyle: b.book.coverStyle ?? {} }
 
   const blankBadge = (chapter: string): BadgeDef => ({
     id: newBadgeId(uid, 'badge'), set: b.book.id, page: chapter, name: '', description: '', game: 'pokemon',
@@ -132,47 +156,52 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 mb-5">
-        {view === 'pages' && (
-          <button type="button" onClick={() => setView('cover')} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><ArrowLeft size={15} />Cover</button>
-        )}
-        <h2 className="text-lg font-bold text-ink truncate">{b.book.name}</h2>
-        <span className="text-xs text-slate-500">{b.badges.length} badge{b.badges.length === 1 ? '' : 's'}</span>
+      {/* The book's bar: its name, saving, and the fan's-eye preview */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-5">
+        <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: `linear-gradient(135deg, ${b.book.cover.from}, ${b.book.cover.to})`, color: b.book.cover.accent }}>
+          {view === 'cover' ? <Palette size={17} /> : <BookOpen size={17} />}
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-ink truncate leading-tight">{view === 'cover' ? 'Design your cover' : b.book.name}</h2>
+          <p className="text-xs text-slate-500">
+            {view === 'cover' ? 'Every change shows on the book as you go' : `${b.badges.length} badge${b.badges.length === 1 ? '' : 's'} · ${chaptersFor(b.book, b.badges).length} chapter${chaptersFor(b.book, b.badges).length === 1 ? '' : 's'} · tap a “+” to make a badge`}
+          </p>
+        </div>
         <span className={cn('ml-auto text-xs flex items-center gap-1', state === 'error' ? 'text-red-600' : 'text-slate-500')}>
           {state === 'saving' ? <><Loader2 size={12} className="animate-spin" />Saving…</> : state === 'error' ? 'Not saved — check your connection (or the security rules aren’t published yet)' : <><Check size={12} className="text-emerald-600" />Saved</>}
         </span>
-        <button type="button" onClick={() => setPreview(true)} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Eye size={15} />Preview</button>
+        <button type="button" onClick={() => setPreview(true)} className="btn-secondary !bg-slate-900 border border-slate-700 !text-ink"><Eye size={15} />Preview as a fan</button>
       </div>
 
       {view === 'cover' ? (
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
-          {/* While editing, the big book shows the unsaved cover; Save keeps it, ✕ puts it back */}
-          {/* Pinned in the middle of the window while the panel scrolls (about half the stage's height above centre) */}
-          <div className="lg:sticky self-start" style={{ top: 'max(1rem, calc(50dvh - 300px))' }}>
-            <BookStage book={coverDraft ?? b.book} badges={b.badges} onOpen={() => setView('pages')} editing={!!coverDraft} />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] items-start">
+          {/* The book under a spotlight, pinned mid-window while the designer scrolls */}
+          <div className="lg:sticky self-start" style={{ top: 'max(1rem, calc(50dvh - 330px))' }}>
+            <CoverStage book={designing} badges={b.badges} dirty={coverDirty} onOpen={() => onView('pages')} />
           </div>
-          {coverDraft ? (
-            <div className="card-glass p-5">
-              <div className="flex items-center gap-2 mb-5">
-                <h3 className="font-bold text-ink flex-1">Editing your cover</h3>
-                <button type="button" onClick={() => setCoverDraft(null)} className="p-2 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label="Cancel — keep the saved cover" title="Cancel — keep the saved cover"><X size={18} /></button>
-              </div>
-              <CoverDesigner uid={uid} book={coverDraft} onChange={setCoverDraft} />
-              <div className="mt-6 flex gap-2">
-                <button type="button" onClick={() => setCoverDraft(null)} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink flex-1 justify-center"><X size={15} />Cancel</button>
-                <button type="button" onClick={() => { setBook(coverDraft); setCoverDraft(null) }} className="btn-primary flex-[2] justify-center"><Check size={16} />Save Book Cover</button>
-              </div>
-            </div>
-          ) : (
-            <div className="card-glass p-6 flex flex-col items-center text-center">
-              <span className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${b.book.cover.from}, ${b.book.cover.to})` }}>
-                <Palette size={22} style={{ color: b.book.cover.accent }} />
+          <div className="card-glass !bg-slate-900 p-4 md:p-5">
+            <CoverDesigner uid={uid} book={designing} onChange={setCoverDraft} initialOpen="cover" />
+            {/* Unsaved changes: keep them or put the saved cover back */}
+            <div className={cn('sticky bottom-3 mt-5 rounded-2xl p-2.5 flex items-center gap-2 transition-all',
+              coverDirty ? 'bg-ink text-white shadow-[0_12px_28px_-10px_rgba(40,20,5,0.8)]' : 'bg-slate-950 border border-slate-800 text-slate-500')}>
+              <span className="text-xs font-semibold flex-1 pl-1.5 flex items-center gap-1.5">
+                {coverDirty ? <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />Unsaved cover changes</> : <><Check size={13} className="text-emerald-600" />Cover saved</>}
               </span>
-              <h3 className="mt-3 font-bold text-ink text-lg">Your book cover</h3>
-              <p className="text-sm text-slate-400 mt-1">Leather, foil, your title and stamp, and your own cover picture.</p>
-              <button type="button" onClick={() => setCoverDraft({ ...b.book, coverStyle: b.book.coverStyle ?? {} })} className="btn-primary w-full justify-center mt-5 py-3 text-base"><Pencil size={16} />Edit Book Cover</button>
+              {coverDirty && (
+                <>
+                  <button type="button" onClick={() => setCoverDraft(null)} className="rounded-xl px-3 py-2 text-xs font-bold text-white/75 hover:text-white hover:bg-white/10 inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
+                  <button type="button" onClick={() => {
+                    const keep: Partial<BadgeSet> = {}
+                    for (const k of COVER_KEYS) (keep as Record<string, unknown>)[k] = designing[k]
+                    setBook({ ...b.book, ...keep }); setCoverDraft(null)
+                  }} className="rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 hover:brightness-110"
+                    style={{ background: `linear-gradient(180deg, #f8e2a2, ${FOILS[0].color})`, color: '#1c1206' }}>
+                    <Check size={15} />Save cover
+                  </button>
+                </>
+              )}
             </div>
-          )}
+          </div>
         </div>
       ) : (
         <BookPlanner
@@ -218,7 +247,7 @@ function BookTab({ uid, creatorName }: { uid: string; creatorName: string }) {
           }}
         />
       )}
-      {preview && <Preview book={b.book} badges={b.badges} onClose={() => setPreview(false)} />}
+      {preview && <Preview book={coverDraft ? { ...b.book, ...designing } : b.book} badges={b.badges} onClose={() => setPreview(false)} />}
     </div>
   )
 }
@@ -351,43 +380,40 @@ function StartBook({ creatorName, onCreate, onOpened }: {
   )
 }
 
-/** The closed book, big, tilting toward the pointer — tap to open it */
-function BookStage({ book, badges, onOpen, editing = false }: { book: BadgeSet; badges: BadgeDef[]; onOpen: () => void; editing?: boolean }) {
+/** The closed book under a spotlight in its own leather, tilting toward the pointer — tap to open it */
+function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: BadgeDef[]; onOpen: () => void; dirty: boolean }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
+  const { from, to, accent } = book.cover
   return (
-    <div className="flex flex-col items-center gap-5 py-4">
-      <button
-        type="button"
-        onClick={onOpen}
-        onPointerMove={(e) => {
-          const r = e.currentTarget.getBoundingClientRect()
-          setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -10, y: ((e.clientX - r.left) / r.width - 0.5) * 14 })
-        }}
-        onPointerLeave={() => setTilt({ x: 0, y: 0 })}
-        className="relative w-[min(360px,78vw)] aspect-[0.71] [perspective:1100px] outline-none group"
-        aria-label={`Open ${book.name}`}
-      >
-        <div
-          className="absolute inset-0 transition-transform duration-200 ease-out"
-          style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', containerType: 'inline-size' }}
-        >
+    <div
+      className="relative overflow-hidden rounded-[24px] min-h-[520px] md:min-h-[600px] flex flex-col items-center justify-center gap-6 py-10"
+      style={{ background: `radial-gradient(ellipse at 50% 42%, ${from}66 0%, ${to}dd 48%, #0d0a08 100%)`, transition: 'background 0.6s' }}
+      onPointerMove={(e) => {
+        const r = e.currentTarget.getBoundingClientRect()
+        setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -12, y: ((e.clientX - r.left) / r.width - 0.5) * 18 })
+      }}
+      onPointerLeave={() => setTilt({ x: 0, y: 0 })}
+    >
+      {Array.from({ length: 14 }, (_, i) => (
+        <span key={i} className="creator-spark absolute rounded-full pointer-events-none"
+          style={{ left: `${(i * 37) % 100}%`, bottom: '-8px', width: 2 + (i % 3), height: 2 + (i % 3), background: accent, color: accent, animationDelay: `${(i * 0.53) % 6}s`, animationDuration: `${5 + (i % 5)}s` }} />
+      ))}
+      {dirty && <span className="absolute top-4 left-4 rounded-full bg-black/45 backdrop-blur px-3 py-1 text-[11px] font-bold text-amber-300 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />Preview — not saved yet</span>}
+      <div className="absolute bottom-[17%] w-[44%] max-w-[300px] h-6 rounded-[50%] bg-black/55 blur-xl" />
+      <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>
+        <div className="absolute inset-0 transition-transform duration-200 ease-out creator-bob"
+          style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', containerType: 'inline-size' }}>
           <BookThickness pageColor={book.coverStyle?.pageColor} />
           <span className="absolute inset-0"><BookCover set={book} badges={null} defs={badges} /></span>
-          {/* A sheen that follows the tilt */}
-          <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay transition-opacity opacity-60"
-            style={{ background: `linear-gradient(${110 + tilt.y * 4}deg, transparent 30%, rgba(255,255,255,0.35) 48%, transparent 62%)` }} />
+          <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay opacity-60"
+            style={{ background: `linear-gradient(${110 + tilt.y * 4}deg, transparent 30%, rgba(255,255,255,0.4) 48%, transparent 62%)` }} />
         </div>
       </button>
-      {editing ? (
-        <p className="text-xs font-semibold text-violet-700 text-center">Preview — not saved until you press Save Book Cover</p>
-      ) : (
-        <>
-          <button type="button" onClick={onOpen} className="btn-primary px-6 py-3 text-base shadow-lg">
-            <BookOpen size={18} /> Open your book{badges.length ? '' : ' & add badges'}
-          </button>
-          <p className="text-xs text-slate-500 text-center max-w-sm">Open the book to add badges to its pages.</p>
-        </>
-      )}
+      <button type="button" onClick={onOpen}
+        className="relative rounded-full px-5 py-2.5 text-sm font-bold inline-flex items-center gap-2 shadow-lg hover:brightness-110 active:scale-[0.98] transition"
+        style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 55%, white), ${accent})`, color: '#1c1206' }}>
+        <BookOpen size={16} />Open it{badges.length ? '' : ' & add badges'}<ArrowRight size={15} />
+      </button>
     </div>
   )
 }
@@ -409,64 +435,6 @@ function Preview({ book, badges, onClose }: { book: BadgeSet; badges: BadgeDef[]
         <div className="w-full max-w-[1100px]">
           <BadgeBook set={book} defs={badges} badges={null} isMe={false} />
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Community (barebones for now) ─────────────────────────────────────────
-
-function CommunityTab({ uid, creatorName }: { uid: string; creatorName: string }) {
-  const { community, loaded } = useCommunity(uid)
-  const [draft, setDraft] = useState<Community | null>(null)
-  const [saving, setSaving] = useState<'idle' | 'saving' | 'saved'>('idle')
-  useEffect(() => { if (loaded && !draft) setDraft(community ?? { name: `${creatorName}'s Community`, tagline: '', about: '', color: BANNERS[0], games: [] }) }, [loaded, community, draft, creatorName])
-  if (!draft) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
-  const set = (p: Partial<Community>) => { setDraft({ ...draft, ...p }); setSaving('idle') }
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
-      {/* How it looks */}
-      <div>
-        <CommunityCard c={draft} big />
-        <p className="mt-3 text-xs text-slate-500 rounded-xl bg-slate-950/50 border border-slate-800 p-3">
-          Collectors find your community under Friends → Communities and join it; your book shows on its page. Coming next: news posts.
-        </p>
-      </div>
-      {/* Edit it */}
-      <div className="card-glass p-5 space-y-4">
-        <label className="block"><span className="field-label">Community name</span>
-          <input className="input-field font-semibold" maxLength={40} value={draft.name} onChange={(e) => set({ name: e.target.value })} /></label>
-        <label className="block"><span className="field-label">Tagline</span>
-          <input className="input-field text-sm" maxLength={80} value={draft.tagline} onChange={(e) => set({ tagline: e.target.value })} placeholder="One line about your community" /></label>
-        <label className="block"><span className="field-label">About</span>
-          <textarea className="input-field text-sm min-h-[100px]" maxLength={600} value={draft.about} onChange={(e) => set({ about: e.target.value })} /></label>
-        <div><span className="field-label">Games</span>
-          <div className="flex flex-wrap gap-1.5">
-            {(Object.keys(GAME_LABELS) as Game[]).map((g) => {
-              const on = draft.games?.includes(g)
-              return (
-                <button key={g} type="button" onClick={() => set({ games: on ? draft.games!.filter((x) => x !== g) : [...(draft.games ?? []), g] })}
-                  className={cn('rounded-full px-2.5 py-1 text-xs font-bold border transition-colors', on ? 'text-white border-transparent' : 'border-slate-800 text-slate-400 hover:text-ink')}
-                  style={on ? { background: GAME_COLORS[g] } : undefined}>{GAME_LABELS[g]}</button>
-              )
-            })}
-          </div>
-        </div>
-        <div><span className="field-label">Banner colour</span>
-          <div className="flex flex-wrap gap-2">
-            {BANNERS.map((c) => (
-              <button key={c} type="button" onClick={() => set({ color: c })} className={cn('w-8 h-8 rounded-full transition-transform hover:scale-110', draft.color === c && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a]')} style={{ background: c }} aria-label={c} />
-            ))}
-          </div>
-        </div>
-        <button type="button" disabled={saving === 'saving'} onClick={async () => { setSaving('saving'); try { await saveCommunity(uid, draft); setSaving('saved') } catch { setSaving('idle') } }} className="btn-primary w-full justify-center">
-          {saving === 'saving' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}{saving === 'saved' ? 'Saved' : 'Save community'}
-        </button>
-        {(community || saving === 'saved') && (
-          <Link href={communityPath(uid)} className="btn-secondary w-full justify-center !bg-slate-950 border border-slate-700 !text-ink">
-            <Eye size={15} />View your community page
-          </Link>
-        )}
       </div>
     </div>
   )

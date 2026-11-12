@@ -244,7 +244,8 @@ TCGHaven/
     │   └── ScanReviewDialog.tsx    ← After the iPhone scanner: printing, condition, quantity,
     │                                 then "Add N cards" (saves like AddCardDialog — keep in step)
     ├── creator/                    ← The Creator Studio's parts (docs/creators.md): CoverDesigner,
-    │                                 BookPlanner (the open book with "+" spots), BadgeMaker
+    │                                 BookPlanner (the open book with "+" spots), BadgeMaker,
+    │                                 StudioHero (header, checklist, tabs), CommunityStudio
     ├── pages/
     │   ├── ScanLinkPage.tsx        ← /scan — the QR code's page: opens the app's scanner
     │   ├── InventoryPage.tsx       ← Card list, search, filter, delete
