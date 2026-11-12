@@ -94,7 +94,7 @@ export interface CoverStyle {
   showCount?: boolean    // "3 / 10 earned" (default on)
   countColor?: string    // its text (default gold)
   pageColor?: string     // the page edges showing at the side
-  spine?: string         // components/badges/CoverSpine.tsx SPINES id; unset = no spine (the picture fills the cover)
+  spine?: string         // components/badges/CoverSpine.tsx SPINES id; unset = the default brown stitched spine, 'none' = no spine
   spineColor?: string    // its main colour (any; default walnut)
   spineAccent?: string   // its second colour — thread, gold, stripes… (any; default per look)
   spineDetail?: string   // a third colour on looks that have one (pinlines, rivets, eyelets, moon)

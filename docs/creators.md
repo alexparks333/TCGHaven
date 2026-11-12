@@ -66,7 +66,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        Every look also has Width (8–24%, `spineWidth`) and Roundness (`spineRound`), plus Surprise me and
        Reset. The spine **eats into the cover**: the picture, title and count sit in what's left
        (`coverArea()`), so every book stays the same size. Add a new look by adding a `SpineDef` —
-       the designer builds its controls from it.
+       the designer builds its controls from it. Every creator book starts with a **brown stitched spine**
+       (`DEFAULT_SPINE`; unset `spine` = stitched, `'none'` = no spine).
      - Book saves use `mergeFields` (not `merge`), so a setting switched off (a missing key) really goes.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
   3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder

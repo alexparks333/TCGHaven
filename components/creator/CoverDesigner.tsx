@@ -191,7 +191,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
           {[undefined, ...SPINES].map((sp) => {
             const on = spine?.id === sp?.id
             return (
-              <button key={sp?.id ?? 'none'} type="button" onClick={() => setStyle({ spine: sp?.id })} title={sp?.name ?? 'No spine'}
+              <button key={sp?.id ?? 'none'} type="button" onClick={() => setStyle({ spine: sp?.id ?? 'none' })} title={sp?.name ?? 'No spine'}
                 className={cn('rounded-xl border p-1 transition-colors', on ? 'border-[#7a5230] bg-[#f6eedb] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
                 {/* A strip of the spine in this look, in the creator's colours */}
                 <span className="relative block w-full h-16 rounded-[6px] overflow-hidden" style={{ background: BLANK_COVER }}>

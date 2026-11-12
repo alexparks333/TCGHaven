@@ -300,8 +300,10 @@ export const SPINES: SpineDef[] = [
   },
 ]
 
-/** The cover's spine look, if it has one (an unknown id = none) */
-export const spineOf = (st?: CoverStyle) => SPINES.find((x) => x.id === st?.spine)
+/** Every creator book starts with a brown stitched spine; 'none' takes it off */
+export const DEFAULT_SPINE = 'stitched'
+/** The cover's spine look, if it has one (unset = the default stitched one; 'none' = no spine) */
+export const spineOf = (st?: CoverStyle) => SPINES.find((x) => x.id === (st?.spine ?? DEFAULT_SPINE))
 export const spineWidth = (st?: CoverStyle) => Math.min(SPINE_W_RANGE[1], Math.max(SPINE_W_RANGE[0], st?.spineWidth ?? SPINE_W))
 /** One spine's slider values: what the creator set, else the look's defaults (kept in range) */
 export function spineParams(def: SpineDef, st?: CoverStyle): Record<string, number> {
@@ -319,7 +321,7 @@ export function coverArea(st?: CoverStyle) {
  *  (`swatch` = the box's width ÷ height): filling its box. `look` overrides the cover's own. */
 export function CoverSpine({ st, look, swatch }: { st?: CoverStyle; look?: string; swatch?: number }) {
   const id = 'spine' + useId().replace(/:/g, '')
-  const def = SPINES.find((x) => x.id === (look ?? st?.spine))
+  const def = look ? SPINES.find((x) => x.id === look) : spineOf(st)
   if (!def) return null
   const width = spineWidth(st)
   // Its width in units, from its real shape (the cover is 0.71 wide : 1 tall), so dots stay round
