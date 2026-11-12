@@ -1111,15 +1111,14 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     <MaybeAuthGuard guard={!picker}>
       <div>
         {!readOnly && (
-          <div className="mb-6 flex items-start justify-between gap-4">
+          <div className="mb-6 flex items-center justify-between gap-4">
             <h1 className="text-2xl font-bold text-ink">Cardex</h1>
-            {/* The click shortcuts, top right (computers only — a phone has no keys) */}
-            <dl className="hidden md:grid grid-cols-[auto_auto] items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-800 bg-slate-950/50 px-3.5 py-2.5 text-xs">
-              <dt className="flex items-center gap-1 justify-end"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span></dt>
-              <dd className="font-semibold text-ink">Add card</dd>
-              <dt className="flex items-center gap-1 justify-end"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span></dt>
-              <dd className="font-semibold text-ink">Look up price <span className="font-normal text-slate-500">(new tab)</span></dd>
-            </dl>
+            {/* The click shortcuts, top right on one slim line, no taller than the title (computers only) */}
+            <div className="hidden md:flex items-center gap-4 rounded-full border border-slate-800 bg-slate-950/50 pl-1.5 pr-4 py-1 text-xs whitespace-nowrap">
+              <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Add card</span></span>
+              <span className="w-px h-4 bg-slate-700" />
+              <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Look up price</span></span>
+            </div>
           </div>
         )}
 
