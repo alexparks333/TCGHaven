@@ -39,7 +39,7 @@ const PinInspector = dynamic(() => import('@/components/badges/PinInspector'), {
 
 const GAMES = Object.keys(GAME_LABELS) as Game[]
 
-export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, onClose }: {
+export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, onClose, startStep }: {
   uid: string
   book: BadgeSet
   badges?: BadgeDef[]      // the book's other badges — the left side shows this one on its real page among them
@@ -47,13 +47,14 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
   onSave: (b: BadgeDef) => Promise<void>
   onDelete?: () => Promise<void>
   onClose: () => void
+  startStep?: number        // open on this step (default: Name it once there's art, else Pin art)
 }) {
   useScrollLock(true)
   const [draft, setDraft] = useState<BadgeDef>(badge)
   const set = (patch: Partial<BadgeDef>) => setDraft((d) => ({ ...d, ...patch }))
   // Publishing needs all four steps: art, a name, cards to collect, and the 3D sculpt
   const allDone = !!draft.imageUrl && !!draft.name.trim() && draft.slots.length > 0 && !!draft.reliefKit
-  const [step, setStep] = useState(badge.imageUrl ? 2 : 1)
+  const [step, setStep] = useState(startStep ?? (badge.imageUrl ? 2 : 1))
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
   const [studio, setStudio] = useState(false)
@@ -419,6 +420,7 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
   const [results, setResults] = useState<CardSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [cardex, setCardex] = useState(false)
+  const [reviewing, setReviewing] = useState(false) // the big review of the picked cards
   // The eye on a result: the Cardex's own card view (big card, rarity, set, price)
   const [zoom, setZoom] = useState<ZoomCardData | null>(null)
   useScrollLock(zoom !== null)
@@ -461,32 +463,31 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
     <div>
       <h3 className="text-lg font-bold text-ink">What do fans collect?</h3>
       <p className="text-sm text-slate-400 mt-1">Pick the cards. Owning one of each earns the badge — fans see their progress fill up in your book.</p>
-      {/* The picked cards: small tiles that wrap, in a tray that scrolls — fits 3 or 300 */}
-      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Picked</span>
-          <span className="rounded-full bg-violet-600 text-white text-[11px] font-bold px-2 py-0.5 tabular-nums">{slots.length}</span>
-          {slots.length > 1 && (
-            <button type="button" onClick={() => { if (confirm(`Remove all ${slots.length} cards from this badge?`)) onChange([]) }}
-              className="ml-auto text-[11px] font-semibold text-slate-500 hover:text-red-600">Clear all</button>
-          )}
-        </div>
-        {slots.length === 0
-          ? <p className="text-xs text-slate-500 py-2">None yet — tap cards below to add them.</p>
-          : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(46px,1fr))] gap-1.5 max-h-[188px] overflow-y-auto overscroll-contain pr-1">
-              {slots.map((s, i) => (
-                <button key={s.cardIds.join() + i} type="button" title={`${s.label}${s.cards?.[0]?.setName ? ` · ${s.cards[0].setName}` : ''} — tap to remove`}
-                  onClick={() => onChange(slots.filter((_, j) => j !== i))}
-                  className="group relative aspect-[63/88] rounded-[5px] overflow-hidden border border-slate-800">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={cardImage(s.cards?.[0]?.imageUrl, 'thumb') ?? s.cards?.[0]?.imageUrl} alt={s.label} loading="lazy" className="w-full h-full object-cover" />
-                  <span className="absolute inset-0 bg-red-700/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} /></span>
-                </button>
+      {/* The picked cards: a summary — tap it to review them all big, with their details */}
+      <button type="button" onClick={() => setReviewing(true)} disabled={slots.length === 0}
+        className="group mt-4 w-full rounded-2xl border border-slate-800 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-950/60 p-3 flex items-center gap-3 text-left transition-colors disabled:cursor-default">
+        {slots.length === 0 ? (
+          <span className="text-xs text-slate-500 py-2">No cards yet — pick them below.</span>
+        ) : (
+          <>
+            {/* a little fanned stack of the first few */}
+            <span className="relative shrink-0 h-[68px]" style={{ width: 48 + Math.min(3, slots.length - 1) * 14 }}>
+              {slots.slice(0, 4).map((sl, k) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={k} src={cardImage(sl.cards?.[0]?.imageUrl, 'thumb') ?? sl.cards?.[0]?.imageUrl} alt=""
+                  className="absolute top-0 h-[68px] aspect-[63/88] object-cover rounded-[5px] border border-black/20 shadow-md"
+                  style={{ left: k * 14, transform: `rotate(${(k - 1.5) * 4}deg)`, zIndex: 4 - k }} />
               ))}
-            </div>
-          )}
-      </div>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-ink">{slots.length} card{slots.length === 1 ? '' : 's'} to collect</span>
+              <span className="block text-xs text-slate-500 truncate">{slots.slice(0, 3).map((sl) => sl.label).join(', ')}{slots.length > 3 ? ` +${slots.length - 3} more` : ''}</span>
+            </span>
+            <span className="shrink-0 rounded-full bg-violet-600 text-white text-xs font-bold px-3 py-1.5 inline-flex items-center gap-1 group-hover:brightness-110">Review<ArrowRight size={13} /></span>
+          </>
+        )}
+      </button>
+      {reviewing && <CardsReview slots={slots} onSave={(next) => { onChange(next); setReviewing(false) }} onClose={() => setReviewing(false)} />}
       {/* Which game: a row of pills (scrolls sideways) — then the search, full width */}
       <div className="mt-5">
         <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Game</p>
@@ -623,3 +624,103 @@ function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<
   )
 }
 
+/** The picked cards, big: each with its name, set, number and game, a full-size look, and a remove
+ *  toggle. Nothing changes until Save — so a creator can go through them and decide. */
+export function CardsReview({ slots, onSave, onClose }: { slots: BadgeSlot[]; onSave: (next: BadgeSlot[]) => void; onClose: () => void }) {
+  const [removing, setRemoving] = useState<Set<number>>(new Set())
+  const [filter, setFilter] = useState('')
+  const [sort, setSort] = useState<'picked' | 'name' | 'set'>('picked')
+  const [zoom, setZoom] = useState<ZoomCardData | null>(null)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape' && !zoom) onClose() }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose, zoom])
+  const toggle = (i: number) => setRemoving((r) => { const n = new Set(r); if (n.has(i)) n.delete(i); else n.add(i); return n })
+  const f = filter.trim().toLowerCase()
+  const shown = slots.map((sl, i) => ({ sl, i, c: sl.cards?.[0] }))
+    .filter(({ sl, c }) => !f || [sl.label, c?.setName, c?.number].some((v) => v?.toLowerCase().includes(f)))
+    .sort((a, b) => sort === 'name' ? a.sl.label.localeCompare(b.sl.label)
+      : sort === 'set' ? (a.c?.setName ?? '').localeCompare(b.c?.setName ?? '') || (a.c?.number ?? '').localeCompare(b.c?.number ?? '', undefined, { numeric: true })
+      : a.i - b.i)
+  const look = (el: HTMLElement, sl: BadgeSlot) => {
+    const c = sl.cards?.[0]
+    const g = gameOf(sl)
+    setZoom({
+      imageUrl: c?.imageUrl, name: c?.name ?? sl.label, number: c?.number, setName: c?.setName,
+      rarityLabel: '', rarityColor: '#7a6a55', owned: false, quantity: 0,
+      glowColor: g ? GAME_COLORS[g] : '#d6b168', originRect: el.getBoundingClientRect(),
+    } as ZoomCardData)
+  }
+  const keep = slots.length - removing.size
+  return (
+    <Portal>
+      <div className="fixed inset-0 z-[75] flex items-center justify-center p-3 sm:p-6">
+        <div className="add-card-backdrop absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose} />
+        <div role="dialog" aria-modal="true" aria-label="Cards to collect" className="add-card-panel relative w-full max-w-[1080px] h-[min(92dvh,860px)] card-glass rounded-2xl flex flex-col overflow-hidden">
+          <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-slate-800">
+            <span className="haven-medallion w-9 h-9"><Layers size={16} /></span>
+            <div className="min-w-0">
+              <h2 className="pinbook-serif text-lg font-bold text-ink leading-tight">Cards to collect</h2>
+              <p className="text-xs text-slate-500">{slots.length} picked · fans own one of each to earn the badge</p>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Find a card…" className="input-field !pl-8 !py-1.5 text-sm w-44" />
+              </div>
+              <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="input-field !py-1.5 text-sm !w-auto">
+                <option value="picked">Order picked</option><option value="name">Name</option><option value="set">Set & number</option>
+              </select>
+              <button type="button" onClick={onClose} className="p-2 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label="Close"><X size={18} /></button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto overscroll-contain p-5">
+            {shown.length === 0 ? <p className="text-sm text-slate-500 text-center py-16">No picked cards match &ldquo;{filter.trim()}&rdquo;</p> : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {shown.map(({ sl, i, c }) => {
+                  const off = removing.has(i), g = gameOf(sl)
+                  return (
+                    <div key={sl.cardIds.join() + i} className={cn('group rounded-xl border p-2 transition-all', off ? 'border-red-500/40 bg-red-500/5' : 'border-slate-800 bg-slate-950/40 hover:border-slate-700')}>
+                      <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={cardImage(c?.imageUrl, 'grid') ?? c?.imageUrl} alt={sl.label} loading="lazy"
+                          className={cn('w-full aspect-[63/88] object-cover rounded-lg shadow-md transition-all', off && 'grayscale opacity-40')} />
+                        <button type="button" onClick={(e) => look(e.currentTarget.parentElement!, sl)} title="Look at the card" aria-label={`Look at ${sl.label}`}
+                          className="absolute top-2 left-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"><Eye size={15} /></button>
+                        {off && <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs font-bold uppercase tracking-wider text-red-600">Will be removed</span>}
+                      </div>
+                      <p className={cn('mt-2 text-sm font-bold truncate', off ? 'text-slate-500 line-through' : 'text-ink')} title={sl.label}>{sl.label}</p>
+                      <p className="text-[11px] text-slate-500 truncate" title={c?.setName}>{c?.setName ?? '—'}{c?.number ? ` · #${c.number}` : ''}</p>
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        {g && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500"><span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}</span>}
+                        {sl.cardIds.length > 1 && <span className="text-[10px] text-slate-500">· any of {sl.cardIds.length} versions</span>}
+                      </div>
+                      <button type="button" onClick={() => toggle(i)}
+                        className={cn('mt-2 w-full rounded-lg py-1.5 text-xs font-semibold transition-colors', off ? 'bg-slate-800 text-ink hover:bg-slate-700' : 'text-slate-500 hover:text-red-600 hover:bg-red-500/10 border border-slate-800')}>
+                        {off ? 'Keep it' : 'Remove'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 px-5 py-4 border-t border-slate-800">
+            <span className="text-sm text-slate-500">
+              <b className="text-ink">{keep}</b> to collect{removing.size > 0 && <> · <span className="text-red-600 font-semibold">{removing.size} to remove</span></>}
+            </span>
+            {removing.size > 0 && <button type="button" onClick={() => setRemoving(new Set())} className="text-xs font-semibold text-slate-500 hover:text-ink">Undo all</button>}
+            {removing.size < slots.length && <button type="button" onClick={() => setRemoving(new Set(slots.map((_, i) => i)))} className="text-xs font-semibold text-slate-500 hover:text-red-600">Remove all</button>}
+            <div className="flex-1" />
+            <button type="button" onClick={onClose} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink">Cancel</button>
+            <button type="button" onClick={() => onSave(slots.filter((_, i) => !removing.has(i)))} className="btn-primary"><Check size={16} />Save {removing.size ? `(${keep} cards)` : ''}</button>
+          </div>
+        </div>
+      </div>
+      {createPortal(<CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly />, document.body)}
+    </Portal>
+  )
+}

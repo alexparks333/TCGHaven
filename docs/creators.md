@@ -113,6 +113,9 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      Exit Creator Studio and closing the browser tab ask too. **Back to the classic inside** warns that it
      can't be undone, then clears `insideStyle` and saves at once. The Studio's pages now show the Center
      rings too, like the fan view.
+     **Cards to collect:** the picked cards are a summary (a fanned stack, the count, the first names, Review);
+     Review opens `CardsReview` — every picked card big with its name, set, number and game, a full-size look,
+     filter and sort, and Remove / Keep it on each. Nothing changes until Save (Cancel leaves them as they were).
      **Drafts and publishing:** a new badge is a draft (`BadgeDef.published: false`) — only its creator sees it,
      tagged DRAFT on the Studio's pages. **Save draft** keeps it as is; **Publish badge** unlocks once all four
      steps are done (art, name, cards to collect, 3D) and makes it live (`published: true`), playing the
