@@ -2148,7 +2148,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                   onClick={() => openEbaySearch(d.ebayCard)}
                   className="mt-1 text-[11px] text-slate-500 hover:text-ink underline underline-offset-2"
                 >
-                  Search eBay sold listings
+                  Search Recently Sold Listings
                 </button>
               </>
             )}
