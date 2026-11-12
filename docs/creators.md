@@ -35,7 +35,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 - **The Studio's layout** (redesigned 2026-11-12, in the app's paper: `haven-panel` / `haven-chip` / `haven-medallion`, flat walnut, no gradients or glows; hand-made touches from `components/creator/Ornaments.tsx` — corner flourishes, a fleuron divider, a lettered seal, a ribbon — over `.haven-grain` paper). **`StudioHero`** (`components/creator/StudioHero.tsx`)
   is a paper header with the community's stamp, with:
   - stats: badges, chapters and members;
-  - a **checklist** of 7 steps (`studioSteps()`), with dots, a progress bar and a "Next: …" link.
+  - a **checklist** of 6 steps (`studioSteps()`; "fill a whole chapter" was dropped 2026-11-12), with dots, a progress bar and a "Next: …" link.
     Each step jumps to its tab;
   - three paper index tabs into the panel below: **Cover** (first, and where the Studio opens), **Pages &
     badges** and **Community**. Both halves stay mounted (`hidden`),

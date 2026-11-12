@@ -27,14 +27,12 @@ export function studioSteps(community: Community, book: CreatorBook | null): Ste
   const badges = book?.badges ?? []
   const b = book?.book
   const dressed = !!b?.coverImage
-  const fullChapter = !!b && chaptersFor(b, badges).some((c) => badges.filter((x) => x.page === c).length >= 6)
   return [
     { label: 'Launch your community', done: true, tab: 'community' },
     { label: 'Make your book', done: !!book, tab: 'cover' },
     { label: 'Add your cover picture', done: dressed, tab: 'cover' },
     { label: 'Make your first badge', done: badges.length > 0, tab: 'pages' },
     { label: 'Give a badge a 3D pin', done: badges.some((x) => !!x.reliefKit || !!x.relief), tab: 'pages' },
-    { label: 'Fill a whole chapter (6)', done: fullChapter, tab: 'pages' },
     { label: 'Tell fans about your community', done: !!community.about.trim(), tab: 'community' },
   ]
 }
