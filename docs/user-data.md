@@ -260,6 +260,7 @@ back to `[]` and logs its own specific error, so one flaky read no longer blanks
   known yet shows USD, never a guess.
 - **Redrawing:** changing the currency remounts the app shell (`ClientWrapper`
   `useCurrencyRedraw`), because `formatCurrency` is a plain function.
-- **Entering prices:** "How Much Paid" and "Sale Price" are still entered in US dollars and are
-  labelled so.
+- **Typed amounts are in the chosen currency too:** How Much Paid, Sale Price and the Filters
+  value floor. They're converted to USD on save with `toUSD()` and shown back with `toDisplay()`
+  (`lib/currency.ts`), so a CAD collector never sees or types USD.
 - **Staff portal:** always USD. Use `formatUSD()` there, and anywhere that must not convert.
