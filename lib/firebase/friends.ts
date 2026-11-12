@@ -107,8 +107,15 @@ export async function ensureProfile(user: User): Promise<Profile> {
   const photoURL = user.photoURL ?? ''
   if (snap.exists()) {
     const d = snap.data()
-    if (d.displayName !== displayName || d.photoURL !== photoURL) {
-      await updateDoc(ref, { displayName, displayNameLower: displayName.toLowerCase(), photoURL, updatedAt: serverTimestamp() })
+    // Profiles made before 2026-11-11 have no `privacy` saved. The app shows that as the default
+    // (shared), but firestore.rules read it as not shared, so visitors saw "private" until the owner
+    // flipped a switch. Write the default down the first time we see one without it.
+    const missingPrivacy = !d.privacy || typeof d.privacy.cardex !== 'boolean' || typeof d.privacy.badges !== 'boolean'
+    if (d.displayName !== displayName || d.photoURL !== photoURL || missingPrivacy) {
+      await updateDoc(ref, {
+        displayName, displayNameLower: displayName.toLowerCase(), photoURL, updatedAt: serverTimestamp(),
+        ...(missingPrivacy && { privacy: { ...DEFAULT_PRIVACY, ...(d.privacy ?? {}) } }),
+      })
     }
     return { ...(toProfile(user.uid, d) as Profile), displayName, photoURL }
   }
@@ -121,6 +128,7 @@ export async function ensureProfile(user: User): Promise<Profile> {
     batch.set(doc(db, 'usernames', username), { uid: user.uid })
     batch.set(ref, {
       uid: user.uid, username, displayName, displayNameLower: displayName.toLowerCase(), photoURL,
+      privacy: DEFAULT_PRIVACY, // saved, not just assumed: firestore.rules read a missing one as private
       createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
     })
     try {
