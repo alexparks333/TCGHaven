@@ -10,8 +10,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   steps: name, bio (tagline + about), **games** (`Community.games`), colour. The community's card
   (`CommunityCard`) fills in live beside it. **Launch community** saves it, and only then does the
   Studio itself appear.
-- **The Studio's layout** (redesigned 2026-11-12). **`StudioHero`** (`components/creator/StudioHero.tsx`)
-  is a leather header in the creator's book leather + community colour, with:
+- **The Studio's layout** (redesigned 2026-11-12, in the app's paper: `haven-panel` / `haven-chip` / `haven-medallion`, flat walnut, no gradients or glows). **`StudioHero`** (`components/creator/StudioHero.tsx`)
+  is a paper header with the community's stamp, with:
   - stats: badges, chapters and members;
   - a **checklist** of 7 steps (`studioSteps()`), with dots, a progress bar and a "Next: …" link.
     Each step jumps to its tab;
@@ -27,7 +27,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   1. **No book yet:** name it ("PewDiePie Cuties") and it's made, with a random leather and gold
      foil, chapter "Chapter One", and collection = its name.
   2. **The Cover tab** (`components/creator/CoverDesigner.tsx`, always open beside the book).
-     Every change shows on the big book (`CoverStage`, under a spotlight in its leather) but stays
+     Every change shows on the big book (`CoverStage`, on binder paper) but stays
      unsaved until **Save cover** in the bar at the bottom of the designer. **Undo all** puts the
      saved cover back, and closing the browser tab asks first. A save writes only the cover's own
      fields (`COVER_KEYS` in CreatorPage.tsx), so chapter or inside changes made meanwhile on the
@@ -50,8 +50,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        Fill cover / Center. It's saved as `BadgeSet.coverFit` `{ x, y, scale }`, and `BookCover`
        draws it over the leather. Staff covers have no `coverFit` and still fill the cover.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
-  3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on a walnut
-     desk, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
+  3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder
+     paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
      - Each chapter shows its badges and **one "+ Add a badge" spot**.
      - **Beside the book, a panel with two tabs.**

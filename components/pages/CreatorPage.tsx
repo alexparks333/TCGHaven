@@ -75,7 +75,7 @@ function Body() {
     <div className="pb-6">
       <StudioHero uid={user.uid} community={community} book={book} since={since} tab={tab} onTab={setPicked} dirtyTabs={coverDirty ? ['cover'] : []} />
       {/* The parchment panel the tabs open onto (both halves stay mounted, so nothing's lost switching) */}
-      <div className="rounded-b-[28px] bg-slate-950 border border-t-0 border-slate-800 shadow-[0_24px_40px_-30px_rgba(40,20,5,0.6)] p-4 md:p-6">
+      <div className="rounded-b-[22px] rounded-tr-[22px] bg-slate-950 border border-slate-800 p-4 md:p-6">
         <div hidden={tab === 'community'}>
           <BookTab uid={user.uid} creatorName={creatorName} saved={book} view={tab === 'cover' ? 'cover' : 'pages'} onView={setPicked} onCoverDirty={setCoverDirty} />
         </div>
@@ -158,8 +158,8 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
     <div>
       {/* The book's bar: its name, saving, and the fan's-eye preview */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-5">
-        <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm" style={{ background: `linear-gradient(135deg, ${b.book.cover.from}, ${b.book.cover.to})`, color: b.book.cover.accent }}>
-          {view === 'cover' ? <Palette size={17} /> : <BookOpen size={17} />}
+        <span className="haven-medallion w-9 h-9 shrink-0">
+          {view === 'cover' ? <Palette size={16} /> : <BookOpen size={16} />}
         </span>
         <div className="min-w-0">
           <h2 className="text-lg font-bold text-ink truncate leading-tight">{view === 'cover' ? 'Design your cover' : b.book.name}</h2>
@@ -179,23 +179,21 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
           <div className="lg:sticky self-start" style={{ top: 'max(1rem, calc(50dvh - 330px))' }}>
             <CoverStage book={designing} badges={b.badges} dirty={coverDirty} onOpen={() => onView('pages')} />
           </div>
-          <div className="card-glass !bg-slate-900 p-4 md:p-5">
+          <div className="haven-panel !p-4 md:!p-5">
             <CoverDesigner uid={uid} book={designing} onChange={setCoverDraft} initialOpen="cover" />
             {/* Unsaved changes: keep them or put the saved cover back */}
-            <div className={cn('sticky bottom-3 mt-5 rounded-2xl p-2.5 flex items-center gap-2 transition-all',
-              coverDirty ? 'bg-ink text-white shadow-[0_12px_28px_-10px_rgba(40,20,5,0.8)]' : 'bg-slate-950 border border-slate-800 text-slate-500')}>
-              <span className="text-xs font-semibold flex-1 pl-1.5 flex items-center gap-1.5">
-                {coverDirty ? <><span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />Unsaved cover changes</> : <><Check size={13} className="text-emerald-600" />Cover saved</>}
+            <div className={cn('haven-label sticky bottom-3 mt-5 !py-2 !pr-2', coverDirty && 'shadow-[0_10px_20px_-12px_rgba(60,35,15,0.5)]')}>
+              <span className="text-xs font-semibold flex-1 flex items-center gap-1.5 text-slate-500">
+                {coverDirty ? <><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" /><span className="text-ink">Unsaved cover changes</span></> : <><Check size={13} className="text-emerald-600" />Cover saved</>}
               </span>
               {coverDirty && (
                 <>
-                  <button type="button" onClick={() => setCoverDraft(null)} className="rounded-xl px-3 py-2 text-xs font-bold text-white/75 hover:text-white hover:bg-white/10 inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
+                  <button type="button" onClick={() => setCoverDraft(null)} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1"><RotateCcw size={13} />Undo all</button>
                   <button type="button" onClick={() => {
                     const keep: Partial<BadgeSet> = {}
                     for (const k of COVER_KEYS) (keep as Record<string, unknown>)[k] = designing[k]
                     setBook({ ...b.book, ...keep }); setCoverDraft(null)
-                  }} className="rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 hover:brightness-110"
-                    style={{ background: `linear-gradient(180deg, #f8e2a2, ${FOILS[0].color})`, color: '#1c1206' }}>
+                  }} className="btn-primary !py-1.5">
                     <Check size={15} />Save cover
                   </button>
                 </>
@@ -383,25 +381,20 @@ function StartBook({ creatorName, onCreate, onOpened }: {
 /** The closed book under a spotlight in its own leather, tilting toward the pointer — tap to open it */
 function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: BadgeDef[]; onOpen: () => void; dirty: boolean }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
-  const { from, to, accent } = book.cover
   return (
     <div
-      className="relative overflow-hidden rounded-[24px] min-h-[520px] md:min-h-[600px] flex flex-col items-center justify-center gap-6 py-10"
-      style={{ background: `radial-gradient(ellipse at 50% 42%, ${from}66 0%, ${to}dd 48%, #0d0a08 100%)`, transition: 'background 0.6s' }}
+      className="haven-panel relative overflow-hidden min-h-[520px] md:min-h-[600px] flex flex-col items-center justify-center gap-7 !py-10"
       onPointerMove={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -12, y: ((e.clientX - r.left) / r.width - 0.5) * 18 })
       }}
       onPointerLeave={() => setTilt({ x: 0, y: 0 })}
     >
-      {Array.from({ length: 14 }, (_, i) => (
-        <span key={i} className="creator-spark absolute rounded-full pointer-events-none"
-          style={{ left: `${(i * 37) % 100}%`, bottom: '-8px', width: 2 + (i % 3), height: 2 + (i % 3), background: accent, color: accent, animationDelay: `${(i * 0.53) % 6}s`, animationDuration: `${5 + (i % 5)}s` }} />
-      ))}
-      {dirty && <span className="absolute top-4 left-4 rounded-full bg-black/45 backdrop-blur px-3 py-1 text-[11px] font-bold text-amber-300 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />Preview — not saved yet</span>}
-      <div className="absolute bottom-[17%] w-[44%] max-w-[300px] h-6 rounded-[50%] bg-black/55 blur-xl" />
+      <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
+      {dirty && <span className="haven-plate absolute top-4 left-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" />Preview — not saved yet</span>}
+      <div className="absolute bottom-[16%] w-[40%] max-w-[260px] h-5 rounded-[50%] bg-[#5a3c1e]/30 blur-lg" />
       <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>
-        <div className="absolute inset-0 transition-transform duration-200 ease-out creator-bob"
+        <div className="absolute inset-0 transition-transform duration-200 ease-out"
           style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', containerType: 'inline-size' }}>
           <BookThickness pageColor={book.coverStyle?.pageColor} />
           <span className="absolute inset-0"><BookCover set={book} badges={null} defs={badges} /></span>
@@ -409,9 +402,7 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
             style={{ background: `linear-gradient(${110 + tilt.y * 4}deg, transparent 30%, rgba(255,255,255,0.4) 48%, transparent 62%)` }} />
         </div>
       </button>
-      <button type="button" onClick={onOpen}
-        className="relative rounded-full px-5 py-2.5 text-sm font-bold inline-flex items-center gap-2 shadow-lg hover:brightness-110 active:scale-[0.98] transition"
-        style={{ background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 55%, white), ${accent})`, color: '#1c1206' }}>
+      <button type="button" onClick={onOpen} className="btn-primary relative">
         <BookOpen size={16} />Open it{badges.length ? '' : ' & add badges'}<ArrowRight size={15} />
       </button>
     </div>

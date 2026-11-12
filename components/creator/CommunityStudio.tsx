@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 
 const GAMES = Object.keys(GAME_LABELS) as Game[]
 // Click-to-edit text: looks like the page until you hover or type in it
-const inline = 'w-full bg-transparent rounded-xl px-2 -mx-2 outline-none transition-colors hover:bg-slate-900 focus:bg-slate-900 focus:ring-2 focus:ring-violet-600/40 placeholder:text-slate-600'
+const inline = 'w-full bg-transparent rounded-lg px-2 -mx-2 outline-none border border-transparent transition-colors hover:border-[#d6c49f] hover:bg-[#f6eedb] focus:border-[#c4ae83] focus:bg-[#f6eedb] placeholder:text-slate-600'
 
 export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: CreatorBook | null; onEditBook: () => void }) {
   const { community, loaded } = useCommunity(uid)
@@ -60,25 +60,25 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
       {/* ── The page, editable in place ── */}
-      <div className="card-glass overflow-hidden !bg-slate-900">
-        <div className="relative h-40 md:h-52" style={{ background: `linear-gradient(135deg, ${c.color}, #0b0b12)`, transition: 'background 0.5s' }}>
-          <div className="absolute inset-0 opacity-40" style={{ backgroundImage: 'radial-gradient(circle at 18% 30%, rgba(255,255,255,0.35) 0, transparent 38%), radial-gradient(circle at 85% 75%, rgba(255,255,255,0.18) 0, transparent 34%)' }} />
-          <span className="absolute left-4 top-4 rounded-full bg-black/35 backdrop-blur px-3 py-1 text-[11px] font-bold text-white/90 inline-flex items-center gap-1.5">
+      <div className="haven-panel !p-0 overflow-hidden">
+        <div className="relative h-40 md:h-48 border-b border-[#d6c49f]" style={{ background: c.color, transition: 'background 0.5s' }}>
+          <div className="absolute inset-0 opacity-25" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0)', backgroundSize: '16px 16px' }} />
+          <span className="haven-plate absolute left-4 top-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5">
             <MousePointerClick size={13} />Click anything to edit · it saves itself
           </span>
           {/* The banner's colour, picked right on it */}
-          <div className="absolute right-3 bottom-3 flex flex-wrap justify-end gap-1.5 rounded-2xl bg-black/35 backdrop-blur p-1.5 max-w-[70%]">
+          <div className="haven-plate absolute right-3 bottom-3 flex flex-wrap justify-end gap-1.5 !p-1.5 max-w-[70%]">
             {BANNERS.map((col) => (
               <button key={col} type="button" onClick={() => set({ color: col })} aria-label={`Banner colour ${col}`}
-                className={cn('w-6 h-6 rounded-full border-2 transition-transform hover:scale-125', c.color === col ? 'border-white scale-110' : 'border-white/20')}
+                className={cn('w-6 h-6 rounded-full transition-shadow', c.color === col ? 'ring-2 ring-offset-2 ring-offset-[#f6eedb] ring-[#7a5230]' : 'hover:ring-1 hover:ring-[#c4ae83] hover:ring-offset-1 hover:ring-offset-[#f6eedb]')}
                 style={{ background: col }} />
             ))}
           </div>
         </div>
 
         <div className="px-5 md:px-8 pb-7 -mt-11 relative">
-          <div className="w-[84px] h-[84px] rounded-[24px] border-4 border-slate-900 shadow-lg flex items-center justify-center text-4xl font-black text-white rotate-[-3deg]"
-            style={{ background: `linear-gradient(145deg, ${c.color}, color-mix(in srgb, ${c.color} 45%, black))`, transition: 'background 0.5s' }}>
+          <div className="w-[84px] h-[84px] rounded-[22px] border-4 border-[#efe4cc] flex items-center justify-center pinbook-serif text-4xl font-bold text-white"
+            style={{ background: c.color, transition: 'background 0.5s' }}>
             {(c.name.trim()[0] || '★').toUpperCase()}
           </div>
 
@@ -97,9 +97,8 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
               const on = c.games?.includes(g)
               return (
                 <button key={g} type="button" onClick={() => set({ games: on ? c.games!.filter((x) => x !== g) : [...(c.games ?? []), g] })}
-                  className={cn('rounded-full px-3 py-1 text-xs font-bold border transition-all', on ? 'text-white border-transparent shadow-sm' : 'border-dashed border-slate-700 text-slate-500 hover:text-ink hover:border-slate-600')}
-                  style={on ? { background: GAME_COLORS[g] } : undefined}>
-                  {on && <Check size={11} className="inline -mt-0.5 mr-1" strokeWidth={3} />}{GAME_LABELS[g]}
+                  className={cn('haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1.5', on && 'haven-chip-on')}>
+                  <span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}
                 </button>
               )
             })}
@@ -117,7 +116,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
 
       {/* ── Beside it ── */}
       <div className="space-y-4 lg:sticky lg:top-4">
-        <div className="card-glass p-4">
+        <div className="haven-panel">
           <div className="flex items-center gap-2">
             <span className={cn('text-xs font-semibold flex items-center gap-1.5', state === 'error' ? 'text-red-600' : 'text-slate-500')}>
               {state === 'saving' ? <><Loader2 size={13} className="animate-spin" />Saving…</>
@@ -136,10 +135,10 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
         </div>
 
         {/* The book fans collect on the page */}
-        <div className="card-glass p-4 flex items-center gap-4">
+        <div className="haven-panel flex items-center gap-4">
           {book ? (
             <>
-              <div className="relative w-20 aspect-[0.71] shrink-0 rotate-[-4deg] drop-shadow-[0_8px_10px_rgba(40,20,5,0.4)]" style={{ containerType: 'inline-size' }}>
+              <div className="relative w-20 aspect-[0.71] shrink-0 drop-shadow-[0_6px_8px_rgba(60,35,15,0.3)]" style={{ containerType: 'inline-size' }}>
                 <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
               </div>
               <div className="min-w-0">
@@ -159,12 +158,12 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
         </div>
 
         {/* What's coming */}
-        <div className="rounded-2xl border-2 border-dashed border-slate-800 p-4">
+        <div className="rounded-[0.875rem] border border-dashed border-[#c4ae83] p-4">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Coming soon</p>
           <div className="mt-2.5 space-y-2.5">
             {([[Megaphone, 'News posts', 'Tell members about new badges and drops'], [CalendarDays, 'Events', 'Limited-time badges and collecting challenges']] as const).map(([Icon, t, d]) => (
               <div key={t} className="flex items-start gap-3">
-                <span className="w-8 h-8 rounded-xl bg-slate-800 text-slate-500 flex items-center justify-center shrink-0"><Icon size={15} /></span>
+                <span className="haven-medallion w-8 h-8 shrink-0"><Icon size={14} /></span>
                 <div><p className="text-sm font-semibold text-ink">{t}</p><p className="text-[11px] text-slate-500">{d}</p></div>
               </div>
             ))}
