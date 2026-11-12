@@ -47,7 +47,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        `showEmblem` / `emblemColor` / `titleShine` settings are ignored)
        with its own colour. It starts gold (`COVER_TEXT_GOLD`) and is set in
        Text;
-     - **page edges:** the colour of the page block at the side (`BookThickness pageColor`);
+     - **page edges** (`lib/pageEdges.ts`): the page block at the closed book's side — Classic dark, Paper,
+       Gilded, Sprayed, Marbled, Painted fade or Chapter bands, with any colours (`pageColor`/`pageColor2`),
+       Depth (`pageDepth`), Page lines (`pageLines`) and each style's own sliders (`pageParams[style]`).
+       `BookThickness look={coverStyle}` draws it (shelf, Studio, community page); a lone old `pageColor` = Paper;
      - these are stored as `BadgeSet.coverStyle` (`CoverStyle` in `lib/badges.ts`). A book with a
        `coverStyle` is drawn by `StyledCover` in BadgeLibrary.tsx; creator books always have one,
        and staff books (none) keep the classic cover;
@@ -104,6 +107,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      Exit Creator Studio and closing the browser tab ask too. **Back to the classic inside** warns that it
      can't be undone, then clears `insideStyle` and saves at once. The Studio's pages now show the Center
      rings too, like the fan view.
+     **Pop-ups** (BadgeMaker, Preview as a fan, the Studio's prompts) render into `<body>` through
+     `components/creator/Portal.tsx`, so no transformed or sticky parent can push them off screen; the
+     entrance's `.studio-reveal` uses `backwards` fill so it leaves no transform behind. Center rings are drawn
+     as one measured SVG with chrome shading, specular bevels and cast shadows.
      Every page draws two layers over the felt for these — `.pinbook-page-art` (picture) then
      `.pinbook-page-pattern` — under the page's content. With a pattern, an empty badge's silhouette is solid
      felt (`.pinbook-hole-felt`, `--page-solid`): the pattern stops at its outline, no halo. Empty Studio spots

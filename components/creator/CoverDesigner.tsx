@@ -10,6 +10,7 @@ import { ImagePlus, Loader2, Type, AlignCenter, Palette, BookOpen, ChevronDown, 
 import type { BadgeSet, CoverStyle } from '@/lib/badges'
 import { COVER_FONTS, FONT_GROUPS, TITLE_FINISHES, loadCoverFonts } from '@/lib/coverFonts'
 import { monogramOf } from '@/lib/creatorBooks'
+import { PAGE_EDGES, PAGE_DEPTH, edgeParams, pageEdgeCss, pageEdgeOf } from '@/lib/pageEdges'
 import { ACCENT_COLORS, BLANK_COVER, CoverSpine, SPINES, SPINE_COLORS, SPINE_W_RANGE, coverArea, spineOf, spineParams, spineWidth, type SpineDef } from '@/components/badges/CoverSpine'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
@@ -78,7 +79,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
     spineColor: undefined, spineAccent: undefined, spineDetail: undefined, spineWidth: undefined, spineRound: undefined,
     spineParams: { ...(st.spineParams ?? {}), [def.id]: Object.fromEntries(def.sliders.map((x) => [x.key, x.def])) },
   })
-  const page = PAGE_COLORS.find((p) => (p.color ?? '') === (st.pageColor ?? ''))
+  const edgeDef = pageEdgeOf(st.pageStyle ?? (st.pageColor ? 'paper' : undefined))
   return (
     <div className="space-y-2.5">
       {/* One part at a time: tap a part to open it (the others fold away) */}
@@ -227,18 +228,46 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
         )}
       </Group>
 
-      <Group id="pages" open={open} setOpen={setOpen} icon={BookOpen} title="Page edges" summary={page?.name ?? 'Custom'}>
-        <p className="text-xs text-slate-500 mb-3">The pages showing at the side of the closed book.</p>
-        <div className="flex flex-wrap gap-2">
-          {PAGE_COLORS.map((p) => {
-            const on = (st.pageColor ?? '') === (p.color ?? '')
+      <Group id="pages" open={open} setOpen={setOpen} icon={BookOpen} title="Page edges" summary={edgeDef ? edgeDef.name : 'Classic dark'}>
+        <p className="text-xs text-slate-500 mb-3">The block of pages showing at the side of the closed book.</p>
+        <div className="grid grid-cols-4 gap-2">
+          {[undefined, ...PAGE_EDGES].map((e) => {
+            const on = edgeDef?.id === e?.id
+            const bg = e ? pageEdgeCss(st, e.id) : '#221d1a'
             return (
-              <button key={p.name} type="button" title={p.name} onClick={() => setStyle({ pageColor: p.color })}
-                className={cn('w-10 h-10 rounded-lg transition-transform hover:scale-110 shadow-[0_2px_4px_rgba(0,0,0,0.25)]', on && 'ring-[3px] ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                style={{ background: p.color ? `repeating-linear-gradient(0deg, ${p.color} 0 3px, color-mix(in srgb, ${p.color} 80%, black) 3px 4px)` : '#221d1a' }} />
+              <button key={e?.id ?? 'classic'} type="button" title={e?.name ?? 'Classic dark'}
+                onClick={() => setStyle(e ? { pageStyle: e.id } : { pageStyle: undefined, pageColor: undefined })}
+                className={cn('rounded-xl border p-1 transition-colors', on ? 'border-[#7a5230] bg-[#f6eedb] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+                {/* a closed book's corner: the cover, with the page block showing at its side and foot */}
+                <span className="relative block h-12 rounded-md overflow-hidden bg-[#e6d7b6]">
+                  <span className="absolute left-0 top-0 right-[5px] bottom-[5px] translate-x-[5px] translate-y-[5px] rounded-[5px]" style={{ background: bg ?? '#221d1a' }} />
+                  <span className="absolute left-0 top-0 right-[12px] bottom-[12px] rounded-[5px] shadow-[2px_2px_4px_rgba(0,0,0,0.35)]" style={{ background: `linear-gradient(150deg, #5a3a22, #2b1a0f)` }} />
+                </span>
+                <span className={cn('block mt-1 text-[10px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{e?.name ?? 'Classic'}</span>
+              </button>
             )
           })}
         </div>
+        {edgeDef && (
+          <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3.5">
+            {/* A close look at the edge, big */}
+            <div className="relative h-24 rounded-lg overflow-hidden bg-[#e6d7b6]">
+              <span className="absolute left-0 top-0 right-[10%] bottom-[14%] rounded-lg" style={{ background: pageEdgeCss(st) ?? '#221d1a', transform: `translate(${Math.min(28, (st.pageDepth ?? PAGE_DEPTH) * 2.4)}px, ${Math.min(22, (st.pageDepth ?? PAGE_DEPTH) * 1.8)}px)` }} />
+              <span className="absolute left-0 top-0 right-[10%] bottom-[14%] rounded-lg shadow-[3px_3px_8px_rgba(0,0,0,0.4)]" style={{ background: 'linear-gradient(150deg, #5a3a22, #2b1a0f)' }} />
+            </div>
+            {edgeDef.colors.map(([label, d], i) => {
+              const key = i === 0 ? 'pageColor' : 'pageColor2'
+              return <ColorPick key={key} label={label} value={st[key] ?? d} palette={EDGE_PALETTE} onChange={(c) => setStyle({ [key]: c })} />
+            })}
+            <div className="mt-1" />
+            <ValueSlider label="Depth" min={2} max={14} step={0.5} value={st.pageDepth ?? PAGE_DEPTH} unit="px" onChange={(v) => setStyle({ pageDepth: v })} />
+            <ValueSlider label="Page lines" min={0} max={1} step={0.05} value={st.pageLines ?? 0.5} onChange={(v) => setStyle({ pageLines: v })} />
+            {edgeDef.sliders.map((x) => (
+              <ValueSlider key={x.key} label={x.label} min={x.min} max={x.max} step={x.step} value={edgeParams(edgeDef, st)[x.key]}
+                onChange={(v) => setStyle({ pageParams: { ...(st.pageParams ?? {}), [edgeDef.id]: { ...edgeParams(edgeDef, st), [x.key]: v } } })} />
+            ))}
+          </div>
+        )}
       </Group>
     </div>
   )
@@ -364,9 +393,11 @@ export function PicturePlacer({ src, fit: fit0, onChange, aspect, area = { left:
 }
 
 const TEXT_COLORS = ['#fbe9c4', '#ffffff', '#e8b35a', '#f2d38a', '#d9dde3', '#e8a48e', '#8fb6ff', '#6fd3a2', '#c79bff', '#f5a3c7', '#e05252', '#1c1206']
-const PAGE_COLORS: Array<{ name: string; color?: string }> = [
-  { name: 'Classic dark' }, { name: 'Cream', color: '#efe2c4' }, { name: 'White', color: '#f7f4ee' }, { name: 'Gilded', color: '#d4a24c' },
-  { name: 'Silver', color: '#c9ccd1' }, { name: 'Rose', color: '#e2a3a8' }, { name: 'Red', color: '#8a2b2b' }, { name: 'Blue', color: '#2c4a7a' }, { name: 'Black', color: '#1a1714' },
+// Colours for the page edges: papers, metals and inks
+const EDGE_PALETTE = [
+  { name: 'Cream', color: '#efe2c4' }, { name: 'White', color: '#f7f4ee' }, { name: 'Gold', color: '#d6b168' }, { name: 'Silver', color: '#c9ccd1' },
+  { name: 'Copper', color: '#b87333' }, { name: 'Rose', color: '#e2a3a8' }, { name: 'Red', color: '#8a2b2b' }, { name: 'Blue', color: '#2c4a7a' },
+  { name: 'Green', color: '#2f5a3c' }, { name: 'Purple', color: '#5a3a7a' }, { name: 'Black', color: '#1a1714' }, { name: 'Sky', color: '#8fb2ff' },
 ]
 
 function Slider({ label, hint, min, max, step, value, onChange }: { label: string; hint?: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void }) {

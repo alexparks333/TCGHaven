@@ -472,7 +472,7 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
       <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>
         <div className="absolute inset-0 transition-transform duration-200 ease-out"
           style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', containerType: 'inline-size' }}>
-          <BookThickness pageColor={book.coverStyle?.pageColor} />
+          <BookThickness look={book.coverStyle} />
           <span className="absolute inset-0"><BookCover set={book} badges={null} defs={badges} /></span>
           <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay opacity-60"
             style={{ background: `linear-gradient(${110 + tilt.y * 4}deg, transparent 30%, rgba(255,255,255,0.4) 48%, transparent 62%)` }} />

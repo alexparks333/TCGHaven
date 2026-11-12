@@ -118,7 +118,7 @@ function Body({ uid }: { uid: string }) {
           {book ? (
             <div className="mt-4 flex flex-col sm:flex-row items-center gap-6">
               <button type="button" onClick={() => setOpen(true)} className="relative w-[200px] aspect-[0.71] shrink-0 transition-transform hover:-translate-y-1" style={{ containerType: 'inline-size' }} aria-label={`Open ${book.book.name}`}>
-                <BookThickness pageColor={book.book.coverStyle?.pageColor} />
+                <BookThickness look={book.book.coverStyle} />
                 <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
               </button>
               <div className="text-center sm:text-left">

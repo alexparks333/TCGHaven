@@ -4,8 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ArrowLeft, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BLANK_COVER, CoverSpine, coverArea, spineOf } from '@/components/badges/CoverSpine'
+import { pageEdgeCss, PAGE_DEPTH } from '@/lib/pageEdges'
 import { coverFont, loadCoverFonts, titleFinish } from '@/lib/coverFonts'
-import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet } from '@/lib/badges'
+import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet, type CoverStyle } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { preloadTrimmedArt } from './trimmedArt'
@@ -322,7 +323,7 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
         }}
       >
         {/* The closed book's thickness and shadow: there while it's shut, gone as it opens */}
-        <BookThickness style={{ opacity: at === 'cover' ? 0 : 1, transition: anim === 'grow' ? `opacity ${GROW_MS}ms ease` : 'none' }} />
+        <BookThickness look={set.coverStyle} style={{ opacity: at === 'cover' ? 0 : 1, transition: anim === 'grow' ? `opacity ${GROW_MS}ms ease` : 'none' }} />
         {/* 2 · glide (+ the perspective, looking from the spine) */}
         <div
           className="absolute inset-0"
@@ -406,7 +407,7 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, collectio
                 className="badge-book-tile group relative w-full max-w-[240px] aspect-[0.71] outline-none"
                 aria-label={`Open the ${set.name} pin book`}
               >
-                <BookThickness />
+                <BookThickness look={set.coverStyle} />
                 <span data-cover className="absolute inset-0"><BookCover set={set} badges={badges} /></span>
               </button>
               <div className="mt-3 w-full max-w-[240px] text-center">
@@ -492,13 +493,16 @@ function CompletionBar({ set, earned, total }: { set: BadgeSet; earned: number; 
 // The closed book's thickness: the page block peeking out below and right of the cover, with the
 // shadow it casts. Drawn under the cover on the shelf and under the flying book (opening and closing),
 // so the book keeps its whole shape in flight.
-export function BookThickness({ style, pageColor }: { style?: React.CSSProperties; pageColor?: string }) {
-  // pageColor: a creator's page edges (CoverStyle.pageColor) — the block showing past the cover
+export function BookThickness({ style, pageColor, look }: { style?: React.CSSProperties; pageColor?: string; look?: CoverStyle }) {
+  // look: a creator's page edges (CoverStyle page* — lib/pageEdges.ts), the block showing past the
+  // cover; pageColor alone = plain paper in that colour (older books)
+  const edge = pageEdgeCss(look ?? (pageColor ? { pageColor } : undefined))
+  const d = Math.max(2, Math.min(14, look?.pageDepth ?? PAGE_DEPTH))
   return (
     <>
-      <span className="absolute inset-0 translate-x-[5px] translate-y-[5px] rounded-[14px] bg-[#0f0d0c] shadow-[0_14px_24px_-10px_rgba(40,25,10,0.7)]" style={style} />
-      <span className="absolute inset-0 translate-x-[2.5px] translate-y-[2.5px] rounded-[14px] bg-[#221d1a]"
-        style={pageColor ? { ...style, background: `repeating-linear-gradient(0deg, ${pageColor} 0 2px, color-mix(in srgb, ${pageColor} 82%, black) 2px 3px)` } : style} />
+      <span className="absolute inset-0 rounded-[14px] bg-[#0f0d0c] shadow-[0_14px_24px_-10px_rgba(40,25,10,0.7)]" style={{ ...style, transform: `translate(${d}px, ${d}px)` }} />
+      <span className="absolute inset-0 rounded-[14px] bg-[#221d1a]"
+        style={edge ? { ...style, background: edge, transform: `translate(${d / 2}px, ${d / 2}px)` } : { ...style, transform: `translate(${d / 2}px, ${d / 2}px)` }} />
     </>
   )
 }

@@ -122,7 +122,12 @@ export interface CoverStyle {
   emblemColor?: string   // the stamp's ring and letters (default gold)
   showCount?: boolean    // "3 / 10 earned" (default on)
   countColor?: string    // its text (default gold)
-  pageColor?: string     // the page edges showing at the side
+  pageColor?: string     // the page edges showing at the side (their first colour)
+  pageStyle?: string     // lib/pageEdges.ts PAGE_EDGES id; unset = paper if pageColor is set, else the classic dark edge
+  pageColor2?: string    // the style's second colour (speckles, veins, the fade's end, bands)
+  pageParams?: Record<string, Record<string, number>> // per style: its own sliders
+  pageDepth?: number     // px the page block shows past the cover (2–14, default 5)
+  pageLines?: number     // how strongly the sheets' lines read (0–1, default 0.5)
   spine?: string         // components/badges/CoverSpine.tsx SPINES id; unset = the default brown stitched spine, 'none' = no spine
   spineColor?: string    // its main colour (any; default walnut)
   spineAccent?: string   // its second colour — thread, gold, stripes… (any; default per look)
