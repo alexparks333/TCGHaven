@@ -76,6 +76,7 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   pageImage?: string        // the creator's own picture on every page (Storage URL)
   pageImageOpacity?: number // its strength, 0.05–1 (default 0.5)
   pageImageFade?: number    // how much it fades toward the page's edges, 0–1 (default 0.4)
+  pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
 /** The CSS a book with an inside style puts on its root: classes turning the styled rules on, and
@@ -91,7 +92,7 @@ export function insideLook(s: InsideStyle | undefined, coverImage?: string): { c
   const fade = Math.max(0, Math.min(1, s.pageImageFade ?? 0.4))
   return {
     className: ['pinbook-styled', pattern && 'pinbook-patterned', frame && 'pinbook-framed', edge && 'pinbook-edged', s.edgeStitch === false && 'pinbook-no-stitch',
-      picture && 'pinbook-imaged', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
+      picture && 'pinbook-imaged', picture && s.pageImageFit?.ar && 'pinbook-image-placed', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
     style: {
       '--page': page, '--trim': trim,
       '--page-solid': `color-mix(in srgb, ${page} 70%, black)`,
@@ -99,6 +100,7 @@ export function insideLook(s: InsideStyle | undefined, coverImage?: string): { c
       ...(frame && { '--frame': frame, '--frame-w': `${Math.max(6, Math.min(40, s.frameWidth ?? FRAME_W))}px` }),
       ...(edge && { '--edge-bg': edge.image, '--edge-size': edge.size, '--edge-k': String(Math.max(0.5, Math.min(2.5, s.edgeWidth ?? 1))), '--edge-stitch': s.edgeStitchColor ?? '#d6b168' }),
       ...(picture && { '--page-image': `url("${picture}")`, '--page-image-op': String(Math.max(0.05, Math.min(1, s.pageImageOpacity ?? 0.5))), '--page-image-fade': `${Math.round((1 - fade) * 70)}%` }),
+      ...(picture && s.pageImageFit?.ar && { '--pi-x': String(s.pageImageFit.x), '--pi-y': String(s.pageImageFit.y), '--pi-s': String(s.pageImageFit.scale), '--pi-ar': String(s.pageImageFit.ar) }),
     },
   }
 }

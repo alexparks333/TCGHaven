@@ -628,6 +628,18 @@
   -webkit-mask-image: radial-gradient(ellipse 72% 68% at 50% 47%, #000 var(--page-image-fade), transparent 100%);
   mask-image: radial-gradient(ellipse 72% 68% at 50% 47%, #000 var(--page-image-fade), transparent 100%);
 }
+/* A placed page picture: where the creator dragged and zoomed it (may hang far past the page) */
+.pinbook-image-placed .pinbook-page-art { background: none; overflow: hidden; }
+.pinbook-image-placed .pinbook-page-art::before {
+  content: '';
+  position: absolute;
+  left: calc(50% + var(--pi-x) * 1%);
+  top: calc(50% + var(--pi-y) * 1%);
+  width: calc(var(--pi-s) * 100%);
+  aspect-ratio: var(--pi-ar);
+  transform: translate(-50%, -50%);
+  background: var(--page-image) center / 100% 100% no-repeat;
+}
 .pinbook-patterned .pinbook-page-pattern { display: block; background: var(--pattern) center / cover no-repeat; }
 /* A border style (lib/pageFrames.ts): a nine-slice picture round the page, crisp corners, edges repeating */
 .pinbook-framed .pinbook-frame {

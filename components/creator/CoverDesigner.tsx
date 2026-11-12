@@ -283,20 +283,38 @@ type Fit = NonNullable<BadgeSet['coverFit']>
 /** Place the cover picture: drag it anywhere (the faded part is off the cover; plain tan shows
  *  where it doesn't reach), zoom with the slider or the scroll wheel */
 function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit) => void }) {
-  const fit: Fit = book.coverFit ?? { x: 0, y: 0, scale: 1 }
-  const coverRef = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ x: number; y: number; fit: Fit } | null>(null)
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
-  // The picture goes in the space beside the spine (or the whole cover); the zoom at which it just
-  // covers that space (the cover is 0.71 wide : 1 tall)
-  const area = coverArea(book.coverStyle)
   const spine = spineOf(book.coverStyle)
-  const fillScale = natural ? Math.max(1, natural.w / (natural.h * 0.71 * area.width / 100)) : 1
+  return (
+    <PicturePlacer src={book.coverImage!} fit={book.coverFit} onChange={({ x, y, scale }) => onChange({ x, y, scale })} aspect={0.71}
+      area={coverArea(book.coverStyle)} base={BLANK_COVER} fillLabel="Fill cover"
+      overlay={spine && <CoverSpine st={book.coverStyle} />} />
+  )
+}
+
+/** Where a picture sits in its frame: its centre's offset from the frame's centre (% of the frame's
+ *  width / height), its width as a multiple of the frame's, and (once known) its own width ÷ height */
+export type PictureFit = { x: number; y: number; scale: number; ar?: number }
+
+/** Place a picture in a frame (a cover, a page): drag it anywhere — even far past the edges (the
+ *  faded part is off the frame) — and zoom with the slider or the scroll wheel; Fill / Center.
+ *  `area`: the part of the frame the picture goes in (left, width in %), e.g. beside a spine. */
+export function PicturePlacer({ src, fit: fit0, onChange, aspect, area = { left: 0, width: 100 }, base, overlay, fillLabel = 'Fill' }: {
+  src: string; fit?: PictureFit; onChange: (fit: PictureFit) => void; aspect: number
+  area?: { left: number; width: number }; base: string; overlay?: React.ReactNode; fillLabel?: string
+}) {
+  const coverRef = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ x: number; y: number; fit: PictureFit } | null>(null)
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
+  const ar = natural ? natural.w / natural.h : fit0?.ar
+  // Not placed yet: as it's shown before placing (filling the frame)
+  const fillScale = ar ? Math.max(1, ar / (aspect * area.width / 100)) : 1
+  const fit: PictureFit = fit0 ?? { x: 0, y: 0, scale: fillScale }
+  const change = (f: PictureFit) => onChange(ar ? { ...f, ar: Math.round(ar * 10000) / 10000 } : f)
   const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
   const img = (ghost: boolean) => (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={book.coverImage}
+      src={src}
       alt=""
       draggable={false}
       onLoad={ghost ? undefined : (e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
@@ -306,7 +324,7 @@ function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit)
   )
   return (
     <div>
-      {/* The cover's outline in the middle of a bigger stage, so the picture can hang past it */}
+      {/* The frame's outline in the middle of a bigger stage, so the picture can hang far past it */}
       <div
         className="relative mx-auto w-full max-w-[300px] aspect-[1.05] rounded-xl overflow-hidden bg-[repeating-conic-gradient(#d9ccb0_0%_25%,#e8dcc2_0%_50%)] [background-size:16px_16px] touch-none cursor-grab active:cursor-grabbing"
         onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture?.(e.pointerId); drag.current = { x: e.clientX, y: e.clientY, fit } }}
@@ -314,31 +332,31 @@ function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit)
           const d = drag.current, cover = coverRef.current
           if (!d || !cover) return
           const r = cover.getBoundingClientRect()
-          onChange({ ...d.fit, x: clamp(d.fit.x + ((e.clientX - d.x) / r.width) * 100, -150, 150), y: clamp(d.fit.y + ((e.clientY - d.y) / r.height) * 100, -150, 150) })
+          change({ ...d.fit, x: clamp(d.fit.x + ((e.clientX - d.x) / r.width) * 100, -300, 300), y: clamp(d.fit.y + ((e.clientY - d.y) / r.height) * 100, -300, 300) })
         }}
         onPointerUp={() => { drag.current = null }}
         onPointerCancel={() => { drag.current = null }}
-        onWheel={(e) => onChange({ ...fit, scale: clamp(fit.scale * (e.deltaY < 0 ? 1.06 : 1 / 1.06), 0.2, 6) })}
+        onWheel={(e) => change({ ...fit, scale: clamp(fit.scale * (e.deltaY < 0 ? 1.06 : 1 / 1.06), 0.1, 10) })}
       >
-        {/* The cover, in the middle */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[86%] aspect-[0.71]">
-          {/* What's off the cover, faded */}
+        {/* The frame, in the middle */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[80%]" style={{ aspectRatio: String(aspect) }}>
+          {/* What's off the frame, faded */}
           <div className="absolute inset-y-0" style={{ left: `${area.left}%`, width: `${area.width}%` }}>{img(true)}</div>
-          {/* What's on it: the picture clipped to the space beside the spine, then the spine */}
-          <div className="absolute inset-0 rounded-[8px] overflow-hidden shadow-[0_6px_18px_rgba(0,0,0,0.35)]" style={{ background: BLANK_COVER }}>
+          {/* What's on it, clipped to its area, then anything drawn over it */}
+          <div className="absolute inset-0 rounded-[8px] overflow-hidden shadow-[0_6px_18px_rgba(0,0,0,0.35)]" style={{ background: base }}>
             <div ref={coverRef} className="absolute inset-y-0 overflow-hidden" style={{ left: `${area.left}%`, width: `${area.width}%` }}>{img(false)}</div>
-            {spine && <CoverSpine st={book.coverStyle} />}
+            {overlay}
           </div>
           <div className="absolute inset-0 rounded-[8px] ring-2 ring-white/80 ring-offset-0 pointer-events-none" />
         </div>
       </div>
       <div className="mt-3 flex items-center gap-2">
         <span className="text-[11px] font-semibold text-slate-500 w-10">Zoom</span>
-        <input type="range" min={0.2} max={4} step={0.01} value={fit.scale} onChange={(e) => onChange({ ...fit, scale: Number(e.target.value) })} className="flex-1 accent-violet-600" />
+        <input type="range" min={0.1} max={6} step={0.01} value={fit.scale} onChange={(e) => change({ ...fit, scale: Number(e.target.value) })} className="flex-1 accent-violet-600" />
       </div>
       <div className="mt-2 flex gap-2">
-        <button type="button" onClick={() => onChange({ x: 0, y: 0, scale: fillScale })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">Fill cover</button>
-        <button type="button" onClick={() => onChange({ ...fit, x: 0, y: 0 })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">Center</button>
+        <button type="button" onClick={() => change({ x: 0, y: 0, scale: fillScale })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">{fillLabel}</button>
+        <button type="button" onClick={() => change({ ...fit, x: 0, y: 0 })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">Center</button>
       </div>
       <p className="text-[11px] text-slate-500 mt-2 text-center">Drag to move · scroll or slide to zoom</p>
     </div>

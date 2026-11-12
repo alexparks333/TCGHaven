@@ -7,7 +7,7 @@
 
 import { PAGE_PATTERNS, pagePatternOf, patternCss, patternParams, type PagePatternDef } from '@/lib/pagePatterns'
 import { ACCENT_COLORS } from '@/components/badges/CoverSpine'
-import { ColorPick, Group, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
+import { ColorPick, Group, PicturePlacer, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
 import { PAGE_FRAMES, pageFrameOf, frameCss, FRAME_W } from '@/lib/pageFrames'
 import { EDGE_COLORS, EDGE_TEXTURES, edgeBackground } from '@/lib/bookEdges'
 import { badgeArt, badgeAsset } from '@/lib/badgeAssets'
@@ -288,7 +288,7 @@ function PagePicture({ uid, s, set }: { uid: string; s: InsideStyle; set: (p: Pa
       const blob = await shrink(file)
       const r = ref(appStorage, `creators/${uid}/page-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`)
       await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
-      set({ pageImage: await getDownloadURL(r) })
+      set({ pageImage: await getDownloadURL(r), pageImageFit: undefined })
     } catch (e) {
       setError('Couldn’t upload that picture — ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -300,15 +300,16 @@ function PagePicture({ uid, s, set }: { uid: string; s: InsideStyle; set: (p: Pa
     <div>
       {s.pageImage ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={badgeArt(s.pageImage, 384)} alt="" className="w-full h-28 object-cover rounded-xl border border-[#d6c49f]" />
+          {/* Drag and zoom it on a page, like the cover picture */}
+          <PicturePlacer src={badgeArt(s.pageImage)!} fit={s.pageImageFit} onChange={(pageImageFit) => set({ pageImageFit })} aspect={0.78} fillLabel="Fill page"
+            base={`radial-gradient(120% 90% at 50% 42%, ${s.page || INSIDE_DEFAULTS.page}, color-mix(in srgb, ${s.page || INSIDE_DEFAULTS.page} 40%, black))`} />
           <ValueSlider label="Strength" min={0.05} max={1} step={0.05} value={s.pageImageOpacity ?? 0.5} onChange={(v) => set({ pageImageOpacity: v })} />
           <ValueSlider label="Fade edges" min={0} max={1} step={0.05} value={s.pageImageFade ?? 0.4} onChange={(v) => set({ pageImageFade: v })} />
           <div className="mt-3 flex items-center gap-2">
             <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
               {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
             </button>
-            <button type="button" onClick={() => set({ pageImage: undefined })} className="ml-auto haven-chip px-3 py-1.5 text-xs font-semibold">Remove</button>
+            <button type="button" onClick={() => set({ pageImage: undefined, pageImageFit: undefined })} className="ml-auto haven-chip px-3 py-1.5 text-xs font-semibold">Remove</button>
           </div>
         </>
       ) : (

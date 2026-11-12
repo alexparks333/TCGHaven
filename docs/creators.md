@@ -76,7 +76,9 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      (globals.css `.pinbook-styled` and friends), so the Studio and fans' pin book look the same:
      - **Pages:** felt colour, trim, felt texture.
      - **Page picture:** the creator's own image on every page (`pageImage`, uploaded to
-       `creators/{uid}/page-*`), with Strength (`pageImageOpacity`) and Fade edges (`pageImageFade`).
+       `creators/{uid}/page-*`), with Strength (`pageImageOpacity`) and Fade edges (`pageImageFade`). It's
+       placed like the cover picture — the shared `PicturePlacer` (CoverDesigner.tsx): drag anywhere, even far
+       past the page, and zoom — saved as `pageImageFit` `{ x, y, scale, ar }` (unset = fills the page).
      - **Pattern** (`lib/pagePatterns.ts`): 20 — Damask, Trellis, Harlequin, Starry sky, Confetti, Waves,
        Sunburst, Honeycomb, Dragon scales, Contour map, Art Deco fans, Moroccan tiles, Mandala,
        Constellations, Circuit board, Card suits, Crystals, Climbing vines, Cherry blossoms, Tartan. Each is a
