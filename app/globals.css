@@ -615,7 +615,7 @@
 .pinbook-styled.pinbook-no-texture .pinbook-page {
   background-image: radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
 }
-/* With a page pattern, an empty badge's silhouette is plain felt (BadgeBook PinHole) — the pattern
+/* With a page pattern or picture, an empty badge's silhouette is plain felt (BadgeBook PinHole) — the pattern
    stops exactly at its outline, no halo. --page-solid: the felt's colour where badges sit. */
 .pinbook-hole-felt { display: none; }
 /* Over the felt, under everything on the page: the creator's own picture (faded toward the edges),
@@ -657,7 +657,8 @@
 }
 .pinbook-edged .pinbook-stitch, .pinbook-edged .pinbook-rim-stitch { border-color: color-mix(in srgb, var(--edge-stitch) 75%, transparent) !important; }
 .pinbook-no-stitch .pinbook-stitch, .pinbook-no-stitch .pinbook-rim-stitch { display: none; }
-.pinbook-patterned .pinbook-hole-felt { display: block; background: var(--page-solid); }
+/* …and with a page picture too: the hollow is felt, never the picture behind it */
+.pinbook-patterned .pinbook-hole-felt, .pinbook-imaged .pinbook-hole-felt { display: block; background: var(--page-solid); }
 /* A creator's badge shadow (Inside look → Badge shadow, insideLook() --pin-shadow) */
 .pinbook-styled .pinbook-pin-shadow { filter: var(--pin-shadow); }
 .pinbook-styled .pinbook-frame {

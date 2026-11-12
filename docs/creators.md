@@ -139,8 +139,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      entrance's `.studio-reveal` uses `backwards` fill so it leaves no transform behind. Center rings are drawn
      as one measured SVG with chrome shading, specular bevels and cast shadows.
      Every page draws two layers over the felt for these — `.pinbook-page-art` (picture) then
-     `.pinbook-page-pattern` — under the page's content. With a pattern, an empty badge's silhouette is solid
-     felt (`.pinbook-hole-felt`, `--page-solid`): the pattern stops at its outline, no halo. Empty Studio spots
+     `.pinbook-page-pattern` — under the page's content. With a pattern or a page picture, an empty badge's
+     silhouette is solid felt (`.pinbook-hole-felt`, `--page-solid`): nothing shows through the hollow, no halo. Empty Studio spots
      are blank page.
      paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
