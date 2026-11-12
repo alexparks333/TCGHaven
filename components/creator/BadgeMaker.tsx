@@ -15,8 +15,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye } from 'lucide-react'
-import { DEFAULT_TIERS, CREATOR_MAX_SCALE, pinDrawSize, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
+import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye, Rocket } from 'lucide-react'
+import { DEFAULT_TIERS, CREATOR_MAX_SCALE, isLive, pinDrawSize, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -28,6 +28,7 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage } from '@/lib/cardImage'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { PublishReveal } from '@/components/creator/PublishReveal'
 import { Portal } from '@/components/creator/Portal'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { CardZoomOverlay, RARITY_COLORS, type ZoomCardData } from '@/components/pages/CardexPage'
@@ -50,6 +51,8 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
   useScrollLock(true)
   const [draft, setDraft] = useState<BadgeDef>(badge)
   const set = (patch: Partial<BadgeDef>) => setDraft((d) => ({ ...d, ...patch }))
+  // Publishing needs all four steps: art, a name, cards to collect, and the 3D sculpt
+  const allDone = !!draft.imageUrl && !!draft.name.trim() && draft.slots.length > 0 && !!draft.reliefKit
   const [step, setStep] = useState(badge.imageUrl ? 2 : 1)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
@@ -58,6 +61,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
   const [artName, setArtName] = useState('')
   // Unsaved changes: the draft vs what was last saved. ✕ with changes asks first.
   const [savedJson, setSavedJson] = useState(() => JSON.stringify(badge))
+  const [revealed, setRevealed] = useState<BadgeDef | null>(null) // just published: the reveal plays
   const dirty = JSON.stringify(draft) !== savedJson
   const [confirmClose, setConfirmClose] = useState(false)
   const requestClose = () => { if (busy) return; if (dirty) setConfirmClose(true); else onClose() }
@@ -133,15 +137,20 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
     }
   }
 
-  async function save() {
+  // Save keeps it as it is (a draft stays a draft; a live badge's changes go live). Publish — only
+  // once all four steps are done — makes it live, and the reveal plays.
+  async function save(publish = false) {
     if (!draft.name.trim()) { setStep(2); return setError('Give your badge a name') }
     if (!draft.imageUrl) { setStep(1); return setError('Add your pin art first') }
-    setBusy('Saving…'); setError('')
+    if (publish && !allDone) return setError('Finish all four steps to publish it')
+    setBusy(publish ? 'Publishing…' : 'Saving…'); setError('')
     try {
       const game = draft.slots[0] ? (gameOf(draft.slots[0]) ?? draft.game) : draft.game
-      await onSave({ ...draft, name: draft.name.trim(), game })
-      setSavedJson(JSON.stringify(draft))
-      onClose()
+      const next: BadgeDef = { ...draft, name: draft.name.trim(), game, ...(publish && { published: true }) }
+      await onSave(next)
+      setSavedJson(JSON.stringify(next))
+      if (publish) setRevealed(next)
+      else onClose()
     } catch (e) {
       setError('Couldn’t save — ' + (e instanceof Error ? e.message : String(e)))
     } finally {
@@ -155,6 +164,9 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
     { n: 3, label: 'Cards to collect', icon: Layers, done: draft.slots.length > 0 },
     { n: 4, label: 'Make it 3D', icon: Box, done: !!draft.reliefKit },
   ]
+  const live = isLive(draft)
+  const missing = steps.filter((s) => !s.done).map((s) => s.label)
+  if (revealed) return <PublishReveal def={revealed} bookName={book.name} onDone={onClose} />
 
   return (
     <Portal>
@@ -335,9 +347,23 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
             )}
             <div className="flex-1" />
             {step < 4 && <button type="button" onClick={() => setStep(step + 1)} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink">Next</button>}
-            <button type="button" disabled={!!busy} onClick={save} className="btn-primary">
-              {busy === 'Saving…' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Save badge
-            </button>
+            {live ? (
+              // Already live: saving puts the changes live
+              <button type="button" disabled={!!busy} onClick={() => save()} className="btn-primary">
+                {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Save changes
+              </button>
+            ) : (
+              <>
+                <button type="button" disabled={!!busy} onClick={() => save()} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink">
+                  {busy === 'Saving…' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}Save draft
+                </button>
+                <button type="button" disabled={!!busy || !allDone} onClick={() => save(true)}
+                  title={allDone ? 'Make it live — fans can start collecting it' : `Still to do: ${missing.join(', ')}`}
+                  className="btn-primary disabled:opacity-45 disabled:cursor-not-allowed">
+                  {busy === 'Publishing…' ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}Publish badge
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

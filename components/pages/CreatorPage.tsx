@@ -17,7 +17,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
 import { useCreatorBook, saveCreatorBook, newCreatorBook, newBadgeId, useCommunity, monogramOf, LEATHERS, FOILS, type CreatorBook } from '@/lib/creatorBooks'
-import { DEFAULT_TIERS, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
+import { DEFAULT_TIERS, isLive, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { CoverDesigner } from '@/components/creator/CoverDesigner'
 import { CreateCommunity } from '@/components/creator/CreateCommunity'
 import { CommunityStudio } from '@/components/creator/CommunityStudio'
@@ -235,6 +235,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onDirty, guard }: {
   const blankBadge = (chapter: string): BadgeDef => ({
     id: newBadgeId(uid, 'badge'), set: b.book.id, page: chapter, name: '', description: '', game: 'pokemon',
     slotNoun: 'cards', slots: [], art: 'crest', tiers: [...DEFAULT_TIERS] as [number, number],
+    published: false, // a draft until it's published (BadgeMaker)
   })
 
   return (
@@ -496,13 +497,13 @@ function Preview({ book, badges, onClose }: { book: BadgeSet; badges: BadgeDef[]
         <Eye size={18} />
         <div className="min-w-0">
           <p className="font-bold truncate">{book.name}</p>
-          <p className="text-xs text-white/60">How your followers will see it (their progress fills it in)</p>
+          <p className="text-xs text-white/60">How your followers will see it (their progress fills it in) · drafts are hidden until you publish them</p>
         </div>
         <button type="button" onClick={onClose} className="ml-auto p-2 rounded-full bg-white/10 hover:bg-white/20" aria-label="Close the preview"><X size={18} /></button>
       </div>
       <div className="flex-1 overflow-auto px-3 pb-6 flex items-start justify-center">
         <div className="w-full max-w-[1100px]">
-          <BadgeBook set={book} defs={badges} badges={null} isMe={false} />
+          <BadgeBook set={book} defs={badges.filter(isLive) /* drafts aren't shown to fans */} badges={null} isMe={false} />
         </div>
       </div>
     </div>

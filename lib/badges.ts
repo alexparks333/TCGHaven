@@ -218,6 +218,7 @@ export interface BadgeDef {
   // view needn't — used only while reliefBuildKey still matches the art, finish map and hole settings
   reliefBuildUrl?: string
   reliefBuildKey?: string
+  published?: boolean  // creator badges: false = a draft only its creator sees (BadgeMaker → Publish badge); unset = live
 }
 
 // The standard pin backs every 3D pin gets (built in components/badges/pinBacks.ts)
@@ -279,6 +280,9 @@ export function looksOn(def: Pick<BadgeDef, 'tiersOff'>): BadgeLook[] {
 }
 /** The size to draw a badge's pin at, for a slot made for `size` (its Display size applied). */
 export const pinSize = (def: Pick<BadgeDef, 'displayScale'>, size: number) => size * (def.displayScale ?? 1)
+/** A creator's badge is live (fans see it) once published; `published: false` is a draft only its
+ *  creator sees. Unset = live (badges made before drafts existed). */
+export const isLive = (def: Pick<BadgeDef, 'published'>) => def.published !== false
 /** A 100% pin on a page this big (px) — the pin book's one rule, used everywhere a page is drawn (the pin
  *  book, the Studio's pages, the badge maker): 2 × 3 pins, by whichever of width or height is tighter,
  *  leaving room for each spot's nameplate */

@@ -113,6 +113,13 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      Exit Creator Studio and closing the browser tab ask too. **Back to the classic inside** warns that it
      can't be undone, then clears `insideStyle` and saves at once. The Studio's pages now show the Center
      rings too, like the fan view.
+     **Drafts and publishing:** a new badge is a draft (`BadgeDef.published: false`) — only its creator sees it,
+     tagged DRAFT on the Studio's pages. **Save draft** keeps it as is; **Publish badge** unlocks once all four
+     steps are done (art, name, cards to collect, 3D) and makes it live (`published: true`), playing the
+     reveal (`components/creator/PublishReveal.tsx`: blurred screen, wheeling rays, sparks, a light sweep,
+     "Published", Turn it in 3D). A live badge's button is **Save changes** (they go live). Fans' views (the
+     community page, Preview as a fan) show only `isLive()` badges; badges from before drafts (no
+     `published`) count as live.
      **Pin size — one rule everywhere:** `pagePin(w, h)` (lib/badges.ts) is a 100% pin on a page that big, and
      `pinDrawSize(def, pin)` applies its Size on the page — used by the pin book, the Studio's pages and the badge
      maker, so they all match. The badge maker's velvet side shows the pin in its spot zoomed to fill the side: a

@@ -19,7 +19,7 @@ import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
-import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
+import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, isLive, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
@@ -672,7 +672,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
       <div className="absolute inset-x-[7%] top-[15%] bottom-[4%] grid grid-cols-2 grid-rows-3 gap-x-[4%]">
         {page.spots.map((b, i) =>
           b ? (
-            <button key={b.id} type="button" onClick={() => onEdit(b)} className="group min-h-0 min-w-0 flex flex-col items-center justify-center gap-1.5 rounded-xl hover:bg-white/5 transition-colors">
+            <button key={b.id} type="button" onClick={() => onEdit(b)} className="group relative min-h-0 min-w-0 flex flex-col items-center justify-center gap-1.5 rounded-xl hover:bg-white/5 transition-colors">
               <span className="pinbook-pin-shadow relative !flex shrink-0 items-center justify-center transition-transform group-hover:scale-105" style={{ width: pin, height: pin * 1.12 }} /* !flex: .pinbook-pin-shadow is inline-block in the pin book */>
                 {/* its Size on the page, as the pin book draws it — in its own box, centred, so a pin over 100%
                     isn't held to the spot's width (an <img> never grows past its parent) */}
@@ -680,6 +680,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
                   <BadgePin art={b.art} imageUrl={b.imageUrl} size={pinDrawSize(b, pin)} />
                 </span>
               </span>
+              {!isLive(b) && <span className="absolute top-1 right-1 z-10 rounded-full bg-[#2b2014]/80 border border-[#d6b168]/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#f2d38a]" title="Only you can see it — open it and Publish to make it live">Draft</span>}
               <span className="pinbook-serif shrink-0 max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
             </button>
           ) : i === plusAt ? (

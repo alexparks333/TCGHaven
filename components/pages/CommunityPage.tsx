@@ -13,6 +13,7 @@ import { Avatar } from '@/components/friends/Avatar'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
 import { getCommunity, joinCommunity, leaveCommunity, memberCount, useMyCommunities, type CommunityEntry } from '@/lib/communities'
 import { useCreatorBook } from '@/lib/creatorBooks'
+import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
@@ -35,7 +36,9 @@ function Body({ uid }: { uid: string }) {
   const isMember = joined.has(uid)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const { book } = useCreatorBook(community ? uid : null)
+  const { book: raw } = useCreatorBook(community ? uid : null)
+  // Fans see only published badges — a creator's drafts stay in their Studio (lib/badges.ts isLive)
+  const book = raw && { ...raw, badges: raw.badges.filter(isLive) }
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
