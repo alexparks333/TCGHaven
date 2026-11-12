@@ -267,12 +267,13 @@ service cloud.firestore {
     }
 
     // A copy of which cards someone owns (no prices or purchase info), kept only while they share
-    // their Cardex. Any signed-in collector can read it while the profile's privacy.cardex is on (the default). The
+    // their Cardex. Any signed-in collector can read it while the profile's privacy.cardex is on (the default — a profile
+    // with no privacy saved counts as on, as the app shows it; until 2026-11-11 new profiles saved none). The
     // Portfolio has no shared copy at all — it's never visible to anyone else.
     match /shared_cardex/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
-        get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('cardex', false) == true
+        get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('cardex', true) == true
       );
       allow create, update: if signedIn() && request.auth.uid == uid && notBanned();
       allow delete: if signedIn() && request.auth.uid == uid;
@@ -291,7 +292,7 @@ service cloud.firestore {
     match /shared_badges/{uid} {
       allow read: if signedIn() && (
         request.auth.uid == uid ||
-        get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('badges', false) == true
+        get(/databases/$(database)/documents/profiles/$(uid)).data.get('privacy', {}).get('badges', true) == true
       );
       allow create, update: if signedIn() && request.auth.uid == uid && notBanned()
         && request.resource.data.keys().hasOnly(['earned', 'progress', 'updatedAt'])
