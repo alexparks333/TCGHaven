@@ -310,3 +310,45 @@ export async function resolveInviteCode(code: string): Promise<string | null> {
     return null
   }
 }
+
+// ── Your name and photo (Settings) ──────────────────────────────────────────────────────────
+// Set on the sign-in account itself (Firebase Auth), which ensureProfile() copies onto the profile
+// at every sign-in, AND on the profile now, so friends see it straight away. Photos live in Storage
+// avatars/{uid}/ (storage.rules), shrunk to a 512 px square first.
+
+export const NAME_MAX = 40
+
+export async function updateNameAndPhoto(user: User, patch: { displayName?: string; photoURL?: string }): Promise<void> {
+  const { updateProfile } = await import('firebase/auth')
+  const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
+  const authPatch: { displayName?: string; photoURL?: string | null } = {}
+  if (patch.displayName !== undefined) {
+    const name = patch.displayName.trim().replace(/\s+/g, ' ').slice(0, NAME_MAX)
+    if (name.length < 1) throw new Error('Your name can’t be empty')
+    authPatch.displayName = name
+    data.displayName = name
+    data.displayNameLower = name.toLowerCase()
+  }
+  if (patch.photoURL !== undefined) {
+    authPatch.photoURL = patch.photoURL || null // '' = no photo: your initials instead
+    data.photoURL = patch.photoURL
+  }
+  await updateProfile(user, authPatch)
+  await updateDoc(doc(db, 'profiles', user.uid), data)
+}
+
+/** A picked photo → a centred 512 px square (JPEG), uploaded; returns its address. */
+export async function uploadProfilePhoto(uid: string, file: File): Promise<string> {
+  const bmp = await createImageBitmap(file)
+  const side = Math.min(bmp.width, bmp.height)
+  const c = document.createElement('canvas')
+  c.width = c.height = Math.min(512, side)
+  c.getContext('2d')!.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, c.width, c.height)
+  bmp.close()
+  const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/jpeg', 0.9))
+  if (!blob) throw new Error('Couldn’t read that picture')
+  const [{ ref, uploadBytes, getDownloadURL }, { appStorage }] = await Promise.all([import('firebase/storage'), import('./appStorage')])
+  const r = ref(appStorage, `avatars/${uid}/photo-${Date.now()}.jpg`)
+  await uploadBytes(r, blob, { contentType: 'image/jpeg' })
+  return getDownloadURL(r)
+}

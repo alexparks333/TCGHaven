@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins } from 'lucide-react'
+import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins, Camera } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { CURRENCIES, type CurrencyCode } from '@/lib/currency'
 import { saveCurrency } from '@/lib/firebase/preferences'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends } from './FriendsProvider'
 import { Avatar } from './Avatar'
-import { changeUsername } from '@/lib/firebase/friends'
+import { changeUsername, updateNameAndPhoto, uploadProfilePhoto, NAME_MAX } from '@/lib/firebase/friends'
 import { RequestDelete } from '@/components/account/DeleteAccount'
 
 // Settings — opened from the ⚙️ on your profile banner (it used to be its own page in the
@@ -25,6 +25,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   const [signingOut, setSigningOut] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // Your name and photo (lib/firebase/friends.ts updateNameAndPhoto)
+  const [nameEditing, setNameEditing] = useState(false)
+  const [nameValue, setNameValue] = useState('')
+  const [nameSaving, setNameSaving] = useState(false)
+  const [nameError, setNameError] = useState('')
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const photoInput = useRef<HTMLInputElement>(null)
   const currency = useStore((s) => s.currency)
   const setCurrency = useStore((s) => s.setCurrency)
   const chooseCurrency = (code: CurrencyCode) => {
@@ -54,6 +62,48 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       setError(e instanceof Error ? e.message : 'Could not save')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveName() {
+    if (!me || !user) return
+    setNameSaving(true); setNameError('')
+    try {
+      await updateNameAndPhoto(user, { displayName: nameValue })
+      setMe({ ...me, displayName: nameValue.trim().replace(/\s+/g, ' ').slice(0, NAME_MAX) })
+      setNameEditing(false)
+    } catch (e) {
+      setNameError(e instanceof Error ? e.message : 'Could not save')
+    } finally {
+      setNameSaving(false)
+    }
+  }
+
+  async function changePhoto(file: File | undefined) {
+    if (!file || !me || !user) return
+    setPhotoBusy(true); setPhotoError('')
+    try {
+      const photoURL = await uploadProfilePhoto(user.uid, file)
+      await updateNameAndPhoto(user, { photoURL })
+      setMe({ ...me, photoURL })
+    } catch (e) {
+      setPhotoError('Couldn’t change your photo — ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setPhotoBusy(false)
+      if (photoInput.current) photoInput.current.value = ''
+    }
+  }
+
+  async function removePhoto() {
+    if (!me || !user || !confirm('Remove your profile photo? Your initials show instead.')) return
+    setPhotoBusy(true); setPhotoError('')
+    try {
+      await updateNameAndPhoto(user, { photoURL: '' })
+      setMe({ ...me, photoURL: '' })
+    } catch (e) {
+      setPhotoError('Couldn’t remove it — ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setPhotoBusy(false)
     }
   }
 
@@ -87,10 +137,24 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         <div className="px-5 pb-5 flex flex-col gap-4">
           {/* Who you're signed in as */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-950 border border-slate-800">
-            <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? ''} photoURL={user.photoURL ?? ''} size={48} />
-            <div className="min-w-0">
+            {/* Your photo: tap to change it */}
+            <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me}
+              className="group relative rounded-full shrink-0" aria-label="Change your profile photo" title="Change your photo">
+              <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? ''} photoURL={me?.photoURL ?? user.photoURL ?? ''} size={56} />
+              <span className={'absolute inset-0 rounded-full bg-black/45 text-white flex items-center justify-center transition-opacity ' + (photoBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
+                {photoBusy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+              </span>
+              <span className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center ring-2 ring-slate-950"><Camera size={11} /></span>
+            </button>
+            <input ref={photoInput} type="file" accept="image/png,image/jpeg,image/webp,image/heic" hidden onChange={(e) => changePhoto(e.target.files?.[0])} />
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-bold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</div>
               <div className="text-xs text-slate-500 truncate">{google ? 'Signed in with Google' : 'Signed in with email'}</div>
+              <div className="mt-1 flex items-center gap-3 text-xs font-semibold">
+                <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me} className="text-violet-700 hover:underline">Change photo</button>
+                {(me?.photoURL ?? user.photoURL) && <button type="button" onClick={removePhoto} disabled={photoBusy} className="text-slate-500 hover:text-red-600">Remove</button>}
+              </div>
+              {photoError && <div className="text-[11px] text-red-600 mt-1">{photoError}</div>}
             </div>
           </div>
 
@@ -101,7 +165,30 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className={row}>
                 <UserRound size={16} className="text-slate-500 shrink-0" />
                 <span className="text-sm text-slate-400 w-20 shrink-0">Name</span>
-                <span className="text-sm font-semibold text-ink truncate">{me?.displayName ?? user.displayName ?? '—'}</span>
+                {nameEditing ? (
+                  <form onSubmit={(e) => { e.preventDefault(); saveName() }} className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <input autoFocus value={nameValue} maxLength={NAME_MAX} aria-label="Your name"
+                        onChange={(e) => { setNameValue(e.target.value); setNameError('') }}
+                        className="flex-1 min-w-0 bg-slate-900 border border-slate-700 focus:border-violet-600 rounded-lg px-2 py-1 text-sm text-ink outline-none" />
+                      <button type="submit" disabled={nameSaving || !nameValue.trim()} aria-label="Save your name" className="w-7 h-7 flex items-center justify-center rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50">
+                        {nameSaving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                      </button>
+                      <button type="button" onClick={() => { setNameEditing(false); setNameError('') }} aria-label="Cancel" className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800">
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {nameError && <div className="text-[11px] text-red-600 mt-1">{nameError}</div>}
+                  </form>
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold text-ink truncate flex-1">{me?.displayName ?? user.displayName ?? '—'}</span>
+                    <button onClick={() => { setNameValue(me?.displayName ?? user.displayName ?? ''); setNameEditing(true) }} disabled={!me}
+                      className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-ink px-2 py-1 rounded-lg hover:bg-slate-800">
+                      <Pencil size={12} />Change
+                    </button>
+                  </>
+                )}
               </div>
               <div className={row}>
                 <Mail size={16} className="text-slate-500 shrink-0" />
