@@ -18,8 +18,8 @@ import { useStickyCenter } from '@/lib/useStickyCenter'
 import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
-import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check } from 'lucide-react'
-import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
+import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
+import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, pinShadowCss, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
@@ -270,6 +270,9 @@ function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: stri
         {swatches(TRIMS, trim, 'trim')}
         <div className="mt-4">{toggle('Felt texture', s.texture !== false, () => set({ texture: s.texture === false ? undefined : false }))}</div>
       </Group>
+      <Group id="shadow" open={open} setOpen={setOpen} icon={Sun} title="Badge shadow" summary={s.pinShadow === false ? 'Off' : 'On'}>
+        <ShadowPicker s={s} page={page} set={set} />
+      </Group>
       <Group id="picture" open={open} setOpen={setOpen} icon={ImagePlus} title="Page picture" summary={s.pageImage ? 'Your picture on every page' : 'Add your own background'}>
         <PagePicture uid={uid} s={s} set={set} />
       </Group>
@@ -297,6 +300,37 @@ function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: stri
             <button type="button" onClick={() => setReverting(false)} className="py-1.5 text-sm font-semibold text-slate-500 hover:text-ink">Cancel</button>
           </div>
         </PaperDialog>
+      )}
+    </div>
+  )
+}
+
+/** The shadow under every badge: on/off, and how it falls */
+function ShadowPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p: Partial<InsideStyle>) => void }) {
+  const on = s.pinShadow !== false
+  return (
+    <div>
+      <button type="button" onClick={() => set({ pinShadow: on ? false : undefined })} className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm font-semibold text-ink">
+        Shadow under badges
+        <span className={cn('w-9 h-5 rounded-full p-0.5 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
+          <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', on && 'translate-x-4')} />
+        </span>
+      </button>
+      {/* A pin on the felt, lit the way it'll be */}
+      <div className="mt-3 h-28 rounded-xl flex items-center justify-center" style={{ background: `radial-gradient(120% 90% at 50% 42%, ${page}, color-mix(in srgb, ${page} 40%, black))` }}>
+        <span className="w-16 h-16 rounded-full" style={{ filter: pinShadowCss(s), background: 'radial-gradient(circle at 35% 30%, #fff3cf, #d6b168 45%, #8a6420 80%)', boxShadow: 'inset 0 0 0 4px rgba(120,80,20,0.6), inset 0 0 0 9px #f2d38a' }} />
+      </div>
+      {on && (
+        <div className="mt-1">
+          <ColorPick label="Colour" value={s.pinShadowColor ?? '#000000'} palette={[{ name: 'Black', color: '#000000' }, { name: 'Brown', color: '#2b1a0f' }, { name: 'Navy', color: '#0b1430' }, { name: 'Plum', color: '#2a0f26' }, { name: 'Gold glow', color: '#d6b168' }, { name: 'White glow', color: '#ffffff' }]} onChange={(c) => set({ pinShadowColor: c })} />
+          <ValueSlider label="Strength" min={0} max={1} step={0.05} value={s.pinShadowStrength ?? PIN_SHADOW.strength} onChange={(v) => set({ pinShadowStrength: v })} />
+          <ValueSlider label="Softness" min={0} max={30} step={0.5} value={s.pinShadowBlur ?? PIN_SHADOW.blur} unit="px" onChange={(v) => set({ pinShadowBlur: v })} />
+          <ValueSlider label="Distance" min={0} max={30} step={0.5} value={s.pinShadowDistance ?? PIN_SHADOW.distance} unit="px" onChange={(v) => set({ pinShadowDistance: v })} />
+          <ValueSlider label="Direction" min={0} max={359} step={1} value={s.pinShadowAngle ?? PIN_SHADOW.angle} unit="°" onChange={(v) => set({ pinShadowAngle: v })} />
+          {(s.pinShadowColor || s.pinShadowStrength !== undefined || s.pinShadowBlur !== undefined || s.pinShadowDistance !== undefined || s.pinShadowAngle !== undefined) && (
+            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined, pinShadowDistance: undefined, pinShadowAngle: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
+          )}
+        </div>
       )}
     </div>
   )
@@ -613,7 +647,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
         {page.spots.map((b, i) =>
           b ? (
             <button key={b.id} type="button" onClick={() => onEdit(b)} className="group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
-              <span className="relative flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105 drop-shadow-[0_6px_6px_rgba(0,0,0,0.55)]">
+              <span className="pinbook-pin-shadow relative flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105">
                 <BadgePin art={b.art} imageUrl={b.imageUrl} size={90} />
               </span>
               <span className="pinbook-serif max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>

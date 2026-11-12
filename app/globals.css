@@ -658,6 +658,8 @@
 .pinbook-edged .pinbook-stitch, .pinbook-edged .pinbook-rim-stitch { border-color: color-mix(in srgb, var(--edge-stitch) 75%, transparent) !important; }
 .pinbook-no-stitch .pinbook-stitch, .pinbook-no-stitch .pinbook-rim-stitch { display: none; }
 .pinbook-patterned .pinbook-hole-felt { display: block; background: var(--page-solid); }
+/* A creator's badge shadow (Inside look → Badge shadow, insideLook() --pin-shadow) */
+.pinbook-styled .pinbook-pin-shadow { filter: var(--pin-shadow); }
 .pinbook-styled .pinbook-frame {
   border-color: color-mix(in srgb, var(--trim) 45%, transparent);
   box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4px color-mix(in srgb, var(--trim) 20%, transparent);

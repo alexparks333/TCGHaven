@@ -76,12 +76,32 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   pageImage?: string        // the creator's own picture on every page (Storage URL)
   pageImageOpacity?: number // its strength, 0.05–1 (default 0.5)
   pageImageFade?: number    // how much it fades toward the page's edges, 0–1 (default 0.4)
+  pinShadow?: boolean       // a shadow under every badge (default on)
+  pinShadowColor?: string   // default black
+  pinShadowStrength?: number // 0–1 (default 0.55)
+  pinShadowBlur?: number    // px of softness (0–30, default 12)
+  pinShadowDistance?: number // px it falls from the pin (0–30, default 10)
+  pinShadowAngle?: number   // which way it falls, degrees (90 = straight down)
   binding?: string          // the center rings (components/badges/BookBinding.tsx BINDINGS id, or 'none'); unset = the classic silver rings. Shown to fans only
   bindingColor?: string; bindingColor2?: string; bindingColor3?: string // its colour parts (BindingDef.colors)
   bindingParams?: Record<string, Record<string, number>>             // per binding: its own sliders
   pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
+export const PIN_SHADOW = { strength: 0.55, blur: 12, distance: 10, angle: 90 }
+/** The CSS filter for the shadow under a creator's badges (InsideStyle.pinShadow*) */
+export function pinShadowCss(s: InsideStyle): string {
+  if (s.pinShadow === false) return 'none'
+  const a = Math.max(0, Math.min(1, s.pinShadowStrength ?? PIN_SHADOW.strength))
+  const blur = Math.max(0, Math.min(30, s.pinShadowBlur ?? PIN_SHADOW.blur))
+  const dist = Math.max(0, Math.min(30, s.pinShadowDistance ?? PIN_SHADOW.distance))
+  const ang = ((s.pinShadowAngle ?? PIN_SHADOW.angle) * Math.PI) / 180
+  const h = (s.pinShadowColor ?? '#000000').replace('#', '').padEnd(6, '0')
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) || 0)
+  const dx = (dist * Math.cos(ang)).toFixed(1), dy = (dist * Math.sin(ang)).toFixed(1)
+  // a tight contact shadow right under the pin, and the soft cast one
+  return `drop-shadow(${(+dx * 0.15).toFixed(1)}px ${(+dy * 0.15).toFixed(1)}px 1px rgba(${r},${g},${b},${Math.min(1, a * 1.35).toFixed(2)})) drop-shadow(${dx}px ${dy}px ${blur}px rgba(${r},${g},${b},${a.toFixed(2)}))`
+}
 /** The CSS a book with an inside style puts on its root: classes turning the styled rules on, and
  *  the colours, pattern, border, page picture and edge as variables (globals.css `.pinbook-styled`
  *  and friends). Unset = nothing (the classic inside). coverImage: for a "Cover picture" edge. */
@@ -99,6 +119,7 @@ export function insideLook(s: InsideStyle | undefined, coverImage?: string): { c
     style: {
       '--page': page, '--trim': trim,
       '--page-solid': `color-mix(in srgb, ${page} 70%, black)`,
+      '--pin-shadow': pinShadowCss(s),
       ...(pattern && { '--pattern': pattern }),
       ...(frame && { '--frame': frame, '--frame-w': `${Math.max(6, Math.min(40, s.frameWidth ?? FRAME_W))}px` }),
       ...(edge && { '--edge-bg': edge.image, '--edge-size': edge.size, '--edge-k': String(Math.max(0.5, Math.min(2.5, s.edgeWidth ?? 1))), '--edge-stitch': s.edgeStitchColor ?? '#d6b168' }),
