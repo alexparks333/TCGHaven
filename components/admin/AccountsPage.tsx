@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { QueryDocumentSnapshot } from 'firebase/firestore'
-import { Search, Loader2, X, ArrowUpRight, History, AlertTriangle, Check, Ban, PauseCircle, PlayCircle, ShieldCheck, Crown } from 'lucide-react'
+import { Search, Loader2, X, ArrowUpRight, History, AlertTriangle, Check, Ban, PauseCircle, PlayCircle, ShieldCheck, Crown, ImageOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Avatar } from '@/components/friends/Avatar'
 import { profilePath } from '@/lib/firebase/friends'
@@ -256,6 +256,7 @@ function AccountTable({ rows, dateLabel, onManage }: { rows: AccountRow[]; dateL
 
 const ACTION_TEXT: Record<Exclude<AccountChange['action'], 'title'>, string> = {
   suspend: 'Creator suspended', restore: 'Creator restored', ban: 'Account banned', unban: 'Account unbanned',
+  photoBan: 'Profile photo removed & blocked', photoUnban: 'Profile photos allowed again',
 }
 
 function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: () => void; onChanged: (uid: string, r: AccountRoleRecord) => void }) {
@@ -325,7 +326,7 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
           </div>
         ) : (<>
         {/* Note — used by whichever action you take */}
-        <label className="field-label">Note — only staff see this (required to suspend or ban)</label>
+        <label className="field-label">Note — only staff see this (required to suspend, ban or remove a photo)</label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={500} placeholder="Why? e.g. Partnership signed · Under investigation for…" className="input-field resize-none mb-4" />
 
         <label className="field-label">Title</label>
@@ -395,6 +396,29 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
               className="btn-secondary justify-center !text-red-600 hover:!bg-red-100/40 disabled:opacity-50"
             >
               {busy === 'ban' ? <Loader2 size={15} className="animate-spin" /> : <Ban size={15} />}Ban account
+            </button>
+          )}
+        </div>
+        {/* Profile photo: take it down and block new ones (or lift that) */}
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+          <Avatar seed={profile.uid} name={name} photoURL={profile.photoURL} size={36} />
+          <div className="min-w-0 flex-1 text-xs">
+            <div className="font-bold text-ink">Profile photo</div>
+            <div className="text-slate-500">
+              {record.photoBanned ? 'Removed by staff — they can’t set a new one.' : profile.photoURL ? 'Their own photo.' : 'No photo (their initials show).'}
+            </div>
+          </div>
+          {record.photoBanned ? (
+            <button onClick={() => act({ action: 'photoUnban' }, false, `Let ${name} set a profile photo again?`)} disabled={!!busy} className="btn-secondary shrink-0 disabled:opacity-50">
+              {busy === 'photoUnban' ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />}Allow photos again
+            </button>
+          ) : (
+            <button
+              onClick={() => act({ action: 'photoBan' }, true, `Remove ${name}'s profile photo?\n\nIt comes off their profile straight away and they can't set a new one until you allow photos again. Their account is otherwise untouched.`)}
+              disabled={!!busy}
+              className="btn-secondary shrink-0 !text-red-600 hover:!bg-red-100/40 disabled:opacity-50"
+            >
+              {busy === 'photoBan' ? <Loader2 size={15} className="animate-spin" /> : <ImageOff size={15} />}Remove photo &amp; block
             </button>
           )}
         </div>

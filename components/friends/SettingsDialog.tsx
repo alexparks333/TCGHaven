@@ -7,6 +7,7 @@ import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coi
 import { useStore } from '@/lib/store'
 import { CURRENCIES, type CurrencyCode } from '@/lib/currency'
 import { saveCurrency } from '@/lib/firebase/preferences'
+import { useAccountRole } from '@/lib/accountRoles'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends } from './FriendsProvider'
 import { Avatar } from './Avatar'
@@ -33,6 +34,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoError, setPhotoError] = useState('')
   const photoInput = useRef<HTMLInputElement>(null)
+  const photoBlocked = !!useAccountRole(user?.uid).record.photoBanned // staff took it down (Accounts)
   const currency = useStore((s) => s.currency)
   const setCurrency = useStore((s) => s.setCurrency)
   const chooseCurrency = (code: CurrencyCode) => {
@@ -138,9 +140,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           {/* Who you're signed in as */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-950 border border-slate-800">
             {/* Your photo: tap to change it */}
-            <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me}
-              className="group relative rounded-full shrink-0" aria-label="Change your profile photo" title="Change your photo">
-              <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? ''} photoURL={me?.photoURL ?? user.photoURL ?? ''} size={56} />
+            <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me || photoBlocked}
+              className="group relative rounded-full shrink-0" aria-label="Change your profile photo" title={photoBlocked ? 'Profile photos are turned off for your account' : 'Change your photo'}>
+              <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? ''} photoURL={me?.photoURL ?? ''} size={56} />
               <span className={'absolute inset-0 rounded-full bg-black/45 text-white flex items-center justify-center transition-opacity ' + (photoBusy ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}>
                 {photoBusy ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
               </span>
@@ -150,10 +152,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <div className="min-w-0 flex-1">
               <div className="text-sm font-bold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</div>
               <div className="text-xs text-slate-500 truncate">{google ? 'Signed in with Google' : 'Signed in with email'}</div>
-              <div className="mt-1 flex items-center gap-3 text-xs font-semibold">
-                <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me} className="text-violet-700 hover:underline">Change photo</button>
-                {(me?.photoURL ?? user.photoURL) && <button type="button" onClick={removePhoto} disabled={photoBusy} className="text-slate-500 hover:text-red-600">Remove</button>}
-              </div>
+              {photoBlocked ? (
+                <div className="mt-1 text-[11px] text-amber-700">Your profile photo was removed by TCG Haven staff, and photos are turned off for your account.</div>
+              ) : (
+                <div className="mt-1 flex items-center gap-3 text-xs font-semibold">
+                  <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me} className="text-violet-700 hover:underline">Change photo</button>
+                  {me?.photoURL && <button type="button" onClick={removePhoto} disabled={photoBusy} className="text-slate-500 hover:text-red-600">Remove</button>}
+                </div>
+              )}
               {photoError && <div className="text-[11px] text-red-600 mt-1">{photoError}</div>}
             </div>
           </div>

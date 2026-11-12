@@ -41,7 +41,10 @@ service firebase.storage {
       allow read: if true;
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType.matches('image/.*')
+        // not while staff have blocked their photo (account_roles photoBanned)
+        && !(firestore.exists(/databases/(default)/documents/account_roles/$(uid)) &&
+             firestore.get(/databases/(default)/documents/account_roles/$(uid)).data.get('photoBanned', false) == true);
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
 

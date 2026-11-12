@@ -35,6 +35,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/account_roles/$(request.auth.uid)).data.get('banned', false) != true;
     }
 
+    // Staff removed this account's profile photo and blocked new ones (account_roles photoBanned)
+    function photoBanned(uid) {
+      return exists(/databases/$(database)/documents/account_roles/$(uid)) &&
+        get(/databases/$(database)/documents/account_roles/$(uid)).data.get('photoBanned', false) == true;
+    }
+
     function isAdmin() {
       return signedIn() && (
         request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'] ||
@@ -104,7 +110,7 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if isAdmin()
         && request.resource.data.role in ['regular', 'premium', 'creator', 'staff']
-        && request.resource.data.keys().hasOnly(['role', 'creatorSince', 'formerCreator', 'suspended', 'banned', 'updatedAt']);
+        && request.resource.data.keys().hasOnly(['role', 'creatorSince', 'formerCreator', 'suspended', 'banned', 'photoBanned', 'updatedAt']);
       allow delete: if isAdmin();
       match /history/{id} {
         allow read, create: if isAdmin();
@@ -232,6 +238,10 @@ service cloud.firestore {
     // must be one you've claimed in /usernames.
     match /profiles/{uid} {
       allow read: if signedIn();
+      // Staff take a profile photo down (Accounts → Remove photo): only the photo, only to empty
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['photoURL', 'updatedAt'])
+        && request.resource.data.photoURL == '';
       allow create, update: if signedIn() && request.auth.uid == uid && notBanned()
         && request.resource.data.uid == uid
         && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'pinDisplay', 'createdAt', 'updatedAt'])
@@ -239,7 +249,9 @@ service cloud.firestore {
         && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
         && (!('privacy' in request.resource.data) || request.resource.data.privacy.keys().hasOnly(['cardex', 'badges']))
         && (!('pinDisplay' in request.resource.data) || (request.resource.data.pinDisplay is list && request.resource.data.pinDisplay.size() <= 6))
-        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid;
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid
+        // Photo-banned by staff: no photo until it's lifted
+        && (!photoBanned(uid) || request.resource.data.get('photoURL', '') == '');
       // Only by its owner, deleting their account (lib/firebase/deleteAccount.ts)
       allow delete: if signedIn() && request.auth.uid == uid;
     }

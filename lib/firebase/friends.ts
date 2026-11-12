@@ -111,13 +111,14 @@ export async function ensureProfile(user: User): Promise<Profile> {
     // (shared), but firestore.rules read it as not shared, so visitors saw "private" until the owner
     // flipped a switch. Write the default down the first time we see one without it.
     const missingPrivacy = !d.privacy || typeof d.privacy.cardex !== 'boolean' || typeof d.privacy.badges !== 'boolean'
-    if (d.displayName !== displayName || d.photoURL !== photoURL || missingPrivacy) {
+    // The photo isn't copied again (Settings sets both; a photo staff took down must stay down)
+    if (d.displayName !== displayName || missingPrivacy) {
       await updateDoc(ref, {
-        displayName, displayNameLower: displayName.toLowerCase(), photoURL, updatedAt: serverTimestamp(),
+        displayName, displayNameLower: displayName.toLowerCase(), updatedAt: serverTimestamp(),
         ...(missingPrivacy && { privacy: { ...DEFAULT_PRIVACY, ...(d.privacy ?? {}) } }),
       })
     }
-    return { ...(toProfile(user.uid, d) as Profile), displayName, photoURL }
+    return { ...(toProfile(user.uid, d) as Profile), displayName }
   }
   let base = slugify(user.displayName || '') || slugify(user.email?.split('@')[0] || '') || 'collector'
   if (base.length < 3) base = (base + 'collector').slice(0, 15)

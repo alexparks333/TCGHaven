@@ -1,6 +1,6 @@
 import {
   addDoc, collection, doc, documentId, getCountFromServer, getDoc, getDocs, limit, orderBy, query,
-  runTransaction, serverTimestamp, startAfter, startAt, endAt, where, type QueryDocumentSnapshot,
+  runTransaction, serverTimestamp, startAfter, startAt, endAt, updateDoc, where, type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { staffDb, listStaff } from './staff'
 import { toProfile, type Profile } from './friends'
@@ -9,7 +9,7 @@ import { toRoleRecord, type AccountRole, type AccountRoleRecord } from '../accou
 // Staff portal side of Accounts (lib/accountRoles.ts) — always the staff session (staffDb).
 
 export interface AccountRow { profile: Profile; record: AccountRoleRecord }
-export type AccountAction = 'title' | 'suspend' | 'restore' | 'ban' | 'unban'
+export type AccountAction = 'title' | 'suspend' | 'restore' | 'ban' | 'unban' | 'photoBan' | 'photoUnban'
 export interface AccountChange { id: string; at: number; byName: string; action: AccountAction; from?: AccountRole; to?: AccountRole; note: string }
 
 /** The Accounts page's lists. `regular` is everyone without a title (paged — there are many).
@@ -138,17 +138,23 @@ export async function changeAccount(
     if (change.action === 'restore') n.suspended = false
     if (change.action === 'ban') n.banned = true
     if (change.action === 'unban') n.banned = false
+    if (change.action === 'photoBan') n.photoBanned = true
+    if (change.action === 'photoUnban') n.photoBanned = false
     const data: Record<string, unknown> = {
       role: n.role,
       formerCreator: !!n.formerCreator,
       suspended: !!n.suspended,
       banned: !!n.banned,
+      photoBanned: !!n.photoBanned,
       updatedAt: serverTimestamp(),
     }
     if (n.creatorSince) data.creatorSince = n.creatorSince
     tx.set(roleRef(uid), data)
     return { ...n, updatedAt: Date.now() }
   })
+  // A photo ban takes the photo off their profile now (the file stays in Storage, for the record);
+  // the rules stop them setting another until it's lifted
+  if (change.action === 'photoBan') await updateDoc(doc(staffDb, 'profiles', uid), { photoURL: '', updatedAt: serverTimestamp() })
   await addDoc(collection(staffDb, 'account_roles', uid, 'history'), {
     at: serverTimestamp(), by: by.uid, byName: by.name, action: change.action,
     ...(change.action === 'title' ? { from, to: change.to } : {}),

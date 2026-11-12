@@ -46,6 +46,7 @@ export interface AccountRoleRecord {
   formerCreator?: boolean // was a Creator, title taken away; their work is kept, hidden
   suspended?: boolean     // a Creator on hold: Studio paused, their work hidden
   banned?: boolean        // the whole account is blocked
+  photoBanned?: boolean   // staff removed their profile photo and they can't set a new one
   updatedAt?: number
   // Set when this account is also on the staff team (its staff portal login is the same account,
   // like the Owner's): shown instead of "Staff" (e.g. "Owner", "Developer"). Such accounts are
@@ -88,6 +89,7 @@ export function toRoleRecord(d: DocumentData | undefined): AccountRoleRecord {
     formerCreator: d.formerCreator === true,
     suspended: d.suspended === true && role === 'creator',
     banned: d.banned === true,
+    photoBanned: d.photoBanned === true,
     updatedAt: millis(d.updatedAt),
   }
 }
