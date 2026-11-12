@@ -1121,7 +1121,6 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
               <dd className="font-semibold text-ink">Look up price <span className="font-normal text-slate-500">(new tab)</span></dd>
             </dl>
           </div>
-          </div>
         )}
 
         {/* Game bubbles — only the games this user tracks (added from Inventory's "+" menu) */}
