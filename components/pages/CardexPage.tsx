@@ -2012,7 +2012,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
         <X size={18} />
       </button>
 
-      <div className={cn('flex flex-col items-center gap-4', closing && 'card-zoom-content closing')}>
+      {/* Click-through: only the card and the info panel themselves catch clicks, so a click on any
+          empty space around or between them reaches the backdrop and closes the view */}
+      <div className={cn('flex flex-col items-center gap-4 pointer-events-none [&>*]:pointer-events-auto', closing && 'card-zoom-content closing')}>
         <div
           ref={moverRef}
           className="relative card-zoom-mover"
