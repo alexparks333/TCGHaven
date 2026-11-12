@@ -1,3 +1,4 @@
+import { patternCss, type PatternLook } from '@/lib/pagePatterns'
 import type { Card, Game } from './types'
 import type { ReliefSettings } from './reliefStudio'
 
@@ -62,7 +63,8 @@ export interface BadgeSet {
   collection?: string
 }
 
-export interface InsideStyle {
+export interface InsideStyle extends PatternLook {
+  // + a pattern over the felt (lib/pagePatterns.ts: pattern, its colours, Strength, Fade edges, sliders)
   page?: string      // the felt's colour (its middle; darker toward the edges). Default #2a221c
   trim?: string      // the gold trim's colour. Default #d6b168
   frame?: boolean    // the double frame + corner ornaments (default on)
@@ -73,9 +75,13 @@ export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
  *  the colours as variables (globals.css `.pinbook-styled`). Unset = nothing (the classic inside). */
 export function insideLook(s: InsideStyle | undefined): { className: string; style: Record<string, string> } {
   if (!s) return { className: '', style: {} }
+  const pattern = patternCss(s)
   return {
     className: ['pinbook-styled', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
-    style: { '--page': s.page || INSIDE_DEFAULTS.page, '--trim': s.trim || INSIDE_DEFAULTS.trim },
+    style: {
+      '--page': s.page || INSIDE_DEFAULTS.page, '--trim': s.trim || INSIDE_DEFAULTS.trim,
+      ...(pattern && { '--pattern': pattern }),
+    },
   }
 }
 

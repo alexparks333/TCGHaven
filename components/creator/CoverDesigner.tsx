@@ -405,7 +405,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 }
 
 /** A slider with its value shown */
-function ValueSlider({ label, min, max, step, value, unit = '', onChange }: { label: string; min: number; max: number; step: number; value: number; unit?: string; onChange: (v: number) => void }) {
+export function ValueSlider({ label, min, max, step, value, unit = '', onChange }: { label: string; min: number; max: number; step: number; value: number; unit?: string; onChange: (v: number) => void }) {
   const shown = step >= 1 ? String(Math.round(value)) : max <= 1 ? `${Math.round(value * 100)}%` : value.toFixed(1)
   return (
     <label className="mt-2.5 flex items-center gap-3">
@@ -417,7 +417,7 @@ function ValueSlider({ label, min, max, step, value, unit = '', onChange }: { la
 }
 
 /** A colour: a row of swatches, or any colour at all from the picker at the end */
-function ColorPick({ label, value, palette, onChange }: { label: string; value: string; palette: Array<{ name: string; color: string }>; onChange: (c: string) => void }) {
+export function ColorPick({ label, value, palette, onChange }: { label: string; value: string; palette: Array<{ name: string; color: string }>; onChange: (c: string) => void }) {
   const custom = !palette.some((c) => c.color.toLowerCase() === value.toLowerCase())
   return (
     <div className="mt-2.5 flex items-start gap-3">

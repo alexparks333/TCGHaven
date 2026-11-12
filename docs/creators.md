@@ -71,6 +71,13 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - Book saves use `mergeFields` (not `merge`), so a setting switched off (a missing key) really goes.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
   3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder
+     **Page patterns** (2026-11-12, Inside look → Pattern; `lib/pagePatterns.ts`): 14 patterns over the felt —
+     Damask, Polka dots, Stripes, Checkerboard, Trellis, Harlequin, Starry sky, Confetti, Waves, Sunburst,
+     Graph paper, Honeycomb, Dragon scales, Contour map. Each is a `PagePatternDef` drawing one 780 × 1000 SVG
+     with its own sliders (`InsideStyle.patternParams[pattern]`) and colours (`patternColor` / `patternDetail`,
+     any colour), plus Strength (`patternOpacity`), Fade edges (`patternFade`), Surprise and Reset.
+     `insideLook()` puts it in `--pattern`; globals.css layers it over the felt's grain and colour
+     (`.pinbook-styled .pinbook-page`), so the Studio and fans' pin book both show it.
      paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
      - Each chapter shows its badges and **one "+ Add a badge" spot**.

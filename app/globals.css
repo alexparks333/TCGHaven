@@ -607,13 +607,20 @@
 .pinbook-edge-right { background: linear-gradient(90deg, #5e420f, #a37a2c 30%, #e2bd6a 65%, #8a6420); }
 /* A creator's Inside look (BadgeSet.insideStyle → insideLook()): the felt and trim from variables */
 .pinbook-styled .pinbook-page {
+  /* A page pattern (lib/pagePatterns.ts) on top, sized to the page; then the grain, then the felt */
+  background-size: cover, auto, auto;
+  background-position: center, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, no-repeat;
   background-image:
+    var(--pattern, none),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
     radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
   background-color: color-mix(in srgb, var(--page) 40%, black);
 }
 .pinbook-styled.pinbook-no-texture .pinbook-page {
-  background-image: radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
+  background-size: cover, auto;
+  background-repeat: no-repeat;
+  background-image: var(--pattern, none), radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
 }
 .pinbook-styled .pinbook-frame {
   border-color: color-mix(in srgb, var(--trim) 45%, transparent);

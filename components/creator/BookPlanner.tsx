@@ -5,8 +5,11 @@
 // run down the side — rename one by tapping its title, add more. Each chapter starts on a fresh
 // page, 6 pins a page, and always keeps one empty spot to add to. docs/creators.md.
 
+import { PAGE_PATTERNS, pagePatternOf, patternCss, patternParams, type PagePatternDef } from '@/lib/pagePatterns'
+import { ACCENT_COLORS } from '@/components/badges/CoverSpine'
+import { ColorPick, ValueSlider } from '@/components/creator/CoverDesigner'
 import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
@@ -242,6 +245,7 @@ function InsidePanel({ style, onChange }: { style: InsideStyle | undefined; onCh
         <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pages</p>
         {swatches(FELTS, page, 'page')}
       </div>
+      <PatternPicker s={s} page={page} set={set} />
       <div>
         <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Trim <span className="normal-case font-normal tracking-normal">· frames, chapter titles, nameplates</span></p>
         {swatches(TRIMS, trim, 'trim')}
@@ -252,6 +256,58 @@ function InsidePanel({ style, onChange }: { style: InsideStyle | undefined; onCh
       </div>
       {style && (
         <button type="button" onClick={() => onChange(undefined)} className="text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
+      )}
+    </div>
+  )
+}
+
+/** The pages' pattern: a tile for each (drawn on the felt), then the chosen one's colours and sliders */
+function PatternPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p: Partial<InsideStyle>) => void }) {
+  const def = pagePatternOf(s.pattern)
+  const felt = `radial-gradient(120% 90% at 50% 42%, ${page}, color-mix(in srgb, ${page} 45%, black))`
+  const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
+  const surprise = (d: PagePatternDef) => set({
+    patternColor: pick(ACCENT_COLORS).color, patternDetail: pick(ACCENT_COLORS).color,
+    patternOpacity: 0.15 + Math.round(Math.random() * 10) * 0.05, patternFade: Math.round(Math.random() * 10) / 10,
+    patternParams: { ...(s.patternParams ?? {}), [d.id]: Object.fromEntries(d.sliders.map((x) => [x.key, x.min + Math.round((Math.random() * (x.max - x.min)) / x.step) * x.step])) },
+  })
+  const reset = (d: PagePatternDef) => set({
+    patternColor: undefined, patternDetail: undefined, patternOpacity: undefined, patternFade: undefined,
+    patternParams: { ...(s.patternParams ?? {}), [d.id]: Object.fromEntries(d.sliders.map((x) => [x.key, x.def])) },
+  })
+  return (
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pattern <span className="normal-case font-normal tracking-normal">· over the pages</span></p>
+      <div className="grid grid-cols-5 gap-1.5">
+        {[undefined, ...PAGE_PATTERNS].map((d) => {
+          const on = def?.id === d?.id
+          const bg = d ? patternCss({ ...s, patternOpacity: Math.max(0.45, s.patternOpacity ?? 0.3), patternFade: 0 }, d.id) : null
+          return (
+            <button key={d?.id ?? 'none'} type="button" onClick={() => set({ pattern: d?.id })} title={d?.name ?? 'No pattern'}
+              className={cn('rounded-lg border p-0.5 transition-colors', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+              <span className="block w-full aspect-[0.78] rounded-[5px]" style={{ background: bg ? `${bg} center / cover no-repeat, ${felt}` : felt }} />
+              <span className={cn('block mt-0.5 text-[9px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{d?.name ?? 'Plain'}</span>
+            </button>
+          )
+        })}
+      </div>
+      {def && (
+        <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
+          <div className="flex items-center gap-2">
+            <p className="pinbook-serif font-bold text-ink flex-1 truncate">{def.name}</p>
+            <button type="button" onClick={() => surprise(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1"><Dices size={12} />Surprise</button>
+            <button type="button" onClick={() => reset(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1" title="Back to this pattern's defaults"><RotateCcw size={12} />Reset</button>
+          </div>
+          <ColorPick label={def.color[0]} value={s.patternColor ?? def.color[1]} palette={ACCENT_COLORS} onChange={(c) => set({ patternColor: c })} />
+          {def.detail && <ColorPick label={def.detail[0]} value={s.patternDetail ?? def.detail[1]} palette={ACCENT_COLORS} onChange={(c) => set({ patternDetail: c })} />}
+          <div className="mt-2" />
+          <ValueSlider label="Strength" min={0.05} max={1} step={0.05} value={s.patternOpacity ?? 0.3} onChange={(v) => set({ patternOpacity: v })} />
+          <ValueSlider label="Fade edges" min={0} max={1} step={0.05} value={s.patternFade ?? 0.35} onChange={(v) => set({ patternFade: v })} />
+          {def.sliders.map((x) => (
+            <ValueSlider key={x.key} label={x.label} min={x.min} max={x.max} step={x.step} value={patternParams(def, s.patternParams)[x.key]}
+              onChange={(v) => set({ patternParams: { ...(s.patternParams ?? {}), [def.id]: { ...patternParams(def, s.patternParams), [x.key]: v } } })} />
+          ))}
+        </div>
       )}
     </div>
   )
