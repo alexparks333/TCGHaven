@@ -14,6 +14,7 @@ import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
+import { displayCurrency } from '@/lib/currency'
 
 
 const TIME_LABELS: Record<string, string> = { 'entry': 'Since Entry', '1d': '24H', '7d': '7D', '30d': '30D', '365d': '1Y' }
@@ -267,7 +268,7 @@ export default function PortfolioPage() {
             onClick={() => router.push('/portfolio/analytics?metric=value')}
           >
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Collection Value</span>
-            <span className="text-2xl md:text-3xl font-bold text-ink">{formatCurrency(totals.value)}</span>
+            <span className="text-2xl md:text-3xl font-bold text-ink">{formatCurrency(totals.value)}<span className="ml-1 align-baseline text-[11px] font-semibold tracking-wide text-slate-500/70">{displayCurrency().code}</span></span>
             {calcFloor > 0 && <span className="text-[10px] text-slate-600">floor {formatCurrency(calcFloor)}</span>}
           </div>
           <div
