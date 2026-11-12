@@ -16,7 +16,7 @@ import { createPortal } from 'react-dom'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { X, Upload, Loader2, Search, Trash2, Box, Check, ImageIcon, PenLine, Layers, ArrowRight, LayoutGrid, Eye } from 'lucide-react'
-import { DEFAULT_TIERS, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
+import { DEFAULT_TIERS, pinShadowCss, looksOn, tierNeed, tierPercents, type BadgeDef, type BadgeSet, type BadgeSlot } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -157,7 +157,7 @@ export function BadgeMaker({ uid, book, badge, onSave, onDelete, onClose }: {
               <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
             </div>
           ) : (
-          <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center drop-shadow-[0_14px_14px_rgba(0,0,0,0.6)]">
+          <div className="relative w-[min(240px,52vw)] aspect-square flex items-center justify-center" style={{ filter: pinShadowCss(book.insideStyle ?? {}) /* the book's own badge shadow (Badge Accessories) */ }}>
             {draft.imageUrl
               ? <BadgePin art={draft.art} imageUrl={draft.imageUrl} size={220} />
               : <span className="w-[70%] aspect-square rounded-full border-2 border-dashed flex items-center justify-center text-center text-xs px-6" style={{ borderColor: accent + 'aa', color: accent }}>Your pin appears here</span>}

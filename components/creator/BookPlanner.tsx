@@ -17,7 +17,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStickyCenter } from '@/lib/useStickyCenter'
 import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
-import { PinShadowFilter } from '@/components/badges/BadgeBook'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
 import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, pinShadowCss, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
@@ -84,7 +83,6 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start" style={inside.style /* the trim colour for the side panel too */}>
-    <PinShadowFilter st={book.insideStyle ?? {}} />
     {/* The book stays in the middle of the window while the edit panel beside it scrolls */}
     <div ref={stick.ref} className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10 xl:sticky xl:self-start')} style={{ ...inside.style, top: stick.top }}>
       {/* It lies open on the binder paper, inside a thin rule with engraved corners */}
@@ -327,7 +325,6 @@ function ShadowPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p:
       </button>
       {/* A pin on the felt, lit the way it'll be */}
       <div className="mt-3 h-28 rounded-xl flex items-center justify-center" style={{ background: `radial-gradient(120% 90% at 50% 42%, ${page}, color-mix(in srgb, ${page} 40%, black))` }}>
-        <PinShadowFilter st={s} />
         <span className="w-16 h-[72px]" style={{ filter: pinShadowCss(s) }}>
           <svg viewBox="0 0 64 72" className="w-full h-full" aria-hidden>
             <defs><radialGradient id="shadow-demo-pin" cx="0.35" cy="0.3" r="0.8"><stop offset="0" stopColor="#fff3cf" /><stop offset="0.45" stopColor="#d6b168" /><stop offset="1" stopColor="#7a5a20" /></radialGradient></defs>

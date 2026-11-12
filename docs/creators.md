@@ -98,8 +98,9 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        width and stitching on/off with its thread colour (`edge*`). Rims carry `.pinbook-rim`.
      - **Badge shadow** (Badge Accessories tab): a shadow border straight behind every badge, following its
        outline — on by default; colour (any), strength, **spread** (how far the border grows out) and softness
-       (`pinShadow*`). It's an SVG filter (`pinShadowSpec()` → `PinShadowFilter` in BadgeBook, referenced as
-       `--pin-shadow: url(#id)` on `.pinbook-pin-shadow`), since CSS shadows can't spread.
+       (`pinShadow*`). `pinShadowCss()` stacks centred `drop-shadow`s (each spreading the last) → `--pin-shadow`
+       on `.pinbook-pin-shadow`; the badge maker's big pin wears it too. (An SVG feMorphology filter was tried
+       first — on HTML it drew the shadow off-centre.)
      - **Center rings** (`components/badges/BookBinding.tsx`): what binds the pages down the middle — None,
        Silver rings, Brass D-rings, Spiral coil, Leather lacing, Chain links, Ribbon & clasps, Jewelled hinge;
        each with up to three colours (`bindingColor`/`2`/`3`, any colour) and its own sliders
