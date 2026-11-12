@@ -79,28 +79,24 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   pinShadow?: boolean       // a shadow under every badge (default on)
   pinShadowColor?: string   // default black
   pinShadowStrength?: number // 0–1 (default 0.55)
-  pinShadowBlur?: number    // px of softness (0–30, default 12)
-  pinShadowDistance?: number // px it falls from the pin (0–30, default 10)
-  pinShadowAngle?: number   // which way it falls, degrees (90 = straight down)
+  pinShadowBlur?: number    // px of softness — how far the even shadow spreads round the pin (0–30, default 12)
   binding?: string          // the center rings (components/badges/BookBinding.tsx BINDINGS id, or 'none'); unset = the classic silver rings. Shown to fans only
   bindingColor?: string; bindingColor2?: string; bindingColor3?: string // its colour parts (BindingDef.colors)
   bindingParams?: Record<string, Record<string, number>>             // per binding: its own sliders
   pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
-export const PIN_SHADOW = { strength: 0.55, blur: 12, distance: 10, angle: 90 }
-/** The CSS filter for the shadow under a creator's badges (InsideStyle.pinShadow*) */
+export const PIN_SHADOW = { strength: 0.55, blur: 12 }
+/** The CSS filter for the shadow behind a creator's badges (InsideStyle.pinShadow*): straight on,
+ *  even all round the pin — no direction */
 export function pinShadowCss(s: InsideStyle): string {
   if (s.pinShadow === false) return 'none'
   const a = Math.max(0, Math.min(1, s.pinShadowStrength ?? PIN_SHADOW.strength))
   const blur = Math.max(0, Math.min(30, s.pinShadowBlur ?? PIN_SHADOW.blur))
-  const dist = Math.max(0, Math.min(30, s.pinShadowDistance ?? PIN_SHADOW.distance))
-  const ang = ((s.pinShadowAngle ?? PIN_SHADOW.angle) * Math.PI) / 180
   const h = (s.pinShadowColor ?? '#000000').replace('#', '').padEnd(6, '0')
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) || 0)
-  const dx = (dist * Math.cos(ang)).toFixed(1), dy = (dist * Math.sin(ang)).toFixed(1)
-  // a tight contact shadow right under the pin, and the soft cast one
-  return `drop-shadow(${(+dx * 0.15).toFixed(1)}px ${(+dy * 0.15).toFixed(1)}px 1px rgba(${r},${g},${b},${Math.min(1, a * 1.35).toFixed(2)})) drop-shadow(${dx}px ${dy}px ${blur}px rgba(${r},${g},${b},${a.toFixed(2)}))`
+  // a tight edge right round the pin, and the soft even spread behind it
+  return `drop-shadow(0 0 1.5px rgba(${r},${g},${b},${Math.min(1, a * 1.35).toFixed(2)})) drop-shadow(0 0 ${blur}px rgba(${r},${g},${b},${a.toFixed(2)}))`
 }
 /** The CSS a book with an inside style puts on its root: classes turning the styled rules on, and
  *  the colours, pattern, border, page picture and edge as variables (globals.css `.pinbook-styled`

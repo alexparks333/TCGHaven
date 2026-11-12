@@ -305,13 +305,13 @@ function InsidePanel({ uid, style, onChange, onRevert, coverImage }: { uid: stri
   )
 }
 
-/** The shadow under every badge: on/off, and how it falls */
+/** The shadow behind every badge, even all round: on/off, colour, strength, softness */
 function ShadowPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p: Partial<InsideStyle>) => void }) {
   const on = s.pinShadow !== false
   return (
     <div>
       <button type="button" onClick={() => set({ pinShadow: on ? false : undefined })} className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm font-semibold text-ink">
-        Shadow under badges
+        Shadow behind badges
         <span className={cn('w-9 h-5 rounded-full p-0.5 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
           <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', on && 'translate-x-4')} />
         </span>
@@ -325,10 +325,8 @@ function ShadowPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p:
           <ColorPick label="Colour" value={s.pinShadowColor ?? '#000000'} palette={[{ name: 'Black', color: '#000000' }, { name: 'Brown', color: '#2b1a0f' }, { name: 'Navy', color: '#0b1430' }, { name: 'Plum', color: '#2a0f26' }, { name: 'Gold glow', color: '#d6b168' }, { name: 'White glow', color: '#ffffff' }]} onChange={(c) => set({ pinShadowColor: c })} />
           <ValueSlider label="Strength" min={0} max={1} step={0.05} value={s.pinShadowStrength ?? PIN_SHADOW.strength} onChange={(v) => set({ pinShadowStrength: v })} />
           <ValueSlider label="Softness" min={0} max={30} step={0.5} value={s.pinShadowBlur ?? PIN_SHADOW.blur} unit="px" onChange={(v) => set({ pinShadowBlur: v })} />
-          <ValueSlider label="Distance" min={0} max={30} step={0.5} value={s.pinShadowDistance ?? PIN_SHADOW.distance} unit="px" onChange={(v) => set({ pinShadowDistance: v })} />
-          <ValueSlider label="Direction" min={0} max={359} step={1} value={s.pinShadowAngle ?? PIN_SHADOW.angle} unit="°" onChange={(v) => set({ pinShadowAngle: v })} />
-          {(s.pinShadowColor || s.pinShadowStrength !== undefined || s.pinShadowBlur !== undefined || s.pinShadowDistance !== undefined || s.pinShadowAngle !== undefined) && (
-            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined, pinShadowDistance: undefined, pinShadowAngle: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
+          {(s.pinShadowColor || s.pinShadowStrength !== undefined || s.pinShadowBlur !== undefined) && (
+            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
           )}
         </div>
       )}
