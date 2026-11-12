@@ -1,4 +1,7 @@
 import { patternCss, type PatternLook } from '@/lib/pagePatterns'
+import { frameCss, FRAME_W, type FrameLook } from '@/lib/pageFrames'
+import { edgeBackground, type EdgeLook } from '@/lib/bookEdges'
+import { badgeArt, badgeAsset } from '@/lib/badgeAssets'
 import type { Card, Game } from './types'
 import type { ReliefSettings } from './reliefStudio'
 
@@ -63,24 +66,39 @@ export interface BadgeSet {
   collection?: string
 }
 
-export interface InsideStyle extends PatternLook {
-  // + a pattern over the felt (lib/pagePatterns.ts: pattern, its colours, Strength, Fade edges, sliders)
+export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
+  // + a pattern over the felt (lib/pagePatterns.ts), a border style (lib/pageFrames.ts) and the
+  //   book's outer edge (lib/bookEdges.ts)
   page?: string      // the felt's colour (its middle; darker toward the edges). Default #2a221c
   trim?: string      // the gold trim's colour. Default #d6b168
-  frame?: boolean    // the double frame + corner ornaments (default on)
+  frame?: boolean    // the page border (default on; frameStyle picks its look — unset = the classic one)
   texture?: boolean  // the felt's grain (default on)
+  pageImage?: string        // the creator's own picture on every page (Storage URL)
+  pageImageOpacity?: number // its strength, 0.05–1 (default 0.5)
+  pageImageFade?: number    // how much it fades toward the page's edges, 0–1 (default 0.4)
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
-/** The CSS a book with an inside style puts on its root: a class turning the styled rules on, and
- *  the colours as variables (globals.css `.pinbook-styled`). Unset = nothing (the classic inside). */
-export function insideLook(s: InsideStyle | undefined): { className: string; style: Record<string, string> } {
+/** The CSS a book with an inside style puts on its root: classes turning the styled rules on, and
+ *  the colours, pattern, border, page picture and edge as variables (globals.css `.pinbook-styled`
+ *  and friends). Unset = nothing (the classic inside). coverImage: for a "Cover picture" edge. */
+export function insideLook(s: InsideStyle | undefined, coverImage?: string): { className: string; style: Record<string, string> } {
   if (!s) return { className: '', style: {} }
+  const page = s.page || INSIDE_DEFAULTS.page, trim = s.trim || INSIDE_DEFAULTS.trim
   const pattern = patternCss(s)
+  const frame = s.frame !== false ? frameCss(s, trim) : null
+  const edge = edgeBackground(s, badgeAsset(coverImage))
+  const picture = s.pageImage ? badgeArt(s.pageImage) : undefined
+  const fade = Math.max(0, Math.min(1, s.pageImageFade ?? 0.4))
   return {
-    className: ['pinbook-styled', pattern && 'pinbook-patterned', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
+    className: ['pinbook-styled', pattern && 'pinbook-patterned', frame && 'pinbook-framed', edge && 'pinbook-edged', s.edgeStitch === false && 'pinbook-no-stitch',
+      picture && 'pinbook-imaged', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
     style: {
-      '--page': s.page || INSIDE_DEFAULTS.page, '--trim': s.trim || INSIDE_DEFAULTS.trim,
+      '--page': page, '--trim': trim,
+      '--page-solid': `color-mix(in srgb, ${page} 70%, black)`,
       ...(pattern && { '--pattern': pattern }),
+      ...(frame && { '--frame': frame, '--frame-w': `${Math.max(6, Math.min(40, s.frameWidth ?? FRAME_W))}px` }),
+      ...(edge && { '--edge-bg': edge.image, '--edge-size': edge.size, '--edge-k': String(Math.max(0.5, Math.min(2.5, s.edgeWidth ?? 1))), '--edge-stitch': s.edgeStitchColor ?? '#d6b168' }),
+      ...(picture && { '--page-image': `url("${picture}")`, '--page-image-op': String(Math.max(0.05, Math.min(1, s.pageImageOpacity ?? 0.5))), '--page-image-fade': `${Math.round((1 - fade) * 70)}%` }),
     },
   }
 }

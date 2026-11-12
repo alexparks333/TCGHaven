@@ -607,37 +607,45 @@
 .pinbook-edge-right { background: linear-gradient(90deg, #5e420f, #a37a2c 30%, #e2bd6a 65%, #8a6420); }
 /* A creator's Inside look (BadgeSet.insideStyle → insideLook()): the felt and trim from variables */
 .pinbook-styled .pinbook-page {
-  /* A page pattern (lib/pagePatterns.ts) on top, sized to the page; then the grain, then the felt */
-  background-size: cover, auto, auto;
-  background-position: center, 0 0, 0 0;
-  background-repeat: no-repeat, repeat, no-repeat;
   background-image:
-    var(--pattern, none),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
     radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
   background-color: color-mix(in srgb, var(--page) 40%, black);
 }
 .pinbook-styled.pinbook-no-texture .pinbook-page {
-  background-size: cover, auto;
-  background-repeat: no-repeat;
-  background-image: var(--pattern, none), radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
+  background-image: radial-gradient(120% 90% at 50% 42%, var(--page) 0%, color-mix(in srgb, var(--page) 62%, black) 48%, color-mix(in srgb, var(--page) 28%, black) 100%);
 }
-/* With a page pattern, each badge sits in a soft clearing of plain felt (BadgeBook, BookPlanner) */
-.pinbook-patterned .pinbook-clear { position: relative; }
-/* its contents paint above the clearing (positioned, in order) — no z-index, so a badge's hover card isn't trapped */
-.pinbook-patterned .pinbook-clear > * { position: relative; }
-.pinbook-patterned .pinbook-clear::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  height: 125%; /* the spot's height sets the circle; a cell is wider than it is tall */
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--page) 72%, black) 55%, color-mix(in srgb, var(--page) 60%, transparent) 78%, transparent);
-  pointer-events: none;
+/* With a page pattern, an empty badge's silhouette is plain felt (BadgeBook PinHole) — the pattern
+   stops exactly at its outline, no halo. --page-solid: the felt's colour where badges sit. */
+.pinbook-hole-felt { display: none; }
+/* Over the felt, under everything on the page: the creator's own picture (faded toward the edges),
+   then the pattern — two layers every page draws (BadgeBook PinPage, BookPlanner Velvet) */
+.pinbook-page-art, .pinbook-page-pattern { display: none; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.pinbook-imaged .pinbook-page-art {
+  display: block;
+  background: var(--page-image) center / cover no-repeat;
+  opacity: var(--page-image-op);
+  -webkit-mask-image: radial-gradient(ellipse 72% 68% at 50% 47%, #000 var(--page-image-fade), transparent 100%);
+  mask-image: radial-gradient(ellipse 72% 68% at 50% 47%, #000 var(--page-image-fade), transparent 100%);
 }
+.pinbook-patterned .pinbook-page-pattern { display: block; background: var(--pattern) center / cover no-repeat; }
+/* A border style (lib/pageFrames.ts): a nine-slice picture round the page, crisp corners, edges repeating */
+.pinbook-framed .pinbook-frame {
+  border: var(--frame-w) solid transparent;
+  border-image: var(--frame) 40 / var(--frame-w) / 0 round;
+  box-shadow: none;
+  border-radius: 0;
+}
+.pinbook-framed .pinbook-ornament { display: none; }
+/* The book's outer edge (lib/bookEdges.ts): the rim's own colour and texture, and its stitching */
+.pinbook-edged.pinbook-rim, .pinbook-edged .pinbook-rim {
+  background-image: var(--edge-bg) !important;
+  background-size: var(--edge-size) !important;
+  background-color: transparent !important;
+}
+.pinbook-edged .pinbook-stitch, .pinbook-edged .pinbook-rim-stitch { border-color: color-mix(in srgb, var(--edge-stitch) 75%, transparent) !important; }
+.pinbook-no-stitch .pinbook-stitch, .pinbook-no-stitch .pinbook-rim-stitch { display: none; }
+.pinbook-patterned .pinbook-hole-felt { display: block; background: var(--page-solid); }
 .pinbook-styled .pinbook-frame {
   border-color: color-mix(in srgb, var(--trim) 45%, transparent);
   box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4px color-mix(in srgb, var(--trim) 20%, transparent);

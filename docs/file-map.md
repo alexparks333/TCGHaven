@@ -74,6 +74,8 @@ TCGHaven/
 │   ├── premium.ts                  ← Haven Premium prices (premium/config) and promo codes (promo_codes)
 │   ├── creatorBooks.ts             ← Creator Books + communities (creator_books/{uid}, communities/{uid}; docs/creators.md)
 │   ├── pagePatterns.ts             ← Creator Book page patterns (Inside look → Pattern; docs/creators.md)
+│   ├── pageFrames.ts               ← Creator Book page borders (Inside look → Border)
+│   ├── bookEdges.ts                ← Creator Book outer edge textures (Inside look → Book edge)
 │   ├── scan/                       ← The card scanner's site side (card-scanner.md):
 │   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
 │   │   ├── decide.ts               ←   text score + picture (tiles, AI similarity) → matched / pick / none

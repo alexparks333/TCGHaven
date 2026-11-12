@@ -25,6 +25,15 @@ function seeded(seed: number) {
 }
 const fill = (id: string) => `<rect width='${W}' height='${H}' fill='url(#${id})'/>`
 
+// Card-suit shapes (centre x, y; size s)
+const heart = (x: number, y: number, s: number) => `M${n2(x)} ${n2(y + s * 0.9)} C${n2(x - s * 1.2)} ${n2(y + s * 0.1)} ${n2(x - s * 0.9)} ${n2(y - s * 0.9)} ${n2(x)} ${n2(y - s * 0.3)} C${n2(x + s * 0.9)} ${n2(y - s * 0.9)} ${n2(x + s * 1.2)} ${n2(y + s * 0.1)} ${n2(x)} ${n2(y + s * 0.9)} Z`
+const spade = (x: number, y: number, s: number) => `M${n2(x)} ${n2(y - s * 0.9)} C${n2(x - s * 1.2)} ${n2(y - s * 0.1)} ${n2(x - s * 0.9)} ${n2(y + s * 0.8)} ${n2(x)} ${n2(y + s * 0.25)} C${n2(x + s * 0.9)} ${n2(y + s * 0.8)} ${n2(x + s * 1.2)} ${n2(y - s * 0.1)} ${n2(x)} ${n2(y - s * 0.9)} Z M${n2(x)} ${n2(y + s * 0.1)} L${n2(x - s * 0.35)} ${n2(y + s)} L${n2(x + s * 0.35)} ${n2(y + s)} Z`
+const diamond = (x: number, y: number, s: number) => `M${n2(x)} ${n2(y - s)} L${n2(x + s * 0.7)} ${n2(y)} L${n2(x)} ${n2(y + s)} L${n2(x - s * 0.7)} ${n2(y)} Z`
+const circ = (x: number, y: number, r: number) => `M${n2(x - r)} ${n2(y)} a${n2(r)} ${n2(r)} 0 1 0 ${n2(r * 2)} 0 a${n2(r)} ${n2(r)} 0 1 0 ${n2(-r * 2)} 0 Z`
+const club = (x: number, y: number, s: number) => circ(x, y - s * 0.45, s * 0.42) + circ(x - s * 0.48, y + s * 0.12, s * 0.42) + circ(x + s * 0.48, y + s * 0.12, s * 0.42)
+  + `M${n2(x)} ${n2(y)} L${n2(x - s * 0.35)} ${n2(y + s)} L${n2(x + s * 0.35)} ${n2(y + s)} Z`
+export const SUITS = { heart, spade, diamond, club }
+
 export const PAGE_PATTERNS: PagePatternDef[] = [
   {
     id: 'damask', name: 'Damask', color: ['Pattern', '#d6b168'],
@@ -41,29 +50,6 @@ export const PAGE_PATTERNS: PagePatternDef[] = [
         + dia(z / 2, 0) + dia(0, z / 2) + dia(z, z / 2) + dia(z / 2, z)
         + `</pattern></defs>${fill('q')}`
     },
-  },
-  {
-    id: 'dots', name: 'Polka dots', color: ['Dots', '#d6b168'],
-    sliders: [s('size', 'Dot size', 2, 30, 0.5, 7), s('space', 'Spacing', 16, 120, 1, 44), s('stagger', 'Stagger', 0, 1, 1, 1)],
-    draw: ({ p, c }) => {
-      const sp = p.space, off = p.stagger ? sp / 2 : 0
-      return `<defs><pattern id='q' width='${sp}' height='${sp * 2}' patternUnits='userSpaceOnUse'>`
-        + `<circle cx='${sp / 2}' cy='${sp / 2}' r='${p.size}' fill='${c}'/><circle cx='${sp / 2 + off}' cy='${sp * 1.5}' r='${p.size}' fill='${c}'/>`
-        + (off ? `<circle cx='${sp / 2 + off - sp}' cy='${sp * 1.5}' r='${p.size}' fill='${c}'/>` : '')
-        + `</pattern></defs>${fill('q')}`
-    },
-  },
-  {
-    id: 'stripes', name: 'Stripes', color: ['Stripes', '#d6b168'],
-    sliders: [s('wide', 'Stripe width', 1, 80, 0.5, 8), s('gap', 'Gap', 4, 160, 1, 34), s('angle', 'Angle', 0, 180, 1, 45)],
-    draw: ({ p, c }) => `<defs><pattern id='q' width='${p.wide + p.gap}' height='10' patternUnits='userSpaceOnUse' patternTransform='rotate(${p.angle} ${W / 2} ${H / 2})'>`
-      + `<rect width='${p.wide}' height='10' fill='${c}'/></pattern></defs>${fill('q')}`,
-  },
-  {
-    id: 'checker', name: 'Checkerboard', color: ['Squares', '#d6b168'],
-    sliders: [s('size', 'Square size', 10, 150, 1, 46), s('angle', 'Tilt', 0, 45, 1, 0)],
-    draw: ({ p, c }) => `<defs><pattern id='q' width='${p.size * 2}' height='${p.size * 2}' patternUnits='userSpaceOnUse' patternTransform='rotate(${p.angle} ${W / 2} ${H / 2})'>`
-      + `<rect width='${p.size}' height='${p.size}' fill='${c}'/><rect x='${p.size}' y='${p.size}' width='${p.size}' height='${p.size}' fill='${c}'/></pattern></defs>${fill('q')}`,
   },
   {
     id: 'lattice', name: 'Trellis', color: ['Lines', '#d6b168'],
@@ -139,16 +125,6 @@ export const PAGE_PATTERNS: PagePatternDef[] = [
     },
   },
   {
-    id: 'grid', name: 'Graph paper', color: ['Lines', '#c7ccd3'],
-    sliders: [s('cell', 'Square size', 8, 80, 1, 22), s('weight', 'Line weight', 0.3, 4, 0.1, 0.7), s('major', 'Bold every', 0, 10, 1, 5)],
-    draw: ({ p, c }) => {
-      const z = p.cell
-      let out = `<defs><pattern id='q' width='${z}' height='${z}' patternUnits='userSpaceOnUse'><path d='M${z} 0 V${z} M0 ${z} H${z}' stroke='${c}' stroke-width='${p.weight}' fill='none'/></pattern>`
-      if (p.major > 1) out += `<pattern id='m' width='${z * p.major}' height='${z * p.major}' patternUnits='userSpaceOnUse'><path d='M${z * p.major} 0 V${z * p.major} M0 ${z * p.major} H${z * p.major}' stroke='${c}' stroke-width='${n2(p.weight * 2.4)}' fill='none'/></pattern>`
-      return out + `</defs>${fill('q')}${p.major > 1 ? fill('m') : ''}`
-    },
-  },
-  {
     id: 'honeycomb', name: 'Honeycomb', color: ['Lines', '#d6b168'],
     sliders: [s('size', 'Cell size', 10, 90, 1, 34), s('weight', 'Line weight', 0.5, 6, 0.1, 1.4), s('fill', 'Filled cells', 0, 1, 0.05, 0)],
     draw: ({ p, c }) => {
@@ -187,6 +163,179 @@ export const PAGE_PATTERNS: PagePatternDef[] = [
         out += `<polygon points='${pts.join(' ')}' fill='none' stroke='${c}' stroke-width='${p.weight}'/>`
       }
       return out
+    },
+  },
+  {
+    id: 'deco', name: 'Art Deco fans', color: ['Fans', '#d6b168'],
+    sliders: [s('size', 'Fan size', 40, 220, 2, 96), s('rings', 'Rings', 1, 8, 1, 4), s('rays', 'Rays', 0, 14, 1, 6), s('weight', 'Line weight', 0.5, 5, 0.1, 1.4)],
+    draw: ({ p, c }) => {
+      const z = p.size, R = z / 2
+      const fan = (x: number, y: number) => {
+        let o = ''
+        for (let k = 1; k <= p.rings; k++) { const r = n2((R * k) / p.rings); o += `<path d='M${n2(x - r)} ${y} A${r} ${r} 0 0 1 ${n2(x + r)} ${y}' fill='none' stroke='${c}' stroke-width='${p.weight}'/>` }
+        for (let k = 1; k < p.rays + 1; k++) { const a = Math.PI + (Math.PI * k) / (p.rays + 1); o += `<path d='M${x} ${y} L${n2(x + R * Math.cos(a))} ${n2(y + R * Math.sin(a))}' stroke='${c}' stroke-width='${n2(p.weight * 0.7)}'/>` }
+        return o
+      }
+      return `<defs><pattern id='q' width='${z}' height='${R}' patternUnits='userSpaceOnUse'>${fan(R, R)}${fan(0, R * 2)}${fan(z, R * 2)}${fan(0, 0)}${fan(z, 0)}</pattern></defs>${fill('q')}`
+    },
+  },
+  {
+    id: 'moroccan', name: 'Moroccan tiles', color: ['Lines', '#d6b168'], detail: ['Centres', '#6fd3a2'],
+    sliders: [s('size', 'Tile size', 40, 240, 2, 104), s('weight', 'Line weight', 0.5, 6, 0.1, 1.6), s('dot', 'Centres', 0, 1, 0.05, 0.5), s('angle', 'Tilt', 0, 45, 1, 0)],
+    draw: ({ p, c, d }) => {
+      const z = p.size, r = z / 4
+      const foil = (cx: number, cy: number) => `<path d='M${n2(cx + r)} ${n2(cy - r)} A${r} ${r} 0 0 1 ${n2(cx + r)} ${n2(cy + r)} A${r} ${r} 0 0 1 ${n2(cx - r)} ${n2(cy + r)} A${r} ${r} 0 0 1 ${n2(cx - r)} ${n2(cy - r)} A${r} ${r} 0 0 1 ${n2(cx + r)} ${n2(cy - r)} Z' fill='none' stroke='${c}' stroke-width='${p.weight}'/>`
+        + (p.dot > 0 ? `<path d='M${cx} ${n2(cy - r * 0.6 * p.dot)} L${n2(cx + r * 0.6 * p.dot)} ${cy} L${cx} ${n2(cy + r * 0.6 * p.dot)} L${n2(cx - r * 0.6 * p.dot)} ${cy} Z' fill='${d}'/>` : '')
+      return `<defs><pattern id='q' width='${z}' height='${z}' patternUnits='userSpaceOnUse' patternTransform='rotate(${p.angle} ${W / 2} ${H / 2})'>${foil(z / 2, z / 2)}${foil(0, 0)}${foil(z, 0)}${foil(0, z)}${foil(z, z)}</pattern></defs>${fill('q')}`
+    },
+  },
+  {
+    id: 'mandala', name: 'Mandala', color: ['Colour one', '#d6b168'], detail: ['Colour two', '#c79bff'],
+    sliders: [s('size', 'Size', 120, 700, 5, 380), s('rings', 'Rings', 2, 10, 1, 6), s('petals', 'Petals', 6, 36, 1, 16), s('cy', 'Height', 10, 90, 1, 46), s('weight', 'Line weight', 0.5, 4, 0.1, 1.2)],
+    draw: ({ p, c, d }) => {
+      const cx = W / 2, cy = (H * p.cy) / 100
+      let out = ''
+      for (let i = 1; i <= p.rings; i++) {
+        const r = (p.size * i) / p.rings, col = i % 2 ? c : d, pr = (p.size / p.rings) * 0.48, n = Math.round(p.petals * (i % 2 ? 1 : 1.5))
+        out += `<circle cx='${cx}' cy='${n2(cy)}' r='${n2(r)}' fill='none' stroke='${col}' stroke-width='${n2(p.weight * 0.6)}'/>`
+        for (let k = 0; k < n; k++) {
+          const a = n2((360 * k) / n + (i % 2 ? 0 : 180 / n))
+          out += i % 3 === 0
+            ? `<circle cx='${cx}' cy='${n2(cy - r + pr * 0.5)}' r='${n2(pr * 0.22)}' fill='${col}' transform='rotate(${a} ${cx} ${n2(cy)})'/>`
+            : `<path d='M${cx} ${n2(cy - r + pr)} Q${n2(cx + pr * 0.45)} ${n2(cy - r + pr * 0.4)} ${cx} ${n2(cy - r - pr * 0.05)} Q${n2(cx - pr * 0.45)} ${n2(cy - r + pr * 0.4)} ${cx} ${n2(cy - r + pr)} Z' fill='none' stroke='${col}' stroke-width='${p.weight}' transform='rotate(${a} ${cx} ${n2(cy)})'/>`
+        }
+      }
+      return out + `<circle cx='${cx}' cy='${n2(cy)}' r='${n2(p.size / p.rings / 3)}' fill='${c}'/>`
+    },
+  },
+  {
+    id: 'constellations', name: 'Constellations', color: ['Stars & lines', '#f2d38a'],
+    sliders: [s('groups', 'Constellations', 2, 20, 1, 8), s('stars', 'Stars each', 3, 9, 1, 5), s('dust', 'Faint stars', 0, 300, 5, 90), s('weight', 'Line weight', 0.3, 3, 0.1, 0.9), s('seed', 'Shuffle', 1, 99, 1, 11)],
+    draw: ({ p, c }) => {
+      const rnd = seeded(p.seed)
+      let out = ''
+      for (let i = 0; i < p.dust; i++) out += `<circle cx='${n2(rnd() * W)}' cy='${n2(rnd() * H)}' r='${n2(0.6 + rnd() * 1.2)}' fill='${c}' opacity='${n2(0.25 + rnd() * 0.4)}'/>`
+      for (let g = 0; g < p.groups; g++) {
+        let x = 60 + rnd() * (W - 120), y = 60 + rnd() * (H - 120)
+        const pts: Array<[number, number]> = [[x, y]]
+        for (let k = 1; k < p.stars; k++) { x = Math.min(W - 20, Math.max(20, x + (rnd() - 0.5) * 140)); y = Math.min(H - 20, Math.max(20, y + (rnd() - 0.5) * 140)); pts.push([x, y]) }
+        out += `<polyline points='${pts.map(([a, b]) => `${n2(a)},${n2(b)}`).join(' ')}' fill='none' stroke='${c}' stroke-width='${p.weight}' opacity='0.6'/>`
+        for (const [a, b] of pts) { const r = 2.2 + rnd() * 2.8; out += `<circle cx='${n2(a)}' cy='${n2(b)}' r='${n2(r * 2.2)}' fill='${c}' opacity='0.15'/><circle cx='${n2(a)}' cy='${n2(b)}' r='${n2(r)}' fill='${c}'/>` }
+      }
+      return out
+    },
+  },
+  {
+    id: 'circuit', name: 'Circuit board', color: ['Traces', '#6fd3a2'],
+    sliders: [s('traces', 'Traces', 10, 160, 1, 60), s('grid', 'Grid size', 12, 60, 1, 26), s('weight', 'Line weight', 0.5, 5, 0.1, 1.6), s('pad', 'Pad size', 1, 10, 0.5, 4), s('seed', 'Shuffle', 1, 99, 1, 5)],
+    draw: ({ p, c }) => {
+      const rnd = seeded(p.seed), g = p.grid
+      const dirs: Array<[number, number]> = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]
+      let out = ''
+      for (let t = 0; t < p.traces; t++) {
+        let x = Math.round((rnd() * W) / g) * g, y = Math.round((rnd() * H) / g) * g
+        let [dx, dy] = dirs[Math.floor(rnd() * 4)]
+        const pts = [`${x},${y}`]
+        const legs = 2 + Math.floor(rnd() * 4)
+        for (let l = 0; l < legs; l++) {
+          const len = (1 + Math.floor(rnd() * 5)) * g
+          x += dx * len; y += dy * len; pts.push(`${x},${y}`)
+          const turn = dirs[Math.floor(rnd() * 8)]
+          if (turn[0] !== -dx || turn[1] !== -dy) [dx, dy] = turn
+        }
+        const [ex, ey] = pts[pts.length - 1].split(',')
+        const [sx, sy] = pts[0].split(',')
+        out += `<polyline points='${pts.join(' ')}' fill='none' stroke='${c}' stroke-width='${p.weight}' stroke-linejoin='round'/>`
+          + `<circle cx='${ex}' cy='${ey}' r='${p.pad}' fill='none' stroke='${c}' stroke-width='${p.weight}'/><circle cx='${sx}' cy='${sy}' r='${n2(p.pad * 0.6)}' fill='${c}'/>`
+      }
+      return out
+    },
+  },
+  {
+    id: 'suits', name: 'Card suits', color: ['Black suits', '#d6b168'], detail: ['Red suits', '#e05252'],
+    sliders: [s('size', 'Size', 6, 40, 0.5, 14), s('space', 'Spacing', 30, 160, 1, 64), s('tilt', 'Tilt', 0, 45, 1, 0)],
+    draw: ({ p, c, d }) => {
+      const z = p.size, sp = p.space, h = sp / 2
+      return `<defs><pattern id='q' width='${sp}' height='${sp}' patternUnits='userSpaceOnUse' patternTransform='rotate(${p.tilt} ${W / 2} ${H / 2})'>`
+        + `<path d='${spade(h / 2, h / 2, z)}' fill='${c}'/><path d='${heart(h * 1.5, h / 2, z)}' fill='${d}'/>`
+        + `<path d='${diamond(h / 2, h * 1.5, z)}' fill='${d}'/><path d='${club(h * 1.5, h * 1.5, z)}' fill='${c}'/>`
+        + `</pattern></defs>${fill('q')}`
+    },
+  },
+  {
+    id: 'crystals', name: 'Crystals', color: ['Edges', '#c7ccd3'], detail: ['Facets', '#8fb2ff'],
+    sliders: [s('count', 'Crystals', 4, 120, 1, 34), s('size', 'Size', 8, 80, 1, 30), s('facets', 'Facets', 0, 1, 0.05, 0.6), s('seed', 'Shuffle', 1, 99, 1, 9)],
+    draw: ({ p, c, d }) => {
+      const rnd = seeded(p.seed)
+      let out = ''
+      for (let i = 0; i < p.count; i++) {
+        const x = rnd() * W, y = rnd() * H, k = p.size * (0.5 + rnd() * 0.8), a = Math.round(rnd() * 60 - 30)
+        const top = [x, y - k], l = [x - k * 0.55, y - k * 0.25], r = [x + k * 0.55, y - k * 0.25], bl = [x - k * 0.4, y + k * 0.5], br = [x + k * 0.4, y + k * 0.5], bot = [x, y + k * 0.95]
+        const P = (q: number[]) => `${n2(q[0])},${n2(q[1])}`
+        out += `<g transform='rotate(${a} ${n2(x)} ${n2(y)})'>`
+          + `<polygon points='${[top, r, br, bot, bl, l].map(P).join(' ')}' fill='${d}' fill-opacity='${n2(p.facets * 0.25)}' stroke='${c}' stroke-width='1.2'/>`
+          + (p.facets > 0 ? `<path d='M${P(l)} L${P([x, y])} L${P(r)} M${P(top)} L${P([x, y])} L${P(bot)} M${P(bl)} L${P([x, y])} L${P(br)}' stroke='${c}' stroke-width='0.7' opacity='${p.facets}' fill='none'/>` : '')
+          + `</g>`
+      }
+      return out
+    },
+  },
+  {
+    id: 'vines', name: 'Climbing vines', color: ['Vines', '#6fd3a2'], detail: ['Flowers', '#f5a3c7'],
+    sliders: [s('cols', 'Vines', 1, 8, 1, 4), s('wave', 'Sway', 5, 80, 1, 34), s('leaf', 'Leaf size', 4, 30, 0.5, 13), s('bloom', 'Flowers', 0, 1, 0.05, 0.5), s('weight', 'Stem weight', 0.5, 4, 0.1, 1.6)],
+    draw: ({ p, c, d }) => {
+      let out = ''
+      for (let v = 0; v < p.cols; v++) {
+        const cx = (W * (v + 0.5)) / p.cols, ph = v * 1.7, xAt = (y: number) => cx + p.wave * Math.sin(y / 70 + ph)
+        const pts: string[] = []
+        for (let y = -10; y <= H + 10; y += 8) pts.push(`${n2(xAt(y))},${y}`)
+        out += `<polyline points='${pts.join(' ')}' fill='none' stroke='${c}' stroke-width='${p.weight}'/>`
+        for (let y = 20, k = 0; y < H; y += 46, k++) {
+          const x = xAt(y), side = k % 2 ? 1 : -1, L = p.leaf
+          out += `<path d='M${n2(x)} ${y} q${n2(side * L * 0.9)} ${n2(-L * 0.9)} ${n2(side * L * 1.6)} ${n2(-L * 0.3)} q${n2(-side * L * 0.6)} ${n2(L * 0.9)} ${n2(-side * L * 1.6)} ${n2(L * 0.3)} Z' fill='${c}' opacity='0.85'/>`
+          if (k % 3 === 1) out += `<path d='M${n2(x)} ${y} q${n2(-side * L)} ${n2(L * 0.2)} ${n2(-side * L * 1.1)} ${n2(L * 1.1)} q0 ${n2(L * 0.5)} ${n2(side * L * 0.45)} ${n2(L * 0.45)}' fill='none' stroke='${c}' stroke-width='${n2(p.weight * 0.6)}'/>`
+          if (p.bloom > 0 && k % 4 === 2) {
+            const fx = x - side * L * 1.2, fy = y + L * 0.4, pr = L * 0.42 * (0.6 + p.bloom * 0.6)
+            for (let a = 0; a < 5; a++) out += `<circle cx='${n2(fx + pr * Math.cos((a * 2 * Math.PI) / 5))}' cy='${n2(fy + pr * Math.sin((a * 2 * Math.PI) / 5))}' r='${n2(pr * 0.75)}' fill='${d}' opacity='${n2(0.5 + p.bloom * 0.5)}'/>`
+            out += `<circle cx='${n2(fx)}' cy='${n2(fy)}' r='${n2(pr * 0.5)}' fill='${c}'/>`
+          }
+        }
+      }
+      return out
+    },
+  },
+  {
+    id: 'sakura', name: 'Cherry blossoms', color: ['Petals', '#f5a3c7'], detail: ['Centres', '#f2d38a'],
+    sliders: [s('count', 'Blossoms', 5, 120, 1, 30), s('size', 'Size', 6, 40, 0.5, 16), s('petals', 'Falling petals', 0, 200, 5, 50), s('seed', 'Shuffle', 1, 99, 1, 4)],
+    draw: ({ p, c, d }) => {
+      const rnd = seeded(p.seed)
+      let out = ''
+      for (let i = 0; i < p.petals; i++) {
+        const x = rnd() * W, y = rnd() * H, k = p.size * (0.25 + rnd() * 0.2)
+        out += `<ellipse cx='${n2(x)}' cy='${n2(y)}' rx='${n2(k)}' ry='${n2(k * 0.55)}' fill='${c}' opacity='0.7' transform='rotate(${Math.round(rnd() * 180)} ${n2(x)} ${n2(y)})'/>`
+      }
+      for (let i = 0; i < p.count; i++) {
+        const x = rnd() * W, y = rnd() * H, k = p.size * (0.7 + rnd() * 0.6), rot = rnd() * 72
+        out += `<g transform='rotate(${n2(rot)} ${n2(x)} ${n2(y)})'>`
+        for (let a = 0; a < 5; a++) {
+          const t = (a * 72 * Math.PI) / 180, px = x + k * 0.55 * Math.cos(t), py = y + k * 0.55 * Math.sin(t)
+          out += `<ellipse cx='${n2(px)}' cy='${n2(py)}' rx='${n2(k * 0.5)}' ry='${n2(k * 0.36)}' fill='${c}' transform='rotate(${a * 72} ${n2(px)} ${n2(py)})'/>`
+        }
+        out += `<circle cx='${n2(x)}' cy='${n2(y)}' r='${n2(k * 0.2)}' fill='${d}'/></g>`
+      }
+      return out
+    },
+  },
+  {
+    id: 'tartan', name: 'Tartan', color: ['Bands', '#a8452a'], detail: ['Pinlines', '#f2d38a'],
+    sliders: [s('band', 'Band width', 10, 120, 1, 46), s('space', 'Spacing', 60, 300, 2, 150), s('pin', 'Pinline', 0, 6, 0.2, 2), s('cross', 'Cross bands', 0, 1, 0.05, 0.6)],
+    draw: ({ p, c, d }) => {
+      const sp = p.space, b = p.band, o = n2(0.35 + p.cross * 0.4)
+      return `<defs><pattern id='q' width='${sp}' height='${sp}' patternUnits='userSpaceOnUse'>`
+        + `<rect x='${n2((sp - b) / 2)}' width='${b}' height='${sp}' fill='${c}' opacity='${o}'/><rect y='${n2((sp - b) / 2)}' height='${b}' width='${sp}' fill='${c}' opacity='${o}'/>`
+        + `<rect x='${n2(sp / 2 - b / 6)}' width='${n2(b / 3)}' height='${sp}' fill='${c}' opacity='${n2(o * 0.8)}'/><rect y='${n2(sp / 2 - b / 6)}' height='${n2(b / 3)}' width='${sp}' fill='${c}' opacity='${n2(o * 0.8)}'/>`
+        + (p.pin > 0 ? `<rect x='${n2(sp * 0.08)}' width='${p.pin}' height='${sp}' fill='${d}'/><rect y='${n2(sp * 0.08)}' height='${p.pin}' width='${sp}' fill='${d}'/>` : '')
+        + `</pattern></defs>${fill('q')}`
     },
   },
 ]

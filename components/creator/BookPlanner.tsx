@@ -7,9 +7,14 @@
 
 import { PAGE_PATTERNS, pagePatternOf, patternCss, patternParams, type PagePatternDef } from '@/lib/pagePatterns'
 import { ACCENT_COLORS } from '@/components/badges/CoverSpine'
-import { ColorPick, ValueSlider } from '@/components/creator/CoverDesigner'
-import { useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices } from 'lucide-react'
+import { ColorPick, Group, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
+import { PAGE_FRAMES, pageFrameOf, frameCss, FRAME_W } from '@/lib/pageFrames'
+import { EDGE_COLORS, EDGE_TEXTURES, edgeBackground } from '@/lib/bookEdges'
+import { badgeArt, badgeAsset } from '@/lib/badgeAssets'
+import { appStorage } from '@/lib/firebase/appStorage'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { useMemo, useRef, useState } from 'react'
+import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners } from '@/components/creator/Ornaments'
@@ -40,7 +45,7 @@ export function plan(book: BadgeSet, badges: BadgeDef[]): PlannedPage[] {
   return pages
 }
 
-export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAddChapter, onChapters, onInside }: {
+export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter, onAddChapter, onChapters, onInside }: {
   book: BadgeSet
   badges: BadgeDef[]
   onAdd: (chapter: string) => void
@@ -49,6 +54,7 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
   onAddChapter: () => void
   onChapters: (next: string[]) => void          // reordered / one removed (only an empty one)
   onInside: (style: InsideStyle | undefined) => void
+  uid: string
 }) {
   const pages = useMemo(() => plan(book, badges), [book, badges])
   const chapters = chaptersFor(book, badges)
@@ -59,7 +65,7 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
   const right = pages[at * 2 + 1] ?? null
   const { from, to } = book.cover
   const accent = 'var(--trim)' // the inside's trim (Inside look), not the cover's foil
-  const inside = insideLook(book.insideStyle ?? {})
+  const inside = insideLook(book.insideStyle ?? {}, book.coverImage)
   const [panel, setPanel] = useState<'chapters' | 'inside'>('chapters')
   const goTo = (chapter: number) => {
     const i = pages.findIndex((p) => p.chapterIndex === chapter)
@@ -73,8 +79,8 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
       <Corners inset={12} size={44} />
       {/* The open book: leather all round, two felt pages, trim frames */}
-      <div className="relative mx-auto max-w-[980px] rounded-[18px] p-[1.6%] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})` }}>
-        <div className="absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />
+      <div className="pinbook-rim relative mx-auto max-w-[980px] rounded-[18px] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})`, padding: 'calc(1.6% * var(--edge-k, 1))' }}>
+        <div className="pinbook-rim-stitch absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />
         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-0">
           <Page page={left} accent={accent} side="left" onAdd={onAdd} onEdit={onEdit} onRename={onRenameChapter} />
           <div className="hidden md:block">
@@ -120,7 +126,7 @@ export function BookPlanner({ book, badges, onAdd, onEdit, onRenameChapter, onAd
       {panel === 'chapters'
         ? <ChaptersPanel chapters={chapters} badges={badges} showing={[left?.chapterIndex, right?.chapterIndex]} onGo={goTo}
             onRename={onRenameChapter} onAdd={onAddChapter} onChapters={onChapters} onAddBadge={onAdd} />
-        : <InsidePanel style={book.insideStyle} onChange={onInside} />}
+        : <InsidePanel uid={uid} style={book.insideStyle} onChange={onInside} coverImage={book.coverImage} />}
       </div>
     </div>
     </div>
@@ -213,49 +219,192 @@ const TRIMS: Array<[string, string]> = [
   ['Bronze', '#a8793f'], ['Emerald', '#6fd3a2'], ['Sapphire', '#8fb2ff'], ['Amethyst', '#c49bff'],
 ]
 
-function InsidePanel({ style, onChange }: { style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void }) {
+function InsidePanel({ uid, style, onChange, coverImage }: { uid: string; style: InsideStyle | undefined; onChange: (s: InsideStyle | undefined) => void; coverImage?: string }) {
   const s = style ?? {}
   const set = (p: Partial<InsideStyle>) => onChange({ ...s, ...p })
   const page = s.page || INSIDE_DEFAULTS.page, trim = s.trim || INSIDE_DEFAULTS.trim
+  const [open, setOpen] = useState<string | null>('pages')
   const swatches = (list: Array<[string, string]>, value: string, key: 'page' | 'trim') => (
     <div className="flex flex-wrap gap-2">
       {list.map(([name, col]) => (
         <button key={col} type="button" title={name} aria-label={name} onClick={() => set({ [key]: col })}
-          className={cn('w-9 h-9 rounded-xl shadow-sm transition-transform hover:scale-110', value.toLowerCase() === col && 'ring-2 ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
+          className={cn('w-8 h-8 rounded-xl shadow-sm transition-transform hover:scale-110', value.toLowerCase() === col && 'ring-2 ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
           style={{ background: key === 'page' ? `radial-gradient(circle at 50% 40%, ${col}, color-mix(in srgb, ${col} 35%, black))` : `linear-gradient(135deg, color-mix(in srgb, ${col} 35%, white), ${col} 50%, color-mix(in srgb, ${col} 65%, black))` }} />
       ))}
-      <label title="Any colour" className="relative w-9 h-9 rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500 hover:text-ink cursor-pointer overflow-hidden">
+      <label title="Any colour" className="relative w-8 h-8 rounded-xl border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500 hover:text-ink cursor-pointer overflow-hidden">
         <Palette size={14} />
         <input type="color" value={value} onChange={(e) => set({ [key]: e.target.value })} className="absolute inset-0 opacity-0 cursor-pointer" />
       </label>
     </div>
   )
   const toggle = (label: string, on: boolean, flip: () => void) => (
-    <button type="button" onClick={flip} className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2.5 text-sm font-semibold text-ink">
+    <button type="button" onClick={flip} className="w-full flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm font-semibold text-ink">
       {label}
       <span className={cn('w-9 h-5 rounded-full p-0.5 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
         <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', on && 'translate-x-4')} />
       </span>
     </button>
   )
+  const frameDef = pageFrameOf(s.frameStyle)
+  const edgeName = EDGE_TEXTURES.find((t) => t.id === s.edgeTexture)?.name
   return (
-    <div className="space-y-5">
-      <p className="text-xs text-slate-500">How the inside of your book looks — fans see it exactly like this.</p>
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pages</p>
+    <div className="space-y-2">
+      <p className="text-xs text-slate-500 mb-3">How the inside of your book looks — fans see it exactly like this.</p>
+      <Group id="pages" open={open} setOpen={setOpen} icon={Palette} title="Pages" summary="Felt colour, trim and texture">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Felt</p>
         {swatches(FELTS, page, 'page')}
-      </div>
-      <PatternPicker s={s} page={page} set={set} />
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Trim <span className="normal-case font-normal tracking-normal">· frames, chapter titles, nameplates</span></p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-2">Trim <span className="normal-case font-normal tracking-normal">· titles, nameplates, the classic border</span></p>
         {swatches(TRIMS, trim, 'trim')}
-      </div>
-      <div className="space-y-2">
-        {toggle('Page frame', s.frame !== false, () => set({ frame: s.frame === false ? undefined : false }))}
-        {toggle('Felt texture', s.texture !== false, () => set({ texture: s.texture === false ? undefined : false }))}
-      </div>
+        <div className="mt-4">{toggle('Felt texture', s.texture !== false, () => set({ texture: s.texture === false ? undefined : false }))}</div>
+      </Group>
+      <Group id="picture" open={open} setOpen={setOpen} icon={ImagePlus} title="Page picture" summary={s.pageImage ? 'Your picture on every page' : 'Add your own background'}>
+        <PagePicture uid={uid} s={s} set={set} />
+      </Group>
+      <Group id="pattern" open={open} setOpen={setOpen} icon={Sparkles} title="Pattern" summary={pagePatternOf(s.pattern)?.name ?? 'Plain'}>
+        <PatternPicker s={s} page={page} set={set} />
+      </Group>
+      <Group id="border" open={open} setOpen={setOpen} icon={Frame} title="Border" summary={s.frame === false ? 'None' : frameDef?.name ?? 'Classic'}>
+        <FramePicker s={s} page={page} trim={trim} set={set} />
+      </Group>
+      <Group id="edge" open={open} setOpen={setOpen} icon={BookOpen} title="Book edge" summary={edgeName ? `${edgeName}${s.edgeStitch === false ? '' : ' · stitched'}` : 'The book’s usual rim'}>
+        <EdgePicker s={s} set={set} coverImage={coverImage} />
+      </Group>
       {style && (
-        <button type="button" onClick={() => onChange(undefined)} className="text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
+        <button type="button" onClick={() => onChange(undefined)} className="pt-2 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Back to the classic inside</button>
+      )}
+    </div>
+  )
+}
+
+/** The creator's own picture on every page: upload, Strength, Fade edges */
+function PagePicture({ uid, s, set }: { uid: string; s: InsideStyle; set: (p: Partial<InsideStyle>) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function upload(file: File | undefined) {
+    if (!file) return
+    setBusy(true); setError('')
+    try {
+      const blob = await shrink(file)
+      const r = ref(appStorage, `creators/${uid}/page-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`)
+      await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
+      set({ pageImage: await getDownloadURL(r) })
+    } catch (e) {
+      setError('Couldn’t upload that picture — ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+  return (
+    <div>
+      {s.pageImage ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={badgeArt(s.pageImage, 384)} alt="" className="w-full h-28 object-cover rounded-xl border border-[#d6c49f]" />
+          <ValueSlider label="Strength" min={0.05} max={1} step={0.05} value={s.pageImageOpacity ?? 0.5} onChange={(v) => set({ pageImageOpacity: v })} />
+          <ValueSlider label="Fade edges" min={0} max={1} step={0.05} value={s.pageImageFade ?? 0.4} onChange={(v) => set({ pageImageFade: v })} />
+          <div className="mt-3 flex items-center gap-2">
+            <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
+            </button>
+            <button type="button" onClick={() => set({ pageImage: undefined })} className="ml-auto haven-chip px-3 py-1.5 text-xs font-semibold">Remove</button>
+          </div>
+        </>
+      ) : (
+        <button type="button" onClick={() => input.current?.click()} disabled={busy}
+          className="w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] bg-[#f6eedb] py-6 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
+          <span className="haven-medallion w-10 h-10">{busy ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}</span>
+          <span className="text-sm font-bold text-ink">{busy ? 'Uploading…' : 'Upload a page picture'}</span>
+          <span className="text-[11px] px-5 text-center">It shows softly behind your badges on every page, over the felt.</span>
+        </button>
+      )}
+      <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+    </div>
+  )
+}
+
+/** The page border: None, Classic, then 20 styles in three groups; colours and width */
+function FramePicker({ s, page, trim, set }: { s: InsideStyle; page: string; trim: string; set: (p: Partial<InsideStyle>) => void }) {
+  const def = s.frame === false ? null : pageFrameOf(s.frameStyle)
+  const felt = `radial-gradient(120% 90% at 50% 42%, ${page}, color-mix(in srgb, ${page} 45%, black))`
+  const tile = (id: string, label: string, on: boolean, onClick: () => void, inner: React.ReactNode) => (
+    <button key={id} type="button" onClick={onClick} title={label}
+      className={cn('rounded-lg border p-0.5 transition-colors', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+      <span className="relative block w-full aspect-[0.78] rounded-[5px] overflow-hidden" style={{ background: felt }}>{inner}</span>
+      <span className={cn('block mt-0.5 text-[9px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{label}</span>
+    </button>
+  )
+  return (
+    <div>
+      <div className="grid grid-cols-5 gap-1.5">
+        {tile('none', 'None', s.frame === false, () => set({ frame: false }), <span className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">∅</span>)}
+        {tile('classic', 'Classic', s.frame !== false && !s.frameStyle, () => set({ frame: undefined, frameStyle: undefined }),
+          <span className="absolute inset-[12%] rounded-[2px]" style={{ border: `1px solid color-mix(in srgb, ${trim} 55%, transparent)`, boxShadow: `inset 0 0 0 3px transparent, inset 0 0 0 4px color-mix(in srgb, ${trim} 25%, transparent)` }} />)}
+      </div>
+      {(['Elegant', 'Retro', 'Fun'] as const).map((g) => (
+        <div key={g} className="mt-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {PAGE_FRAMES.filter((f) => f.group === g).map((f) => tile(f.id, f.name, def?.id === f.id, () => set({ frame: undefined, frameStyle: f.id }),
+              <span className="absolute inset-[9%]" style={{ border: '9px solid transparent', borderImage: `${frameCss({ ...s, frameStyle: f.id }, trim)} 40 / 9px / 0 round` }} />))}
+          </div>
+        </div>
+      ))}
+      {def && (
+        <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
+          <p className="pinbook-serif font-bold text-ink">{def.name}</p>
+          <ColorPick label={def.two ? 'Colour one' : 'Colour'} value={s.frameColor ?? def.color ?? trim} palette={ACCENT_COLORS} onChange={(c) => set({ frameColor: c })} />
+          {def.two && <ColorPick label={def.two[0]} value={s.frameColor2 ?? def.two[1]} palette={ACCENT_COLORS} onChange={(c) => set({ frameColor2: c })} />}
+          <ValueSlider label="Width" min={6} max={40} step={1} value={s.frameWidth ?? FRAME_W} unit="px" onChange={(v) => set({ frameWidth: v })} />
+          {(s.frameColor || s.frameColor2) && (
+            <button type="button" onClick={() => set({ frameColor: undefined, frameColor2: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />This border’s own colours</button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The open book's outer edge: texture, colour, grain, width, stitching */
+function EdgePicker({ s, set, coverImage }: { s: InsideStyle; set: (p: Partial<InsideStyle>) => void; coverImage?: string }) {
+  const on = !!s.edgeTexture
+  return (
+    <div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <button type="button" onClick={() => set({ edgeTexture: undefined })} title="The book's usual rim"
+          className={cn('rounded-lg border p-0.5', !on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+          <span className="block w-full h-10 rounded-[5px] bg-[#e6d7b6] flex items-center justify-center text-[10px] text-slate-500">Usual</span>
+          <span className={cn('block mt-0.5 text-[9px] font-semibold truncate', !on ? 'text-ink' : 'text-slate-500')}>Usual</span>
+        </button>
+        {EDGE_TEXTURES.map((t) => {
+          const bg = edgeBackground({ ...s, edgeTexture: t.id }, badgeAsset(coverImage))!
+          const picked = s.edgeTexture === t.id
+          return (
+            <button key={t.id} type="button" onClick={() => set({ edgeTexture: t.id })} title={t.name}
+              className={cn('rounded-lg border p-0.5', picked ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+              <span className="block w-full h-10 rounded-[5px]" style={{ backgroundImage: bg.image, backgroundSize: bg.size }} />
+              <span className={cn('block mt-0.5 text-[9px] font-semibold truncate', picked ? 'text-ink' : 'text-slate-500')}>{t.name}</span>
+            </button>
+          )
+        })}
+      </div>
+      {on && (
+        <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
+          {s.edgeTexture !== 'picture' && <ColorPick label="Colour" value={s.edgeColor ?? EDGE_COLORS[0].color} palette={EDGE_COLORS} onChange={(c) => set({ edgeColor: c })} />}
+          {s.edgeTexture !== 'picture' && s.edgeTexture !== 'smooth' && <ValueSlider label="Texture" min={0} max={1} step={0.05} value={s.edgeGrain ?? 0.6} onChange={(v) => set({ edgeGrain: v })} />}
+          <ValueSlider label="Edge width" min={0.5} max={2.5} step={0.05} value={s.edgeWidth ?? 1} onChange={(v) => set({ edgeWidth: v })} />
+          <div className="mt-3 flex items-center gap-3">
+            <button type="button" onClick={() => set({ edgeStitch: s.edgeStitch === false ? undefined : false })} className="flex items-center gap-2 text-xs font-semibold text-ink">
+              <span className={cn('w-9 h-5 rounded-full p-0.5 transition-colors', s.edgeStitch !== false ? 'bg-violet-600' : 'bg-slate-700')}>
+                <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', s.edgeStitch !== false && 'translate-x-4')} />
+              </span>
+              Stitching
+            </button>
+          </div>
+          {s.edgeStitch !== false && <ColorPick label="Thread" value={s.edgeStitchColor ?? '#d6b168'} palette={ACCENT_COLORS} onChange={(c) => set({ edgeStitchColor: c })} />}
+        </div>
       )}
     </div>
   )
@@ -277,7 +426,6 @@ function PatternPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p
   })
   return (
     <div>
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pattern <span className="normal-case font-normal tracking-normal">· over the pages</span></p>
       <div className="grid grid-cols-5 gap-1.5">
         {[undefined, ...PAGE_PATTERNS].map((d) => {
           const on = def?.id === d?.id
@@ -321,6 +469,7 @@ function Velvet({ children, side }: { children: React.ReactNode; accent?: string
     <div
       className={cn('pinbook-page relative aspect-[0.78] p-[6%] flex flex-col', side === 'left' ? 'pinbook-page-left md:rounded-l-[10px]' : 'pinbook-page-right md:rounded-r-[10px]')}
     >
+      <div className="pinbook-page-art" /><div className="pinbook-page-pattern" />
       {/* The trim's frame (the same as the real pin book's) */}
       <div className="pinbook-frame absolute inset-[3.2%] pointer-events-none" />
       {children}
@@ -374,7 +523,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
       <div className="relative flex-1 grid grid-cols-2 grid-rows-3 gap-[5%] px-[4%] pb-[2%]">
         {page.spots.map((b, i) =>
           b ? (
-            <button key={b.id} type="button" onClick={() => onEdit(b)} className="pinbook-clear group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
+            <button key={b.id} type="button" onClick={() => onEdit(b)} className="group flex flex-col items-center justify-center gap-[6%] rounded-xl hover:bg-white/5 transition-colors">
               <span className="relative flex items-center justify-center w-[62%] aspect-square transition-transform group-hover:scale-105 drop-shadow-[0_6px_6px_rgba(0,0,0,0.55)]">
                 <BadgePin art={b.art} imageUrl={b.imageUrl} size={90} />
               </span>
@@ -382,10 +531,10 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
             </button>
           ) : i === plusAt ? (
             <button key={'plus' + i} type="button" onClick={() => onAdd(page.chapter)}
-              className="pinbook-clear group flex flex-col items-center justify-center gap-[6%]">
+              className="group flex flex-col items-center justify-center gap-[6%]">
               <span
                 className="flex items-center justify-center w-[52%] aspect-square rounded-full border-2 border-dashed transition-all group-hover:scale-110 group-hover:bg-white/5"
-                style={{ borderColor: 'color-mix(in srgb, var(--trim) 80%, transparent)', color: accent, boxShadow: 'inset 0 3px 10px rgba(0,0,0,0.7)' }}
+                style={{ borderColor: 'color-mix(in srgb, var(--trim) 80%, transparent)', color: accent, background: 'var(--page-solid)' /* plain page inside the ring — no pattern, no shadow */ }}
               >
                 <Plus className="w-[42%] h-[42%] transition-transform group-hover:rotate-90" strokeWidth={2.5} />
               </span>

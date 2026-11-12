@@ -216,6 +216,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
         </div>
       ) : (
         <BookPlanner
+          uid={uid}
           book={b.book}
           badges={b.badges}
           onAdd={(chapter) => setMaking({ badge: blankBadge(chapter), isNew: true })}

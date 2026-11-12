@@ -245,7 +245,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
 }
 
 /** A part of the designer that folds open when tapped — one open at a time */
-function Group({ id, open, setOpen, icon: Icon, title, summary, children }: {
+export function Group({ id, open, setOpen, icon: Icon, title, summary, children }: {
   id: string; open: string | null; setOpen: (id: string | null) => void
   icon: typeof Type; title: string; summary: string; children: React.ReactNode
 }) {
@@ -266,7 +266,7 @@ function Group({ id, open, setOpen, icon: Icon, title, summary, children }: {
 }
 
 /** Big pictures shrunk to at most 2400 px on the long side (JPEG, or PNG when it has see-through parts) */
-async function shrink(file: File): Promise<Blob> {
+export async function shrink(file: File): Promise<Blob> {
   const img = await createImageBitmap(file).catch(() => null)
   if (!img) return file
   const k = Math.min(1, 2400 / Math.max(img.width, img.height))

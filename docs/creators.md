@@ -71,15 +71,29 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      - Book saves use `mergeFields` (not `merge`), so a setting switched off (a missing key) really goes.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
   3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder
-     **Page patterns** (2026-11-12, Inside look → Pattern; `lib/pagePatterns.ts`): 14 patterns over the felt —
-     Damask, Polka dots, Stripes, Checkerboard, Trellis, Harlequin, Starry sky, Confetti, Waves, Sunburst,
-     Graph paper, Honeycomb, Dragon scales, Contour map. Each is a `PagePatternDef` drawing one 780 × 1000 SVG
-     with its own sliders (`InsideStyle.patternParams[pattern]`) and colours (`patternColor` / `patternDetail`,
-     any colour), plus Strength (`patternOpacity`), Fade edges (`patternFade`), Surprise and Reset.
-     `insideLook()` puts it in `--pattern`; globals.css layers it over the felt's grain and colour
-     (`.pinbook-styled .pinbook-page`), so the Studio and fans' pin book both show it.
-     Each badge (and the Studio's "+") sits in a soft clearing of plain felt (`.pinbook-clear`, only with a
-     pattern: `.pinbook-patterned`), so the pattern never runs under a pin. Empty spots are blank page — no dots.
+     **Inside look** (2026-11-12) is five folding sections (BookPlanner `InsidePanel`), all stored on
+     `BadgeSet.insideStyle` and drawn through `insideLook(style, coverImage)` → classes + CSS variables
+     (globals.css `.pinbook-styled` and friends), so the Studio and fans' pin book look the same:
+     - **Pages:** felt colour, trim, felt texture.
+     - **Page picture:** the creator's own image on every page (`pageImage`, uploaded to
+       `creators/{uid}/page-*`), with Strength (`pageImageOpacity`) and Fade edges (`pageImageFade`).
+     - **Pattern** (`lib/pagePatterns.ts`): 20 — Damask, Trellis, Harlequin, Starry sky, Confetti, Waves,
+       Sunburst, Honeycomb, Dragon scales, Contour map, Art Deco fans, Moroccan tiles, Mandala,
+       Constellations, Circuit board, Card suits, Crystals, Climbing vines, Cherry blossoms, Tartan. Each is a
+       `PagePatternDef` drawing one 780 × 1000 SVG, with its own sliders (`patternParams[pattern]`), colours
+       (`patternColor` / `patternDetail`, any colour), Strength, Fade edges, Surprise and Reset.
+     - **Border** (`lib/pageFrames.ts`): None, Classic, and 20 styles (Elegant: Double rule, Filigree, Art
+       Nouveau, Baroque beads, Pearls, Greek key, Laurel, Twisted rope; Retro: Art Deco, 70s bands, Scallops,
+       Rickrack, Film strip, 8-bit, Neon tube; Fun: Stitches, Stars, Hearts, Card suits, Marquee lights). Each
+       is a 120 × 120 nine-slice SVG used as `border-image` on `.pinbook-frame` (`frameStyle`, `frameColor`,
+       `frameColor2`, `frameWidth`); `frame: false` = none.
+     - **Book edge** (`lib/bookEdges.ts`): the rim round the open book — Leather, Suede, Linen, Wood, Velvet,
+       Brushed metal, Carbon fibre, Marble, Smooth or the Cover picture, any colour, texture strength, edge
+       width and stitching on/off with its thread colour (`edge*`). Rims carry `.pinbook-rim`.
+     Every page draws two layers over the felt for these — `.pinbook-page-art` (picture) then
+     `.pinbook-page-pattern` — under the page's content. With a pattern, an empty badge's silhouette is solid
+     felt (`.pinbook-hole-felt`, `--page-solid`): the pattern stops at its outline, no halo. Empty Studio spots
+     are blank page.
      paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap
      to rename), chapter pills, page turning, and "+ Chapter".
      - Each chapter shows its badges and **one "+ Add a badge" spot**.

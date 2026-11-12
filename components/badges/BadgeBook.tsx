@@ -166,15 +166,15 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   const half = TURN_MS / 2
   const away = leaf?.side === 'right' ? 'left' : 'right' // direction from the spine outward on the leaf's side
 
-  const inside = insideLook(set.insideStyle) // a creator's Inside look (unset: the classic inside)
+  const inside = insideLook(set.insideStyle, set.coverImage) // a creator's Inside look (unset: the classic inside)
   const cover = (
     // A thin cover rim — the felt pages fill almost the whole book
     <div
       ref={coverRef}
-      className={cn('pinbook-cover relative rounded-[16px]', inside.className)}
+      className={cn('pinbook-cover pinbook-rim relative rounded-[16px]', inside.className)}
       style={{
         ...inside.style,
-        padding: 'clamp(10px, 1.4%, 20px)', ['--leather-from' as string]: set.cover.from, ['--leather-to' as string]: set.cover.to, ['--accent' as string]: set.cover.accent,
+        padding: 'clamp(10px, calc(1.4% * var(--edge-k, 1)), 44px)', ['--leather-from' as string]: set.cover.from, ['--leather-to' as string]: set.cover.to, ['--accent' as string]: set.cover.accent,
         // A cover picture is the open book's cover too: it shows round the pages as the rim
         ...(set.coverImage && { backgroundImage: `url("${badgeAsset(set.coverImage)}")`, backgroundSize: '100% 100%' }),
       }}
@@ -182,7 +182,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       <PinholeFilter />
       {/* Saddle stitching around the cover, and gold corner protectors */}
       {/* (a cover picture brings its own frame) */}
-      {!set.coverImage && <div className="pinbook-stitch absolute inset-[5px] rounded-[12px] pointer-events-none" />}
+      {(!set.coverImage || set.insideStyle?.edgeTexture) && <div className="pinbook-stitch absolute inset-[5px] rounded-[12px] pointer-events-none" />}
       {!set.coverImage && (['tl', 'tr', 'bl', 'br'] as const).map((c) => <CoverCorner key={c} at={c} />)}
       {/* Chapter tabs down the right edge (they replace the strap — the book's open) */}
       {chapters.length > 0 && (
@@ -362,6 +362,8 @@ export interface PageProps {
 export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, flash }: PageProps) {
   return (
     <div className={cn('pinbook-page absolute inset-0 overflow-visible', side === 'left' ? 'rounded-l-xl pinbook-page-left' : 'rounded-r-xl pinbook-page-right')}>
+      {/* A creator's page picture and pattern (shown only when set — globals.css) */}
+      <div className="pinbook-page-art" /><div className="pinbook-page-pattern" />
       {/* Gold-foil double frame with engraved corner ornaments */}
       <div className={cn('pinbook-frame absolute top-[2.5%] bottom-[2.5%] pointer-events-none', side === 'left' ? 'left-[4%] right-[6%]' : 'left-[6%] right-[4%]')}>
         {(['tl', 'tr', 'bl', 'br'] as const).map((c) => <FrameOrnament key={c} at={c} />)}
@@ -372,8 +374,7 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
           {Array.from({ length: PER_PAGE }, (_, i) => {
             const def = page.badges[i]
             return def
-              // pinbook-clear: a page pattern stays out from under the badge (globals.css)
-              ? <div key={def.id} className="pinbook-clear"><BadgeSpot def={def} badges={badges} pin={pin} isMe={isMe} interactive={!turning} below={i < 2} onInspect={onInspect} /></div>
+              ? <BadgeSpot key={def.id} def={def} badges={badges} pin={pin} isMe={isMe} interactive={!turning} below={i < 2} onInspect={onInspect} />
               : <EmptySpot key={i} size={pin} />
           })}
         </div>
@@ -551,6 +552,8 @@ function PinHole({ size, hovered, imageUrl, art, tier, progress }: { size: numbe
   const fill = riseHeight(trimmed, p)
   return (
     <span className="relative block transition-transform duration-200" style={{ width: size, height: size * 1.12, transform: hovered ? 'scale(1.03)' : undefined }}>
+      {/* With a page pattern: plain felt in exactly the pin's shape, so the pattern stops at the silhouette */}
+      <span className="pinbook-hole-felt absolute inset-0" aria-hidden style={{ WebkitMask: `${src} center / contain no-repeat`, mask: `${src} center / contain no-repeat` }} />
       <span
         className="absolute inset-0"
         style={{ backgroundImage: src, backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', filter: 'url(#pinhole-inset)' }}
