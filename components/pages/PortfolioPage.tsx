@@ -246,14 +246,17 @@ export default function PortfolioPage() {
             {/* Opens the FilterPanel above the page (ClientWrapper) */}
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`md:order-last shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[13px] font-semibold transition-colors ${
-                showFilters ? 'bg-slate-800 border-slate-700 text-ink' : 'border-slate-800 text-slate-300'
+              // A real button: raised cream with a shadow; filled when the panel is open
+              className={`md:order-last shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[13px] font-semibold transition-all active:translate-y-px ${
+                showFilters
+                  ? 'bg-violet-600 border-violet-600 text-white shadow-inner'
+                  : 'bg-[#f6eedb] border-[#c9b48c] text-ink shadow-[0_2px_0_#c9b48c] hover:bg-[#fbf5e8] hover:-translate-y-px'
               }`}
               aria-expanded={showFilters}
             >
               <SlidersHorizontal size={15} />
               Filters
-              {calcFloor > 0 && <span className="text-[9px] font-bold bg-violet-600 text-white px-1.5 py-0.5 rounded-full leading-none">ON</span>}
+              {calcFloor > 0 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
             </button>
           </div>
           <div className="flex items-center gap-2">
