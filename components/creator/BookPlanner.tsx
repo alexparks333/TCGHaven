@@ -14,6 +14,7 @@ import { badgeArt, badgeAsset } from '@/lib/badgeAssets'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useMemo, useRef, useState } from 'react'
+import { useStickyCenter } from '@/lib/useStickyCenter'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame } from 'lucide-react'
 import { INSIDE_DEFAULTS, insideLook, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
@@ -67,6 +68,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
   const accent = 'var(--trim)' // the inside's trim (Inside look), not the cover's foil
   const inside = insideLook(book.insideStyle ?? {}, book.coverImage)
   const [panel, setPanel] = useState<'chapters' | 'inside'>('chapters')
+  const stick = useStickyCenter()
   const goTo = (chapter: number) => {
     const i = pages.findIndex((p) => p.chapterIndex === chapter)
     if (i >= 0) setSpread(Math.floor(i / 2))
@@ -74,7 +76,8 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start" style={inside.style /* the trim colour for the side panel too */}>
-    <div className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10')} style={inside.style}>
+    {/* The book stays in the middle of the window while the edit panel beside it scrolls */}
+    <div ref={stick.ref} className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10 xl:sticky xl:self-start')} style={{ ...inside.style, top: stick.top }}>
       {/* It lies open on the binder paper, inside a thin rule with engraved corners */}
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
       <Corners inset={12} size={44} />

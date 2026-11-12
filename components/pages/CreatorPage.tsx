@@ -29,6 +29,7 @@ import { BadgeMaker } from '@/components/creator/BadgeMaker'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
+import { useStickyCenter } from '@/lib/useStickyCenter'
 import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
 
@@ -119,6 +120,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
   const [preview, setPreview] = useState(false)
   // The cover being designed: unsaved until "Save cover" (null = no changes)
   const [coverDraft, setCoverDraft] = useState<BadgeSet | null>(null)
+  const stick = useStickyCenter()
   const timer = useRef<ReturnType<typeof setTimeout>>()
 
   // The saved book arrives (and later changes elsewhere) — take it unless there are unsaved edits
@@ -187,7 +189,7 @@ function BookTab({ uid, creatorName, saved, view, onView, onCoverDirty }: {
       {view === 'cover' ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] items-start">
           {/* The book under a spotlight, pinned mid-window while the designer scrolls */}
-          <div className="lg:sticky self-start" style={{ top: 'max(1rem, calc(50dvh - 330px))' }}>
+          <div ref={stick.ref} className="lg:sticky self-start" style={{ top: stick.top }}>
             <CoverStage book={designing} badges={b.badges} dirty={coverDirty} onOpen={() => onView('pages')} />
           </div>
           <div className="haven-panel !p-4 md:!p-5">
