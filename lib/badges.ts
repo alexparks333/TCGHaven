@@ -95,7 +95,12 @@ export interface CoverStyle {
   countColor?: string    // its text (default gold)
   pageColor?: string     // the page edges showing at the side
   spine?: string         // components/badges/CoverSpine.tsx SPINES id; unset = no spine (the picture fills the cover)
-  spineColor?: string    // its leather / cloth colour (SPINE_COLORS; default walnut)
+  spineColor?: string    // its main colour (any; default walnut)
+  spineAccent?: string   // its second colour — thread, gold, stripes… (any; default per look)
+  spineDetail?: string   // a third colour on looks that have one (pinlines, rivets, eyelets, moon)
+  spineWidth?: number    // % of the cover's width it takes (8–24, default 13) — the picture gets the rest
+  spineRound?: number    // how rounded its shading looks (0–1, default 0.8)
+  spineParams?: Record<string, Record<string, number>> // per look: its own sliders (SpineDef.sliders)
 }
 
 /** The collection every TCG Haven-made book is in */

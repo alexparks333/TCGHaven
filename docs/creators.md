@@ -58,10 +58,16 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        The picture is uploaded as is (big ones shrunk to 2400 px), then **placed**: drag and zoom
        (slider or wheel), Fill cover / Center. It's saved as `BadgeSet.coverFit` `{ x, y, scale }`, in %
        of the picture's space. Staff covers have no `coverFit` and still fill the cover;
-     - **a spine** (`components/badges/CoverSpine.tsx`): None, Raised bands, Stitched, Gilded or
-       Bookcloth, in 6 colours (`CoverStyle.spine` / `spineColor`). It **eats into the cover**:
-       it takes the left `SPINE_W` (13%), and the picture, title and count sit in what's left
-       (`coverArea()`), so every book stays the same size.
+     - **Spine** (its own section; `components/badges/CoverSpine.tsx`): 14 looks — Raised bands,
+       Stitched, Gilded, Bookcloth, Racing stripes, Chevrons, Polka dots, Harlequin, Dragon scales,
+       Starry night, Waves, Riveted metal, Laced up, Checkerboard. Each look is a `SpineDef` in `SPINES`:
+       its colour parts (main + `accent` + sometimes `detail`, e.g. Thread, Gold, Eyelets, Moon — swatches
+       or **any colour**) and its own sliders (`sliders`, stored per look in `CoverStyle.spineParams[look]`).
+       Every look also has Width (8–24%, `spineWidth`) and Roundness (`spineRound`), plus Surprise me and
+       Reset. The spine **eats into the cover**: the picture, title and count sit in what's left
+       (`coverArea()`), so every book stays the same size. Add a new look by adding a `SpineDef` —
+       the designer builds its controls from it.
+     - Book saves use `mergeFields` (not `merge`), so a setting switched off (a missing key) really goes.
      The big book on the left (`CoverStage`) is the real `BookCover`, tilting toward the pointer.
   3. **The Pages & badges tab** (`components/creator/BookPlanner.tsx`): the open book on binder
      paper, in its own leather and velvet, 2 × 3 pin spots a page, a chapter title engraved on each chapter's first page (tap

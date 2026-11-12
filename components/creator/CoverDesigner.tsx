@@ -6,11 +6,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { ImagePlus, Loader2, Type, AlignCenter, Palette, BookOpen, ChevronDown } from 'lucide-react'
+import { ImagePlus, Loader2, Type, AlignCenter, Palette, BookOpen, ChevronDown, BookMarked, Dices, RotateCcw } from 'lucide-react'
 import type { BadgeSet, CoverStyle } from '@/lib/badges'
 import { COVER_FONTS, FONT_GROUPS, TITLE_FINISHES, loadCoverFonts } from '@/lib/coverFonts'
 import { monogramOf } from '@/lib/creatorBooks'
-import { BLANK_COVER, CoverSpine, SPINES, SPINE_COLORS, coverArea, spineOf } from '@/components/badges/CoverSpine'
+import { ACCENT_COLORS, BLANK_COVER, CoverSpine, SPINES, SPINE_COLORS, SPINE_W_RANGE, coverArea, spineOf, spineParams, spineWidth, type SpineDef } from '@/components/badges/CoverSpine'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
 
@@ -68,6 +68,16 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
     </div>
   )
   const spine = spineOf(st)
+  const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
+  // Every slider of the look somewhere random, and random colours
+  const surpriseSpine = (def: SpineDef) => setStyle({
+    spineColor: pick(SPINE_COLORS).color, spineAccent: pick(ACCENT_COLORS).color, spineDetail: pick(ACCENT_COLORS).color,
+    spineParams: { ...(st.spineParams ?? {}), [def.id]: Object.fromEntries(def.sliders.map((x) => [x.key, x.min + Math.round((Math.random() * (x.max - x.min)) / x.step) * x.step])) },
+  })
+  const resetSpine = (def: SpineDef) => setStyle({
+    spineColor: undefined, spineAccent: undefined, spineDetail: undefined, spineWidth: undefined, spineRound: undefined,
+    spineParams: { ...(st.spineParams ?? {}), [def.id]: Object.fromEntries(def.sliders.map((x) => [x.key, x.def])) },
+  })
   const page = PAGE_COLORS.find((p) => (p.color ?? '') === (st.pageColor ?? ''))
   return (
     <div className="space-y-2.5">
@@ -147,7 +157,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
       </Group>
 
       <Group id="cover" open={open} setOpen={setOpen} icon={Palette} title="Cover"
-        summary={!book.coverImage ? 'Needs a picture' : `Your picture · ${spine ? `${spine.name} spine` : 'no spine'}`}>
+        summary={book.coverImage ? 'Your picture' : 'Needs a picture'}>
         {/* A creator cover is always a picture — until there is one the book is plain tan */}
         <Section title="Cover picture" hint="your artwork is the cover">
           {book.coverImage ? (
@@ -171,36 +181,50 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
           {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
         </Section>
 
-        <div className="mt-6" />
-        <Section title="Spine" hint="bound down the left edge — the book stays the same size">
-          <div className="grid grid-cols-5 gap-2">
-            {[undefined, ...SPINES].map((sp) => {
-              const on = (spine?.id) === sp?.id
-              return (
-                <button key={sp?.id ?? 'none'} type="button" onClick={() => setStyle({ spine: sp?.id })} title={sp?.name ?? 'No spine'}
-                  className={cn('rounded-xl border p-1.5 transition-colors', on ? 'border-[#7a5230] bg-[#f6eedb] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
-                  {/* A little book showing the look */}
-                  <span className="relative block mx-auto w-full aspect-[0.71] rounded-[4px] overflow-hidden" style={{ background: BLANK_COVER }}>
-                    {sp && <CoverSpine look={sp.id} color={st.spineColor} width={30} />}
-                  </span>
-                  <span className={cn('block mt-1 text-[10px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{sp ? sp.name.replace('Raised ', '') : 'None'}</span>
-                </button>
-              )
-            })}
-          </div>
-          {spine && (
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-xs font-semibold text-slate-500 w-14 shrink-0">Colour</span>
-              <div className="flex flex-wrap gap-1.5">
-                {SPINE_COLORS.map((c) => (
-                  <button key={c.color} type="button" title={c.name} aria-label={`${c.name} spine`} onClick={() => setStyle({ spineColor: c.color })}
-                    className={cn('w-7 h-7 rounded-full border border-black/20 transition-transform hover:scale-110', (st.spineColor ?? SPINE_COLORS[0].color) === c.color && 'ring-2 ring-offset-2 ring-offset-[#efe3c8] ring-[#7a5a3a] scale-110')}
-                    style={{ background: c.color }} />
-                ))}
-              </div>
+      </Group>
+
+      {/* The spine: its own section — pick a look, then its colours and its own sliders */}
+      <Group id="spine" open={open} setOpen={setOpen} icon={BookMarked} title="Spine"
+        summary={spine ? `${spine.name} · ${Math.round(spineWidth(st))}% wide` : 'None — add one down the left edge'}>
+        <p className="text-xs text-slate-500 mb-3">Bound down the left edge. It eats into the cover, so your book stays the same size — the picture fits beside it.</p>
+        <div className="grid grid-cols-5 gap-2">
+          {[undefined, ...SPINES].map((sp) => {
+            const on = spine?.id === sp?.id
+            return (
+              <button key={sp?.id ?? 'none'} type="button" onClick={() => setStyle({ spine: sp?.id })} title={sp?.name ?? 'No spine'}
+                className={cn('rounded-xl border p-1 transition-colors', on ? 'border-[#7a5230] bg-[#f6eedb] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+                {/* A strip of the spine in this look, in the creator's colours */}
+                <span className="relative block w-full h-16 rounded-[6px] overflow-hidden" style={{ background: BLANK_COVER }}>
+                  {sp ? <CoverSpine st={st} look={sp.id} swatch={0.6} /> : <span className="absolute inset-0 flex items-center justify-center text-[#8a7350] text-lg">∅</span>}
+                </span>
+                <span className={cn('block mt-1 text-[10px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{sp?.name ?? 'None'}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {spine && (
+          <div className="mt-4 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3.5">
+            <div className="flex items-center gap-2">
+              <p className="pinbook-serif font-bold text-ink flex-1 truncate">{spine.name}</p>
+              <button type="button" onClick={() => surpriseSpine(spine)} className="haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1"><Dices size={13} />Surprise me</button>
+              <button type="button" onClick={() => resetSpine(spine)} className="haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1" title="Back to this look's defaults"><RotateCcw size={13} />Reset</button>
             </div>
-          )}
-        </Section>
+
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mt-4">Colours</p>
+            <ColorPick label={spine.base} value={st.spineColor ?? SPINE_COLORS[0].color} palette={SPINE_COLORS} onChange={(c) => setStyle({ spineColor: c })} />
+            {spine.accent && <ColorPick label={spine.accent[0]} value={st.spineAccent ?? spine.accent[1]} palette={ACCENT_COLORS} onChange={(c) => setStyle({ spineAccent: c })} />}
+            {spine.detail && <ColorPick label={spine.detail[0]} value={st.spineDetail ?? spine.detail[1]} palette={ACCENT_COLORS} onChange={(c) => setStyle({ spineDetail: c })} />}
+
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5">Shape</p>
+            <ValueSlider label="Width" min={SPINE_W_RANGE[0]} max={SPINE_W_RANGE[1]} step={0.5} value={spineWidth(st)} unit="%" onChange={(v) => setStyle({ spineWidth: v })} />
+            <ValueSlider label="Roundness" min={0} max={1} step={0.05} value={st.spineRound ?? 0.8} onChange={(v) => setStyle({ spineRound: v })} />
+            {spine.sliders.map((x) => (
+              <ValueSlider key={x.key} label={x.label} min={x.min} max={x.max} step={x.step} value={spineParams(spine, st)[x.key]}
+                onChange={(v) => setStyle({ spineParams: { ...(st.spineParams ?? {}), [spine.id]: { ...spineParams(spine, st), [x.key]: v } } })} />
+            ))}
+          </div>
+        )}
       </Group>
 
       <Group id="pages" open={open} setOpen={setOpen} icon={BookOpen} title="Page edges" summary={page?.name ?? 'Custom'}>
@@ -303,7 +327,7 @@ function PlacePicture({ book, onChange }: { book: BadgeSet; onChange: (fit: Fit)
           {/* What's on it: the picture clipped to the space beside the spine, then the spine */}
           <div className="absolute inset-0 rounded-[8px] overflow-hidden shadow-[0_6px_18px_rgba(0,0,0,0.35)]" style={{ background: BLANK_COVER }}>
             <div ref={coverRef} className="absolute inset-y-0 overflow-hidden" style={{ left: `${area.left}%`, width: `${area.width}%` }}>{img(false)}</div>
-            {spine && <CoverSpine look={spine.id} color={book.coverStyle?.spineColor} />}
+            {spine && <CoverSpine st={book.coverStyle} />}
           </div>
           <div className="absolute inset-0 rounded-[8px] ring-2 ring-white/80 ring-offset-0 pointer-events-none" />
         </div>
@@ -376,6 +400,40 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
         {title}{hint && <span className="font-normal normal-case tracking-normal"> · {hint}</span>}
       </p>
       {children}
+    </div>
+  )
+}
+
+/** A slider with its value shown */
+function ValueSlider({ label, min, max, step, value, unit = '', onChange }: { label: string; min: number; max: number; step: number; value: number; unit?: string; onChange: (v: number) => void }) {
+  const shown = step >= 1 ? String(Math.round(value)) : max <= 1 ? `${Math.round(value * 100)}%` : value.toFixed(1)
+  return (
+    <label className="mt-2.5 flex items-center gap-3">
+      <span className="text-xs font-semibold text-slate-500 w-[92px] shrink-0 truncate">{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="flex-1 min-w-0 accent-[#7a5230]" />
+      <span className="text-[11px] tabular-nums text-slate-500 w-9 text-right shrink-0">{shown}{unit}</span>
+    </label>
+  )
+}
+
+/** A colour: a row of swatches, or any colour at all from the picker at the end */
+function ColorPick({ label, value, palette, onChange }: { label: string; value: string; palette: Array<{ name: string; color: string }>; onChange: (c: string) => void }) {
+  const custom = !palette.some((c) => c.color.toLowerCase() === value.toLowerCase())
+  return (
+    <div className="mt-2.5 flex items-start gap-3">
+      <span className="text-xs font-semibold text-slate-500 w-[92px] shrink-0 pt-1 truncate">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {palette.map((c) => (
+          <button key={c.color} type="button" onClick={() => onChange(c.color)} title={c.name} aria-label={`${label}: ${c.name}`}
+            className={cn('w-6 h-6 rounded-full border border-black/20 transition-transform hover:scale-110', value.toLowerCase() === c.color.toLowerCase() && 'ring-2 ring-offset-2 ring-offset-[#f6eedb] ring-[#7a5a3a] scale-110')}
+            style={{ background: c.color }} />
+        ))}
+        {/* Any colour: shows the picked one once it's not a swatch */}
+        <label className={cn('relative w-6 h-6 rounded-full border border-black/20 overflow-hidden cursor-pointer transition-transform hover:scale-110', custom && 'ring-2 ring-offset-2 ring-offset-[#f6eedb] ring-[#7a5a3a] scale-110')}
+          title="Any colour" style={{ background: custom ? value : 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }}>
+          <input type="color" value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" aria-label={`${label}: any colour`} />
+        </label>
+      </div>
     </div>
   )
 }

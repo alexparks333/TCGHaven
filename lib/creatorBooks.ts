@@ -114,7 +114,9 @@ export async function saveCreatorBook(uid: string, book: CreatorBook, created = 
     ...clean({ owner: uid, book: book.book, badges: book.badges }),
     ...(created && { createdAt: serverTimestamp() }),
     updatedAt: serverTimestamp(),
-  }, { merge: true })
+    // mergeFields, not merge: these fields are replaced whole, so a setting switched off (no spine,
+    // Haven Style off — stored as a missing key) really goes; any other field on the doc is kept
+  }, { mergeFields: ['owner', 'book', 'badges', 'updatedAt', ...(created ? ['createdAt'] : [])] })
 }
 
 export function useCommunity(uid: string | null | undefined): { community: Community | null; loaded: boolean } {

@@ -529,7 +529,7 @@ function StyledCover({ set, inSet, earned, emptyLabel }: { set: BadgeSet; inSet:
         {/* The hinge's shadow falling on the cover */}
         {spine && <div className="absolute inset-y-0 left-0 w-[7%] bg-gradient-to-r from-black/35 to-transparent pointer-events-none" />}
       </div>
-      {spine && <CoverSpine look={spine.id} color={st.spineColor} />}
+      {spine && <CoverSpine st={st} />}
       {/* The title (and the line above it), where the creator put it */}
       <div className="absolute flex flex-col items-center text-center -translate-y-1/2 pointer-events-none px-[5%]" style={{ ...inArea, top: `${st.titleY ?? 38}%` }}>
         {st.showSubtitle !== false && set.subtitle && (
