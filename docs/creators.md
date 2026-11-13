@@ -20,9 +20,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   in the top right over the header's corner (after the name on a phone), the name, tagline, members and
   Join, then the sections the creator switched on (`page.sections`, `COMMUNITY_SECTIONS` / `sectionOn()`):
   About, the Achievement Badge Board and Newest members (`newestMembers()`, sorted in the browser — no
-  extra index); the Community Discussion Board is listed as Coming soon. Edited in the
-  Studio's Community tab: Change header (upload, drag and zoom with `PicturePlacer`, Darken) and Page
-  sections. `saveCommunity` uses `mergeFields`; firestore.rules lets `communities` carry `page`.
+  extra index); the Community Discussion Board is listed as Coming soon. The Studio's
+  Community tab IS this page, in editing mode (`CommunityView edit={…}`): the header's Add / Change header
+  (upload, drag and zoom with `PicturePlacer`, Darken) and colour dots, the name / tagline / About typed in
+  place, games tapped on and off, and every section with its own Shown / Hidden switch (hidden ones faded,
+  for the creator only); Page sections in the side panel does the same. `saveCommunity` uses `mergeFields`; firestore.rules lets `communities` carry `page`.
 - **Earning creator badges** (2026-11-12, `lib/creatorShelf.ts`). Joining a community makes its creator's
   published badges yours to earn: FriendsProvider checks the collection against TCG Haven's catalog plus
   every joined community's book (`useJoinedCreatorBooks`), into the same `shared_badges/{uid}` (badge ids

@@ -1,29 +1,25 @@
 'use client'
 
-// The Creator Studio's Community tab (docs/creators.md): the community page itself, edited right on
-// it — click the name, tagline or bio and type, tap a colour on the banner, tap games on and off.
-// It saves itself a moment after each change (communities/{uid}). Beside it: members, the page's
-// link, the book fans collect there, and what's coming.
+// The Creator Studio's Community tab (docs/creators.md): the real community page (CommunityPage's
+// CommunityView) in editing mode — type the name, tagline and About in place, add and place a header
+// picture, pick a colour, tap games on and off, show or hide each section. It saves itself a moment
+// after each change (communities/{uid}). Beside it: the page's link, the book, Page sections, what's coming.
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, Copy, ExternalLink, Loader2, MousePointerClick, Pencil, Users, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
+import { Check, Copy, ExternalLink, Loader2, MousePointerClick, Pencil, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
 import { useCommunity, saveCommunity, COMMUNITY_SECTIONS, HEADER_ASPECT, type Community, type CommunityLook, type CreatorBook } from '@/lib/creatorBooks'
-import { CommunityHeader } from '@/components/creator/CommunityHeader'
+import { CommunityView } from '@/components/pages/CommunityPage'
+import { isLive } from '@/lib/badges'
 import { PicturePlacer, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
 import { Portal } from '@/components/creator/Portal'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { badgeArt } from '@/lib/badgeAssets'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { communityPath, memberCount } from '@/lib/communities'
-import { BANNERS } from '@/components/creator/CreateCommunity'
 import { BookCover } from '@/components/badges/BadgeLibrary'
-import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-const GAMES = Object.keys(GAME_LABELS) as Game[]
-// Click-to-edit text: looks like the page until you hover or type in it
-const inline = 'w-full bg-transparent rounded-lg px-2 -mx-2 outline-none border border-transparent transition-colors hover:border-[#d6c49f] hover:bg-[#f6eedb] focus:border-[#c4ae83] focus:bg-[#f6eedb] placeholder:text-slate-600'
 
 export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: CreatorBook | null; onEditBook: () => void }) {
   const { community, loaded } = useCommunity(uid)
@@ -32,6 +28,9 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   const [members, setMembers] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [headerOpen, setHeaderOpen] = useState(false)
+  const [viewing, setViewing] = useState(false) // the book opened from the page
+  // Fans see only the published badges
+  const liveBook = book && { ...book, badges: book.badges.filter(isLive) }
   const timer = useRef<ReturnType<typeof setTimeout>>()
   const pending = useRef<() => void>()
   useEffect(() => { if (loaded && community && !draft) setDraft(community) }, [loaded, community, draft])
@@ -66,62 +65,15 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   const c = draft
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
-      {/* ── The page, editable in place ── */}
-      <div className="haven-panel haven-grain !p-0 overflow-hidden relative">
-        {/* The header, exactly as fans see it (CommunityHeader) — your picture, placed, or your colour */}
-        <CommunityHeader community={c} className="border-b border-[#d6c49f]">
-          <span className="haven-plate absolute left-4 top-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5">
-            <MousePointerClick size={13} />Click anything to edit · it saves itself
-          </span>
-          <button type="button" onClick={() => setHeaderOpen(true)} className="haven-chip absolute right-3 top-3 px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5 shadow-sm">
-            <ImagePlus size={14} />{c.page?.header ? 'Change header' : 'Add a header picture'}
-          </button>
-          {/* The banner's colour, picked right on it */}
-          <div className="haven-plate absolute right-3 bottom-3 flex flex-wrap justify-end gap-1.5 !p-1.5 max-w-[70%]">
-            {BANNERS.map((col) => (
-              <button key={col} type="button" onClick={() => set({ color: col })} aria-label={`Banner colour ${col}`}
-                className={cn('w-6 h-6 rounded-full transition-shadow', c.color === col ? 'ring-2 ring-offset-2 ring-offset-[#f6eedb] ring-[#7a5230]' : 'hover:ring-1 hover:ring-[#c4ae83] hover:ring-offset-1 hover:ring-offset-[#f6eedb]')}
-                style={{ background: col }} />
-            ))}
-          </div>
-        </CommunityHeader>
-
-        <div className="px-5 md:px-8 pb-7 -mt-11 relative">
-          <div className="w-[84px] h-[84px] rounded-[22px] border-4 border-[#efe4cc] flex items-center justify-center pinbook-serif text-4xl font-bold text-white"
-            style={{ background: c.color, transition: 'background 0.5s' }}>
-            {(c.name.trim()[0] || '★').toUpperCase()}
-          </div>
-
-          <input value={c.name} maxLength={40} style={{ fontFamily: 'var(--font-engraved), Georgia, serif' }} onChange={(e) => set({ name: e.target.value })} placeholder="Your community’s name" aria-label="Community name"
-            className={cn(inline, 'mt-4 py-1 text-[26px] md:text-[32px] font-bold text-ink leading-tight')} />
-          {state === 'name' && <p className="text-xs text-red-600 mt-0.5">Give it a name of at least 2 letters to save.</p>}
-          <input value={c.tagline} maxLength={80} onChange={(e) => set({ tagline: e.target.value })} placeholder="Add a one-line tagline…" aria-label="Tagline"
-            className={cn(inline, 'py-1 text-base text-slate-400')} />
-
-          <div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><Users size={14} /><b className="text-ink">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</div>
-
-          {/* What it collects */}
-          <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">What you collect <span className="normal-case tracking-normal font-normal">· tap to switch on or off</span></p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {GAMES.map((g) => {
-              const on = c.games?.includes(g)
-              return (
-                <button key={g} type="button" onClick={() => set({ games: on ? c.games!.filter((x) => x !== g) : [...(c.games ?? []), g] })}
-                  className={cn('haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1.5', on && 'haven-chip-on')}>
-                  <span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* About */}
-          <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 flex justify-between">
-            <span>About</span><span className="font-normal tabular-nums normal-case tracking-normal">{c.about.length}/600</span>
-          </p>
-          <textarea value={c.about} maxLength={600} onChange={(e) => set({ about: e.target.value })} aria-label="About your community"
-            placeholder="Who you are, what you collect, what members get… (fans read this on your page)"
-            className={cn(inline, 'mt-1 py-2 min-h-[140px] text-sm leading-relaxed text-slate-300 resize-y')} />
-        </div>
+      {/* ── The page itself, exactly as fans see it — editable in place (CommunityPage's CommunityView) ── */}
+      <div className="min-w-0">
+        <p className="mb-3 text-xs text-slate-500 flex items-center gap-1.5">
+          <MousePointerClick size={13} />Your community page, as fans see it — click the text to type, add a header picture, show or hide each section · it saves itself
+        </p>
+        {state === 'name' && <p className="mb-2 text-xs text-red-600">Give it a name of at least 2 letters to save.</p>}
+        <CommunityView uid={uid} community={{ uid, ...c }} creator={null} members={members} mine studio="computer"
+          isMember={false} busy={false} error="" toggle={() => {}} book={liveBook} open={viewing} setOpen={setViewing}
+          edit={{ set, onHeader: () => setHeaderOpen(true), onEditBook }} />
       </div>
 
       {/* ── Beside it ── */}

@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Trophy } from 'lucide-react'
+import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Trophy, ImagePlus } from 'lucide-react'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Avatar } from '@/components/friends/Avatar'
@@ -18,13 +18,13 @@ import { BadgePin } from '@/components/badges/BadgePin'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
-import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
+import { sectionOn, useCreatorBook, type Community, type CommunitySection, type CreatorBook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
 import { BadgeBook } from '@/components/badges/BadgeBook'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { GAME_COLORS, GAME_LABELS } from '@/lib/types'
+import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 
 export default function CommunityPage({ uid }: { uid: string }) {
   return (
@@ -83,16 +83,64 @@ function Body({ uid }: { uid: string }) {
 }
 
 /** The page itself, from its data — split from Body so it can be drawn without signing in (dev checks) */
-export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen }: {
+/** The Studio's Community tab edits the page in place: this switches the page into editing — text
+ *  becomes fields, the header gets its picture and colour controls, every section shows with its own
+ *  Shown / Hidden switch (hidden ones faded, for the creator only) */
+export interface CommunityEdit {
+  set: (patch: Partial<Community>) => void
+  onHeader: () => void
+  onEditBook: () => void
+}
+const BANNERS = ['#7c3aed', '#b3261e', '#2f7d6d', '#2d5bd7', '#c2571a', '#b0306a', '#4d6b1f', '#3a4660', '#9a6420', '#2f7ea0']
+const fieldCls = 'w-full bg-transparent rounded-lg px-2 -mx-2 outline-none border border-transparent transition-colors hover:border-[#d6c49f] hover:bg-[#f6eedb] focus:border-[#c4ae83] focus:bg-[#f6eedb] placeholder:text-slate-600'
+
+export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen, edit }: {
   uid: string; community: CommunityEntry; creator: Profile | null; members: number | null; mine: boolean
   studio: ReturnType<typeof useStudioDevice>; isMember: boolean; busy: boolean; error: string; toggle: () => void
-  book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
+  book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void; edit?: CommunityEdit
 }) {
   const { myBadges: progress } = useFriends()
+  const on = (id: CommunitySection) => sectionOn(community, id)
+  // A section as fans see it — or, while editing, every section with its Shown / Hidden switch
+  const frame = (id: CommunitySection, body: React.ReactNode) => {
+    if (!edit) return on(id) ? <div key={id}>{body}</div> : null
+    const shown = on(id)
+    const flip = () => edit.set({ page: { ...(community.page ?? {}), sections: { ...(community.page?.sections ?? {}), [id]: !shown } } })
+    return (
+      <div key={id} className="relative">
+        <button type="button" onClick={flip} title={shown ? 'Hide it from your page' : 'Show it on your page'}
+          className={cn('absolute -top-3 right-4 z-10 rounded-full border px-3 py-1 text-[11px] font-bold inline-flex items-center gap-2 shadow-sm', shown ? 'bg-[#f6eedb] border-[#c4ae83] text-ink' : 'bg-[#2b2014] border-[#2b2014] text-[#f3e6c8]')}>
+          <span className={cn('w-7 h-4 rounded-full p-0.5 transition-colors', shown ? 'bg-violet-600' : 'bg-slate-600')}>
+            <span className={cn('block w-3 h-3 rounded-full bg-white transition-transform', shown && 'translate-x-3')} />
+          </span>
+          {shown ? 'Shown on your page' : 'Hidden from fans'}
+        </button>
+        <div className={cn('transition-opacity', !shown && 'opacity-40 pointer-events-none select-none [&>*]:border-dashed')}>{body}</div>
+      </div>
+    )
+  }
   return (
     <div className="flex flex-col pb-10">
       {/* The header — the creator's picture (or colour) */}
-      <CommunityHeader community={community} className="rounded-2xl shadow-[0_18px_40px_-24px_rgba(40,25,10,0.7)]" />
+      <CommunityHeader community={community} className="rounded-2xl shadow-[0_18px_40px_-24px_rgba(40,25,10,0.7)]">
+        {edit && (
+          <>
+            <button type="button" onClick={edit.onHeader}
+              className={cn('absolute z-10 rounded-full bg-[#f6eedb]/95 border border-[#c4ae83] px-4 py-2 text-sm font-bold text-ink inline-flex items-center gap-2 shadow-md hover:bg-white',
+                community.page?.header ? 'right-4 top-4' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 px-5 py-2.5')}>
+              <ImagePlus size={16} />{community.page?.header ? 'Change header' : 'Add a header picture'}
+            </button>
+            {!community.page?.header && (
+              <div className="absolute left-3 bottom-3 z-10 flex flex-wrap gap-1.5 rounded-full bg-[#f6eedb]/95 border border-[#c4ae83] p-1.5 max-w-[70%]" title="Your colour (shown when there's no header picture)">
+                {BANNERS.map((col) => (
+                  <button key={col} type="button" onClick={() => edit.set({ color: col })} aria-label={`Colour ${col}`}
+                    className={cn('w-6 h-6 rounded-full', community.color === col ? 'ring-2 ring-offset-2 ring-offset-[#f6eedb] ring-[#7a5230]' : 'hover:ring-1 hover:ring-[#c4ae83]')} style={{ background: col }} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </CommunityHeader>
 
       {/* Who it is · the book (top right on a computer; after the name on a phone) · the sections */}
       <div className="grid gap-x-6 gap-y-5 lg:grid-cols-[minmax(0,1fr)_260px] items-start">
@@ -103,8 +151,19 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
               {(community.name.trim()[0] || '★').toUpperCase()}
             </div>
             <div className="min-w-0 flex-1 md:pt-4">
-              <h1 className="pinbook-serif text-2xl md:text-3xl font-bold text-ink leading-tight">{community.name}</h1>
-              {community.tagline && <p className="text-sm text-slate-500 mt-1">{community.tagline}</p>}
+              {edit ? (
+                <>
+                  <input value={community.name} maxLength={40} onChange={(e) => edit.set({ name: e.target.value })} placeholder="Your community’s name" aria-label="Community name"
+                    className={cn(fieldCls, 'pinbook-serif text-2xl md:text-3xl font-bold text-ink leading-tight py-0.5')} />
+                  <input value={community.tagline} maxLength={80} onChange={(e) => edit.set({ tagline: e.target.value })} placeholder="Add a one-line tagline…" aria-label="Tagline"
+                    className={cn(fieldCls, 'text-sm text-slate-500 mt-1 py-0.5')} />
+                </>
+              ) : (
+                <>
+                  <h1 className="pinbook-serif text-2xl md:text-3xl font-bold text-ink leading-tight">{community.name}</h1>
+                  {community.tagline && <p className="text-sm text-slate-500 mt-1">{community.tagline}</p>}
+                </>
+              )}
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span className="flex items-center gap-1.5"><Users size={14} /><b className="text-ink">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
                 {creator && (
@@ -113,14 +172,25 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
                   </Link>
                 )}
               </div>
-              {(community.games?.length ?? 0) > 0 && (
+              {edit ? (
+                <div className="mt-2 flex flex-wrap gap-1.5" title="The games you collect — tap to switch on or off">
+                  {(Object.keys(GAME_LABELS) as Game[]).map((g) => {
+                    const has = community.games?.includes(g)
+                    return (
+                      <button key={g} type="button" onClick={() => edit.set({ games: has ? community.games!.filter((x) => x !== g) : [...(community.games ?? []), g] })}
+                        className={cn('rounded-full px-2 py-0.5 text-[11px] font-bold transition-colors', has ? 'text-white' : 'border border-dashed border-[#c4ae83] text-slate-500 hover:text-ink')}
+                        style={has ? { background: GAME_COLORS[g] } : undefined}>{GAME_LABELS[g]}</button>
+                    )
+                  })}
+                </div>
+              ) : (community.games?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {community.games!.map((g) => <span key={g} className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>)}
                 </div>
               )}
             </div>
             <div className="shrink-0">
-              {mine ? (
+              {edit ? null : mine ? (
                 // the Studio is computers-only — no link to it in the app or on a phone
                 studio === 'computer' ? <Link href="/creator" className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
               ) : (
@@ -147,6 +217,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
                 <p className="pinbook-serif font-bold text-ink truncate">{book.book.name}</p>
                 <p className="text-xs text-slate-500 mt-0.5">{book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect</p>
                 <button type="button" onClick={() => setOpen(true)} className="btn-primary mt-3 lg:w-full justify-center"><BookOpen size={15} />Open the book</button>
+                {edit && <button type="button" onClick={edit.onEditBook} className="mt-2 lg:w-full text-xs font-semibold text-[#7a5230] hover:underline inline-flex items-center justify-center gap-1"><Wand2 size={12} />Edit the book</button>}
                 <p className="text-[11px] text-slate-500 mt-2">
                   {isMember || mine ? 'Collect the cards to earn these pins.' : 'Join to collect these pins in your own pin book.'}
                 </p>
@@ -158,14 +229,26 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         </aside>
 
         <div className="min-w-0 flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
-          {sectionOn(community, 'about') && (
+          {frame('about', (
             <section className="card-glass p-5 md:p-6">
               <h2 className="pinbook-serif text-lg font-bold text-ink mb-2">About</h2>
-              <p className="text-sm text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
+              {edit ? (
+                <>
+                  <textarea value={community.about} maxLength={600} onChange={(e) => edit.set({ about: e.target.value })} aria-label="About your community"
+                    placeholder="Who you are, what you collect, what members get…" className={cn(fieldCls, 'min-h-[110px] py-2 text-sm leading-relaxed text-slate-400 resize-y')} />
+                  <p className="text-right text-[11px] text-slate-500 tabular-nums">{community.about.length}/600</p>
+                </>
+              ) : <p className="text-sm text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>}
+            </section>
+          ))}
+          {frame('badgeBoard', <AchievementBoard community={uid} book={book} />)}
+          {frame('members', <NewestMembers community={uid} members={members} />)}
+          {edit && (
+            <section className="rounded-2xl border border-dashed border-[#c4ae83] p-5 text-center">
+              <p className="pinbook-serif font-bold text-ink">Community Discussion Board</p>
+              <p className="text-xs text-slate-500 mt-1">Coming soon — posts your members upvote, like a forum.</p>
             </section>
           )}
-          {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
-          {sectionOn(community, 'members') && <NewestMembers community={uid} members={members} />}
         </div>
 
       </div>
