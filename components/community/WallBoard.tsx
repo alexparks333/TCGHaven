@@ -37,6 +37,7 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
   const [heights, setHeights] = useState<Record<string, number>>({})
   const [drafts, setDrafts] = useState<Record<string, NotePlace>>({})
   const drag = useRef<Drag | null>(null)
+  const heightsRef = useRef(heights); heightsRef.current = heights
   const moved = useRef(false)
 
   // the board's width on the page → its scale
@@ -65,7 +66,8 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
     const out: Record<string, NotePlace> = {}
     for (const p of posts) {
       const pl = drafts[p.id] ?? p.place
-      if (pl) out[p.id] = pl
+      // never higher than the top of the board — a note can't hang up over the wall's title
+      if (pl) out[p.id] = { ...pl, y: Math.max(pl.y, topOf(heights[p.id], pl.s)) }
     }
     // notes not placed yet hang in loose, tilted columns from the top — never moved by where others are placed
     // (they sit under the placed ones until the owner puts them somewhere)
@@ -90,7 +92,7 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
       const d = drag.current; if (!d) return
       moved.current = true
       let next = d.start
-      if (d.kind === 'move') next = { ...d.start, x: clamp(d.start.x + (e.clientX - d.px) / k, 20, BOARD_W - 20), y: Math.max(30, d.start.y + (e.clientY - d.py) / k) }
+      if (d.kind === 'move') next = { ...d.start, x: clamp(d.start.x + (e.clientX - d.px) / k, 20, BOARD_W - 20), y: Math.max(topOf(heightsRef.current[d.id], d.start.s), d.start.y + (e.clientY - d.py) / k) }
       if (d.kind === 'turn') {
         let r = d.start.r + angle(d.cx, d.cy, e.clientX, e.clientY) - d.a0
         r = ((r + 540) % 360) - 180
@@ -170,5 +172,7 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
   )
 }
 
+/** The highest a note's centre can be: half its (sized, a little turned) height below the board's top */
+const topOf = (h = 300, s = 1) => (h * s) / 2 * 1.06 + 8
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
 const angle = (cx: number, cy: number, x: number, y: number) => (Math.atan2(y - cy, x - cx) * 180) / Math.PI
