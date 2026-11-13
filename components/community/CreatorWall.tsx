@@ -17,6 +17,7 @@ import { REACTIONS, useWallReactions, type ReactionDef } from '@/lib/wallReactio
 import { lookVars, luminance, mix, surfaceCss, wallLook } from '@/lib/blockStyle'
 import { addPost, editPost, removePost, useBlockPosts } from '@/lib/communityPosts'
 import { cn } from '@/lib/utils'
+import { isLive } from '@/lib/badges'
 
 export function ReactionIcon({ r, size = 15 }: { r: ReactionDef; size?: number }) {
   // eslint-disable-next-line @next/next/no-img-element
@@ -49,7 +50,17 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   const w = wallLook(block.style?.wall) // the board: its surface, frame, holders, tilt, columns (Style → Board)
   const pinOf = (h: number) => w.pinColor || PINS[h % PINS.length]
   // held up the note's own way, else the board's (Style → Board → Held by; "mixed": tape for pictures, pins for words)
-  const holderOf = (p: WallPost): 'pin' | 'tape' | 'none' => p.look?.holder ?? (w.holders === 'mixed' ? (p.image ? 'tape' : 'pin') : w.holders === 'pins' ? 'pin' : w.holders as 'tape' | 'none')
+  // a poll's votes are reactions 'vote-0'…'vote-3' (one per member: voting for another choice takes the old vote back)
+  const pollOf = (p: WallPost) => ({
+    count: (i: number) => rx.count(p.id, `vote-${i}`),
+    mine: (i: number) => rx.mine(p.id, `vote-${i}`),
+    vote: (i: number) => {
+      ;(p.look?.options ?? []).forEach((_, j) => { if (j !== i && rx.mine(p.id, `vote-${j}`)) rx.toggle(p.id, `vote-${j}`) })
+      rx.toggle(p.id, `vote-${i}`)
+    },
+    can: canReact,
+  })
+  const holderOf = (p: WallPost): 'pin' | 'tape' | 'none' => p.look?.kind === 'badge' ? 'none' : p.look?.holder ?? (w.holders === 'mixed' ? (p.image ? 'tape' : 'pin') : w.holders === 'pins' ? 'pin' : w.holders as 'tape' | 'none')
   const l = useLook()
   // The whole block is the board: its surface edge to edge inside a slim frame, the title written at the
   // top of it. Words on it are in the board's own ink — dark on a light board, cream on a dark one.
@@ -123,7 +134,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
             renderNote={(p) => {
               const h = hash(p.id)
               return (
-                <NoteCard post={p} holder={holderOf(p)} pinColor={p.look?.pinColor || pinOf(h)}
+                <NoteCard post={p} holder={holderOf(p)} pinColor={p.look?.pinColor || pinOf(h)} poll={p.look?.kind === 'poll' ? pollOf(p) : undefined}
                   top={ctx.owner && p.live && !arranging && (
                     // the owner's own note: change it, or take it down
                     <span className="absolute -top-2.5 -right-2.5 z-[2] flex gap-1 opacity-0 [.cork-note:hover_&]:opacity-100 focus-within:opacity-100 transition-opacity">
@@ -136,8 +147,9 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                   )}>
                   {/* a polaroid keeps its strip for the caption: just the reactions under it (the time shows when opened);
                       a sticker is decoration — nothing under it */}
-                  {p.look?.kind !== 'polaroid' && p.look?.kind !== 'sticker' && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
-                  {p.look?.kind !== 'sticker' && <Reactions p={p} />}
+                  {(!p.look?.kind || p.look.kind === 'note') && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
+                  {/* a sticker is decoration and a poll has its votes — the rest get reactions */}
+                  {p.look?.kind !== 'sticker' && p.look?.kind !== 'poll' && <Reactions p={p} />}
                 </NoteCard>
               )
             }} />
@@ -148,15 +160,15 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
         <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => setOpen(null)}>
           <div className="fixed inset-0 bg-[#2b2014]/55" />
           <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} className="relative w-full max-w-xl my-auto">
-            <NoteCard post={open} holder={holderOf(open)} pinColor={open.look?.pinColor || pinOf(hash(open.id))} full className="!p-5 sm:!p-7"
+            <NoteCard post={open} holder={holderOf(open)} pinColor={open.look?.pinColor || pinOf(hash(open.id))} full poll={open.look?.kind === 'poll' ? pollOf(open) : undefined} className="!p-5 sm:!p-7"
               top={<button type="button" onClick={() => setOpen(null)} className="absolute top-2 right-2 z-[2] p-1.5 opacity-60 hover:opacity-100" aria-label="Close"><X size={18} /></button>}>
               <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-50">{ctx.community.name} · {timeAgo(open.at)}</p>
-              <Reactions p={open} />
+              {open.look?.kind !== 'poll' && <Reactions p={open} />}
             </NoteCard>
           </div>
         </div>, document.body)}
       {editing && ctx.owner && (
-        <NoteEditor uid={ctx.uid} post={typeof editing === 'string' ? undefined : editing} board={surfaceCss(w.surface, w.color, w.texture)}
+        <NoteEditor uid={ctx.uid} post={typeof editing === 'string' ? undefined : editing} board={surfaceCss(w.surface, w.color, w.texture)} badges={(ctx.book?.badges ?? []).filter(isLive) /* drafts aren't shown to fans */}
           boardHolder={w.holders === 'pins' ? 'pin' : w.holders}
           onSave={async (n) => {
             if (typeof editing === 'string') {
@@ -164,7 +176,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
               // board opens for arranging with it picked, so the owner can put it exactly where they want
               const z = Math.max(0, ...posts.map((p) => p.place?.z ?? 0)) + 1
               const id = await addPost({ community: ctx.uid, block: block.id, kind: 'wall', text: n.text, image: n.image, note: n.note, look: n.look,
-                place: { x: BOARD_W / 2, y: 190, r: [-3, 2, -1.5, 3.5][Date.now() % 4] * (n.look.kind === 'sticker' ? 3 : 1), s: n.look.kind === 'sticker' ? 0.7 : 1, z } })
+                place: { x: BOARD_W / 2, y: 190, r: [-3, 2, -1.5, 3.5][Date.now() % 4] * (n.look.kind === 'sticker' ? 3 : 1), s: n.look.kind === 'sticker' || n.look.kind === 'badge' ? 0.7 : n.look.kind === 'card' ? 0.85 : 1, z } })
               setArranging(true); setSelected(id)
             }
             else await editPost(editing.id, { text: n.text, note: n.note, look: n.look, image: n.image ?? null })

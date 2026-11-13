@@ -89,7 +89,15 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   `post.look` (`NoteLook`). Two kinds: **Note** and **Polaroid** (`look.kind` — a real instant photo: matte frame in
   `POLAROID_FRAMES` (`look.pframe`; classic white, cream, black, colour editions), thin even borders and the deep
   bottom strip with a marker caption, the photo square (or `fit: 'whole'`) recessed with a sheen — `.polaroid` CSS).
-  The owner's **New note** (a note, polaroid or sticker — its Kind) / **Arrange the board** sit at the top right of the board, always above
+  Three more Kinds (all kept in `post.look`, no rules change): **Card** — a catalog card (picked with the Badge
+  Maker's `CardPicker`, `look.card` incl. its game) in a sleeve (clear / matte / black / gold, `look.sleeve`) with its
+  **live price** on a string tag (read from `catalog/{game}/cards/{id}` through `catalogPrice()`, once per card per
+  visit, in the viewer's currency; `look.price: false` hides it). **Badge pin** — one of the community's own live
+  badges (`look.badge`), stuck straight in with a brass nameplate, no holder. **Poll** — an index card (ruled,
+  red margin) with the question in pen (the post's text) and 2–4 choices (`look.options`); members tap a choice to
+  vote, shown as tally marks; votes are `wall_reactions` `vote-0`…`vote-3` (voting for another choice takes the old
+  one back, so one each). Polls and stickers have no reactions; cards and badges do.
+  The owner's **New note** (any Kind) / **Arrange the board** sit at the top right of the board, always above
   the notes (z-index), even one placed over that corner. A third kind, **Sticker** (`lib/stickerCut.ts`, all in the
   browser — no AI service): upload a photo and it's cut out — **Cut out** flood-fills a plain background away from
   the picture's edges (a "Cut" sensitivity slider; a PNG with its own see-through edge keeps it), or one of 18 shapes
