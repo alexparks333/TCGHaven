@@ -2,18 +2,19 @@
 // posts and announcements. Written by the owner right on their community page — never in the Creator
 // Studio, which is only the page's layout and look. Highlighted Cards are posts too (kind 'card', one card each) (communities/{uid}.page). Kept in their own collection
 // so a Studio save of the layout can never overwrite a post.
-//   community_posts/{id}  { community, block, kind: 'wall' | 'announcement', text, title?, image?, note?, pinned?, at }
+//   community_posts/{id}  { community, block, kind: 'wall' | 'announcement' | 'card', text, title?, image?, note?, look? (a wall note's layout), pinned?, slot?, at }
 // Anyone signed in reads; only the community's owner (community == their uid) writes (firestore.rules).
 // Older posts kept inside the block (block.posts / block.items, before this) still show, merged in.
 
 import { useEffect, useState } from 'react'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, deleteField, doc, onSnapshot, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { db } from './firebase/config'
 import type { BadgeSlot } from './badges'
+import type { NoteLook } from './communityBlocks'
 
 export interface CommunityPost {
   id: string; community: string; block: string; kind: 'wall' | 'announcement' | 'card'
-  text: string; title?: string; image?: string; note?: string; pinned?: boolean; slot?: BadgeSlot; at: number
+  text: string; title?: string; image?: string; note?: string; look?: NoteLook; pinned?: boolean; slot?: BadgeSlot; at: number
 }
 
 /** A block's posts, live, newest first */
@@ -43,4 +44,9 @@ export async function pinPost(posts: CommunityPost[], id: string, on: boolean) {
   posts.forEach((p) => { if (p.id === id) b.update(doc(db, 'community_posts', p.id), { pinned: on }); else if (on && p.pinned) b.update(doc(db, 'community_posts', p.id), { pinned: false }) })
   await b.commit()
 }
-export const editPost = (id: string, patch: Partial<Pick<CommunityPost, 'text' | 'title' | 'note'>>) => updateDoc(doc(db, 'community_posts', id), patch)
+/** Change a post. `image: null` takes its picture off; the rest is JSON-cleaned (Firestore refuses undefined). */
+export function editPost(id: string, patch: Partial<Pick<CommunityPost, 'text' | 'title' | 'note' | 'look'>> & { image?: string | null }) {
+  const { image, ...rest } = patch
+  const clean = JSON.parse(JSON.stringify(rest))
+  return updateDoc(doc(db, 'community_posts', id), { ...clean, ...(image === null ? { image: deleteField() } : image ? { image } : {}) })
+}

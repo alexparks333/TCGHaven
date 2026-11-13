@@ -9,8 +9,21 @@ import type { Community, CommunityTab } from './creatorBooks'
 
 export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' | 'text' | 'picture' | 'board'
 
-export interface WallPost { id: string; text: string; image?: string; at: number; note?: string /* NOTE_COLOURS id */ }
-/** The papers a Creator Wall post can be pinned up on */
+export interface WallPost { id: string; text: string; image?: string; at: number; note?: string /* NOTE_COLOURS id */; look?: NoteLook }
+/** How one Creator Wall note is laid out — set by the owner in the note editor (components/community/WallNote.tsx).
+ *  Every part is optional: unset = a picture on top at full width with a white photo border, the page's
+ *  body font at medium size, held the way the board says (Style → Board → Held by). */
+export interface NoteLook {
+  pic?: 'top' | 'bottom' | 'left' | 'right' // where the picture sits around the words
+  picSize?: 's' | 'm' | 'l'                 // how much of the note it takes
+  frame?: 'photo' | 'line' | 'none'         // a white photo border, a thin line, or nothing
+  font?: 'print' | 'hand' | 'type' | 'serif'
+  size?: 's' | 'm' | 'l'
+  align?: 'left' | 'center'
+  holder?: 'pin' | 'tape' | 'none'          // unset = the board's choice
+  pinColor?: string
+}
+/** The papers a Creator Wall note can be — ink turns cream on the dark ones */
 export const NOTE_COLOURS = [
   { id: 'paper', name: 'Paper', color: '#f6eedb' },
   { id: 'yellow', name: 'Yellow', color: '#f1e2a4' },
@@ -18,6 +31,12 @@ export const NOTE_COLOURS = [
   { id: 'sky', name: 'Sky', color: '#cfdde6' },
   { id: 'sage', name: 'Sage', color: '#d6e0c4' },
   { id: 'white', name: 'White', color: '#fbf8f1' },
+  { id: 'kraft', name: 'Kraft', color: '#d2b48a' },
+  { id: 'lilac', name: 'Lilac', color: '#ddd2e8' },
+  { id: 'mint', name: 'Mint', color: '#cde6da' },
+  { id: 'peach', name: 'Peach', color: '#f5d3b0' },
+  { id: 'chalk', name: 'Chalkboard', color: '#2f3a33' },
+  { id: 'ink', name: 'Ink', color: '#22202a' },
 ]
 export interface Announcement { id: string; title: string; body: string; at: number; pinned?: boolean }
 

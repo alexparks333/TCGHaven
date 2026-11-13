@@ -78,8 +78,16 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
 - **Creator Wall** (2026-11-12, `components/community/CreatorWall.tsx`). The creator's posts pinned to a flat
   cork board (`.cork-board` / `.cork-note` in globals.css): words on paper notes held by a pin, pictures as
   prints held by tape, each tilted a little (steady per post id) and straightened on hover; packed in CSS
-  columns, newest first, 6 shown then "See all". Tap one to read it whole. The composer picks the paper
-  (`NOTE_COLOURS`, `WallPost.note`). **Reactions** (`lib/wallReactions.ts`): ♥ / 👍 / 🃏 under each post, for
+  columns, newest first, 6 shown then "See all". Tap one to read it whole. The whole block is the board (its
+  title written at the top of it). **Notes** (`components/community/WallNote.tsx`): one `NoteCard` draws a note
+  on the board, opened big and in the editor. The owner's **note editor** (`NoteEditor` — "Pin up a note", and
+  the pencil on a note to change it) shows the note on a piece of the board and the words are typed straight
+  onto it; beside it: paper (`NOTE_COLOURS`, 12 incl. dark Chalkboard / Ink — the writing turns cream), the
+  picture (shown whole at its own shape, never cropped: above / below / left / right of the words, small /
+  medium / large, photo border / thin line / none), the words (Print / Handwritten / Typewriter / Elegant,
+  size, alignment) and what holds it up (the board's choice / pin + colour / tape / nothing) — all in
+  `post.look` (`NoteLook`). Saving a change: `editPost()` (`image: null` takes the picture off). The rules
+  allow `look` on create and `image` / `look` on update. **Reactions** (`lib/wallReactions.ts`): ♥ / 👍 / 🃏 under each post, for
   members and the creator (`ctx.canReact`); `wall_reactions/{community}_{post}_{member}_{reaction}`, one live
   query per wall, counts added up in the browser, toggles shown at once. Add a reaction by adding it to
   `REACTIONS` (the rules accept any `^[a-z0-9-]{1,24}$` id); the creator's own art goes in its `art`

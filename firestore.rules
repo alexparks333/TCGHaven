@@ -90,10 +90,10 @@ service cloud.firestore {
       allow create: if signedIn() && notBanned() && request.resource.data.community == request.auth.uid
         && request.resource.data.kind in ['wall', 'announcement', 'card']
         && request.resource.data.text is string && request.resource.data.text.size() <= 2000
-        && request.resource.data.keys().hasOnly(['community', 'block', 'kind', 'text', 'title', 'image', 'note', 'pinned', 'slot', 'at']);
+        && request.resource.data.keys().hasOnly(['community', 'block', 'kind', 'text', 'title', 'image', 'note', 'look', 'pinned', 'slot', 'at']);
       allow update: if signedIn() && resource.data.community == request.auth.uid
         && request.resource.data.community == resource.data.community
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'title', 'note', 'pinned']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'title', 'note', 'image', 'look', 'pinned']);
       allow delete: if signedIn() && (resource.data.community == request.auth.uid || isAdmin());
     }
 
