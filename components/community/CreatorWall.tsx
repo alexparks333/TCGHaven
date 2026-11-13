@@ -9,11 +9,11 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Sparkles, X, Heart, ThumbsUp, Plus, ImagePlus, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
-import { Section, timeAgo, type BlockContext } from '@/components/community/blocks'
+import { timeAgo, useLook, type BlockContext } from '@/components/community/blocks'
 import { badgeArt } from '@/lib/badgeAssets'
 import { NOTE_COLOURS, type Block, type WallPost } from '@/lib/communityBlocks'
 import { REACTIONS, useWallReactions, type ReactionDef } from '@/lib/wallReactions'
-import { mix, surfaceCss, wallLook } from '@/lib/blockStyle'
+import { lookVars, luminance, mix, surfaceCss, wallLook } from '@/lib/blockStyle'
 import { addPost, removePost, useBlockPosts } from '@/lib/communityPosts'
 import { uploadCreatorPicture } from '@/lib/creatorUpload'
 import { cn } from '@/lib/utils'
@@ -78,7 +78,17 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   const SHOWN = w.shown
   const shown = all ? posts : posts.slice(0, SHOWN)
   const pinOf = (h: number) => w.pinColor || PINS[h % PINS.length]
-  const board: React.CSSProperties = { ...surfaceCss(w.surface, w.color, w.texture), border: w.frame === 'none' ? 'none' : `${w.frame === 'thin' ? 2 : 6}px solid ${w.frameColor}` }
+  const l = useLook()
+  // The whole block is the board: its surface edge to edge inside a slim frame, the title written at the
+  // top of it. Words on it are in the board's own ink — dark on a light board, cream on a dark one.
+  const ink = luminance(w.color) > 0.32 ? '#2b2014' : '#f6ead0'
+  const board = {
+    ...lookVars(l),
+    ...surfaceCss(w.surface, w.color, w.texture),
+    border: w.frame === 'none' ? 'none' : `${w.frame === 'thin' ? 3 : 9}px solid ${w.frameColor}`,
+    borderRadius: l.radius,
+    '--b-accent': ink, '--b-line': mix(ink, w.color, 0.55), '--b-hover': mix(ink, w.color, 0.9),
+  } as React.CSSProperties
   const cols = w.columns === 1 ? 'columns-1' : w.columns === 3 ? 'columns-1 sm:columns-2 lg:columns-3' : 'columns-1 sm:columns-2'
 
   const Reactions = ({ p }: { p: WallPost }) => (
@@ -100,9 +110,14 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   )
 
   return (
-    <Section title={block.title || 'Creator Wall'} icon={<Sparkles size={19} />} sub={`Pinned up by ${ctx.community.name}`}>
+    <section className="relative px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6" style={board}>
+      <header className="mb-4">
+        <h2 className="font-bold flex items-center gap-2.5 leading-tight [&>svg]:shrink-0"
+          style={{ fontFamily: l.titleFont, fontSize: `${1.25 * l.titleSize}rem`, color: ink }}><Sparkles size={19} />{block.title || 'Creator Wall'}</h2>
+        <p className="text-xs mt-1" style={{ color: mix(ink, w.color, 0.18) }}>Pinned up by {ctx.community.name}</p>
+      </header>
       {ctx.owner && <WallComposer uid={ctx.uid} block={block.id} />}
-      <div className="rounded-md p-4 sm:p-6" style={board}>
+      <div>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
             {/* the empty note is held up the way the creator chose (Style → Board → Held by) */}
@@ -161,7 +176,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
             <Reactions p={open} />
           </div>
         </div>, document.body)}
-    </Section>
+    </section>
   )
 }
 
