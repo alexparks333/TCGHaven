@@ -19,7 +19,9 @@ const uncial = Uncial_Antiqua({ subsets: ['latin'], display: 'swap', preload: fa
 const pirata = Pirata_One({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-pirata' })
 const bebas = Bebas_Neue({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-bebas' })
 const elite = Special_Elite({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-elite' })
-const caveat = Caveat({ subsets: ['latin'], display: 'swap', preload: false, weight: ['500', '700'], variable: '--font-caveat' })
+// Caveat is a variable font: asked for as one (no weights). Asking for 500 + 700 together makes Google answer with a
+// font file address the production build can't read ("An error occurred in `next/font`") — the dev server doesn't mind.
+const caveat = Caveat({ subsets: ['latin'], display: 'swap', preload: false, variable: '--font-caveat' })
 const blockFonts = [playfair, cormorant, uncial, pirata, bebas, elite, caveat].map((f) => f.variable).join(' ')
 
 export const metadata: Metadata = {
