@@ -16,7 +16,7 @@ import { FriendsProvider } from '@/components/friends/FriendsProvider'
 import { FriendsDialog } from '@/components/friends/FriendsDialog'
 import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
 import { DevPanel } from '@/components/dev/DevPanel'
-import { hideLaunchScreen, onScanLink } from '@/lib/nativeApp'
+import { hideLaunchScreen, inApp, onScanLink } from '@/lib/nativeApp'
 
 // Prices in the collector's currency (lib/currency.ts): today's rates fetched once a visit, and
 // the app redrawn when the currency shown changes (formatCurrency is a plain function — nothing
@@ -38,6 +38,13 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   const currencyKey = useCurrencyRedraw()
   // The iPhone app's launch screen comes down once the site has drawn (no-op in a browser)
   useEffect(() => { hideLaunchScreen() }, [])
+  // In the app: ready the scanner's picture AI a few seconds after opening, in the background, so
+  // the first scan never waits for it (lib/scan/scanner.ts prepareScanner)
+  useEffect(() => {
+    if (!inApp()) return
+    const t = setTimeout(() => { import('@/lib/scan/scanner').then((m) => m.prepareScanner()).catch(() => {}) }, 4000)
+    return () => clearTimeout(t)
+  }, [])
   // The app opened from the website's "Scan with your phone" QR code: straight to the scanner
   const router = useRouter()
   useEffect(() => onScanLink(() => router.push('/inventory?scan=1')), [router])

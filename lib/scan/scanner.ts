@@ -168,17 +168,24 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerp
   }
 }
 
+/** Readies the picture AI on the phone: downloads the current model once (~41 MB, then only when it
+ *  changes) and loads it — the GPU copy in a moment, the Neural Engine copy in the background (slow
+ *  after every app install/update). Called as the app opens (ClientWrapper) so a first scan never
+ *  waits for it, and again when the scanner opens (does nothing if it's ready or under way). */
+export function prepareScanner(): void {
+  fetch(`/api/cards/scan?model=1&platform=${Capacitor.getPlatform() === 'android' ? 'android' : 'ios'}`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((r: { model?: { version: string; files: Record<string, string> } | null } | null) => (r?.model ? CardScanner.prepareModel(r.model) : null))
+    .catch(() => {})
+}
+
 /** Opens the native scanner; resolves with what the person kept when they tap Add (empty if they
  *  closed it). Only call inside the app (lib/nativeApp.ts inApp()). */
 export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   // Wake the server and load the catalogs while the camera starts
   fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`).catch(() => {})
-  // The picture AI: the phone downloads the current model once (~41 MB, then only when it changes)
-  // and fingerprints every scan with it from then on
-  fetch(`/api/cards/scan?model=1&platform=${Capacitor.getPlatform() === 'android' ? 'android' : 'ios'}`)
-    .then((r) => (r.ok ? r.json() : null))
-    .then((r: { model?: { version: string; files: Record<string, string> } | null } | null) => (r?.model ? CardScanner.prepareModel(r.model) : null))
-    .catch(() => {})
+  // The picture AI (normally already readied when the app opened — prepareScanner)
+  prepareScanner()
 
   const found = new Map<string, ScannedCard>()
   const searched = new Map<string, ScanMatch>()

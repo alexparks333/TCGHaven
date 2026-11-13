@@ -80,15 +80,22 @@ tray: ✓ added / ? pick one                     ◀──  the answer
   that same printed name gets the name's text score (`why: 'name + picture'`), and picture finds
   are compared first, so they can't be pushed out. A real Unown B ("B/28" read as "8/28") was
   found this way: 0.62–0.67 alike, 0.2 ahead of the rest.
-- **Unown letters** (2026-11-13): Unseen Forces' Unowns print "B/28". The AI can't tell them apart (the
-  holo shine on camera: the owner's Unown B scored 0.18 against its own photo), so the number does it:
-  `scanMatch.ts` reads a letter numerator ("B/28", or a look-alike digit "8/28") as the letter, only for
-  cards whose catalog number is a letter. The earlier "0.62–0.67" figure for Unown B didn't hold up.
+- **Unown letters and foil shine** (2026-11-13): Unseen Forces' Unowns print "B/28".
+  - The AI *can* tell the Unowns apart: on the owner's crisp Nov 10 scans Unown B ranked #1 of all
+    27,622 Pokémon cards, 0.14–0.23 ahead of every other Unown.
+  - On Nov 13 the same card's holo caught the light (milky, pink sheen over the art) and fell to
+    ~#3,000 (0.15–0.23 alike). Contrast correction only helps a little: the model never saw foil
+    shine in training. `train_cuda.py` now adds `foil_shine()` to 30% of training pictures, and
+    those 7 scans are in `pc/realscans/truth.json` (64 scans now) to score the next run.
+  - Meanwhile the number does it: `scanMatch.ts` reads a letter numerator ("B/28", or a look-alike
+    digit "8/28") for any card whose catalog number is a letter — the same weight as any number.
 - **Phone model start-up** (2026-11-13): iOS prepares a Core ML model for the Neural Engine on first
   load and again after every app install/update (slow). A scan's fingerprint asked for then used to
   wait on the camera thread, so the scanner seemed stuck. `CardFingerprinter` now loads a GPU copy
   first (warmed before any scan uses it), then swaps in the Neural Engine copy once it has answered.
   Both times are logged ("ready on the GPU in … ms", "Neural Engine ready in … ms").
+- **Ready before the first scan:** the app readies the model 4 s after it opens (`ClientWrapper` →
+  `prepareScanner()`), and again when the scanner opens (a no-op if ready).
 - **Phone** (`CardFingerprinter`): no model in the app bundle. The site names the version and the
   phone downloads it, so **a retrained model reaches phones with no app update**. Until it's ready
   (first open, offline), scans go without a fingerprint and work as before.
@@ -172,6 +179,8 @@ The first run's files: `~/Developer/tcghaven-vision/trained/`
 
 ## For the next training run
 
+- **Foil shine is new in the recipe** (`foil_shine()`): check the 7 "Unown B (holo shine)" real
+  scans rank #1 after the run, and that the old real scans didn't get worse.
 - **Add the newer games.** The first run trained only on Pokémon EN/JP, One Piece, Lorcana,
   Riftbound and Magic. The other 75,770 card images are already at `~/Developer/tcghaven-vision/full2/img/`.
 - **Use Windows-safe file names.** Map ids to files with `ids.txt`, never by sort order: `?` in

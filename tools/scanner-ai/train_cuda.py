@@ -17,6 +17,33 @@ by_label = {}
 for i, l in enumerate(labels): by_label.setdefault(int(l), []).append(i)
 pictures = list(range(int(labels.max()) + 1))
 
+def foil_shine(img, r):
+    """Foil lit up by the light (or seen through a hazy sleeve): the art box washes out into a smooth
+    pink-white or rainbow sheen that hides its sparkle texture, and the whole card goes milky."""
+    w, h = img.size
+    a = np.asarray(img, dtype=np.float32).copy()
+    x0, y0, x1, y1 = int(w * r.uniform(0.04, 0.1)), int(h * r.uniform(0.08, 0.13)), int(w * r.uniform(0.9, 0.96)), int(h * r.uniform(0.44, 0.5))
+    bw, bh = x1 - x0, y1 - y0
+    # the art: its fine sparkle smoothed away, then a sweeping band of sheen screened over it
+    art = Image.fromarray(a[y0:y1, x0:x1].astype(np.uint8)).filter(ImageFilter.GaussianBlur(r.uniform(0.3, 1.0)))
+    region = np.asarray(art, dtype=np.float32)
+    ang, period, phase = r.uniform(0, math.pi), r.uniform(0.5, 1.6), r.uniform(0, 1)
+    yy, xx = np.mgrid[0:bh, 0:bw].astype(np.float32)
+    t = ((xx / bw) * math.cos(ang) + (yy / bh) * math.sin(ang)) / period + phase
+    if r.random() < 0.6:   # the pink-white sheen seen on real scans
+        base = np.array([r.uniform(230, 255), r.uniform(150, 215), r.uniform(185, 240)], np.float32)
+        wash = base[None, None, :] * (0.7 + 0.3 * np.sin(2 * math.pi * t))[..., None]
+    else:                  # a rainbow
+        wash = np.stack([140 + 115 * np.sin(2 * math.pi * (t + o)) for o in (0, 1 / 3, 2 / 3)], -1)
+    strength = np.clip(r.uniform(0.45, 0.9) * (0.65 + 0.35 * np.sin(2 * math.pi * t * r.uniform(0.3, 1.2) + r.uniform(0, 6))), 0, 1)[..., None]
+    screened = 255 - (255 - region) * (255 - wash) / 255
+    a[y0:y1, x0:x1] = region * (1 - strength) + screened * strength
+    # the whole card milky: blacks lifted toward a pale tint, contrast down
+    k = r.uniform(0.1, 0.4)
+    tint = np.array([r.uniform(225, 255), r.uniform(215, 245), r.uniform(225, 255)], np.float32)
+    a = a * (1 - k) + tint * k
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
+
 def phone_shot(img, r):
     """A catalog image made to look like the scanner's flattened capture of the real card."""
     img = img.convert('RGB')
@@ -43,6 +70,9 @@ def phone_shot(img, r):
         rr, gg, bb = img.split(); k = r.uniform(0.85, 1.18)
         img = Image.merge('RGB', (rr.point(lambda v: min(255, int(v * k))), gg, bb.point(lambda v: min(255, int(v / k)))))
     if r.random() < 0.7: img = img.filter(ImageFilter.GaussianBlur(r.uniform(0.2, 1.8)))
+    # holo foil catching the light (2026-11-13: a real Unown B scan whose dark-red holo art lit up as a
+    # milky pink/rainbow sheen fell from #1 to ~#3,000 — the model had never seen foil shine)
+    if r.random() < 0.3: img = foil_shine(img, r)
     # glare: one or two soft hotspots, or a sleeve's band of sheen
     for _ in range(r.choice([0, 1, 1, 2])):
         gl = Image.new('L', (W, H), 0); d = ImageDraw.Draw(gl)
