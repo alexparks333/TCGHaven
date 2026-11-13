@@ -1,12 +1,13 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeft, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Award, Users } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { BLANK_COVER, CoverSpine, coverArea, spineOf } from '@/components/badges/CoverSpine'
 import { pageEdgeCss, PAGE_DEPTH } from '@/lib/pageEdges'
 import { coverFont, loadCoverFonts, titleFinish } from '@/lib/coverFonts'
-import { badgesInSet, badgeTier, pinSize, badgeCollections, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet, type CoverStyle } from '@/lib/badges'
+import { badgesInSet, badgeTier, pinSize, bookCollection, HAVEN_COLLECTION, type BadgeDef, type BadgeSet, type CoverStyle } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { preloadTrimmedArt } from './trimmedArt'
@@ -56,6 +57,8 @@ const PHONE_QUERY = '(max-width: 767px) and (orientation: portrait)'
 
 // The shelf's collection, remembered on this device (a convenience — Haven Badges when unset)
 const COLLECTION_KEY = 'tcghaven-badge-collection'
+const COMMUNITY_SHELF = 'Community Badges'
+type ShelfKind = 'haven' | 'community'
 function readCollection(): string {
   try { return localStorage.getItem(COLLECTION_KEY) || HAVEN_COLLECTION } catch { return HAVEN_COLLECTION }
 }
@@ -103,14 +106,15 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
   const [view, setView] = useState<View>({ mode: 'shelf' })
   // Which collection the shelf shows (remembered on this device; one that no longer exists falls
   // back to Haven Badges)
-  const collections = badgeCollections(catalog.sets)
+  // Two shelves: TCG Haven's own books, and every community's book (the communities you've joined)
   const [pickedCollection, setPickedCollection] = useState(readCollection)
-  const collection = collections.includes(pickedCollection) ? pickedCollection : HAVEN_COLLECTION
-  const pickCollection = (name: string) => {
-    setPickedCollection(name)
-    try { localStorage.setItem(COLLECTION_KEY, name) } catch {}
+  const collection: ShelfKind = pickedCollection === COMMUNITY_SHELF ? 'community' : 'haven'
+  const pickCollection = (kind: ShelfKind) => {
+    const v = kind === 'community' ? COMMUNITY_SHELF : HAVEN_COLLECTION
+    setPickedCollection(v)
+    try { localStorage.setItem(COLLECTION_KEY, v) } catch {}
   }
-  const shelf = { collection, collections, onCollection: pickCollection }
+  const shelf = { collection, onCollection: pickCollection, isMe }
   // The shelf fades in when the page first shows it — not when a book is put back on it
   const [shelfIntro, setShelfIntro] = useState(true)
   const closePhone = useCallback(() => { setShelfIntro(false); setView({ mode: 'shelf' }) }, [])
@@ -389,70 +393,104 @@ export function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, f
 // ── The shelf ───────────────────────────────────────────────────────────────────────────────
 
 // `away`: the book that's out (open, or flying) — its spot is left empty until it's put back
-// `collection`: only that collection's books are on the shelf; the dropdown above it switches.
-function Shelf({ badges, full, onOpen, intro = true, away, collection, collections, onCollection }: {
+// `collection`: which shelf — TCG Haven's own books, or the books of the communities joined (each a collection of
+// its own, lib/creatorShelf.ts) — switched with the toggle at the top.
+function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollection, isMe }: {
   badges: SharedBadges | null; full: boolean; onOpen: (set: BadgeSet, el: HTMLElement) => void; intro?: boolean; away?: string
-  collection: string; collections: string[]; onCollection: (name: string) => void
+  collection: ShelfKind; onCollection: (kind: ShelfKind) => void; isMe: boolean
 }) {
   const { catalog } = useBadgeCatalog()
   // Every book's pin art starts loading while the shelf shows, so a book's holes and pins are
   // ready when it opens; pointing at a book moves its art to the front of the line.
   useEffect(() => { preloadTrimmedArt(catalog.badges.map((b) => b.imageUrl)) }, [catalog])
   const preloadSet = (set: BadgeSet) => { preloadTrimmedArt(badgesInSet(catalog, set.id).map((b) => b.imageUrl), true); preloadPinInspector() }
-  const books = catalog.sets.filter((s) => bookCollection(s) === collection)
+  const isHaven = (set: BadgeSet) => bookCollection(set) === HAVEN_COLLECTION
+  const haven = catalog.sets.filter(isHaven), community = catalog.sets.filter((x) => !isHaven(x))
+  const books = collection === 'community' ? community : haven
+  // progress over the books on this shelf
+  const tally = books.reduce((t, set) => {
+    const inSet = badgesInSet(catalog, set.id)
+    const got = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
+    return { got: t.got + got, all: t.all + inSet.length, done: t.done + (inSet.length > 0 && got === inSet.length ? 1 : 0) }
+  }, { got: 0, all: 0, done: 0 })
   return (
     <div className={cn(intro && 'badge-shelf-in')}>
-      <div className="mb-4 flex items-center gap-3">
-        <CollectionPicker value={collection} options={collections} onChange={onCollection} />
-        <span className="text-xs font-semibold text-slate-500">{books.length} {books.length === 1 ? 'book' : 'books'}</span>
+      {/* The heading: which shelf, how far along — and the toggle between the two */}
+      <div className="mb-7 flex flex-wrap items-end gap-x-6 gap-y-4">
+        {/* the same room for either title, so switching shelves never moves the toggle */}
+        <div className="min-w-0 sm:min-w-[23rem] flex-1">
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">{isMe ? 'Your pin books' : 'Pin books'}</p>
+          <h1 className="pinbook-serif text-3xl md:text-[36px] font-bold text-ink leading-[1.05] mt-0.5 sm:whitespace-nowrap">{collection === 'community' ? 'Community Badges' : 'Haven Badges'}</h1>
+          <p className="mt-1.5 text-sm text-slate-500">
+            {books.length === 0 ? (collection === 'community' ? 'Badges from the communities you join' : 'No books yet')
+              : <>{books.length} {books.length === 1 ? 'book' : 'books'}{tally.all > 0 && <> · <b className="text-ink tabular-nums">{tally.got}</b> of {tally.all} pins earned</>}{tally.done > 0 && <> · {tally.done} complete</>}</>}
+          </p>
+        </div>
+        <ShelfToggle value={collection} onChange={onCollection} counts={{ haven: haven.length, community: community.length }} />
       </div>
-      <div className={cn('grid gap-6 sm:gap-8', full ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')}>
-        {books.map((set) => {
-          const inSet = badgesInSet(catalog, set.id)
-          const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
-          return (
-            <div key={set.id} className="flex flex-col items-center">
-              <button
-                data-book={set.id}
-                onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
-                onPointerEnter={() => preloadSet(set)}
-                onPointerDown={() => preloadSet(set)}
-                onFocus={() => preloadSet(set)}
-                style={away === set.id ? { visibility: 'hidden' } : undefined}
-                className="badge-book-tile group relative w-full max-w-[240px] aspect-[0.71] outline-none"
-                aria-label={`Open the ${set.name} pin book`}
-              >
-                <BookThickness look={set.coverStyle} />
-                <span data-cover className="absolute inset-0"><BookCover set={set} badges={badges} /></span>
-              </button>
-              <div className="mt-3 w-full max-w-[240px] text-center">
-                <div className="text-sm font-bold text-ink">{set.name}</div>
-                <CompletionBar set={set} earned={earned} total={inSet.length} />
+
+      {books.length === 0 ? (
+        <div className="max-w-md mx-auto my-10 text-center rounded-2xl border border-dashed border-[#c9b48a] bg-[#efe4cc]/60 px-6 py-10">
+          <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-[#7a5230] text-[#fbf6ea] flex items-center justify-center"><Users size={26} /></div>
+          <p className="pinbook-serif text-xl font-bold text-ink">{isMe ? 'No community books yet' : 'No community books'}</p>
+          <p className="mt-1.5 text-sm text-slate-500">{isMe ? 'Join a community and its pin book lands here — collect the cards to earn its badges.' : 'They haven’t joined any communities yet.'}</p>
+          {isMe && <Link href="/friends#communities" className="btn-primary mt-5 !inline-flex"><Users size={15} />Find communities</Link>}
+        </div>
+      ) : (
+        // The books stand on wooden shelves: each book's ledge runs into the gaps, so a row reads as one shelf
+        <div className={cn('grid gap-x-6 sm:gap-x-8 gap-y-10', full ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')}>
+          {books.map((set) => {
+            const inSet = badgesInSet(catalog, set.id)
+            const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
+            return (
+              <div key={set.id} className="flex flex-col items-center">
+                <button
+                  data-book={set.id}
+                  onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
+                  onPointerEnter={() => preloadSet(set)}
+                  onPointerDown={() => preloadSet(set)}
+                  onFocus={() => preloadSet(set)}
+                  style={away === set.id ? { visibility: 'hidden' } : undefined}
+                  className="badge-book-tile group relative z-[1] w-full max-w-[240px] aspect-[0.71] outline-none"
+                  aria-label={`Open the ${set.name} pin book`}
+                >
+                  <BookThickness look={set.coverStyle} />
+                  <span data-cover className="absolute inset-0"><BookCover set={set} badges={badges} /></span>
+                </button>
+                {/* the shelf: a walnut plank, its lit top edge and the shadow it casts */}
+                <div aria-hidden className="relative self-stretch -mx-3 sm:-mx-4 -mt-1.5 h-3.5 rounded-[2px] bg-[#6e4b2c] shadow-[inset_0_2px_0_#8f6a44,0_6px_10px_-6px_rgba(40,22,8,0.6)]" />
+                <div className="mt-3 w-full max-w-[240px] text-center">
+                  <div className="text-sm font-bold text-ink truncate">{set.name}</div>
+                  {!isHaven(set) && set.subtitle && <div className="text-[11px] text-slate-500 truncate">{set.subtitle.replace(/\s*·\s*Creator Book$/, '')}</div>}
+                  <CompletionBar set={set} earned={earned} total={inSet.length} />
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
 
-// The collection dropdown: the collection's name as the shelf's title, with a chevron. A native
-// <select> laid invisibly over it does the picking, so phones get their own picker wheel/list.
-function CollectionPicker({ value, options, onChange }: { value: string; options: string[]; onChange: (name: string) => void }) {
+/** Haven Badges | Community Badges — a two-way toggle, the picked side raised in walnut */
+function ShelfToggle({ value, onChange, counts }: { value: ShelfKind; onChange: (k: ShelfKind) => void; counts: Record<ShelfKind, number> }) {
+  const opts: Array<[ShelfKind, string, React.ReactNode]> = [['haven', 'Haven Badges', <Award key="h" size={15} />], ['community', 'Community Badges', <Users key="c" size={15} />]]
   return (
-    <label className="relative inline-flex items-center gap-2 min-w-0 pl-3.5 pr-3 h-10 rounded-xl border border-slate-700 bg-slate-950/60 hover:border-slate-600 transition-colors cursor-pointer">
-      <span className="pinbook-serif text-base font-bold text-ink truncate">{value}</span>
-      <ChevronDown size={16} className="shrink-0 text-slate-500" />
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label="Badge collection"
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-      >
-        {options.map((name) => <option key={name} value={name}>{name}</option>)}
-      </select>
-    </label>
+    <div role="tablist" aria-label="Which pin books" className="relative grid grid-cols-2 p-1 rounded-2xl bg-[#e2d2ad] border border-[#c9b48a] w-full sm:w-auto">
+      {/* the walnut slider under the picked side */}
+      <span aria-hidden className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-[#7a5230] shadow-[0_4px_10px_-4px_rgba(60,35,15,0.6)] transition-transform duration-300 ease-out"
+        style={{ transform: value === 'community' ? 'translateX(100%)' : undefined }} />
+      {opts.map(([k, label, icon]) => (
+        <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)}
+          className={cn('relative z-[1] flex items-center justify-center gap-2 px-3 sm:px-5 py-2.5 text-sm font-bold whitespace-nowrap transition-colors', value === k ? 'text-[#fbf6ea]' : 'text-[#5c4a35] hover:text-ink')}>
+          {icon}
+          {/* a phone has room for the short name */}
+          <span className="sm:hidden">{label.replace(' Badges', '')}</span><span className="hidden sm:inline">{label}</span>
+          <span className={cn('min-w-[20px] px-1.5 rounded-full text-[11px] tabular-nums', value === k ? 'bg-white/20' : 'bg-[#7a5230]/[0.12]')}>{counts[k]}</span>
+        </button>
+      ))}
+    </div>
   )
 }
 
