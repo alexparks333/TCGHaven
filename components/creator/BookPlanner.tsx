@@ -318,6 +318,12 @@ function InsidePanel({ uid, part, style, onChange, onRevert, coverImage }: { uid
   )
 }
 
+/** Two swatch lists as one, each colour once (they share some — a repeat would show twice) */
+function uniqueColors(...lists: Array<Array<{ name: string; color: string }>>) {
+  const seen = new Set<string>()
+  return lists.flat().filter((c) => { const k = c.color.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true })
+}
+
 function tabSummary(t: ChapterTabStyle | undefined) {
   if (!t) return 'Classic leather'
   return [tabDesignOf(t.design).name, t.finish === 'flat' ? 'flat' : '', t.labels === 'numbers' ? 'numbers only' : t.labels === 'names' ? 'names only' : ''].filter(Boolean).join(' · ')
@@ -370,8 +376,8 @@ function TabsPicker({ s, set }: { s: InsideStyle; set: (p: Partial<InsideStyle>)
         ))}
       </div>
       <div className="mt-2">
-        <ColorPick label="Tabs" value={t.color ?? d.shut} palette={[...EDGE_COLORS, ...ACCENT_COLORS]} onChange={(c) => put({ color: c })} />
-        <ColorPick label="Open chapter’s tab" value={t.openColor ?? d.open} palette={[...ACCENT_COLORS, ...EDGE_COLORS]} onChange={(c) => put({ openColor: c })} />
+        <ColorPick label="Tabs" value={t.color ?? d.shut} palette={uniqueColors(EDGE_COLORS, ACCENT_COLORS)} onChange={(c) => put({ color: c })} />
+        <ColorPick label="Open chapter’s tab" value={t.openColor ?? d.open} palette={uniqueColors(ACCENT_COLORS, EDGE_COLORS)} onChange={(c) => put({ openColor: c })} />
       </div>
       {s.tabs && (
         <button type="button" onClick={() => set({ tabs: undefined })} className="mt-3 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Classic tabs</button>
