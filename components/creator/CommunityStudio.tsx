@@ -1,15 +1,17 @@
 'use client'
 
-// The Creator Studio's Community tab (docs/creators.md): the real community page (CommunityPage's
-// CommunityView) in editing mode — type the name, tagline and About in place, add and place a header
-// picture, pick a colour, tap games on and off, show or hide each section. It saves itself a moment
-// after each change (communities/{uid}). Beside it: the page's link, the book, Page sections, what's coming.
+// The Creator Studio's Community tab (docs/creators.md): on the left, the community page exactly as fans
+// see it (CommunityPage's CommunityView); on the right, everything to change it — the header picture,
+// colour, name, tagline, games, About and which sections show. Every change shows on the left at once and
+// saves itself a moment later (communities/{uid}).
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, Copy, ExternalLink, Loader2, MousePointerClick, Pencil, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
+import { Check, Copy, Eye, ExternalLink, Loader2, Pencil, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
 import { useCommunity, saveCommunity, COMMUNITY_SECTIONS, HEADER_ASPECT, type Community, type CommunityLook, type CreatorBook } from '@/lib/creatorBooks'
 import { CommunityView } from '@/components/pages/CommunityPage'
+import { BANNERS } from '@/components/creator/CreateCommunity'
+import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { isLive } from '@/lib/badges'
 import { PicturePlacer, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
 import { Portal } from '@/components/creator/Portal'
@@ -65,15 +67,15 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   const c = draft
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
-      {/* ── The page itself, exactly as fans see it — editable in place (CommunityPage's CommunityView) ── */}
+      {/* ── The page exactly as fans see it (CommunityPage's CommunityView) — every change on the right shows here at once ── */}
       <div className="min-w-0">
-        <p className="mb-3 text-xs text-slate-500 flex items-center gap-1.5">
-          <MousePointerClick size={13} />Your community page, as fans see it — click the text to type, add a header picture, show or hide each section · it saves itself
+        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 flex items-center gap-1.5">
+          <Eye size={13} />Your community page — exactly what fans see
         </p>
-        {state === 'name' && <p className="mb-2 text-xs text-red-600">Give it a name of at least 2 letters to save.</p>}
-        <CommunityView uid={uid} community={{ uid, ...c }} creator={null} members={members} mine studio="computer"
-          isMember={false} busy={false} error="" toggle={() => {}} book={liveBook} open={viewing} setOpen={setViewing}
-          edit={{ set, onHeader: () => setHeaderOpen(true), onEditBook }} />
+        <div className="rounded-2xl border border-[#d6c49f] bg-slate-900 p-3 md:p-5">
+          <CommunityView uid={uid} community={{ uid, ...c }} creator={null} members={members} mine={false} studio="computer"
+            isMember={false} busy={false} error="" toggle={() => {}} book={liveBook} open={viewing} setOpen={setViewing} />
+        </div>
       </div>
 
       {/* ── Beside it ── */}
@@ -94,6 +96,43 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
             </button>
           </div>
           <p className="mt-2.5 text-[11px] text-slate-500">Collectors find it under Friends → Communities and join it there.</p>
+        </div>
+
+        {/* Everything on the page: header, colour, name, tagline, games, About */}
+        <div className="haven-panel">
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Page details</p>
+          <button type="button" onClick={() => setHeaderOpen(true)} className="mt-2.5 w-full haven-chip px-3 py-2 text-sm font-semibold inline-flex items-center justify-center gap-2">
+            <ImagePlus size={15} />{c.page?.header ? 'Change header picture' : 'Add a header picture'}
+          </button>
+          <p className="mt-3 text-[11px] font-semibold text-slate-500">Colour {c.page?.header && <span className="font-normal">· shows round your page and when there&rsquo;s no picture</span>}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {BANNERS.map((col) => (
+              <button key={col} type="button" onClick={() => set({ color: col })} aria-label={`Colour ${col}`}
+                className={cn('w-6 h-6 rounded-full', c.color === col ? 'ring-2 ring-offset-2 ring-offset-[#efe4cc] ring-[#7a5230]' : 'hover:ring-1 hover:ring-[#c4ae83]')} style={{ background: col }} />
+            ))}
+          </div>
+          <label className="mt-3 block text-[11px] font-semibold text-slate-500">Name
+            <input value={c.name} maxLength={40} onChange={(e) => set({ name: e.target.value })} className="input-field mt-1 text-sm font-semibold" placeholder="Your community’s name" />
+          </label>
+          {state === 'name' && <p className="mt-1 text-[11px] text-red-600">Give it a name of at least 2 letters to save.</p>}
+          <label className="mt-2.5 block text-[11px] font-semibold text-slate-500">Tagline
+            <input value={c.tagline} maxLength={80} onChange={(e) => set({ tagline: e.target.value })} className="input-field mt-1 text-sm" placeholder="A one-line tagline" />
+          </label>
+          <p className="mt-2.5 text-[11px] font-semibold text-slate-500">Games you collect</p>
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {(Object.keys(GAME_LABELS) as Game[]).map((g) => {
+              const has = c.games?.includes(g)
+              return (
+                <button key={g} type="button" onClick={() => set({ games: has ? c.games!.filter((x) => x !== g) : [...(c.games ?? []), g] })}
+                  className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors', has ? 'text-white' : 'border border-dashed border-[#c4ae83] text-slate-500 hover:text-ink')}
+                  style={has ? { background: GAME_COLORS[g] } : undefined}>{GAME_LABELS[g]}</button>
+              )
+            })}
+          </div>
+          <label className="mt-2.5 block text-[11px] font-semibold text-slate-500">
+            <span className="flex justify-between">About<span className="font-normal tabular-nums">{c.about.length}/600</span></span>
+            <textarea value={c.about} maxLength={600} onChange={(e) => set({ about: e.target.value })} className="input-field mt-1 text-sm min-h-[110px] resize-y" placeholder="Who you are, what you collect, what members get…" />
+          </label>
         </div>
 
         {/* The book fans collect on the page */}
