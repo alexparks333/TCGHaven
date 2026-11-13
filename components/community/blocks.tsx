@@ -5,7 +5,7 @@
 // Picture, and the coming Community Board. The page (CommunityPage) stacks the ones on the open tab; the
 // Studio draws the very same ones, with its builder around them.
 
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { Loader2, Trophy, Megaphone, Pin, Sparkles, MessagesSquare, Eye } from 'lucide-react'
@@ -16,6 +16,7 @@ import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
 import { watchAchievements, type Achievement, type CommunityEntry } from '@/lib/communities'
 import type { CreatorBook } from '@/lib/creatorBooks'
 import type { Block } from '@/lib/communityBlocks'
+import { blockLook, lookVars, panelStyle, type BlockLook } from '@/lib/blockStyle'
 import { DEV_EARNER_EVENT, DEV_EARNER_CLEAR_EVENT, type DevEarner } from '@/lib/devBoard'
 import { badgeArt } from '@/lib/badgeAssets'
 import { cardImage } from '@/lib/cardImage'
@@ -25,14 +26,23 @@ import { cn } from '@/lib/utils'
 
 export interface BlockContext { uid: string; community: CommunityEntry; book: CreatorBook | null }
 
-/** A paper card with an engraved title and corner flourishes — every block sits in one */
+/** The look of the block being drawn (lib/blockStyle.ts), from BlockView */
+const LookCtx = createContext<BlockLook>(blockLook('text'))
+export const useLook = () => useContext(LookCtx)
+
+/** A block's panel — its colour, paper dots, border and corner flourishes, all from the block's look — with
+ *  its title (in the look's title font) over an ornament divider. Every block sits in one. */
 export function Section({ title, icon, sub, children, className }: { title?: string; icon?: React.ReactNode; sub?: string; children: React.ReactNode; className?: string }) {
+  const l = useLook()
   return (
-    <section className={cn('haven-panel haven-grain relative !p-6 md:!p-7', className)}>
-      <Corners inset={8} size={30} />
-      {title && <h2 className="pinbook-serif text-xl font-bold text-ink flex items-center gap-2.5">{icon}{title}</h2>}
-      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
-      {title && <Divider className="mt-3 mb-4" />}
+    <section className={cn('relative p-6 md:p-7', className)} style={panelStyle(l)}>
+      {l.corners && <Corners inset={8} size={30} className="!text-[color:var(--b-corner)] !opacity-100" />}
+      {title && (
+        <h2 className="font-bold flex items-center gap-2.5 leading-tight [&>svg]:shrink-0 [&>svg]:text-[color:var(--b-accent)]"
+          style={{ fontFamily: l.titleFont, fontSize: `${1.25 * l.titleSize}rem`, color: l.title }}>{icon}{title}</h2>
+      )}
+      {sub && <p className="text-xs mt-1" style={{ color: l.muted }}>{sub}</p>}
+      {title && <Divider className="mt-3 mb-4 !text-[color:var(--b-corner)] [&>span]:!to-[color:var(--b-line)]" />}
       {children}
     </section>
   )
@@ -61,11 +71,17 @@ function shortAgo(ms: number) {
 
 /** One block, as fans see it */
 export function BlockView({ block, ctx }: { block: Block; ctx: BlockContext }) {
+  const look = blockLook(block.type, block.style)
+  return <LookCtx.Provider value={look}><div style={lookVars(look)}><BlockBody block={block} ctx={ctx} /></div></LookCtx.Provider>
+}
+
+function BlockBody({ block, ctx }: { block: Block; ctx: BlockContext }) {
+  const l = useLook()
   switch (block.type) {
     case 'about':
       return (
         <Section title="About">
-          <p className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{ctx.community.about || 'No description yet.'}</p>
+          <p className="text-[15px] text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{ctx.community.about || 'No description yet.'}</p>
         </Section>
       )
     case 'badges': return <AchievementBoard community={ctx.uid} book={ctx.book} title={block.title} />
@@ -76,26 +92,29 @@ export function BlockView({ block, ctx }: { block: Block; ctx: BlockContext }) {
       return (
         <Section title={block.title || undefined}>
           {block.body.trim()
-            ? <div className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{block.body}</div>
-            : <p className="text-sm text-slate-500 italic">Nothing here yet.</p>}
+            ? <div className="text-[15px] text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{block.body}</div>
+            : <p className="text-sm text-[color:var(--b-muted)] italic">Nothing here yet.</p>}
         </Section>
       )
-    case 'picture':
-      return (
+    case 'picture': {
+      const pic = (
         <figure className="relative">
           {block.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={badgeArt(block.image, 1600)} alt={block.caption ?? ''} className="w-full max-h-[520px] object-cover rounded-2xl shadow-[0_18px_36px_-20px_rgba(40,25,10,0.7)]" />
+            <img src={badgeArt(block.image, 1600)} alt={block.caption ?? ''} className={cn('w-full max-h-[520px] object-cover', !l.frame && 'shadow-[0_18px_36px_-20px_rgba(40,25,10,0.7)]')}
+              style={{ borderRadius: l.frame ? Math.max(0, l.radius - 6) : l.radius }} />
           ) : (
-            <div className="w-full aspect-[16/7] rounded-2xl border-2 border-dashed border-[#c4ae83] flex items-center justify-center text-sm text-slate-500">A picture goes here</div>
+            <div className="w-full aspect-[16/7] border-2 border-dashed border-[color:var(--b-line)] flex items-center justify-center text-sm text-[color:var(--b-muted)]" style={{ borderRadius: l.radius }}>A picture goes here</div>
           )}
-          {block.caption && <figcaption className="mt-2 text-center text-sm italic text-slate-500" style={{ fontFamily: 'Georgia, serif' }}>{block.caption}</figcaption>}
+          {block.caption && <figcaption className="mt-2.5 text-center text-sm italic" style={{ fontFamily: l.titleFont, color: l.frame ? l.text : l.muted }}>{block.caption}</figcaption>}
         </figure>
       )
+      return l.frame ? <Section className="!p-3 md:!p-4">{pic}</Section> : pic
+    }
     case 'board':
       return (
-        <Section title={block.title || 'Community Board'} icon={<MessagesSquare size={19} className="text-[#8a6420]" />}>
-          <p className="text-sm text-slate-500">Coming soon — members will post here and upvote the best.</p>
+        <Section title={block.title || 'Community Board'} icon={<MessagesSquare size={19} />}>
+          <p className="text-sm text-[color:var(--b-muted)]">Coming soon — members will post here and upvote the best.</p>
         </Section>
       )
   }
@@ -156,17 +175,12 @@ export function AchievementBoard({ community, book, title, sample }: { community
 
   const cols = 'grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] items-center gap-3'
   return (
-    <section className="relative rounded-[0.875rem] border border-[#4a3b2b] p-6 md:p-7 text-[#efe3c8]"
-      style={{ backgroundColor: '#2a2119', backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(240,220,180,0.05) 1px, transparent 0)', backgroundSize: '16px 16px' }}>
-      <Corners inset={8} size={30} className="text-[#7d6342]" />
-      <h2 className="pinbook-serif text-xl font-bold text-[#f0dfb8] flex items-center gap-2.5"><Trophy size={19} className="text-[#d6a957]" />{title || 'Badge Achievements'}</h2>
-      <p className="text-xs text-[#9c8a70] mt-1">The newest badges earned from this book.</p>
-      <Divider className="mt-3 mb-4 !text-[#7d6342] [&>span]:!from-transparent [&>span]:!to-[#5a4733]" />
-      {real === null ? <Loader2 size={18} className="animate-spin text-[#9c8a70]" />
-        : shown.length === 0 ? <p className="text-sm text-[#9c8a70]">No one has earned a badge yet — collect the cards and be the first.</p>
+    <Section title={title || 'Badge Achievements'} icon={<Trophy size={19} />} sub="The newest badges earned from this book.">
+      {real === null ? <Loader2 size={18} className="animate-spin text-[color:var(--b-muted)]" />
+        : shown.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No one has earned a badge yet — collect the cards and be the first.</p>
         : (
           <div className="-mx-1">
-            <div className={cn(cols, 'px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a785e] border-b border-[#5a4733]')}>
+            <div className={cn(cols, 'px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--b-muted)] border-b border-[color:var(--b-line)]')}>
               <span>Collector</span><span>Badge</span><span className="text-right">Earned</span>
             </div>
             <ol>
@@ -176,25 +190,25 @@ export function AchievementBoard({ community, book, title, sample }: { community
                 const how = entry.current.get(a.key)
                 return (
                   <li key={a.key}
-                    className={cn(cols, 'relative h-12 sm:h-11 px-3 border-b border-white/[0.07] last:border-b-0 transition-colors duration-700',
-                      i === 0 ? 'bg-[#3a2d1f]' : 'hover:bg-white/[0.04]', how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
+                    className={cn(cols, 'relative h-12 sm:h-11 px-3 border-b border-[color:var(--b-hair)] last:border-b-0 transition-colors duration-700',
+                      i === 0 ? 'bg-[color:var(--b-tint)]' : 'hover:bg-[color:var(--b-hover)]', how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
                     style={how === 'in' ? { animationDelay: `${i * 70}ms` } : undefined}>
-                    {how === 'arrive' && <span className="board-row-flash absolute inset-0 pointer-events-none bg-gradient-to-r from-[#e0b866]/40 via-[#e0b866]/15 to-transparent" />}
-                    {i === 0 && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#d6a957]" />}
+                    {how === 'arrive' && <span className="board-row-flash absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--b-accent) 40%, transparent), color-mix(in srgb, var(--b-accent) 15%, transparent) 50%, transparent)' }} />}
+                    {i === 0 && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[color:var(--b-accent)]" />}
                     <Link href={a.profile?.username ? profilePath(a.member, a.profile.username) : '#'} className="relative flex items-center gap-2.5 min-w-0 group">
                       <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} /></span>
                       <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-[#efe3c8] group-hover:underline underline-offset-2">{name}</span>
-                        <span className="sm:hidden block truncate pinbook-serif text-[11px] font-bold text-[#e0b866]">{def.name}</span>
+                        <span className="block truncate text-[13px] font-semibold text-[color:var(--b-title)] group-hover:underline underline-offset-2">{name}</span>
+                        <span className="sm:hidden block truncate [font-family:var(--b-title-font)] text-[11px] font-bold text-[color:var(--b-accent)]">{def.name}</span>
                       </span>
                     </Link>
                     <span className="relative flex items-center gap-2 min-w-0">
                       <span className={cn('relative shrink-0 w-8 h-9 flex items-center justify-center', how === 'arrive' && 'board-pin-pop')}>
                         <BadgePin art={def.art} imageUrl={def.imageUrl} size={30} />
                       </span>
-                      <span className="hidden sm:block truncate pinbook-serif text-[13px] font-bold text-[#e0b866]">{def.name}</span>
+                      <span className="hidden sm:block truncate [font-family:var(--b-title-font)] text-[13px] font-bold text-[color:var(--b-accent)]">{def.name}</span>
                     </span>
-                    <span className={cn('relative text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 ? 'text-[#e0b866] font-semibold' : 'text-[#9c8a70]')}>
+                    <span className={cn('relative text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 ? 'text-[color:var(--b-accent)] font-semibold' : 'text-[color:var(--b-muted)]')}>
                       <span className="hidden sm:inline">{timeAgo(a.earnedAt)}</span><span className="sm:hidden">{shortAgo(a.earnedAt)}</span>
                     </span>
                   </li>
@@ -203,7 +217,7 @@ export function AchievementBoard({ community, book, title, sample }: { community
             </ol>
           </div>
         )}
-    </section>
+    </Section>
   )
 }
 
@@ -212,17 +226,17 @@ function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wall' }>; 
   const posts = [...block.posts].sort((a, b) => b.at - a.at)
   const c = ctx.community
   return (
-    <Section title={block.title || 'Creator Wall'} icon={<Sparkles size={19} className="text-[#b8862b]" />} sub={`Straight from ${c.name}`}>
-      {posts.length === 0 ? <p className="text-sm text-slate-500">Nothing posted yet.</p> : (
+    <Section title={block.title || 'Creator Wall'} icon={<Sparkles size={19} />} sub={`Straight from ${c.name}`}>
+      {posts.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">Nothing posted yet.</p> : (
         <div className="space-y-5">
           {posts.map((p, i) => (
-            <article key={p.id} className={cn('flex gap-3.5', i > 0 && 'pt-5 border-t border-[#d6c49f]/70')}>
+            <article key={p.id} className={cn('flex gap-3.5', i > 0 && 'pt-5 border-t border-[color:var(--b-hair)]')}>
               <span className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center pinbook-serif text-lg font-bold text-white shadow-[inset_0_-3px_6px_rgba(0,0,0,0.25)]" style={{ background: c.color }}>
                 {(c.name.trim()[0] || '★').toUpperCase()}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm"><b className="text-ink">{c.name}</b> <span className="text-xs text-slate-500">· {timeAgo(p.at)}</span></p>
-                {p.text && <p className="mt-1 text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{p.text}</p>}
+                <p className="text-sm"><b className="text-[color:var(--b-title)]">{c.name}</b> <span className="text-xs text-[color:var(--b-muted)]">· {timeAgo(p.at)}</span></p>
+                {p.text && <p className="mt-1 text-[15px] text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{p.text}</p>}
                 {p.image && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={badgeArt(p.image, 1200)} alt="" className="mt-3 w-full max-h-[460px] object-cover rounded-xl shadow-[0_10px_24px_-14px_rgba(40,25,10,0.6)]" />
@@ -240,17 +254,17 @@ function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wall' }>; 
 function Announcements({ block }: { block: Extract<Block, { type: 'announcements' }> }) {
   const items = [...block.items].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.at - a.at)
   return (
-    <Section title={block.title || 'Announcements'} icon={<Megaphone size={19} className="text-[#8a6420]" />}>
-      {items.length === 0 ? <p className="text-sm text-slate-500">No announcements yet.</p> : (
+    <Section title={block.title || 'Announcements'} icon={<Megaphone size={19} />}>
+      {items.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No announcements yet.</p> : (
         <div className="space-y-3">
           {items.map((a) => (
-            <article key={a.id} className={cn('rounded-xl p-4', a.pinned ? 'bg-[#f6e7c4] border border-[#d6b168]/70' : 'bg-[#f6eedb]/60 border border-[#d6c49f]/60')}>
+            <article key={a.id} className={cn('rounded-xl p-4', a.pinned ? 'bg-[color:var(--b-tint)] border border-[color:var(--b-corner)]' : 'bg-[color:var(--b-hover)] border border-[color:var(--b-hair)]')}>
               <div className="flex items-start gap-2">
-                {a.pinned && <Pin size={14} className="mt-1 shrink-0 text-[#8a6420]" />}
-                <h3 className="pinbook-serif text-base font-bold text-ink flex-1">{a.title || 'Announcement'}</h3>
-                <span className="shrink-0 text-[11px] text-slate-500">{new Date(a.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                {a.pinned && <Pin size={14} className="mt-1 shrink-0 text-[color:var(--b-accent)]" />}
+                <h3 className="[font-family:var(--b-title-font)] text-base font-bold text-[color:var(--b-title)] flex-1">{a.title || 'Announcement'}</h3>
+                <span className="shrink-0 text-[11px] text-[color:var(--b-muted)]">{new Date(a.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
               </div>
-              {a.body && <p className="mt-1.5 text-sm text-slate-400 whitespace-pre-line leading-relaxed">{a.body}</p>}
+              {a.body && <p className="mt-1.5 text-sm text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{a.body}</p>}
             </article>
           ))}
         </div>
@@ -264,7 +278,7 @@ function HighlightedCards({ block }: { block: Extract<Block, { type: 'cards' }> 
   const [zoom, setZoom] = useState<ZoomCardData | null>(null)
   return (
     <Section title={block.title || 'Highlighted Cards'} sub={block.note}>
-      {block.cards.length === 0 ? <p className="text-sm text-slate-500">No cards picked yet.</p> : (
+      {block.cards.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No cards picked yet.</p> : (
         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
           {block.cards.map((s, i) => {
             const c = s.cards?.[0]
@@ -281,8 +295,8 @@ function HighlightedCards({ block }: { block: Extract<Block, { type: 'cards' }> 
                     className="w-full aspect-[63/88] object-cover rounded-lg shadow-[0_10px_20px_-10px_rgba(40,25,10,0.6)] transition-transform group-hover:-translate-y-1" />
                   <span className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black/55 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Eye size={13} /></span>
                 </span>
-                <span className="mt-2 block text-sm font-bold text-ink truncate">{s.label}</span>
-                <span className="block text-[11px] text-slate-500 truncate">{c?.setName}{c?.number ? ` · #${c.number}` : ''}{g ? ` · ${GAME_LABELS[g]}` : ''}</span>
+                <span className="mt-2 block text-sm font-bold text-[color:var(--b-title)] truncate">{s.label}</span>
+                <span className="block text-[11px] text-[color:var(--b-muted)] truncate">{c?.setName}{c?.number ? ` · #${c.number}` : ''}{g ? ` · ${GAME_LABELS[g]}` : ''}</span>
               </button>
             )
           })}

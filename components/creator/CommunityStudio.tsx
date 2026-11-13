@@ -35,6 +35,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
   const [headerOpen, setHeaderOpen] = useState(false)
   const [tabOpen, setTabOpen] = useState('home') // the tab being edited, and shown on the left
   const [selected, setSelected] = useState<string | null>(null) // the block being edited
+  const [mode, setMode] = useState<'content' | 'style'>('content') // …its content, or its look (the palette)
   const [adding, setAdding] = useState<number | null>(null)     // "+" pressed: where the new block goes
   const [viewing, setViewing] = useState(false) // the book opened from the page
   // Fans see only the published badges
@@ -87,7 +88,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
     setBlocks(blocks.filter((x) => x.id !== id)); if (selected === id) setSelected(null)
   }
   const builder: PageBuilder = {
-    selected, onSelect: setSelected, onInsert: setAdding, onDelete: remove,
+    selected, onSelect: (id) => { setSelected(id); setMode('content') }, onStyle: (id) => { setSelected(id); setMode('style') }, onInsert: setAdding, onDelete: remove,
     onMove: (id, d) => { const i = blocks.findIndex((b) => b.id === id), n = [...blocks]; [n[i], n[i + d]] = [n[i + d], n[i]]; setBlocks(n) },
   }
   const openTab = (id: string) => { setTabOpen(id); setSelected(null) }
@@ -108,7 +109,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
       {/* ── Beside it: the selected block's editor, or the page's details ── */}
       <div className="space-y-4 lg:sticky lg:top-4">
         {sel ? (
-          <BlockEditor uid={uid} block={sel} community={c} onCommunity={set} onDone={() => setSelected(null)} onDelete={() => remove(sel.id)}
+          <BlockEditor uid={uid} block={sel} community={c} mode={mode} onMode={setMode} onCommunity={set} onDone={() => setSelected(null)} onDelete={() => remove(sel.id)}
             onChange={(b) => setBlocks(blocks.map((x) => (x.id === b.id ? b : x)))} />
         ) : <>
         <div className="haven-panel">
@@ -192,7 +193,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
       </div>
       {adding !== null && (
         <AddBlockMenu has={(t) => blocks.some((b) => b.type === t)} onClose={() => setAdding(null)}
-          onPick={(t) => { const b = newBlock(t); setBlocks([...blocks.slice(0, adding), b, ...blocks.slice(adding)]); setAdding(null); setSelected(b.id) }} />
+          onPick={(t) => { const b = newBlock(t); setBlocks([...blocks.slice(0, adding), b, ...blocks.slice(adding)]); setAdding(null); setSelected(b.id); setMode('content') }} />
       )}
       {headerOpen && <HeaderEditor uid={uid} c={c} onChange={(page) => set({ page })} onClose={() => setHeaderOpen(false)} />}
     </div>

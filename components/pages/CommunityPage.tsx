@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
+import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette } from 'lucide-react'
 import { BlockView, type BlockContext } from '@/components/community/blocks'
 import { blockName, homeBlocks, tabBlocks, type Block } from '@/lib/communityBlocks'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -201,13 +201,15 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
 export interface PageBuilder {
   selected: string | null
   onSelect: (id: string) => void
+  onStyle: (id: string) => void        // the palette: its colours, fonts and finish
   onInsert: (at: number) => void
   onMove: (id: string, d: -1 | 1) => void
   onDelete: (id: string) => void
 }
 
 /** The blocks with the builder round them: a "+" between each (and a big one at the end), and on each
- *  block an outline on hover, its name, move up / down and delete — click a block to edit it */
+ *  block an outline on hover, its name, its style (the palette), move up / down and delete — click a block
+ *  to edit what's in it */
 function BlockBuilder({ blocks, ctx, builder }: { blocks: Block[]; ctx: BlockContext; builder: PageBuilder }) {
   const Insert = ({ at, last }: { at: number; last?: boolean }) => last ? (
     <button type="button" onClick={() => builder.onInsert(at)}
@@ -236,6 +238,8 @@ function BlockBuilder({ blocks, ctx, builder }: { blocks: Block[]; ctx: BlockCon
                 <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[11px] font-bold shadow">{blockName(b.type)}</span>
                 <span className="flex-1" />
                 <span className="flex items-center rounded-full bg-[#f6eedb] border border-[#c4ae83] shadow">
+                  <button type="button" onClick={() => builder.onStyle(b.id)} className="p-1.5 pl-2 text-[#7a5230] hover:text-ink" aria-label="Style this block — colours and fonts" title="Style — colours and fonts"><Palette size={13} /></button>
+                  <span className="w-px h-3.5 bg-[#c4ae83]" />
                   <button type="button" disabled={i === 0} onClick={() => builder.onMove(b.id, -1)} className="p-1.5 text-slate-500 hover:text-ink disabled:opacity-30" aria-label="Move up"><ArrowUp size={13} /></button>
                   <button type="button" disabled={i === blocks.length - 1} onClick={() => builder.onMove(b.id, 1)} className="p-1.5 text-slate-500 hover:text-ink disabled:opacity-30" aria-label="Move down"><ArrowDown size={13} /></button>
                   <button type="button" onClick={() => builder.onDelete(b.id)} className="p-1.5 text-slate-500 hover:text-red-600" aria-label="Delete this block"><Trash2 size={13} /></button>

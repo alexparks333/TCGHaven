@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Cinzel } from 'next/font/google'
+import { Inter, Cinzel, Playfair_Display, Cormorant_Garamond, Uncial_Antiqua, Pirata_One, Bebas_Neue, Special_Elite, Caveat } from 'next/font/google'
 import dynamic from 'next/dynamic'
 import './globals.css'
 
@@ -11,6 +11,16 @@ const ClientWrapper = dynamic(
 const inter = Inter({ subsets: ['latin'] })
 // Engraved lettering in the Haven Badges pin books (page titles, nameplates — .pinbook-serif)
 const cinzel = Cinzel({ subsets: ['latin'], weight: ['500', '700'], variable: '--font-engraved', display: 'swap' })
+// Fonts a creator can pick for a community page block (lib/blockStyle.ts BLOCK_FONTS). Not preloaded:
+// the browser only downloads one when a page actually uses it.
+const playfair = Playfair_Display({ subsets: ['latin'], display: 'swap', preload: false, weight: ['600', '700'], variable: '--font-playfair' })
+const cormorant = Cormorant_Garamond({ subsets: ['latin'], display: 'swap', preload: false, weight: ['500', '700'], variable: '--font-cormorant' })
+const uncial = Uncial_Antiqua({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-uncial' })
+const pirata = Pirata_One({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-pirata' })
+const bebas = Bebas_Neue({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-bebas' })
+const elite = Special_Elite({ subsets: ['latin'], display: 'swap', preload: false, weight: '400', variable: '--font-elite' })
+const caveat = Caveat({ subsets: ['latin'], display: 'swap', preload: false, weight: ['500', '700'], variable: '--font-caveat' })
+const blockFonts = [playfair, cormorant, uncial, pirata, bebas, elite, caveat].map((f) => f.variable).join(' ')
 
 export const metadata: Metadata = {
   title: 'TCGHaven',
@@ -40,7 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preload" as="image" href="/logo.png" />
         <link rel="preload" as="image" href="/logo-text.png" />
       </head>
-      <body className={`${inter.className} ${cinzel.variable}`}>
+      <body className={`${inter.className} ${cinzel.variable} ${blockFonts}`}>
         <ClientWrapper>{children}</ClientWrapper>
       </body>
     </html>

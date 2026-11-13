@@ -433,7 +433,7 @@ function Colors({ label, value, onChange }: { label: string; value: string; onCh
   )
 }
 
-function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
+export function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
     <button type="button" onClick={() => onChange(!on)} className="w-full flex items-center gap-3 text-left">
       <span className={cn('relative w-10 h-6 rounded-full transition-colors shrink-0', on ? 'bg-violet-600' : 'bg-slate-700')}>

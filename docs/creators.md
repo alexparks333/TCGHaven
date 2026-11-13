@@ -57,6 +57,16 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   (up to `MAX_TABS`): Home always first, then the creator's own pages — add, rename, reorder, delete; picking
   one switches the page on the left to it. Members sits beside the page (Page details → Members beside the
   page). `CommunityStudio demo={…}` draws it with a sample community and never saves (dev checks).
+- **Block styles** (2026-11-12, `lib/blockStyle.ts`, `components/creator/BlockStyleEditor.tsx`). Every block has a
+  palette button in the Studio's hover toolbar → the side panel's **Style** tab (clicking the block opens
+  **Content**): 8 themes (Parchment, Walnut, Cream, Ink, Forest, Burgundy, Navy, Stone) or any colours
+  (background, titles, text, accent), 10 title fonts and 5 text fonts, title size, paper dots, corner
+  flourishes, border, roundness; a Picture also gets **Frame** (a panel behind it). Stored as `block.style`
+  — only what changed; `blockLook()` lays it over the type's default (Badge Achievements → Walnut, the rest
+  → Parchment). Blocks read the look through CSS variables (`--b-bg`, `--b-title`, `--b-text`, `--b-accent`,
+  `--b-muted`, `--b-line`, `--b-hair`, `--b-tint`, `--b-title-font` …) and `useLook()` — never hard-code
+  colours in a block. The extra fonts are next/font with `preload: false` in `app/layout.tsx` (downloaded
+  only when a page uses one); next/font needs each call's options written out literally (no spreads).
 - **Computers only** (2026-11-12). The Creator Studio is a web-on-a-computer tool: never in the iPhone or
   Android app — even for creators — and not on a phone or a window under 1024 px (`lib/studioDevice.ts`
   `useStudioDevice()`). There `/creator` shows "The Creator Studio is on computers" with the link to copy;

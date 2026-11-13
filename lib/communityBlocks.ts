@@ -4,6 +4,7 @@
 // `tabs[i].blocks`), so the page and its blocks load and save together.
 
 import type { BadgeSlot } from './badges'
+import type { BlockStyle } from './blockStyle'
 import type { Community, CommunityTab } from './creatorBooks'
 
 export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' | 'text' | 'picture' | 'board'
@@ -11,7 +12,8 @@ export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' 
 export interface WallPost { id: string; text: string; image?: string; at: number }
 export interface Announcement { id: string; title: string; body: string; at: number; pinned?: boolean }
 
-export type Block =
+/** Every block also carries its look (lib/blockStyle.ts) — only what the creator changed */
+export type Block = { style?: BlockStyle } & (
   | { id: string; type: 'about' }                                     // the community's About (Page details)
   | { id: string; type: 'badges'; title?: string }                    // Badge Achievements: newest earners
   | { id: string; type: 'wall'; title?: string; posts: WallPost[] }   // Creator Wall: the creator's posts, newest first
@@ -20,6 +22,7 @@ export type Block =
   | { id: string; type: 'text'; title: string; body: string }
   | { id: string; type: 'picture'; image?: string; caption?: string }
   | { id: string; type: 'board'; title?: string }                     // Community Board (coming)
+)
 
 /** The blocks a creator can add, in the "+" menu's order */
 export const BLOCK_TYPES: Array<{ type: BlockType; name: string; hint: string; ready: boolean }> = [

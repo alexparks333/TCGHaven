@@ -6,10 +6,11 @@
 
 import { useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { ArrowLeft, ImagePlus, Loader2, Megaphone, Pin, PinOff, Sparkles, Trash2, Trophy, Type, Image as ImageIcon, LayoutGrid, MessagesSquare, Info, X } from 'lucide-react'
+import { ArrowLeft, ImagePlus, Loader2, Megaphone, Pin, PinOff, Sparkles, Trash2, Trophy, Type, Image as ImageIcon, LayoutGrid, MessagesSquare, Info, X, Palette, PenLine } from 'lucide-react'
 import { Portal } from '@/components/creator/Portal'
 import { shrink } from '@/components/creator/CoverDesigner'
 import { CardPicker } from '@/components/creator/BadgeMaker'
+import { BlockStyleEditor } from '@/components/creator/BlockStyleEditor'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { badgeArt } from '@/lib/badgeAssets'
 import { BLOCK_TYPES, MAX_POSTS, blockName, newId, type Block, type BlockType } from '@/lib/communityBlocks'
@@ -74,8 +75,9 @@ function useUpload(uid: string) {
 const label = 'block text-[11px] font-semibold text-slate-500'
 
 /** The side-panel editor for the block selected on the page */
-export function BlockEditor({ uid, block, community, onChange, onCommunity, onDone, onDelete }: {
+export function BlockEditor({ uid, block, community, mode, onMode, onChange, onCommunity, onDone, onDelete }: {
   uid: string; block: Block; community: Community
+  mode: 'content' | 'style'; onMode: (m: 'content' | 'style') => void   // what's in it, or how it looks (the palette)
   onChange: (b: Block) => void; onCommunity: (p: Partial<Community>) => void; onDone: () => void; onDelete: () => void
 }) {
   const Icon = ICONS[block.type]
@@ -87,8 +89,18 @@ export function BlockEditor({ uid, block, community, onChange, onCommunity, onDo
         <p className="pinbook-serif font-bold text-ink flex-1 truncate">{blockName(block.type)}</p>
         <button type="button" onClick={onDelete} className="p-1.5 rounded-lg text-slate-500 hover:text-red-600" aria-label="Delete this block"><Trash2 size={15} /></button>
       </div>
-      <div className="mt-3">
-        <Fields uid={uid} block={block} community={community} onChange={onChange} onCommunity={onCommunity} />
+      <div className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-[#e6d7b6]/70 p-1">
+        {([['content', 'Content', PenLine], ['style', 'Style', Palette]] as const).map(([k, name, I]) => (
+          <button key={k} type="button" onClick={() => onMode(k)}
+            className={cn('flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs font-bold transition-colors', mode === k ? 'bg-[#fbf6ea] text-ink shadow-sm' : 'text-slate-500 hover:text-ink')}>
+            <I size={13} />{name}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4">
+        {mode === 'style'
+          ? <BlockStyleEditor block={block} onChange={onChange} />
+          : <Fields uid={uid} block={block} community={community} onChange={onChange} onCommunity={onCommunity} />}
       </div>
       <button type="button" onClick={onDone} className="mt-4 w-full btn-primary justify-center">Done</button>
     </div>
