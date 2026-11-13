@@ -95,7 +95,9 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   visit, in the viewer's currency; `look.price: false` hides it). **Badge pin** — one of the community's own live
   badges (`look.badge`), stuck straight in with a brass nameplate, no holder. **Poll** — an index card (ruled,
   red margin) with the question in pen (the post's text) and 2–4 choices (`look.options`); members tap a choice to
-  vote, shown as tally marks; votes are `wall_reactions` `vote-0`…`vote-3` (voting for another choice takes the old
+  vote, shown as tally marks, bars or numbers; its look: paper (`POLL_PAPERS` — index card, legal pad, graph,
+  dot grid, plain, kraft, pink sticky, chalkboard), pen colour (`POLL_PENS`), writing font and size, and the voter's
+  mark (tick, cross, circle, heart, star) — `look.paper/pen/font/size/mark/show`; votes are `wall_reactions` `vote-0`…`vote-3` (voting for another choice takes the old
   one back, so one each). Polls and stickers have no reactions; cards and badges do.
   The owner's **New note** (any Kind) / **Arrange the board** sit at the top right of the board, always above
   the notes (z-index), even one placed over that corner. A third kind, **Sticker** (`lib/stickerCut.ts`, all in the

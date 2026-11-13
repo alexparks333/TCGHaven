@@ -24,6 +24,10 @@ export interface NoteLook {
   price?: boolean                           // the card's live price on a tag (default on)
   badge?: { id: string; name: string; art: string; imageUrl?: string } // a badge pin from the community's book
   options?: string[]                        // a poll's choices (2–4); the question is the post's text. Votes: wall_reactions 'vote-0'…
+  paper?: string                            // a poll's paper (WallNote POLL_PAPERS id; default index card)
+  pen?: string                              // a poll's ink (POLL_PENS id; default: the paper's own)
+  mark?: string                             // the voter's mark: tick / cross / circle / heart / star
+  show?: 'tally' | 'bars' | 'number'        // how a poll's votes show
   src?: string                              // a sticker's original photo (post.image is the finished cut PNG)
   shape?: string                            // a sticker's cut (lib/stickerCut.ts STICKER_SHAPES id; unset = Cut out)
   border?: 0 | 1 | 2                        // a sticker's white border: none / thin / thick

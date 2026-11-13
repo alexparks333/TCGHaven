@@ -168,35 +168,39 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
     )
   }
 
-  // A poll on an index card: the question in pen at the top, each choice a line to tap, the votes as tally marks
+  // A poll: the question written at the top of its paper, each choice a line to tap, the votes as tally marks (or
+  // bars / numbers) — paper, pen, writing, size, the voter's mark and how votes show are the owner's choice
   if (l.kind === 'poll') {
-    const opts = (l.options ?? []).filter((o, i) => o.trim() || edit || i < 2)
+    // in the editor there are always at least two lines to fill in
+    const opts = edit ? [...(l.options ?? []), '', ''].slice(0, Math.max(2, (l.options ?? []).length)) : (l.options ?? []).filter((o) => o.trim())
     const total = poll ? opts.reduce((n, _, i) => n + poll.count(i), 0) : 0
-    const pen = '#1f3f7a'
+    const most = poll ? Math.max(1, ...opts.map((_, i) => poll.count(i))) : 1
+    const paperDef = POLL_PAPERS.find((x) => x.id === (l.paper ?? 'index')) ?? POLL_PAPERS[0]
+    const pen = POLL_PENS.find((x) => x.id === (l.pen ?? paperDef.pen))?.color ?? '#1f3f7a'
+    const fnt = NOTE_FONTS.find((f) => f.id === (l.font ?? 'hand'))!
+    const k = { s: 0.85, m: 1, l: 1.2 }[l.size ?? 'm'] * (fnt.id === 'hand' ? 1 : 0.78)
+    const write = (px: number): React.CSSProperties => ({ fontFamily: fnt.id === 'print' ? 'inherit' : fnt.css, fontSize: px * k, color: pen, lineHeight: 1.15 })
+    const mark = l.mark ?? 'tick', show = l.show ?? 'tally'
     return (
-      <article onClick={onClick} style={{ '--tilt': `${tilt}deg`, background: '#fdfcf6',
-        backgroundImage: 'linear-gradient(90deg, transparent 30px, rgba(204,74,74,0.45) 30px, rgba(204,74,74,0.45) 31px, transparent 31px), repeating-linear-gradient(180deg, transparent 0, transparent 25px, rgba(86,128,186,0.28) 25px, rgba(86,128,186,0.28) 26px)',
-        backgroundPosition: '0 0, 0 14px' } as React.CSSProperties}
-        className={cn('cork-note relative border border-black/10 pl-[40px] pr-3 pt-5 pb-3 shadow-[0_1px_2px_rgba(0,0,0,0.2)]', onClick && 'cursor-pointer', className)}>
+      <article onClick={onClick} style={{ '--tilt': `${tilt}deg`, ...paperDef.css } as React.CSSProperties}
+        className={cn('cork-note relative border border-black/10 pr-3 pt-5 pb-3 shadow-[0_1px_2px_rgba(0,0,0,0.2)]', paperDef.margin ? 'pl-[40px]' : 'pl-4', onClick && 'cursor-pointer', className)}>
         {held}
         {top}
         {edit
-          ? <AutoText value={edit.value} onChange={edit.onChange} style={{ fontFamily: 'var(--font-caveat), cursive', fontSize: 22, color: pen, lineHeight: 1.15 }} placeholder="Ask your members…" min={30} />
-          : <p className="break-words" style={{ fontFamily: 'var(--font-caveat), cursive', fontSize: 22, color: pen, lineHeight: 1.15 }}>{post.text}</p>}
+          ? <AutoText value={edit.value} onChange={edit.onChange} style={write(22)} placeholder="Ask your members…" min={30} />
+          : <p className="break-words" style={write(22)}>{post.text}</p>}
         <div className="mt-2 flex flex-col">
           {opts.map((o, i) => {
             const n = poll?.count(i) ?? 0, mine = !!poll?.mine(i)
             return (
               <button key={i} type="button" disabled={!poll?.can} onClick={(e) => { e.stopPropagation(); poll?.vote(i) }}
                 title={poll?.can ? 'Vote' : 'Join the community to vote'} aria-pressed={mine}
-                className={cn('min-h-[26px] flex items-center gap-2 text-left', poll?.can ? 'cursor-pointer hover:bg-[rgba(86,128,186,0.08)]' : 'cursor-default')}>
-                {/* a box to tick, hand-drawn */}
-                <svg width="15" height="15" viewBox="0 0 16 16" className="shrink-0" aria-hidden>
-                  <path d="M2.5 3 13.5 2.4 13.2 13.4 2.8 13.6Z" fill="none" stroke={pen} strokeWidth="1.3" strokeLinejoin="round" />
-                  {mine && <path d="M4 8.5 7 11.5 14.5 1.5" fill="none" stroke="#c0392b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
-                </svg>
-                <span className="flex-1 min-w-0 truncate" style={{ fontFamily: 'var(--font-caveat), cursive', fontSize: 19, color: pen }}>{o || `Choice ${i + 1}`}</span>
-                <Tally n={n} color={pen} />
+                className={cn('min-h-[26px] flex items-center gap-2 text-left rounded-[2px]', poll?.can ? 'cursor-pointer hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]' : 'cursor-default')} style={{ color: pen }}>
+                <VoteMark mark={mark} on={mine} pen={pen} />
+                <span className="flex-1 min-w-0 truncate" style={write(19)}>{o || `Choice ${i + 1}`}</span>
+                {show === 'tally' && <Tally n={n} color={pen} />}
+                {show === 'bars' && n > 0 && <span className="shrink-0 h-[9px] rounded-[2px]" style={{ width: 8 + 64 * (n / most), background: pen, opacity: 0.55 }} />}
+                {show !== 'tally' && n > 0 && <span className="shrink-0 tabular-nums" style={write(17)}>{n}</span>}
               </button>
             )
           })}
@@ -365,7 +369,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
         // a card, badge or poll keeps only what it uses
         const keep: NoteLook = kind === 'card' ? { kind, card: look.card, sleeve: look.sleeve, price: look.price, holder: look.holder, pinColor: look.pinColor }
           : kind === 'badge' ? { kind, badge: look.badge }
-          : { kind, options: filled.map((o) => o.trim()).slice(0, 4), holder: look.holder, pinColor: look.pinColor }
+          : { kind, options: filled.map((o) => o.trim()).slice(0, 4), holder: look.holder, pinColor: look.pinColor, paper: look.paper, pen: look.pen, font: look.font, size: look.size, mark: look.mark, show: look.show }
         await onSave({ text: kind === 'poll' ? text.trim() : '', look: keep })
       } else await onSave({ text: text.trim(), image, note: note || undefined, look: { ...look, src: undefined, shape: undefined, border: undefined, tol: undefined, card: undefined, badge: undefined, options: undefined } })
       onClose()
@@ -523,6 +527,59 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                 {(look.options ?? []).length < 4 && (
                   <button type="button" onClick={() => { const o = [...(look.options ?? [])]; while (o.length < 2) o.push(''); put({ options: [...o, ''] }) }} className="mt-2 text-xs font-bold text-[#7a5230] hover:underline">+ Another choice</button>
                 )}
+              </Part>
+            )}
+            {kind === 'poll' && (
+              <Part label="Look">
+                <p className="mb-1 text-[11px] font-semibold text-[#5c4a35]">Paper</p>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {POLL_PAPERS.map((pp) => {
+                    const on = (look.paper ?? 'index') === pp.id
+                    return (
+                      <button key={pp.id} type="button" title={pp.name} aria-pressed={on} onClick={() => put({ paper: pp.id === 'index' ? undefined : pp.id, pen: undefined })}
+                        className={cn('rounded-md border p-1 flex flex-col items-center gap-1', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#2b2014]/20 hover:border-[#a8875c]')}>
+                        <span className="block w-full h-8 rounded-[2px] border border-black/10" style={{ ...pp.css, backgroundPosition: '0 0, 0 4px' }} />
+                        <span className="text-[9.5px] font-semibold truncate max-w-full">{pp.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Pen</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {POLL_PENS.map((pn) => {
+                    const on = (look.pen ?? (POLL_PAPERS.find((x) => x.id === (look.paper ?? 'index'))?.pen ?? 'blue')) === pn.id
+                    return (
+                      <button key={pn.id} type="button" title={pn.name} aria-label={pn.name} aria-pressed={on} onClick={() => put({ pen: pn.id })}
+                        className={cn('w-7 h-7 rounded-full border border-black/25', on && 'outline outline-2 outline-offset-2 outline-[#7a5230]')} style={{ background: pn.color }} />
+                    )
+                  })}
+                </div>
+                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Writing</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {NOTE_FONTS.map((f) => {
+                    const on = (look.font ?? 'hand') === f.id
+                    return (
+                      <button key={f.id} type="button" onClick={() => put({ font: f.id === 'hand' ? undefined : f.id })} aria-pressed={on}
+                        className={cn('rounded-md border py-1.5', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}
+                        style={{ fontFamily: f.css, fontSize: 13 * f.k }}>{f.name}</button>
+                    )
+                  })}
+                </div>
+                <div className="mt-2"><Seg value={look.size ?? 'm'} onPick={(v) => put({ size: v === 'm' ? undefined : v })} options={[{ id: 's', name: 'Small' }, { id: 'm', name: 'Medium' }, { id: 'l', name: 'Large' }]} /></div>
+                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">A member’s vote is marked with</p>
+                <div className="flex gap-1.5">
+                  {VOTE_MARKS.map((m) => {
+                    const on = (look.mark ?? 'tick') === m
+                    return (
+                      <button key={m} type="button" title={m[0].toUpperCase() + m.slice(1)} aria-label={m} aria-pressed={on} onClick={() => put({ mark: m === 'tick' ? undefined : m })}
+                        className={cn('flex-1 h-9 rounded-md border flex items-center justify-center', on ? 'border-[#7a5230] bg-[#7a5230]/15' : 'border-[#2b2014]/20 hover:bg-black/5')}>
+                        <VoteMark mark={m} on pen="#2b2014" />
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Votes show as</p>
+                <Seg value={look.show ?? 'tally'} onPick={(v) => put({ show: v === 'tally' ? undefined : v })} options={[{ id: 'tally', name: 'Tally marks' }, { id: 'bars', name: 'Bars' }, { id: 'number', name: 'Numbers' }]} />
               </Part>
             )}
 
@@ -752,3 +809,38 @@ function Tally({ n, color }: { n: number; color: string }) {
 }
 
 const KIND_NAME: Record<NonNullable<NoteLook['kind']>, string> = { note: 'note', polaroid: 'polaroid', sticker: 'sticker', card: 'card', badge: 'badge pin', poll: 'poll' }
+
+/** A poll's papers: their look, whether they have a margin line, and the pen they're usually written in */
+export const POLL_PAPERS: Array<{ id: string; name: string; pen: string; margin: boolean; css: React.CSSProperties }> = [
+  { id: 'index', name: 'Index card', pen: 'blue', margin: true, css: { background: '#fdfcf6', backgroundImage: 'linear-gradient(90deg, transparent 30px, rgba(204,74,74,0.45) 30px, rgba(204,74,74,0.45) 31px, transparent 31px), repeating-linear-gradient(180deg, transparent 0, transparent 25px, rgba(86,128,186,0.28) 25px, rgba(86,128,186,0.28) 26px)', backgroundPosition: '0 0, 0 14px' } },
+  { id: 'legal', name: 'Legal pad', pen: 'black', margin: true, css: { background: '#f9eea0', backgroundImage: 'linear-gradient(90deg, transparent 27px, rgba(200,70,70,0.5) 27px, rgba(200,70,70,0.5) 28px, transparent 28px, transparent 30px, rgba(200,70,70,0.5) 30px, rgba(200,70,70,0.5) 31px, transparent 31px), repeating-linear-gradient(180deg, transparent 0, transparent 25px, rgba(90,140,190,0.35) 25px, rgba(90,140,190,0.35) 26px)', backgroundPosition: '0 0, 0 14px' } },
+  { id: 'grid', name: 'Graph paper', pen: 'pencil', margin: false, css: { background: '#fbfbf7', backgroundImage: 'linear-gradient(rgba(90,150,190,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(90,150,190,0.22) 1px, transparent 1px)', backgroundSize: '13px 13px' } },
+  { id: 'dots', name: 'Dot grid', pen: 'black', margin: false, css: { background: '#fbfaf4', backgroundImage: 'radial-gradient(circle, rgba(60,60,60,0.28) 1px, transparent 1.3px)', backgroundSize: '14px 14px' } },
+  { id: 'plain', name: 'Plain', pen: 'black', margin: false, css: { background: '#fbf8ef' } },
+  { id: 'kraft', name: 'Kraft', pen: 'black', margin: false, css: { background: '#c9a273', backgroundImage: 'radial-gradient(circle at 30% 40%, rgba(90,60,30,0.18) 0 0.8px, transparent 1.2px), radial-gradient(circle at 70% 70%, rgba(255,240,210,0.18) 0 0.7px, transparent 1px)', backgroundSize: '6px 6px, 9px 8px' } },
+  { id: 'pink', name: 'Pink sticky', pen: 'purple', margin: false, css: { background: '#f6c9d6' } },
+  { id: 'chalk', name: 'Chalkboard', pen: 'chalk', margin: false, css: { background: '#2f3d35', backgroundImage: 'radial-gradient(circle at 40% 60%, rgba(255,255,255,0.05) 0 1px, transparent 1.6px)', backgroundSize: '9px 9px' } },
+]
+export const POLL_PENS = [
+  { id: 'blue', name: 'Blue pen', color: '#1f3f7a' }, { id: 'black', name: 'Black pen', color: '#24221f' },
+  { id: 'red', name: 'Red pen', color: '#b3261e' }, { id: 'green', name: 'Green pen', color: '#1f6b3a' },
+  { id: 'purple', name: 'Purple pen', color: '#5b2a86' }, { id: 'pencil', name: 'Pencil', color: '#5e5c58' },
+  { id: 'chalk', name: 'Chalk', color: '#f1efe6' },
+]
+export const VOTE_MARKS = ['tick', 'cross', 'circle', 'heart', 'star'] as const
+
+/** The box beside a choice, hand-drawn, and the voter's mark in it */
+function VoteMark({ mark, on, pen }: { mark: string; on: boolean; pen: string }) {
+  const ink = pen === '#f1efe6' ? '#ffd166' : '#c0392b' // the mark stands out from the writing
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" className="shrink-0 overflow-visible" aria-hidden>
+      {mark !== 'circle' && <path d="M2.5 3 13.5 2.4 13.2 13.4 2.8 13.6Z" fill="none" stroke={pen} strokeWidth="1.3" strokeLinejoin="round" />}
+      {mark === 'circle' && <circle cx="8" cy="8" r="5.6" fill="none" stroke={pen} strokeWidth="1.3" />}
+      {on && mark === 'tick' && <path d="M4 8.5 7 11.5 14.5 1.5" fill="none" stroke={ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />}
+      {on && mark === 'cross' && <path d="M3.5 3.5 12.5 12.5M12.5 3.5 3.5 12.5" fill="none" stroke={ink} strokeWidth="2.2" strokeLinecap="round" />}
+      {on && mark === 'circle' && <circle cx="8" cy="8" r="3.4" fill={ink} />}
+      {on && mark === 'heart' && <path d="M8 13C3 9.6 2 6.6 3.6 4.8 5 3.3 7 3.8 8 5.6 9 3.8 11 3.3 12.4 4.8 14 6.6 13 9.6 8 13Z" fill={ink} />}
+      {on && mark === 'star' && <path d="M8 2.2 9.6 6 13.6 6.3 10.6 8.9 11.5 12.8 8 10.7 4.5 12.8 5.4 8.9 2.4 6.3 6.4 6Z" fill={ink} />}
+    </svg>
+  )
+}
