@@ -10,6 +10,7 @@ import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
 import { useStudioLinks } from '@/lib/studioDevice'
+import { useCommunity } from '@/lib/creatorBooks'
 
 const BASE_NAV = [
   { href: '/', label: 'Portfolio', icon: TrendingUp },
@@ -35,6 +36,7 @@ export function Sidebar() {
   const { me } = useFriends()
   const creator = canUseCreatorStudio(useAccountRole(user?.uid).record)
   const studioLinks = useStudioLinks() // the Creator Studio is computers-only — no link in the app
+  const owned = useCommunity(user?.uid).community // the community you run, if any
 
   const isAuthPage = pathname === '/login' || pathname === '/signup'
   if (isAuthPage) return null
@@ -69,16 +71,25 @@ export function Sidebar() {
         </nav>
 
         {/* Creators only, set apart under a line: their tools (CreatorPage.tsx) — on a computer, never in the app */}
-        {creator && studioLinks && (
-          <div className="mt-3 pt-3 border-t border-slate-800">
-            <Link
-              href="/creator"
-              className={cn('nav-link', pathname.startsWith('/creator') && 'active')}
-            >
-              <Wand2 size={16} className="text-violet-600" />
-              Creator
-              <span className="ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-violet-600/15 text-violet-700">Studio</span>
-            </Link>
+        {((creator && studioLinks) || owned) && user && (
+          <div className="mt-3 pt-3 border-t border-slate-800 flex flex-col gap-1">
+            {creator && studioLinks && (
+              <Link
+                href="/creator"
+                className={cn('nav-link', pathname.startsWith('/creator') && 'active')}
+              >
+                <Wand2 size={16} className="text-violet-600" />
+                Creator
+                <span className="ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-violet-600/15 text-violet-700">Studio</span>
+              </Link>
+            )}
+            {/* The community you run, straight to its page (where you post, pin notes and arrange the wall) */}
+            {owned && (
+              <Link href={`/c/${user.uid}`} title={owned.name || 'Your community'} className={cn('nav-link', pathname === `/c/${user.uid}` && 'active')}>
+                <Users size={16} />
+                Community
+              </Link>
+            )}
           </div>
         )}
 
