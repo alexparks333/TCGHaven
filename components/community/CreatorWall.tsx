@@ -110,7 +110,6 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           </div>
         )}
       </header>
-      {arranging && <p className="relative z-[100] -mt-1 mb-3 text-xs font-semibold" style={{ color: mix(ink, w.color, 0.18) }}>Drag a note to move it · the round handle turns it · the corner makes it bigger or smaller. Each change saves when you let go.</p>}
       <div>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
