@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { matchScannedCard, cleanLines, cleanBarcodes, warmScanner } from '@/lib/scan/server'
+import { matchScannedCard, cleanLines, cleanBarcodes, warmScanner, ScannerUnavailable } from '@/lib/scan/server'
 import { cleanFingerprints, pictureModel } from '@/lib/scan/picture'
 import { GAME_LABELS, type Game } from '@/lib/types'
 
@@ -9,6 +9,7 @@ import { GAME_LABELS, type Game } from '@/lib/types'
 //   POST { lines: OCR lines from one card, games, fingerprints?: the picture AI's numbers for the
 //          scan (lib/scan/picture.ts), barcodes?: what a slab label's barcode / QR code says (its
 //          cert) }                                              → ranked catalog candidates
+//          (503 { error: 'busy' } when a catalog didn't load properly — the phone tries again)
 //   GET ?warm=1&games=pokemon,mtg                              → loads those catalogs and picture
 //          indexes (as the scanner opens)
 //   GET ?model=1[&platform=android]                            → the picture model the phone should
@@ -35,5 +36,14 @@ export async function POST(req: NextRequest) {
   const lines = cleanLines(body?.lines)
   const fingerprints = cleanFingerprints(body?.fingerprints)
   if (lines.length === 0 && fingerprints.length === 0) return NextResponse.json({ candidates: [], slab: null })
-  return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : []), fingerprints, cleanBarcodes(body?.barcodes)))
+  try {
+    return NextResponse.json(await matchScannedCard(lines, pickGames(Array.isArray(body?.games) ? body.games : []), fingerprints, cleanBarcodes(body?.barcodes)))
+  } catch (err) {
+    // A catalog that wouldn't load properly: "busy" (the phone tries again), never a guess
+    if (err instanceof ScannerUnavailable) {
+      console.error('Scanner unavailable:', err.message)
+      return NextResponse.json({ error: 'busy' }, { status: 503, headers: { 'Retry-After': '2' } })
+    }
+    throw err
+  }
 }

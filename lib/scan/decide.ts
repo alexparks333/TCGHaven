@@ -127,3 +127,36 @@ export function decide<T extends Scored>(candidates: T[], distances?: Array<numb
   else if (first && first.final >= 30) status = 'pick'
   return { ranked, status }
 }
+
+// ── The phone's steps around decide(), shared with the real-scan check that gates every deploy
+// (scripts/scanner-realscans.mjs) so the check judges exactly what the phone would do ──
+
+export interface Offered extends Scored {
+  why: string
+  picture?: number | null
+}
+
+// How many look-alikes the phone compares by picture — small thumbnails (~10 KB each); the
+// comparison itself works on a 40 × 56 grid, so a thumbnail is plenty
+export const MAX_COMPARE = 40
+// A picture-only find shown in the tray (asked about, never added): this alike or more
+export const PICTURE_SHOWS = 0.55
+
+/** Which of the server's candidates are still in the running (and get compared by picture): the
+ *  picture AI's own finds first — a name shared by 40+ printings must not push them out — then
+ *  every text candidate within 20 points of the best */
+export function shortlist<T extends Offered>(candidates: T[]): { close: T[]; rest: T[] } {
+  const best = Math.max(0, ...candidates.filter((c) => c.why !== 'picture').map((c) => c.score))
+  const fromPicture = candidates.filter((c) => c.why.endsWith('picture') && (c.picture ?? 0) >= AI_OFFER)
+  const close = [...fromPicture, ...candidates.filter((c) => !fromPicture.includes(c) && c.why !== 'picture' && c.score >= best - 20)].slice(0, MAX_COMPARE)
+  return { close, rest: candidates.filter((c) => !close.includes(c)) }
+}
+
+/** What the tray does with a decided scan: add it ('matched'), ask ('pick'), or drop it and ask for
+ *  another scan ('reject') — nothing found, or only a loose guess (a word on a screen that happens
+ *  to be a card name) — unless the picture clearly says which card it is */
+export function trayVerdict(status: ScanStatus, top: { exact: boolean; score: number } | undefined, topDistance: number | null, topPicture: number | null): ScanStatus | 'reject' {
+  const pictured = (topDistance !== null && topDistance <= 0.3) || (topPicture !== null && topPicture >= PICTURE_SHOWS)
+  const loose = !top || status === 'none' || (status === 'pick' && (!top.exact || top.score < 55) && !pictured)
+  return loose ? 'reject' : status
+}

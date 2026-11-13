@@ -12,7 +12,7 @@ import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor
 import { CONDITION_LABELS, type Condition, type Game } from '../types'
 import { cardImage } from '../cardImage'
 import { formatCurrency } from '../utils'
-import { decide, AI_OFFER, type ScanStatus } from './decide'
+import { decide, shortlist, trayVerdict, type ScanStatus } from './decide'
 import type { OcrLine } from './scanMatch'
 import type { ScanMatch, ScanSlab } from './server'
 import type { CardSearchResult } from '../api/search'
@@ -54,12 +54,7 @@ export interface ScannedCard {
   condition?: Condition  // picked in the card sheet (absent = Near Mint)
 }
 
-// How many look-alikes the phone compares by picture — small thumbnails (~10 KB each); the
-// comparison itself works on a 40 × 56 grid, so a thumbnail is plenty
-const MAX_COMPARE = 40
 const MATCH_TIMEOUT_MS = 12000
-// A picture-only find shown in the tray (asked about, never added): this alike or more
-const PICTURE_SHOWS = 0.55
 
 function trayOption(m: ScanMatch & { final?: number; distance?: number | null }, slab: ScanSlab | null): TrayOption {
   const ai = typeof m.picture === 'number' ? ` · AI ${m.picture.toFixed(2)}` : ''
@@ -123,10 +118,15 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
   return out.slice(0, 24)
 }
 
+/** The server said it can't answer properly right now (a catalog didn't load — lib/scan/server.ts
+ *  checkCatalogs): never guessed from, the scan is asked for again */
+class ScannerBusy extends Error {}
+
 async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS)
+    let busy = false
     try {
       const res = await fetch('/api/cards/scan', {
         method: 'POST',
@@ -134,10 +134,14 @@ async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: n
         body: JSON.stringify({ lines, games, ...(fingerprints?.length && { fingerprints }), ...(barcodes?.length && { barcodes }) }),
         signal: ctrl.signal,
       })
-      if (!res.ok) throw new Error(`scan match ${res.status}`)
+      busy = res.status === 503
+      if (!res.ok) throw busy ? new ScannerBusy() : new Error(`scan match ${res.status}`)
       return (await res.json()) as { candidates: ScanMatch[]; slab: ScanSlab | null }
     } catch (err) {
-      if (attempt >= 1) throw err   // one retry — a dropped connection on a phone is common
+      // a dropped connection on a phone is common: one retry. Busy: two more, a moment apart (the
+      // next try usually reaches a server that's ready)
+      if (attempt >= (busy ? 2 : 1)) throw err
+      if (busy) await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)))
     } finally {
       clearTimeout(timer)
     }
@@ -149,10 +153,7 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerp
 
   // Only the candidates still in the running get compared by picture — plus the picture AI's own
   // finds (cards the text didn't bring in)
-  const best = Math.max(0, ...candidates.filter((c) => c.why !== 'picture').map((c) => c.score))
-  // (the picture's finds first: a name shared by 40+ printings must not push them out)
-  const fromPicture = candidates.filter((c) => c.why.endsWith('picture') && (c.picture ?? 0) >= AI_OFFER)
-  const close = [...fromPicture, ...candidates.filter((c) => !fromPicture.includes(c) && c.why !== 'picture' && c.score >= best - 20)].slice(0, MAX_COMPARE)
+  const { close, rest } = shortlist(candidates)
   let distances: Array<number | null> | undefined
   // The picture AI already compared every one of them → skip the slower photo-by-photo check
   // (it downloads each candidate's thumbnail)
@@ -166,7 +167,6 @@ async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerp
     }
   }
   const { ranked, status } = decide(close.map((c) => ({ ...c, trusted: c.why.includes(' label ') })), distances, close.map((c) => c.picture))
-  const rest = candidates.filter((c) => !close.includes(c))
   const ordered: Array<ScanMatch & { final?: number; distance?: number | null }> = [...ranked, ...rest]
   return {
     card: { scanId, options: ordered.map(({ final: _f, distance: _d, ...m }) => m), choice: 0, status, slab },
@@ -209,17 +209,11 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
     identify(scanId, lines, games, fingerprints, barcodes)
       .then(({ card, tray, topDistance, topPicture }) => {
         found.set(scanId, card)
-        // Not sure enough to show: nothing found, or only a loose guess (a word on a screen that
-        // happens to be a card name) — the tray drops it and asks for another scan
-        const top = card.options[0]
-        // …unless the picture clearly says which card it is and only the version is in doubt
-        // (Aquapolis Mr. Mime #95 / #95a / #95b): then it's a question, with the versions to pick
-        // (or the picture AI found it with no text to go on — an old card, a worn number)
-        const pictured = (topDistance !== null && topDistance <= 0.3) || (topPicture !== null && topPicture >= PICTURE_SHOWS)
-        const loose = !top || card.status === 'none' || (card.status === 'pick' && (!top.exact || top.score < 55) && !pictured)
+        // Not sure enough to show → dropped, and another scan asked for (decide.ts trayVerdict)
+        const verdict = trayVerdict(card.status, card.options[0], topDistance, topPicture)
         return CardScanner.update({
           scanId,
-          status: loose ? 'reject' : card.status,
+          status: verdict,
           options: tray,
           choice: 0,
           note: card.status === 'none' ? 'Not found — try again, flatter and out of the glare' : undefined,
@@ -227,7 +221,10 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
           slab: card.slab?.grade ? card.slab : null,
         })
       })
-      .catch(() => CardScanner.update({ scanId, status: 'error', options: [], choice: 0, note: 'Couldn’t reach TCGHaven — check your connection' }).catch(() => {}))
+      .catch((err) => CardScanner.update({
+        scanId, status: 'error', options: [], choice: 0,
+        note: err instanceof ScannerBusy ? 'TCGHaven is busy — scan it again in a moment' : 'Couldn’t reach TCGHaven — check your connection',
+      }).catch(() => {}))
   })
   try {
     const { items } = await CardScanner.open({ title: 'Scan cards' })

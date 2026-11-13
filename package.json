@@ -15,6 +15,7 @@
     "test:rebase": "node --experimental-strip-types --no-warnings lib/rebase.test.mts",
     "test:relief": "node --experimental-strip-types --no-warnings lib/reliefLevels.test.mts",
     "test:scan": "node --experimental-strip-types --no-warnings lib/scan/scanMatch.test.mts",
+    "test:realscans": "node --experimental-strip-types --no-warnings scripts/scanner-realscans.mts",
     "test:variants": "node scripts/lib/pokemon-variants.test.mjs",
     "test:pokemon-source": "node scripts/lib/pokemon-tcgplayer.test.mjs",
     "test:onepiece-source": "node scripts/lib/onepiece-tcgplayer.test.mjs",

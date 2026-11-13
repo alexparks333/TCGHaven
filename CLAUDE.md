@@ -44,6 +44,7 @@ npm run scanner-index -- status   # the scanner's picture index (docs/scanner-ai
 npm run download-cards # re-sync catalogs into Firestore (MTG only with -- --include-mtg; MTG also syncs daily via .github/workflows/sync-mtg.yml)
 npm run check-images -- <game>|all
 npm run test:search / test:snapshot / test:variants / test:pokemon-source / test:onepiece-source / test:yugioh-source / test:tcgplayer-games / test:scan
+npm run test:realscans -- http://localhost:3000   # the scanner on 64 real phone scans (needs a running server; CI runs it on every deploy)
 ```
 
 - The owner works on both a Mac and a Windows PC (RTX 4090). `.env.local` is gitignored and must be
@@ -54,7 +55,7 @@ npm run test:search / test:snapshot / test:variants / test:pokemon-source / test
 - Removed on purpose — don't bring back: Pack Analysis (2026-10-08) and Spending (2026-10-24).
   Leftover `registry/main` `packAnalysis` fields and `users/{uid}/purchases` docs are unread.
 - **Deploy gate:** every push to main runs `.github/workflows/checks.yml` (typecheck, lint, 11 test
-  suites, production build, ~90 s); Vercel holds the new version off www.tcghaven.org until it
+  suites, production build, the scanner's real-scan check, ~2 min); Vercel holds the new version off www.tcghaven.org until it
   passes. Failed → fix and push again (`gh run watch` shows why); Vercel's Force Promote is the
   emergency override. CI uses only the six public `NEXT_PUBLIC_FIREBASE_*` repo variables — never real secrets.
 - A change to any `route.ts`'s exports or handler signature needs a real `npm run build` too:

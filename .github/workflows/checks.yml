@@ -1,8 +1,9 @@
 name: Checks
 
-# Every push to main (and every pull request): typecheck, lint, the test suites and a full
-# production build. Vercel's Deployment Checks wait for this job before a new version goes live on
-# www.tcghaven.org, so a push that breaks any of these never reaches the site.
+# Every push to main (and every pull request): typecheck, lint, the test suites, a full
+# production build and the scanner's real-scan check. Vercel's Deployment Checks wait for this job
+# before a new version goes live on www.tcghaven.org, so a push that breaks any of these never
+# reaches the site.
 #
 # Setup (done once, 2026-11-04): the six NEXT_PUBLIC_FIREBASE_* repository variables (Settings →
 # Secrets and variables → Actions → Variables). They're public (every visitor's browser gets them)
@@ -59,3 +60,11 @@ jobs:
       # Catches what tsc can't — e.g. an invalid Next.js route export (CLAUDE.md rule 24)
       - name: Production build
         run: npm run build
+      # The scanner on 64 real iPhone scans, judged as the phone would: the build above is started
+      # and a version that adds a scan as the wrong card, or finds fewer right, never goes live
+      # (scripts/scanner-realscans.mts, docs/card-scanner.md "The real-scan check")
+      - name: Real-scan check
+        run: |
+          npx next start -p 3100 > next-start.log 2>&1 &
+          for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:3100/ && break; sleep 1; done
+          npm run test:realscans -- http://localhost:3100 || { echo '--- server log ---'; tail -40 next-start.log; exit 1; }

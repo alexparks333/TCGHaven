@@ -5,11 +5,11 @@
 // Plan: docs/card-scanner.md.
 
 import type { CatalogKey, Game, Language } from '../types'
-import { loadVisibleCatalog } from '../api/catalog'
+import { loadVisibleCatalog, invalidateCatalogCache } from '../api/catalog'
 import { getPokemonSets } from '../api/pokemon'
 import { getSetsForGame } from '../api/search'
 import { readClues, matchScan, catalogIndex, printedName, fold, type ScanCandidate, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
-import { pictureSearch, pictureSimilarity, warmPictures } from './picture'
+import { pictureSearch, pictureSimilarity, warmPictures, pictureManifest } from './picture'
 
 export interface ScanMatch {
   key: string                 // "catalog:id"
@@ -106,8 +106,35 @@ export function cleanLines(raw: unknown): OcrLine[] {
  *  card doesn't wait for a cold server */
 export async function warmScanner(games: Game[]): Promise<void> {
   const keys = catalogsFor(games)
-  const [catalogs] = await Promise.all([Promise.all(keys.map(scanCatalog)), warmPictures(keys)])
+  const [catalogs] = await Promise.all([loadCatalogsChecked(keys), warmPictures(keys)])
   for (const c of catalogs) catalogIndex(c)
+}
+
+/** The server can't answer a scan properly right now — the route answers 503 "busy" and the phone
+ *  tries again, rather than guessing from a catalog that's missing cards */
+export class ScannerUnavailable extends Error {}
+
+// A loaded catalog must have at least this share of the cards its picture index holds (the index
+// is every visible card with a photo, so a healthy catalog has as many or more)
+const CATALOG_FLOOR = 0.8
+
+/** The catalogs a scan is matched against, checked first: one that came back empty or far too
+ *  small (a failed read on a cold server) is loaded again, and if it's still short the scan is
+ *  refused. On 2026-11-13 servers that had lost the English Pokémon catalog answered clearly read
+ *  Jigglypuff and Dark Vileplume scans with Japanese and Magic cards. */
+async function loadCatalogsChecked(keys: ScanCatalogKey[]) {
+  const manifest = await pictureManifest().catch(() => null)
+  const short = (c: { key: ScanCatalogKey; cards: unknown[] }) =>
+    c.cards.length < Math.max(1, Math.floor((manifest?.catalogs[c.key]?.count ?? 0) * CATALOG_FLOOR))
+  let catalogs = await Promise.all(keys.map(scanCatalog))
+  const bad = catalogs.filter(short)
+  if (bad.length === 0) return catalogs
+  console.warn(`Scanner: catalog too small, loading again — ${bad.map((c) => `${c.key} ${c.cards.length}`).join(', ')}`)
+  for (const c of bad) invalidateCatalogCache(c.key as CatalogKey)
+  catalogs = await Promise.all(keys.map(scanCatalog))
+  const still = catalogs.filter(short)
+  if (still.length) throw new ScannerUnavailable(`catalog too small: ${still.map((c) => `${c.key} ${c.cards.length}`).join(', ')}`)
+  return catalogs
 }
 
 /** "Unown [B]" and "Unown" are the same printed name */
@@ -128,7 +155,7 @@ export function cleanBarcodes(raw: unknown): string[] {
 
 export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerprints: Float32Array[] = [], barcodes: string[] = []): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   const keys = catalogsFor(games)
-  const catalogs = await Promise.all(keys.map(scanCatalog))
+  const catalogs = await loadCatalogsChecked(keys)
   let hits: ReturnType<typeof pictureSearch> = []
   try { hits = pictureSearch(fingerprints, keys, PICTURE_HITS) } catch { /* no picture search this time */ }
   const clues = readClues(lines, barcodes)

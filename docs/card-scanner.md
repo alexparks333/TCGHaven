@@ -154,6 +154,45 @@ About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
     finds now get the name's score and are compared first, so the card is added.
 - The owner's verdict: "working pretty nicely exactly how I want it".
 
+## When a server isn't ready: "busy", never a guess (2026-11-13)
+
+A server keeps each game's catalog in memory. On 2026-11-13, right after two deploys, some fresh
+servers had failed to read the English Pokémon catalog and kept an empty one. Clearly read
+Jigglypuff and Dark Vileplume scans came back as Japanese and Magic cards, depending on which server
+answered. Three guards now:
+- `lib/api/catalog.ts`: a failed or empty load is never kept (the next request loads again); a
+  failed "changes since the snapshot" read keeps the snapshot and catches up on the next refresh.
+- `lib/scan/server.ts` `loadCatalogsChecked`: before matching, each catalog must hold at least 80%
+  of the cards in its picture index (the manifest's count — no numbers to maintain). Short → loaded
+  again; still short → `ScannerUnavailable`, and the route answers **503 `{ error: 'busy' }`**.
+- `lib/scan/scanner.ts`: a 503 is tried twice more, a moment apart; then the tray says "TCGHaven is
+  busy — scan it again in a moment". A broken server never produces an answer.
+
+## The real-scan check (every deploy)
+
+`.github/workflows/checks.yml` starts the production build and runs **64 real iPhone scans**
+through it (`npm run test:realscans -- <url>`, `scripts/scanner-realscans.mts`). Each scan is judged
+exactly as the phone would (`decide.ts` `shortlist` → `decide` → `trayVerdict`, shared with
+`scanner.ts`), searching all 12 games. The deploy is blocked when:
+- any scan would be **added as the wrong card**;
+- fewer than 38 are added right, or fewer than 48 have the right card first (2026-11-13: 40 and 50).
+
+Text only (37 / 48 measured; limits 35 / 46) when the test file's fingerprints come from a different
+model than the published one, e.g. right after a retrain. The test file
+(`scripts/scanner-realscans.json`) holds each scan's OCR text, its AI fingerprint and the right card
+— no photos. Rebuild it after publishing a new model, or after adding scans to
+`~/Developer/tcghaven-vision/pc/realscans/truth.json`:
+
+```bash
+~/Developer/tcghaven-vision/.venv/bin/python -I tools/scanner-ai/realscans.py \
+  <model.pt> <model version> ~/Developer/tcghaven-vision/pc/realscans/truth.json <phone debug scans dir> scripts/scanner-realscans.json
+```
+
+The phone debug scans dir is a copy of the app's `Documents/scans` (`xcrun devicectl device copy
+from … --source Documents/scans`). Raise the limits in `scanner-realscans.mts` as the scanner
+improves. If Firestore or Storage is down the check fails too; re-run it, or use Vercel's Force
+Promote in an emergency.
+
 ## The card sheet and the review screen
 
 - **Card sheet** (tap a card in the tray → View Card), top to bottom:
@@ -261,6 +300,8 @@ camera can't do this well).
 | `ios/App/App/SceneDelegate.swift` | Uses `TCGBridgeViewController` |
 | `ios/App/App/Info.plist` | `NSCameraUsageDescription` (the permission prompt) |
 | `lib/scan/scanMatch.ts` | OCR → candidates. Pure, tested by `npm run test:scan` (`scanMatch.test.mts`) |
+| `scripts/scanner-realscans.mts` + `.json` | The real-scan check run on every deploy (`npm run test:realscans`) |
+| `tools/scanner-ai/realscans.py` | Builds the real-scan check's test file |
 | `lib/scan/decide.ts` | Text + picture (tiles, and the AI's similarity) → matched / pick / none |
 | `lib/scan/picture.ts` | The picture AI's search over every catalog card (`scanner-ai.md`) |
 | `lib/scan/pokemonJaNames.ts` | Japanese → English Pokémon names, for Japanese cards (generated) |

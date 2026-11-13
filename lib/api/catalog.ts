@@ -42,23 +42,30 @@ async function loadFromSnapshot(game: CatalogKey): Promise<CacheEntry> {
     if (compressed) {
       for (const c of compressed.cards) map.set(c.id, c)
       const syncedAt = new Date()
-      for (const card of await pullDeltas(game, compressed.asOf)) map.set(card.id, card)
-      return { cards: map, lastSyncAt: syncedAt }
+      try {
+        for (const card of await pullDeltas(game, compressed.asOf)) map.set(card.id, card)
+        return { cards: map, lastSyncAt: syncedAt }
+      } catch (err) {
+        // Keep the snapshot and fetch what changed since it on the next refresh — never throw the
+        // whole catalog away over the small follow-up read
+        console.warn(`Catalog deltas for ${game} failed, using the snapshot for now:`, (err as Error).message)
+        return { cards: map, lastSyncAt: compressed.asOf }
+      }
     }
   } catch (err) {
     console.warn(`Compressed snapshot for ${game} unreadable, using the original format:`, (err as Error).message)
     map.clear()
   }
-  try {
-    const chunksSnap = await getDocs(collection(db, 'catalog_snapshot', game, 'chunks'))
-    for (const chunkDoc of chunksSnap.docs) {
-      const raw = chunkDoc.data().cards as string | undefined
-      if (!raw) continue
-      const cards = JSON.parse(raw) as Array<Record<string, unknown> & { id: string }>
-      for (const c of cards) map.set(c.id, c)
-    }
-  } catch {
-    // No snapshot yet (e.g. before the first sync has ever run) — start empty rather than throw.
+  // The original format. A failed read throws (loadCatalog doesn't keep it, so the next request
+  // tries again) — it used to be swallowed into an empty catalog that a server then kept for its
+  // whole life: on 2026-11-13 some servers had no English Pokémon and the scanner missed clearly
+  // read cards (Jigglypuff, Dark Vileplume) depending on which server answered
+  const chunksSnap = await getDocs(collection(db, 'catalog_snapshot', game, 'chunks'))
+  for (const chunkDoc of chunksSnap.docs) {
+    const raw = chunkDoc.data().cards as string | undefined
+    if (!raw) continue
+    const cards = JSON.parse(raw) as Array<Record<string, unknown> & { id: string }>
+    for (const c of cards) map.set(c.id, c)
   }
   return { cards: map, lastSyncAt: new Date() }
 }
@@ -85,8 +92,13 @@ export async function loadCatalog<T>(game: CatalogKey): Promise<T[]> {
     if (!loading) {
       const gen = _generation.get(game) ?? 0
       loading = loadFromSnapshot(game).then((loaded) => {
-        if ((_generation.get(game) ?? 0) === gen) _cache.set(game, loaded)
+        // An empty catalog is never kept (a game with no cards yet just loads again next time)
+        if ((_generation.get(game) ?? 0) === gen && loaded.cards.size > 0) _cache.set(game, loaded)
         return loaded
+      }, (err) => {
+        // Not kept either: this request goes without, the next one loads again
+        console.warn(`Catalog load for ${game} failed:`, (err as Error).message)
+        return { cards: new Map(), lastSyncAt: new Date() } as CacheEntry
       }).finally(() => _loading.delete(game))
       _loading.set(game, loading)
     }
