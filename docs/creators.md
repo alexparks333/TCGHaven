@@ -39,7 +39,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   the book sees their own progress. Each creator badge newly earned is recorded for the community's
   **Achievement Badge Board** — `community_achievements/{community}_{member}_{badge}` (`recordAchievement`;
   skipped while the member's badges are private; rules: only the member, only while a member) — shown
-  newest first (`newestAchievements`, sorted in the browser).
+  newest first, kept live (`watchAchievements`, an `onSnapshot`, sorted in the browser). Drawn as a dark flat
+  leaderboard (`AchievementBoard`): rows of collector · badge · time ago; the first load fades in row by row,
+  a new earner slides in at the top with a gold flash and a pin pop (`board-row-*` in globals.css). Testing:
+  the Dev panel's **Community** tab sends fake earners to every board on the page (`lib/devBoard.ts`, a
+  window event — this device only, nothing saved, dev server only).
 - **Community page blocks** (2026-11-12, `lib/communityBlocks.ts`, drawn by `components/community/blocks.tsx`).
   Every tab is an ordered list of blocks: **About** (the community's description), **Badge Achievements**
   (newest earners), **Creator Wall** (the creator's own posts — text and a picture, newest first, up to

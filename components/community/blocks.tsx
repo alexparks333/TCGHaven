@@ -5,7 +5,7 @@
 // Picture, and the coming Community Board. The page (CommunityPage) stacks the ones on the open tab; the
 // Studio draws the very same ones, with its builder around them.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { Loader2, Trophy, Megaphone, Pin, Sparkles, MessagesSquare, Eye } from 'lucide-react'
@@ -13,9 +13,10 @@ import { Avatar } from '@/components/friends/Avatar'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners, Divider } from '@/components/creator/Ornaments'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
-import { newestAchievements, type Achievement, type CommunityEntry } from '@/lib/communities'
+import { watchAchievements, type Achievement, type CommunityEntry } from '@/lib/communities'
 import type { CreatorBook } from '@/lib/creatorBooks'
 import type { Block } from '@/lib/communityBlocks'
+import { DEV_EARNER_EVENT, DEV_EARNER_CLEAR_EVENT, type DevEarner } from '@/lib/devBoard'
 import { badgeArt } from '@/lib/badgeAssets'
 import { cardImage } from '@/lib/cardImage'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
@@ -100,50 +101,100 @@ export function BlockView({ block, ctx }: { block: Block; ctx: BlockContext }) {
   }
 }
 
-/** Badge Achievements: the newest members to earn one of this creator's badges */
+interface BoardRow { key: string; member: string; badge: string; earnedAt: number; profile: Profile | null; fake?: boolean }
+const BOARD_ROWS = 10
+
+/** Badge Achievements: a dark leaderboard of the newest members to earn one of this creator's badges. It
+ *  stays live (watchAchievements): a new earner slides in at the top with a gold flash and their pin pops
+ *  on. On the dev server, the Dev panel's Community tab can send fake earners (lib/devBoard.ts). */
 export function AchievementBoard({ community, book, title, sample }: { community: string; book: CreatorBook | null; title?: string; sample?: Array<Achievement & { profile: Profile | null }> /* dev checks */ }) {
-  const [list, setList] = useState<Array<Achievement & { profile: Profile | null }> | null>(sample ?? null)
+  const [real, setReal] = useState<BoardRow[] | null>(sample ? sample.map((a) => ({ ...a, key: a.member + a.badge })) : null)
+  const [fakes, setFakes] = useState<BoardRow[]>([])
+  const profiles = useRef(new Map<string, Promise<Profile | null>>())
   useEffect(() => {
     if (sample) return
-    newestAchievements(community, 10)
-      .then((rows) => Promise.all(rows.map(async (r) => ({ ...r, profile: await getProfile(r.member).catch(() => null) }))))
-      .then(setList).catch(() => setList([]))
+    let alive = true
+    const stop = watchAchievements(community, BOARD_ROWS, (rows) => {
+      Promise.all(rows.map(async (r) => {
+        if (!profiles.current.has(r.member)) profiles.current.set(r.member, getProfile(r.member).catch(() => null))
+        return { ...r, key: r.member + r.badge, profile: await profiles.current.get(r.member)! }
+      })).then((list) => { if (alive) setReal(list) })
+    }, () => { if (alive) setReal((r) => r ?? []) })
+    return () => { alive = false; stop() }
   }, [community, sample])
+
+  // Dev panel → Community → fake earners (dev server only)
+  const badgeIds = (book?.badges ?? []).map((b) => b.id).join(',')
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    const ids = badgeIds ? badgeIds.split(',') : []
+    const add = (e: Event) => {
+      const d = (e as CustomEvent<DevEarner>).detail
+      const badge = d.badge && ids.includes(d.badge) ? d.badge : ids[Math.floor(Math.random() * ids.length)]
+      if (!badge) return
+      const profile = { uid: d.key, username: '', displayName: d.name, photoURL: '', bio: '', privacy: { cardex: false, badges: false }, pinDisplay: [] }
+      setFakes((f) => [{ key: d.key, member: d.key, badge, earnedAt: d.at, profile, fake: true }, ...f].slice(0, BOARD_ROWS))
+    }
+    const clear = () => setFakes([])
+    window.addEventListener(DEV_EARNER_EVENT, add)
+    window.addEventListener(DEV_EARNER_CLEAR_EVENT, clear)
+    return () => { window.removeEventListener(DEV_EARNER_EVENT, add); window.removeEventListener(DEV_EARNER_CLEAR_EVENT, clear) }
+  }, [badgeIds])
+
+  // "2 min ago" keeps counting
+  const [, tick] = useState(0)
+  useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30000); return () => clearInterval(t) }, [])
+
   const defOf = (id: string) => book?.badges.find((b) => b.id === id)
-  const shown = (list ?? []).filter((a) => defOf(a.badge)) // badges still in the book
+  const shown = real === null ? [] : [...fakes, ...real].filter((a) => defOf(a.badge)).sort((a, b) => b.earnedAt - a.earnedAt).slice(0, BOARD_ROWS)
+
+  // How each row came on: the first load fades in one after another; anyone after that arrives.
+  const entry = useRef(new Map<string, 'in' | 'arrive'>())
+  const loaded = useRef(false)
+  shown.forEach((a) => { if (!entry.current.has(a.key)) entry.current.set(a.key, loaded.current ? "arrive" : "in") })
+  useEffect(() => { if (real !== null) loaded.current = true }, [real])
+
   const cols = 'grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] items-center gap-3'
   return (
-    <Section title={title || 'Badge Achievements'} icon={<Trophy size={19} className="text-[#8a6420]" />} sub="The newest badges earned from this book.">
-      {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
-        : shown.length === 0 ? <p className="text-sm text-slate-500">No one has earned a badge yet — collect the cards and be the first.</p>
+    <section className="relative rounded-[0.875rem] border border-[#4a3b2b] p-6 md:p-7 text-[#efe3c8]"
+      style={{ backgroundColor: '#2a2119', backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(240,220,180,0.05) 1px, transparent 0)', backgroundSize: '16px 16px' }}>
+      <Corners inset={8} size={30} className="text-[#7d6342]" />
+      <h2 className="pinbook-serif text-xl font-bold text-[#f0dfb8] flex items-center gap-2.5"><Trophy size={19} className="text-[#d6a957]" />{title || 'Badge Achievements'}</h2>
+      <p className="text-xs text-[#9c8a70] mt-1">The newest badges earned from this book.</p>
+      <Divider className="mt-3 mb-4 !text-[#7d6342] [&>span]:!from-transparent [&>span]:!to-[#5a4733]" />
+      {real === null ? <Loader2 size={18} className="animate-spin text-[#9c8a70]" />
+        : shown.length === 0 ? <p className="text-sm text-[#9c8a70]">No one has earned a badge yet — collect the cards and be the first.</p>
         : (
           <div className="-mx-1">
-            <div className={cn(cols, 'px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 border-b border-[#c4ae83]')}>
+            <div className={cn(cols, 'px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a785e] border-b border-[#5a4733]')}>
               <span>Collector</span><span>Badge</span><span className="text-right">Earned</span>
             </div>
             <ol>
               {shown.map((a, i) => {
                 const def = defOf(a.badge)!
                 const name = a.profile?.displayName ?? 'A collector'
+                const how = entry.current.get(a.key)
                 return (
-                  <li key={a.member + a.badge}
-                    className={cn(cols, 'relative h-12 sm:h-11 px-3 border-b border-[#d6c49f]/70 last:border-b-0 transition-colors',
-                      i === 0 ? 'bg-[#f6e7c4]' : 'hover:bg-[#e8dbbd]/60')}>
-                    {i === 0 && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#7a5230]" />}
-                    <Link href={a.profile ? profilePath(a.member, a.profile.username) : '#'} className="flex items-center gap-2.5 min-w-0 group">
+                  <li key={a.key}
+                    className={cn(cols, 'relative h-12 sm:h-11 px-3 border-b border-white/[0.07] last:border-b-0 transition-colors duration-700',
+                      i === 0 ? 'bg-[#3a2d1f]' : 'hover:bg-white/[0.04]', how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
+                    style={how === 'in' ? { animationDelay: `${i * 70}ms` } : undefined}>
+                    {how === 'arrive' && <span className="board-row-flash absolute inset-0 pointer-events-none bg-gradient-to-r from-[#e0b866]/40 via-[#e0b866]/15 to-transparent" />}
+                    {i === 0 && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#d6a957]" />}
+                    <Link href={a.profile?.username ? profilePath(a.member, a.profile.username) : '#'} className="relative flex items-center gap-2.5 min-w-0 group">
                       <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} /></span>
                       <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-ink group-hover:underline underline-offset-2">{name}</span>
-                        <span className="sm:hidden block truncate pinbook-serif text-[11px] font-bold text-[#7a5230]">{def.name}</span>
+                        <span className="block truncate text-[13px] font-semibold text-[#efe3c8] group-hover:underline underline-offset-2">{name}</span>
+                        <span className="sm:hidden block truncate pinbook-serif text-[11px] font-bold text-[#e0b866]">{def.name}</span>
                       </span>
                     </Link>
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span className="relative shrink-0 w-8 h-9 flex items-center justify-center">
+                    <span className="relative flex items-center gap-2 min-w-0">
+                      <span className={cn('relative shrink-0 w-8 h-9 flex items-center justify-center', how === 'arrive' && 'board-pin-pop')}>
                         <BadgePin art={def.art} imageUrl={def.imageUrl} size={30} />
                       </span>
-                      <span className="hidden sm:block truncate pinbook-serif text-[13px] font-bold text-[#7a5230]">{def.name}</span>
+                      <span className="hidden sm:block truncate pinbook-serif text-[13px] font-bold text-[#e0b866]">{def.name}</span>
                     </span>
-                    <span className={cn('text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 ? 'text-[#7a5230] font-semibold' : 'text-slate-500')}>
+                    <span className={cn('relative text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 ? 'text-[#e0b866] font-semibold' : 'text-[#9c8a70]')}>
                       <span className="hidden sm:inline">{timeAgo(a.earnedAt)}</span><span className="sm:hidden">{shortAgo(a.earnedAt)}</span>
                     </span>
                   </li>
@@ -152,7 +203,7 @@ export function AchievementBoard({ community, book, title, sample }: { community
             </ol>
           </div>
         )}
-    </Section>
+    </section>
   )
 }
 

@@ -1082,3 +1082,26 @@
   .pub-backdrop, .pub-glow, .pub-rays, .pub-pin, .pub-float, .pub-sheen, .pub-title, .pub-rise { animation: none !important; }
   .pub-spark { display: none; }
 }
+
+/* Badge Achievements board (components/community/blocks.tsx): first load fades in row by row; a new
+   earner slides in at the top (pushing the rest down), flashes gold, and their pin pops on */
+@keyframes board-row-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes board-row-arrive {
+  0% { max-height: 0; opacity: 0; transform: translateX(-28px); }
+  35% { max-height: 48px; opacity: 0; transform: translateX(-28px); }
+  100% { max-height: 48px; opacity: 1; transform: none; }
+}
+@keyframes board-row-flash { 0%, 40% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes board-pin-pop {
+  0%, 40% { transform: scale(0.2) rotate(-24deg); opacity: 0; }
+  70% { transform: scale(1.3) rotate(6deg); opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+.board-row-in { animation: board-row-in 0.45s ease-out backwards; }
+.board-row-arrive { animation: board-row-arrive 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; overflow: hidden; }
+.board-row-flash { animation: board-row-flash 2.4s ease-out forwards; }
+.board-pin-pop { animation: board-pin-pop 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .board-row-in, .board-row-arrive, .board-row-flash, .board-pin-pop { animation: none; }
+  .board-row-flash { opacity: 0; }
+}

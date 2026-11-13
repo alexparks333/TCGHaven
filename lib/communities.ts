@@ -99,6 +99,17 @@ export async function recordAchievement(community: string, member: string, badge
   await setDoc(doc(db, 'community_achievements', `${community}_${member}_${badge}`), { community, member, badge, earnedAt: serverTimestamp() })
 }
 
+/** The newest badges earned in a community, kept live — `cb` runs again whenever someone earns one */
+export function watchAchievements(community: string, n: number, cb: (rows: Achievement[]) => void, onError?: () => void) {
+  return onSnapshot(query(collection(db, 'community_achievements'), where('community', '==', community), limit(500)), (snap) => {
+    cb(snap.docs
+      .map((d) => d.data() as { member: string; badge: string; earnedAt?: { toMillis?: () => number } })
+      .map((r) => ({ member: r.member, badge: r.badge, earnedAt: r.earnedAt?.toMillis?.() ?? Date.now() }))
+      .sort((a, b) => b.earnedAt - a.earnedAt)
+      .slice(0, n))
+  }, () => onError?.())
+}
+
 /** The newest badges earned in a community (sorted here, so no extra Firestore index is needed) */
 export async function newestAchievements(community: string, n = 12): Promise<Achievement[]> {
   const snap = await getDocs(query(collection(db, 'community_achievements'), where('community', '==', community), limit(500)))

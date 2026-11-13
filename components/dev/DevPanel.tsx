@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award } from 'lucide-react'
+import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award, Trophy, Sparkles, Trash2 } from 'lucide-react'
+import { fakeEarner, sendDevEarner, clearDevEarners } from '@/lib/devBoard'
 import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT, readDevBadgePct } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -26,6 +27,8 @@ interface TessStatus {
 }
 
 const OPEN_KEY = 'tcghaven-dev-panel-open'
+const TAB_KEY = 'tcghaven-dev-panel-tab'
+type Tab = 'general' | 'community'
 
 export function DevPanel() {
   const { user } = useAuth()
@@ -39,9 +42,30 @@ function Panel({ uid }: { uid: string }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState('')
 
+  const [tab, setTabState] = useState<Tab>('general')
   useEffect(() => {
-    try { setOpen(localStorage.getItem(OPEN_KEY) === '1') } catch { /* storage blocked */ }
+    try {
+      setOpen(localStorage.getItem(OPEN_KEY) === '1')
+      if (localStorage.getItem(TAB_KEY) === 'community') setTabState('community')
+    } catch { /* storage blocked */ }
   }, [])
+  function setTab(next: Tab) {
+    setTabState(next); setMessage('')
+    try { localStorage.setItem(TAB_KEY, next) } catch { /* storage blocked */ }
+  }
+
+  // Community: fake earners on the Badge Achievements board (this device only, nothing saved)
+  const [earnerName, setEarnerName] = useState('')
+  const [burst, setBurst] = useState(false)
+  function addEarner() {
+    sendDevEarner(fakeEarner(earnerName)); setEarnerName('')
+    setMessage('Sent — watch the Badge Achievements board.')
+  }
+  async function addBurst() {
+    setBurst(true)
+    for (let i = 0; i < 5; i++) { sendDevEarner(fakeEarner()); await new Promise((r) => setTimeout(r, 1400)) }
+    setBurst(false)
+  }
   function toggle(next: boolean) {
     setOpen(next)
     try { localStorage.setItem(OPEN_KEY, next ? '1' : '0') } catch { /* storage blocked */ }
@@ -122,6 +146,36 @@ function Panel({ uid }: { uid: string }) {
         </button>
       </div>
 
+      <div className="flex gap-1 p-1.5 pb-0">
+        {([['general', 'Friends & badges'], ['community', 'Community']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            className={cn('flex-1 rounded-lg py-1.5 text-[11px] font-bold transition-colors', tab === k ? 'bg-slate-800 text-ink' : 'text-slate-500 hover:text-ink')}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'community' ? (
+        <div className="p-3 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-xs font-bold text-ink px-1 mb-1"><Trophy size={13} />Badge Achievements board</div>
+          <div className="flex gap-1.5">
+            <input value={earnerName} onChange={(e) => setEarnerName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addEarner() }}
+              placeholder="Name (blank = random)" maxLength={40}
+              className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-2 text-[13px] text-ink placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-slate-600" />
+            <button onClick={addEarner} className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-3 text-[13px] font-semibold">Earn</button>
+          </div>
+          <button onClick={addBurst} disabled={burst} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+            {burst ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+            Five earners, one after another
+          </button>
+          <button onClick={() => { clearDevEarners(); setMessage('Fake earners cleared.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+            <Trash2 size={15} />Clear fake earners
+          </button>
+          <Link href={`/c/${uid}`} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+            <ExternalLink size={15} />Open my community page
+          </Link>
+          <span className="text-[10px] text-slate-500 px-1">Fake earners get a random badge from your book and show on every board on this page — this device only, nothing is saved, a reload clears them.</span>
+          {message && <div className="text-[11px] text-slate-400 px-1 pt-1">{message}</div>}
+        </div>
+      ) : (
       <div className="p-3 flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-xs mb-1 px-1">
           <span className="font-bold text-ink">Test friend: Tess</span>
@@ -181,6 +235,7 @@ function Panel({ uid }: { uid: string }) {
 
         {message && <div className="text-[11px] text-slate-400 px-1 pt-1">{message}</div>}
       </div>
+      )}
     </div>
   )
 }
