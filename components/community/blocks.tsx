@@ -7,14 +7,16 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { createPortal } from 'react-dom'
-import { Loader2, Trophy, Megaphone, Pin, PinOff, Trash2, Plus, MessagesSquare, Eye } from 'lucide-react'
+import { Loader2, Trophy, Megaphone, Pin, PinOff, Trash2, Plus, MessagesSquare, Eye, X } from 'lucide-react'
 import { Avatar } from '@/components/friends/Avatar'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners, Divider } from '@/components/creator/Ornaments'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
 import { watchAchievements, type Achievement, type CommunityEntry } from '@/lib/communities'
 import type { CreatorBook } from '@/lib/creatorBooks'
+import type { BadgeSlot } from '@/lib/badges'
 import type { Block } from '@/lib/communityBlocks'
 import { blockLook, lookVars, panelStyle, type BlockLook, type BlockStyle } from '@/lib/blockStyle'
 import { CreatorWall } from '@/components/community/CreatorWall'
@@ -99,7 +101,7 @@ function BlockBody({ block, ctx }: { block: Block; ctx: BlockContext }) {
     case 'badges': return <AchievementBoard community={ctx.uid} book={ctx.book} title={block.title} styleOf={block.style} />
     case 'wall': return <CreatorWall block={block} ctx={ctx} />
     case 'announcements': return <Announcements block={block} ctx={ctx} />
-    case 'cards': return <HighlightedCards block={block} />
+    case 'cards': return <HighlightedCards block={block} ctx={ctx} />
     case 'text':
       return (
         <Section title={block.title || undefined}>
@@ -342,20 +344,69 @@ function AnnounceComposer({ uid, block, live }: { uid: string; block: string; li
   )
 }
 
+const MAX_HIGHLIGHTS = 40
+// The card search (the Badge Maker's picker), loaded only when the owner opens it
+const CardPicker = dynamic(() => import('@/components/creator/BadgeMaker').then((m) => m.CardPicker), { ssr: false, loading: () => <Loader2 size={18} className="animate-spin text-slate-500" /> })
+
+/** The owner's "Add cards", on their community page: search or browse, tap cards, add them */
+function AddHighlights({ uid, block, room, onClose }: { uid: string; block: string; room: number; onClose: () => void }) {
+  const [picked, setPicked] = useState<BadgeSlot[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  async function add() {
+    setBusy(true); setErr('')
+    try {
+      for (const slot of picked.slice(0, room)) await addPost({ community: uid, block, kind: 'card', text: '', slot })
+      onClose()
+    } catch { setErr('Couldn\'t add them — check your connection and try again.') } finally { setBusy(false) }
+  }
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-[#2b2014]/55" onClick={() => { if (!picked.length || confirm('Close without adding the cards you picked?')) onClose() }} />
+      <div role="dialog" aria-modal="true" aria-label="Add cards" className="haven-panel relative w-full max-w-3xl max-h-[90vh] overflow-y-auto !p-5">
+        <CardPicker slots={picked} onChange={(s) => setPicked(s.slice(0, room))} title="Cards to show off" hint={`Search or browse the Cardex — tap cards to pick them (room for ${room} more).`} />
+        <div className="sticky -bottom-5 -mx-5 -mb-5 mt-4 px-5 py-3 flex items-center gap-2 border-t border-[#d6c49f] bg-[#efe4cc]">
+          {err && <p className="text-xs font-semibold text-red-700">{err}</p>}
+          <span className="flex-1" />
+          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+          <button type="button" onClick={add} disabled={busy || !picked.length} className="btn-primary disabled:opacity-40">
+            {busy && <Loader2 size={14} className="animate-spin" />}Add {picked.length || ''} card{picked.length === 1 ? '' : 's'}
+          </button>
+        </div>
+      </div>
+    </div>, document.body)
+}
+
 /** Highlighted Cards: the cards the creator picked to show off, each one looked at big with a tap */
-function HighlightedCards({ block }: { block: Extract<Block, { type: 'cards' }> }) {
+function HighlightedCards({ block, ctx }: { block: Extract<Block, { type: 'cards' }>; ctx: BlockContext }) {
   const [zoom, setZoom] = useState<ZoomCardData | null>(null)
+  const [picking, setPicking] = useState(false)
+  // The owner's picks (community_posts, kind 'card' — added on the page, in the order added), then any
+  // older ones saved inside the block
+  const live = useBlockPosts(ctx.uid, block.id).filter((p) => p.slot).sort((a, b) => a.at - b.at)
+  const cards: Array<{ id: string; slot: BadgeSlot; live: boolean }> = [
+    ...live.map((p) => ({ id: p.id, slot: p.slot!, live: true })),
+    ...block.cards.map((slot, i) => ({ id: 'old-' + i, slot, live: false })),
+  ]
   const o = block.style?.cards ?? {}
   const grid = ({ 2: 'grid-cols-2', 3: 'grid-cols-2 sm:grid-cols-3', 5: 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-5' } as Record<number, string>)[o.columns ?? 4] ?? 'grid-cols-2 sm:grid-cols-3 xl:grid-cols-4'
   return (
     <Section title={block.title || 'Highlighted Cards'} sub={block.note}>
-      {block.cards.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No cards picked yet.</p> : (
+      {ctx.owner && (
+        <button type="button" onClick={() => setPicking(true)} disabled={cards.length >= MAX_HIGHLIGHTS}
+          className="mb-4 w-full rounded-md border border-dashed border-[color:var(--b-line)] py-2.5 text-sm font-bold text-[color:var(--b-accent)] inline-flex items-center justify-center gap-2 hover:bg-[color:var(--b-hover)] transition-colors disabled:opacity-50">
+          <Plus size={16} />{cards.length >= MAX_HIGHLIGHTS ? `Full — ${MAX_HIGHLIGHTS} cards at most` : 'Add cards'}
+        </button>
+      )}
+      {picking && <AddHighlights uid={ctx.uid} block={block.id} room={MAX_HIGHLIGHTS - cards.length} onClose={() => setPicking(false)} />}
+      {cards.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No cards picked yet.</p> : (
         <div className={cn('grid gap-4', grid)}>
-          {block.cards.map((s, i) => {
+          {cards.map(({ id, slot: s, live: isLive }) => {
             const c = s.cards?.[0]
             const g = (s as { game?: Game }).game
             return (
-              <button key={s.cardIds.join() + i} type="button" className="group text-left"
+              <div key={id} className="group/card relative">
+              <button type="button" className="group w-full text-left"
                 onClick={(e) => setZoom({
                   imageUrl: c?.imageUrl ?? '', name: c?.name ?? s.label, number: c?.number ?? '', setName: c?.setName, rarityLabel: '', rarityColor: '#7a6a55',
                   marketPrice: 0, owned: true, quantity: 0, glowColor: g ? GAME_COLORS[g] : '#d6b168', originRect: e.currentTarget.getBoundingClientRect(),
@@ -371,6 +422,12 @@ function HighlightedCards({ block }: { block: Extract<Block, { type: 'cards' }> 
                 <span className="block text-[11px] text-[color:var(--b-muted)] truncate">{c?.setName}{c?.number ? ` · #${c.number}` : ''}{g ? ` · ${GAME_LABELS[g]}` : ''}</span>
                 </>}
               </button>
+              {ctx.owner && isLive && (
+                <button type="button" aria-label="Take this card off" title="Take this card off"
+                  onClick={() => { if (confirm(`Take ${s.label} off your highlighted cards?`)) removePost(id).catch(() => alert('That didn\'t save — check your connection and try again.')) }}
+                  className="absolute -top-2 -right-2 z-[1] w-6 h-6 rounded-full bg-[#2b2014] text-[#fbf6ea] flex items-center justify-center opacity-0 group-hover/card:opacity-100 focus:opacity-100 transition-opacity"><X size={13} /></button>
+              )}
+              </div>
             )
           })}
         </div>

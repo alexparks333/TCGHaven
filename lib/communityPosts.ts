@@ -1,6 +1,6 @@
 // What a community's owner puts up on their page (docs/creators.md "Posting on the page"): Creator Wall
 // posts and announcements. Written by the owner right on their community page — never in the Creator
-// Studio, which is only the page's layout and look (communities/{uid}.page). Kept in their own collection
+// Studio, which is only the page's layout and look. Highlighted Cards are posts too (kind 'card', one card each) (communities/{uid}.page). Kept in their own collection
 // so a Studio save of the layout can never overwrite a post.
 //   community_posts/{id}  { community, block, kind: 'wall' | 'announcement', text, title?, image?, note?, pinned?, at }
 // Anyone signed in reads; only the community's owner (community == their uid) writes (firestore.rules).
@@ -9,10 +9,11 @@
 import { useEffect, useState } from 'react'
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { db } from './firebase/config'
+import type { BadgeSlot } from './badges'
 
 export interface CommunityPost {
-  id: string; community: string; block: string; kind: 'wall' | 'announcement'
-  text: string; title?: string; image?: string; note?: string; pinned?: boolean; at: number
+  id: string; community: string; block: string; kind: 'wall' | 'announcement' | 'card'
+  text: string; title?: string; image?: string; note?: string; pinned?: boolean; slot?: BadgeSlot; at: number
 }
 
 /** A block's posts, live, newest first */
@@ -30,7 +31,8 @@ export function useBlockPosts(community: string, block: string) {
 }
 
 export async function addPost(p: Omit<CommunityPost, 'id' | 'at'>) {
-  const clean = Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined && v !== ''))
+  // Firestore refuses undefined anywhere — a JSON round trip drops it (a picked card's details can have gaps)
+  const clean = JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined && v !== ''))))
   await addDoc(collection(db, 'community_posts'), { text: '', ...clean, at: serverTimestamp() })
 }
 export const removePost = (id: string) => deleteDoc(doc(db, 'community_posts', id))

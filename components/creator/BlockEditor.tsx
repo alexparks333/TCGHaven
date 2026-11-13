@@ -9,7 +9,6 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { ArrowLeft, ImagePlus, Loader2, Megaphone, Pin, PinOff, Sparkles, Trash2, Trophy, Type, Image as ImageIcon, LayoutGrid, MessagesSquare, Info, X, Palette, PenLine, ExternalLink } from 'lucide-react'
 import { Portal } from '@/components/creator/Portal'
 import { shrink } from '@/components/creator/CoverDesigner'
-import { CardPicker } from '@/components/creator/BadgeMaker'
 import { BlockStyleEditor } from '@/components/creator/BlockStyleEditor'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { badgeArt } from '@/lib/badgeAssets'
@@ -164,10 +163,21 @@ function Fields({ uid, block, community, onChange, onCommunity }: { uid: string;
           <label className={cn(label, 'mt-3')}>A line under the title <span className="font-normal">· optional</span>
             <input value={block.note ?? ''} maxLength={120} onChange={(e) => onChange({ ...block, note: e.target.value })} className="input-field mt-1 text-sm" placeholder="e.g. My favourite pulls this month" />
           </label>
-          <div className="mt-4 -mx-1">
-            <CardPicker slots={block.cards} onChange={(cards) => onChange({ ...block, cards: cards.slice(0, 40) })}
-              title="Cards to show off" hint="Search or browse the Cardex — tap cards to add them (up to 40)." />
-          </div>
+          <PostedOnPage what="cards" uid={uid} />
+          {block.cards.length > 0 && (
+            <div className="mt-3">
+              <p className={label}>Older cards saved with the page · {block.cards.length}</p>
+              <div className="mt-1.5 space-y-1.5 max-h-[220px] overflow-y-auto scroll-themed pr-1">
+                {block.cards.map((c, i) => (
+                  <div key={c.cardIds.join() + i} className="flex items-center gap-2 rounded-md border border-[#d6c49f] px-2.5 py-1.5">
+                    <span className="min-w-0 flex-1 text-xs text-ink truncate">{c.label}</span>
+                    <button type="button" onClick={() => { if (confirm(`Take ${c.label} off? This can't be undone.`)) onChange({ ...block, cards: block.cards.filter((_, j) => j !== i) }) }}
+                      className="p-1 text-slate-500 hover:text-red-600" aria-label="Remove this card"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )
   }

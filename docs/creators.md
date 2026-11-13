@@ -65,7 +65,8 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   `lib/creatorUpload.ts`, the paper) and "New announcement" (headline, details, pin to the top), with take-down /
   pin / remove on each (confirmed). Stored in `community_posts/{id}` `{ community, block, kind, text, title?,
   image?, note?, pinned?, at }` — its own collection, so a Studio save of `communities/{uid}.page` can never
-  overwrite a post. Older posts saved inside the block (`block.posts` / `block.items`) still show, merged in,
+  overwrite a post. Highlighted Cards work the same way ("Add cards" opens the Badge Maker's `CardPicker`, loaded
+  only then; one `kind: 'card'` post per card with its `slot`, shown in the order added). Older posts saved inside the block (`block.posts` / `block.items`) still show, merged in,
   and can be removed in the Studio's Content tab.
 - **Creator Wall** (2026-11-12, `components/community/CreatorWall.tsx`). The creator's posts pinned to a flat
   cork board (`.cork-board` / `.cork-note` in globals.css): words on paper notes held by a pin, pictures as
