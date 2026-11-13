@@ -64,6 +64,7 @@ export interface ScanCandidate {
 
 export interface ScanClues {
   fractions: Array<{ pre: string; num: string; suf: string; den: number }>
+  letterNums: Array<{ letter: string; den: number; read: boolean }> // Unown "B/28" — a letter for a number (read: printed as a letter, not a look-alike digit)
   promos: string[]            // Pokémon black-star numbers: "SWSH123", "SM60"
   starPromo: Array<{ set: string; num: string }> // "SVP 085" → svp / 85
   opCodes: string[]           // "OP05-119", "P-001"
@@ -184,11 +185,13 @@ const HP_NOISE = /\b(?:hp\s?\d{2,3}|\d{2,3}\s?hp|basic|stage\s?[12]|mega|evolves
 // ── Reading the clues off the OCR lines ─────────────────────────────────────
 
 // "025/198", "TG05/TG30", "F091/086" (a regulation mark glued on), "226*/219" (Riftbound signature)
+// Digits OCR reads in place of a letter printed as a card number
+const LETTER_LOOKALIKES: Record<string, string[]> = { '8': ['B'], '0': ['O', 'D', 'Q'], '1': ['I', 'L'], '5': ['S'], '2': ['Z'], '6': ['G'], '4': ['A'], '7': ['T'] }
 const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([a-z*]?)\\s?\\/\\s?(?:[A-Z]{0,4})\\s?(${DIGITISH}{2,3})(?![0-9])`, 'g')
 
 export function readClues(lines: OcrLine[], barcodes?: string[]): ScanClues {
   const clues: ScanClues = {
-    fractions: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], fabCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
+    fractions: [], letterNums: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], fabCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
     bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, jaNames: [], pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
@@ -208,6 +211,16 @@ export function readClues(lines: OcrLine[], barcodes?: string[]): ScanClues {
       add(clues.fractions, { pre, num, suf, den }, (o) => o.pre === pre && o.num === num && o.suf === suf && o.den === den)
       // A single letter in front is usually the regulation mark, not part of the number
       if (pre.length === 1) add(clues.fractions, { pre: '', num, suf, den }, (o) => o.pre === '' && o.num === num && o.suf === suf && o.den === den)
+    }
+    // A letter for a number: Unseen Forces' Unowns print "B/28". OCR reads the B as itself or as
+    // "8" (and other letters as look-alike digits) — both are kept; a look-alike counts for less
+    for (const m of Array.from(text.matchAll(/(?:^|[^A-Za-z0-9])([A-Z0-9])\s?\/\s?(\d{2})(?![0-9])/g))) {
+      const den = parseInt(m[2], 10)
+      const letters = /[A-Z]/.test(m[1]) ? [m[1]] : (LETTER_LOOKALIKES[m[1]] ?? [])
+      for (const letter of letters) {
+        const read = letter === m[1]
+        add(clues.letterNums, { letter, den, read }, (o) => o.letter === letter && o.den === den && (o.read || !read))
+      }
     }
     if (/\d{2,3}\s?\/\s?\d{2,3}\s?[•·]\s?P\b/.test(text)) clues.riftboundPromo = true
     // Japanese promos: "388/SM-P", "010/PCG-P", "004/BW-P"
@@ -664,6 +677,14 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
         }
       }
       for (const p of clues.promos) for (const c of ix.byNum.get(numKey(p)) ?? []) offer('pokemon', c, 55, `promo ${c.number}`)
+      // Only cards whose number really is a letter (Unseen Forces' Unowns): read as a letter it's as
+      // good as a number; from a look-alike digit ("8/28" for B/28) the name has to back it up
+      for (const f of clues.letterNums) {
+        for (const c of ix.byNum.get(numKey(f.letter)) ?? []) {
+          if (!/^[A-Z]$/.test(String(c.number ?? ''))) continue
+          offer('pokemon', c, f.read ? 48 : 36, `number ${f.letter}/${f.den}${f.read ? '' : '?'}`)
+        }
+      }
       // A number alone low on the card: weaker than "number/total", so the name has to agree. Its
       // letter ("95a" / "95b") is tiny and often misread (a real 95b read as "95a" and "956"), so
       // every version of the number counts the same — the picture or the person picks

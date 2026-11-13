@@ -19,6 +19,10 @@ const pokemon: ScanCatalog = {
     { id: 'swsh11tg-TG05', name: 'Pikachu', number: 'TG05', set: 'swsh11tg' },
     { id: 'swsh10tg-TG05', name: 'Gardevoir', number: 'TG05', set: 'swsh10tg' },
     { id: 'swshp-SWSH123', name: 'Galarian Articuno', number: 'SWSH123', set: 'swshp' },
+    { id: 'ex10-B', name: 'Unown', number: 'B', set: 'ex10' },
+    { id: 'ex10-G', name: 'Unown', number: 'G', set: 'ex10' },
+    { id: 'dp1-66', name: 'Unown [B]', number: '66', set: 'dp1' },
+    { id: 'ex10-8', name: 'Swellow', number: '8', set: 'ex10' },
   ],
   sets: [
     { id: 'sv1', name: 'Scarlet & Violet', total: 258 },
@@ -28,6 +32,8 @@ const pokemon: ScanCatalog = {
     { id: 'swsh11tg', name: 'Lost Origin Trainer Gallery', total: 30 },
     { id: 'swsh10tg', name: 'Astral Radiance Trainer Gallery', total: 30 },
     { id: 'swshp', name: 'SWSH Black Star Promos', total: 304 },
+    { id: 'ex10', name: 'Unseen Forces', total: 115 },
+    { id: 'dp1', name: 'Diamond & Pearl', total: 130 },
   ],
 }
 const pokemonJp: ScanCatalog = {
@@ -483,6 +489,17 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   assert.equal(decide([{ key: 'unown-h', score: 75, exact: true }, { key: 'unown-b', score: 65, exact: false }, { key: 'unown-c', score: 65, exact: false }], undefined, [0.5, 0.62, 0.55]).status, 'pick')
   // A graded slab's label is trusted over the picture
   assert.equal(decide([{ key: 'slab', score: 99, exact: true, trusted: true }, { key: 'other', score: 0, exact: false }], undefined, [0.3, 0.8]).status, 'matched')
+}
+
+// Unseen Forces' Unowns print a letter for their number: "B/28" (2026-11-13 — the owner's Unown B
+// read "B/28" clearly and nothing was found). Read as the letter, or as a look-alike digit ("8/28")
+{
+  const unownLines = (num: string) => [L('Unown', 0.03), L('60 HP', 0.03), L('Shuffle', 0.55), L('Hidden Power', 0.75), L('©2005 Pokémon/Nintendo', 0.95), L(num, 0.95)]
+  assert.equal(ids(unownLines('B/28 *'))[0], 'ex10-B')
+  assert.equal(top(unownLines('B/28 *'))[0].exact, true)
+  assert.equal(ids(unownLines('8/28 *'))[0], 'ex10-B')       // B read as 8 — still ahead of Swellow #8
+  assert.equal(ids(unownLines('G/28'))[0], 'ex10-G')
+  assert.ok(ids(unownLines('8/28')).indexOf('ex10-8') !== 0)
 }
 
 console.log('scan matching: all tests passed')

@@ -2891,15 +2891,29 @@ final class CardFingerprinter {
             try? fm.removeItem(at: download)
             DebugScans.log("picture AI \(version): downloaded + compiled in \(Int((CACurrentMediaTime() - t0) * 1000)) ms")
         }
-        let config = MLModelConfiguration()
-        config.computeUnits = .all
-        guard let m = try? MLModel(contentsOf: compiled, configuration: config) else {
+        // Two steps, so the scanner is never held up by the Neural Engine: iOS prepares the model for
+        // it the first time it's loaded (and again after every app install or update — slow, can be
+        // minutes), and a scan's fingerprint asked for during that waited on the camera's own thread,
+        // so the scanner seemed stuck. Now: the graphics chip copy first (ready in a moment), then the
+        // Neural Engine copy in the background, swapped in only once it has answered a picture.
+        let t1 = CACurrentMediaTime()
+        let quick = MLModelConfiguration()
+        quick.computeUnits = .cpuAndGPU
+        guard let gpu = try? MLModel(contentsOf: compiled, configuration: quick) else {
             try? fm.removeItem(at: compiled) // damaged — fetched again next time
             return false
         }
-        lock.lock(); model = m; self.version = version; lock.unlock()
-        // The first prediction prepares the Neural Engine (slow once) — do it now, not on a scan
-        if let blank = Self.blankImage() { _ = run(blank) }
+        if let blank = Self.blankImage() { _ = Self.predict(gpu, blank) } // warmed before any scan uses it
+        lock.lock(); model = gpu; self.version = version; lock.unlock()
+        DebugScans.log("picture AI \(version): ready on the GPU in \(Int((CACurrentMediaTime() - t1) * 1000)) ms")
+        let t2 = CACurrentMediaTime()
+        let full = MLModelConfiguration()
+        full.computeUnits = .all
+        if let ane = try? MLModel(contentsOf: compiled, configuration: full) {
+            if let blank = Self.blankImage() { _ = Self.predict(ane, blank) }
+            lock.lock(); if self.version == version { model = ane }; lock.unlock()
+            DebugScans.log("picture AI \(version): Neural Engine ready in \(Int((CACurrentMediaTime() - t2) * 1000)) ms")
+        }
         // Older versions' files
         for f in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] where f.lastPathComponent != compiled.lastPathComponent {
             try? fm.removeItem(at: f)
@@ -2946,9 +2960,13 @@ final class CardFingerprinter {
     private func run(_ image: CGImage) -> [Float]? {
         lock.lock(); let m = model; lock.unlock()
         guard let m = m else { return nil }
+        return Self.predict(m, image)
+    }
+
+    private static func predict(_ m: MLModel, _ image: CGImage) -> [Float]? {
         // Squashed to 224 × 308, never cropped — the same as the catalog photos were fingerprinted
         let options: [MLFeatureValue.ImageOption: Any] = [.cropAndScale: VNImageCropAndScaleOption.scaleFill.rawValue]
-        guard let input = try? MLFeatureValue(cgImage: image, pixelsWide: Self.width, pixelsHigh: Self.height,
+        guard let input = try? MLFeatureValue(cgImage: image, pixelsWide: width, pixelsHigh: height,
                                               pixelFormatType: kCVPixelFormatType_32BGRA, options: options),
               let provider = try? MLDictionaryFeatureProvider(dictionary: ["image": input]),
               let out = try? m.prediction(from: provider).featureValue(for: "fingerprint")?.multiArrayValue else { return nil }

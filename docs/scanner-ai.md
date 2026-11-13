@@ -80,6 +80,15 @@ tray: ✓ added / ? pick one                     ◀──  the answer
   that same printed name gets the name's text score (`why: 'name + picture'`), and picture finds
   are compared first, so they can't be pushed out. A real Unown B ("B/28" read as "8/28") was
   found this way: 0.62–0.67 alike, 0.2 ahead of the rest.
+- **Unown letters** (2026-11-13): Unseen Forces' Unowns print "B/28". The AI can't tell them apart (the
+  holo shine on camera: the owner's Unown B scored 0.18 against its own photo), so the number does it:
+  `scanMatch.ts` reads a letter numerator ("B/28", or a look-alike digit "8/28") as the letter, only for
+  cards whose catalog number is a letter. The earlier "0.62–0.67" figure for Unown B didn't hold up.
+- **Phone model start-up** (2026-11-13): iOS prepares a Core ML model for the Neural Engine on first
+  load and again after every app install/update (slow). A scan's fingerprint asked for then used to
+  wait on the camera thread, so the scanner seemed stuck. `CardFingerprinter` now loads a GPU copy
+  first (warmed before any scan uses it), then swaps in the Neural Engine copy once it has answered.
+  Both times are logged ("ready on the GPU in … ms", "Neural Engine ready in … ms").
 - **Phone** (`CardFingerprinter`): no model in the app bundle. The site names the version and the
   phone downloads it, so **a retrained model reaches phones with no app update**. Until it's ready
   (first open, offline), scans go without a fingerprint and work as before.
