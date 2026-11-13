@@ -150,8 +150,8 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             {(community.games ?? []).map((g) => (
               <span key={g} className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}</span>
             ))}
-            {/* the owner's Edit sits on its own line under the members (left); a fan's Join stays at the row's end */}
-            <div className={mine ? 'basis-full mt-1' : 'basis-full sm:basis-auto sm:ml-auto mt-2 sm:mt-0'}>
+            {/* the owner's Edit / a fan's Join: always on its own line under the members and games */}
+            <div className="basis-full mt-1">
               {mine ? (
                 // the Studio is computers-only — no link to it in the app or on a phone
                 studio === 'computer' ? <Link href="/creator" className="btn-secondary !inline-flex !w-auto !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null

@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* The community block / wall note fonts (app/layout.tsx loads them from Google Fonts) */
+  --font-playfair: 'Playfair Display';
+  --font-cormorant: 'Cormorant Garamond';
+  --font-uncial: 'Uncial Antiqua';
+  --font-pirata: 'Pirata One';
+  --font-bebas: 'Bebas Neue';
+  --font-elite: 'Special Elite';
+  --font-caveat: 'Caveat';
+}
+
+
 @layer base {
   :root {
     --background: 10 10 15;
