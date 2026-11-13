@@ -14,6 +14,7 @@ import { PAGE_EDGES, PAGE_DEPTH, edgeParams, pageEdgeCss, pageEdgeOf } from '@/l
 import { ACCENT_COLORS, BLANK_COVER, CoverSpine, SPINES, SPINE_COLORS, SPINE_W_RANGE, coverArea, spineOf, spineParams, spineWidth, type SpineDef } from '@/components/badges/CoverSpine'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { cn } from '@/lib/utils'
+import { shrinkPicture } from '@/lib/creatorUpload'
 
 export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: string; book: BadgeSet; onChange: (next: BadgeSet) => void; initialOpen?: string }) {
   const set = (patch: Partial<BadgeSet>) => onChange({ ...book, ...patch })
@@ -295,17 +296,8 @@ export function Group({ id, open, setOpen, icon: Icon, title, summary, children 
 }
 
 /** Big pictures shrunk to at most 2400 px on the long side (JPEG, or PNG when it has see-through parts) */
-export async function shrink(file: File): Promise<Blob> {
-  const img = await createImageBitmap(file).catch(() => null)
-  if (!img) return file
-  const k = Math.min(1, 2400 / Math.max(img.width, img.height))
-  if (k === 1 && file.size < 6 * 1024 * 1024) return file
-  const c = document.createElement('canvas')
-  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k)
-  c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
-  const type = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
-  return new Promise((res) => c.toBlob((b) => res(b ?? file), type, 0.9))
-}
+/** A picture made small enough to upload (lib/creatorUpload.ts) */
+export const shrink = shrinkPicture
 
 type Fit = NonNullable<BadgeSet['coverFit']>
 

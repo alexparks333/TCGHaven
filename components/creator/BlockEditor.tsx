@@ -6,7 +6,7 @@
 
 import { useRef, useState } from 'react'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { ArrowLeft, ImagePlus, Loader2, Megaphone, Pin, PinOff, Sparkles, Trash2, Trophy, Type, Image as ImageIcon, LayoutGrid, MessagesSquare, Info, X, Palette, PenLine } from 'lucide-react'
+import { ArrowLeft, ImagePlus, Loader2, Megaphone, Pin, PinOff, Sparkles, Trash2, Trophy, Type, Image as ImageIcon, LayoutGrid, MessagesSquare, Info, X, Palette, PenLine, ExternalLink } from 'lucide-react'
 import { Portal } from '@/components/creator/Portal'
 import { shrink } from '@/components/creator/CoverDesigner'
 import { CardPicker } from '@/components/creator/BadgeMaker'
@@ -156,7 +156,7 @@ function Fields({ uid, block, community, onChange, onCommunity }: { uid: string;
         </>
       )
     case 'wall': return <WallFields uid={uid} block={block} onChange={onChange} />
-    case 'announcements': return <AnnouncementFields block={block} onChange={onChange} />
+    case 'announcements': return <AnnouncementFields uid={uid} block={block} onChange={onChange} />
     case 'cards':
       return (
         <>
@@ -174,53 +174,32 @@ function Fields({ uid, block, community, onChange, onCommunity }: { uid: string;
 }
 
 /** The Creator Wall: write a post (words, a picture) — it goes on top; earlier ones can be removed */
+/** What the owner puts up (wall posts, announcements) is posted on their community page itself — the Studio
+ *  is only the layout and look. Here: the block's title, a pointer to the page, and any older posts that
+ *  were saved inside the block (before posts moved to their own collection), which can still be taken down. */
+function PostedOnPage({ what, uid }: { what: string; uid: string }) {
+  return (
+    <div className="mt-3 rounded-md border border-[#d6c49f] bg-[#f6eedb] p-3 text-xs text-slate-500 leading-relaxed">
+      You add {what} <b className="text-ink">right on your community page</b> — open it while signed in and use the
+      button at the top of this block. The Studio is just for its layout and look.
+      <a href={`/c/${uid}`} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-1.5 font-bold text-[#7a5230] hover:underline"><ExternalLink size={12} />Open my community page</a>
+    </div>
+  )
+}
+
 function WallFields({ uid, block, onChange }: { uid: string; block: Extract<Block, { type: 'wall' }>; onChange: (b: Block) => void }) {
-  const [text, setText] = useState('')
-  const [image, setImage] = useState<string | undefined>()
-  const [note, setNote] = useState('paper')
-  const file = useRef<HTMLInputElement>(null)
-  const { busy, up } = useUpload(uid)
-  const post = () => {
-    if (!text.trim() && !image) return
-    onChange({ ...block, posts: [{ id: newId(), text: text.trim(), at: Date.now(), note, ...(image ? { image } : {}) }, ...block.posts].slice(0, MAX_POSTS) })
-    setText(''); setImage(undefined)
-  }
   return (
     <>
       <TitleField value={block.title} placeholder="Creator Wall" onChange={(title) => onChange({ ...block, title })} />
-      <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">New post</p>
-        <textarea value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} className="input-field mt-1.5 text-sm min-h-[100px] resize-y" placeholder="Share something with your members…" />
-        <div className="mt-2 flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-slate-500 mr-1">Paper</span>
-          {NOTE_COLOURS.map((c) => (
-            <button key={c.id} type="button" onClick={() => setNote(c.id)} title={c.name} aria-label={`Paper: ${c.name}`}
-              className={cn('w-6 h-6 rounded-[3px] border border-black/15', note === c.id && 'outline outline-2 outline-offset-1 outline-[#7a5230]')} style={{ background: c.color }} />
-          ))}
-        </div>
-        {image && (
-          <div className="relative mt-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={badgeArt(image, 640)} alt="" className="w-full h-28 object-cover rounded-lg" />
-            <button type="button" onClick={() => setImage(undefined)} className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/55 text-white" aria-label="Remove the picture"><X size={13} /></button>
-          </div>
-        )}
-        <div className="mt-2 flex items-center gap-2">
-          <button type="button" onClick={() => file.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
-            {busy ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}Picture
-          </button>
-          <input ref={file} type="file" accept="image/*" hidden onChange={async (e) => { const url = await up(e.target.files?.[0]); if (url) setImage(url); e.target.value = '' }} />
-          <button type="button" onClick={post} disabled={!text.trim() && !image} className="ml-auto btn-primary !py-1.5 disabled:opacity-40">Post to the wall</button>
-        </div>
-      </div>
+      <PostedOnPage what="posts" uid={uid} />
       {block.posts.length > 0 && (
         <div className="mt-3">
-          <p className={label}>On the wall · {block.posts.length}</p>
-          <div className="mt-1.5 space-y-1.5 max-h-[260px] overflow-y-auto scroll-themed pr-1">
+          <p className={label}>Older posts saved with the page · {block.posts.length}</p>
+          <div className="mt-1.5 space-y-1.5 max-h-[220px] overflow-y-auto scroll-themed pr-1">
             {block.posts.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 rounded-lg border border-[#d6c49f] px-2.5 py-1.5">
+              <div key={p.id} className="flex items-center gap-2 rounded-md border border-[#d6c49f] px-2.5 py-1.5">
                 <span className="min-w-0 flex-1 text-xs text-ink truncate">{p.text || '(a picture)'}</span>
-                <button type="button" onClick={() => { if (confirm('Take this post off the wall?')) onChange({ ...block, posts: block.posts.filter((x) => x.id !== p.id) }) }}
+                <button type="button" onClick={() => { if (confirm('Take this post off the wall? This can\'t be undone.')) onChange({ ...block, posts: block.posts.filter((x) => x.id !== p.id) }) }}
                   className="p-1 text-slate-500 hover:text-red-600" aria-label="Remove this post"><Trash2 size={13} /></button>
               </div>
             ))}
@@ -231,41 +210,23 @@ function WallFields({ uid, block, onChange }: { uid: string; block: Extract<Bloc
   )
 }
 
-/** Announcements: write one (title, text, pinned or not); pin, unpin or remove the ones there */
-function AnnouncementFields({ block, onChange }: { block: Extract<Block, { type: 'announcements' }>; onChange: (b: Block) => void }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [pinned, setPinned] = useState(false)
-  const add = () => {
-    if (!title.trim()) return
-    const items = pinned ? block.items.map((a) => ({ ...a, pinned: false })) : block.items // one pinned at a time
-    onChange({ ...block, items: [{ id: newId(), title: title.trim(), body: body.trim(), at: Date.now(), pinned }, ...items].slice(0, 50) })
-    setTitle(''); setBody(''); setPinned(false)
-  }
+function AnnouncementFields({ uid, block, onChange }: { uid: string; block: Extract<Block, { type: 'announcements' }>; onChange: (b: Block) => void }) {
   return (
     <>
-      <TitleField value={block.title} placeholder="Announcements" onChange={(t) => onChange({ ...block, title: t })} />
-      <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">New announcement</p>
-        <input value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} className="input-field mt-1.5 text-sm font-semibold" placeholder="e.g. New badge drops Friday" />
-        <textarea value={body} maxLength={1500} onChange={(e) => setBody(e.target.value)} className="input-field mt-1.5 text-sm min-h-[80px] resize-y" placeholder="The details…" />
-        <div className="mt-2 flex items-center gap-2">
-          <button type="button" onClick={() => setPinned((p) => !p)} className={cn('haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5', pinned && 'haven-chip-on')}><Pin size={12} />{pinned ? 'Pinned' : 'Pin it'}</button>
-          <button type="button" onClick={add} disabled={!title.trim()} className="ml-auto btn-primary !py-1.5 disabled:opacity-40">Announce</button>
-        </div>
-      </div>
+      <TitleField value={block.title} placeholder="Announcements" onChange={(title) => onChange({ ...block, title })} />
+      <PostedOnPage what="announcements" uid={uid} />
       {block.items.length > 0 && (
-        <div className="mt-3 space-y-1.5 max-h-[260px] overflow-y-auto scroll-themed pr-1">
-          {block.items.map((a) => (
-            <div key={a.id} className="flex items-center gap-1.5 rounded-lg border border-[#d6c49f] px-2.5 py-1.5">
-              <span className="min-w-0 flex-1 text-xs font-semibold text-ink truncate">{a.title}</span>
-              <button type="button" title={a.pinned ? 'Unpin' : 'Pin to the top'}
-                onClick={() => onChange({ ...block, items: block.items.map((x) => ({ ...x, pinned: x.id === a.id ? !a.pinned : false })) })}
-                className={cn('p-1', a.pinned ? 'text-[#8a6420]' : 'text-slate-500 hover:text-ink')}>{a.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>
-              <button type="button" onClick={() => { if (confirm('Remove this announcement?')) onChange({ ...block, items: block.items.filter((x) => x.id !== a.id) }) }}
-                className="p-1 text-slate-500 hover:text-red-600" aria-label="Remove"><Trash2 size={13} /></button>
-            </div>
-          ))}
+        <div className="mt-3">
+          <p className={label}>Older announcements saved with the page · {block.items.length}</p>
+          <div className="mt-1.5 space-y-1.5 max-h-[220px] overflow-y-auto scroll-themed pr-1">
+            {block.items.map((a) => (
+              <div key={a.id} className="flex items-center gap-1.5 rounded-md border border-[#d6c49f] px-2.5 py-1.5">
+                <span className="min-w-0 flex-1 text-xs font-semibold text-ink truncate">{a.title}</span>
+                <button type="button" onClick={() => { if (confirm('Remove this announcement? This can\'t be undone.')) onChange({ ...block, items: block.items.filter((x) => x.id !== a.id) }) }}
+                  className="p-1 text-slate-500 hover:text-red-600" aria-label="Remove"><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </>

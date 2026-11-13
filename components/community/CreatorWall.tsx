@@ -5,15 +5,17 @@
 // newest first. Tap one to read it whole. Under each, the reactions (lib/wallReactions.ts): members and the
 // creator tap ♥ / 👍 / 🃏, everyone sees the counts. Flat on purpose — no fake-3D shading.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, X, Heart, ThumbsUp } from 'lucide-react'
+import { Sparkles, X, Heart, ThumbsUp, Plus, ImagePlus, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Section, timeAgo, type BlockContext } from '@/components/community/blocks'
 import { badgeArt } from '@/lib/badgeAssets'
 import { NOTE_COLOURS, type Block, type WallPost } from '@/lib/communityBlocks'
 import { REACTIONS, useWallReactions, type ReactionDef } from '@/lib/wallReactions'
 import { surfaceCss, wallLook } from '@/lib/blockStyle'
+import { addPost, removePost, useBlockPosts } from '@/lib/communityPosts'
+import { uploadCreatorPicture } from '@/lib/creatorUpload'
 import { cn } from '@/lib/utils'
 
 const PINS = ['#b8402f', '#3f6e8c', '#5d7a3a', '#b8862b', '#7a4a8c']
@@ -39,7 +41,10 @@ export function ReactionIcon({ r, size = 15 }: { r: ReactionDef; size?: number }
 
 export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wall' }>; ctx: BlockContext }) {
   const { user } = useAuth()
-  const posts = [...block.posts].sort((a, b) => b.at - a.at)
+  // The owner's posts (community_posts, put up on the page) and any older ones saved inside the block
+  const live = useBlockPosts(ctx.uid, block.id)
+  const posts: Array<WallPost & { live?: boolean }> = [...live.map((p) => ({ id: p.id, text: p.text, image: p.image, note: p.note, at: p.at, live: true })), ...block.posts]
+    .sort((a, b) => b.at - a.at)
   const [all, setAll] = useState(false)
   const [open, setOpen] = useState<WallPost | null>(null)
   const rx = useWallReactions(ctx.uid, user?.uid ?? null, posts.map((p) => p.id))
@@ -71,6 +76,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
 
   return (
     <Section title={block.title || 'Creator Wall'} icon={<Sparkles size={19} />} sub={`Pinned up by ${ctx.community.name}`}>
+      {ctx.owner && <WallComposer uid={ctx.uid} block={block.id} />}
       <div className="rounded-md p-4 sm:p-6" style={board}>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
@@ -89,6 +95,11 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                   {/* held up by tape (a picture) or a pin (words) — flat */}
                   {holder === 'tape' && <span className="absolute left-1/2 -top-2.5 w-16 h-5 -translate-x-1/2 bg-[#f3ead2]/75 border border-[#2b2014]/[0.06]" style={{ rotate: `${-tilt * 1.5 || -2}deg` }} />}
                   {holder === 'pins' || holder === 'pin' ? <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-black/20" style={{ background: pinOf(h) }} /> : null}
+                  {ctx.owner && p.live && (
+                    <button type="button" aria-label="Take this post down" title="Take this post down"
+                      onClick={(e) => { e.stopPropagation(); if (confirm('Take this post off the wall? This can\'t be undone.')) removePost(p.id).catch(() => alert('Couldn\'t take it down — check your connection.')) }}
+                      className="absolute -top-2 -right-2 z-[1] w-6 h-6 rounded-full bg-[#2b2014] text-[#fbf6ea] flex items-center justify-center opacity-0 [.cork-note:hover_&]:opacity-100 focus:opacity-100 transition-opacity"><X size={13} /></button>
+                  )}
                   {p.image && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={badgeArt(p.image, 800)} alt="" className="w-full aspect-[4/3] object-cover" />
@@ -125,5 +136,69 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           </div>
         </div>, document.body)}
     </Section>
+  )
+}
+
+/** The owner's "Pin something up", right on their community page: words, a picture, the paper */
+function WallComposer({ uid, block }: { uid: string; block: string }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [image, setImage] = useState<string | undefined>()
+  const [note, setNote] = useState('paper')
+  const [busy, setBusy] = useState<'' | 'pic' | 'post'>('')
+  const [err, setErr] = useState('')
+  const file = useRef<HTMLInputElement>(null)
+  const reset = () => { setText(''); setImage(undefined); setNote('paper'); setErr(''); setOpen(false) }
+  async function post() {
+    if (!text.trim() && !image) return
+    setBusy('post'); setErr('')
+    try { await addPost({ community: uid, block, kind: 'wall', text: text.trim(), image, note }); reset() }
+    catch { setErr('Couldn\'t pin it up — check your connection and try again.') }
+    finally { setBusy('') }
+  }
+  if (!open) return (
+    <button type="button" onClick={() => setOpen(true)}
+      className="mb-4 w-full rounded-md border border-dashed border-[color:var(--b-line)] py-2.5 text-sm font-bold text-[color:var(--b-accent)] inline-flex items-center justify-center gap-2 hover:bg-[color:var(--b-hover)] transition-colors">
+      <Plus size={16} />Pin something up
+    </button>
+  )
+  const paper = NOTE_COLOURS.find((c) => c.id === note)!.color
+  return (
+    <div className="mb-4 rounded-md border border-[#2b2014]/15 p-3.5" style={{ background: paper }}>
+      <textarea value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} autoFocus
+        placeholder="Write something for your members…" className="w-full min-h-[90px] resize-y bg-transparent text-[15px] text-[#2b2014] placeholder:text-[#2b2014]/40 outline-none" />
+      {image && (
+        <div className="relative mt-1 mb-2 w-40">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={badgeArt(image, 400)} alt="" className="w-40 aspect-[4/3] object-cover border-[6px] border-[#fbf8f1]" />
+          <button type="button" onClick={() => setImage(undefined)} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-[#2b2014] text-white flex items-center justify-center" aria-label="Remove the picture"><X size={11} /></button>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#2b2014]/10 pt-2.5">
+        <button type="button" onClick={() => file.current?.click()} disabled={!!busy}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[#2b2014]/20 px-2.5 py-1 text-xs font-bold text-[#4a3320] hover:bg-black/5">
+          {busy === 'pic' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Picture
+        </button>
+        <input ref={file} type="file" accept="image/*" hidden onChange={async (e) => {
+          const f = e.target.files?.[0]; e.target.value = ''
+          if (!f) return
+          setBusy('pic'); setErr('')
+          try { setImage(await uploadCreatorPicture(uid, f, 'wall')) } catch { setErr('That picture didn\'t upload — try another.') } finally { setBusy('') }
+        }} />
+        <span className="flex items-center gap-1 ml-1">
+          {NOTE_COLOURS.map((c) => (
+            <button key={c.id} type="button" onClick={() => setNote(c.id)} title={c.name} aria-label={`Paper: ${c.name}`}
+              className={cn('w-5 h-5 rounded-[3px] border border-black/20', note === c.id && 'outline outline-2 outline-offset-1 outline-[#7a5230]')} style={{ background: c.color }} />
+          ))}
+        </span>
+        <span className="flex-1" />
+        <button type="button" onClick={reset} className="px-2.5 py-1 text-xs font-bold text-[#5c4a35] hover:text-[#2b2014]">Cancel</button>
+        <button type="button" onClick={post} disabled={!!busy || (!text.trim() && !image)}
+          className="rounded-md bg-[#7a5230] px-3 py-1.5 text-xs font-bold text-[#fbf6ea] disabled:opacity-40 inline-flex items-center gap-1.5">
+          {busy === 'post' && <Loader2 size={12} className="animate-spin" />}Pin it up
+        </button>
+      </div>
+      {err && <p className="mt-2 text-xs font-semibold text-[#9b2c1f]">{err}</p>}
+    </div>
   )
 }

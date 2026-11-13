@@ -8,7 +8,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
-import { Loader2, Trophy, Megaphone, Pin, Sparkles, MessagesSquare, Eye } from 'lucide-react'
+import { Loader2, Trophy, Megaphone, Pin, PinOff, Trash2, Plus, MessagesSquare, Eye } from 'lucide-react'
 import { Avatar } from '@/components/friends/Avatar'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { Corners, Divider } from '@/components/creator/Ornaments'
@@ -18,6 +18,7 @@ import type { CreatorBook } from '@/lib/creatorBooks'
 import type { Block } from '@/lib/communityBlocks'
 import { blockLook, lookVars, panelStyle, type BlockLook, type BlockStyle } from '@/lib/blockStyle'
 import { CreatorWall } from '@/components/community/CreatorWall'
+import { addPost, pinPost, removePost, useBlockPosts, type CommunityPost } from '@/lib/communityPosts'
 import { DEV_EARNER_EVENT, DEV_EARNER_CLEAR_EVENT, type DevEarner } from '@/lib/devBoard'
 import { badgeArt } from '@/lib/badgeAssets'
 import { cardImage } from '@/lib/cardImage'
@@ -25,7 +26,11 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { CardZoomOverlay, type ZoomCardData } from '@/components/pages/CardexPage'
 import { cn } from '@/lib/utils'
 
-export interface BlockContext { uid: string; community: CommunityEntry; book: CreatorBook | null; canReact?: boolean /* a member, or the creator */ }
+export interface BlockContext {
+  uid: string; community: CommunityEntry; book: CreatorBook | null
+  canReact?: boolean // a member, or the creator
+  owner?: boolean    // the community's owner looking at their own page (not the Studio): posts and announces right here
+}
 
 /** The look of the block being drawn (lib/blockStyle.ts), from BlockView */
 const LookCtx = createContext<BlockLook>(blockLook('text'))
@@ -93,7 +98,7 @@ function BlockBody({ block, ctx }: { block: Block; ctx: BlockContext }) {
       )
     case 'badges': return <AchievementBoard community={ctx.uid} book={ctx.book} title={block.title} styleOf={block.style} />
     case 'wall': return <CreatorWall block={block} ctx={ctx} />
-    case 'announcements': return <Announcements block={block} />
+    case 'announcements': return <Announcements block={block} ctx={ctx} />
     case 'cards': return <HighlightedCards block={block} />
     case 'text':
       return (
@@ -249,21 +254,36 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
 }
 
 /** Announcements: the pinned one first, then newest */
-function Announcements({ block }: { block: Extract<Block, { type: 'announcements' }> }) {
+function Announcements({ block, ctx }: { block: Extract<Block, { type: 'announcements' }>; ctx: BlockContext }) {
   const items = block.style?.layout?.items ?? 'filled'
-  const list = [...block.items].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.at - a.at)
+  // The owner's (community_posts, put up on the page) and any older ones saved inside the block
+  const live = useBlockPosts(ctx.uid, block.id)
+  const list = [
+    ...live.map((p) => ({ id: p.id, title: p.title ?? '', body: p.text, at: p.at, pinned: !!p.pinned, live: true })),
+    ...block.items.map((a) => ({ ...a, live: false })),
+  ].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || b.at - a.at)
+  const fail = () => alert('That didn\'t save — check your connection and try again.')
   return (
     <Section title={block.title || 'Announcements'} icon={<Megaphone size={19} />}>
+      {ctx.owner && <AnnounceComposer uid={ctx.uid} block={block.id} live={live} />}
       {/* the items' look: filled cards, outlines, or plain with a rule between (Style → Layout) */}
       {list.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No announcements yet.</p> : (
         <div className="space-y-3">
           {list.map((a) => (
-            <article key={a.id} className={cn(items === 'plain' ? 'py-3 border-b border-[color:var(--b-hair)] last:border-b-0' : 'rounded-md p-4 border',
+            <article key={a.id} className={cn('group/ann', items === 'plain' ? 'py-3 border-b border-[color:var(--b-hair)] last:border-b-0' : 'rounded-md p-4 border',
               items === 'filled' && (a.pinned ? 'bg-[color:var(--b-tint)] border-[color:var(--b-corner)]' : 'bg-[color:var(--b-hover)] border-[color:var(--b-hair)]'),
               items === 'outlined' && (a.pinned ? 'border-[color:var(--b-accent)]' : 'border-[color:var(--b-line)]'))}>
               <div className="flex items-start gap-2">
                 {a.pinned && <Pin size={14} className="mt-1 shrink-0 text-[color:var(--b-accent)]" />}
                 <h3 className="[font-family:var(--b-title-font)] text-base font-bold text-[color:var(--b-title)] flex-1">{a.title || 'Announcement'}</h3>
+                {ctx.owner && a.live && (
+                  <span className="flex items-center gap-0.5 opacity-0 group-hover/ann:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <button type="button" onClick={() => pinPost(live, a.id, !a.pinned).catch(fail)} title={a.pinned ? 'Unpin' : 'Pin to the top'}
+                      className="p-1 text-[color:var(--b-muted)] hover:text-[color:var(--b-title)]">{a.pinned ? <PinOff size={14} /> : <Pin size={14} />}</button>
+                    <button type="button" onClick={() => { if (confirm('Remove this announcement? This can\'t be undone.')) removePost(a.id).catch(fail) }} title="Remove"
+                      className="p-1 text-[color:var(--b-muted)] hover:text-[#b8402f]"><Trash2 size={14} /></button>
+                  </span>
+                )}
                 <span className="shrink-0 text-[11px] text-[color:var(--b-muted)]">{new Date(a.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
               </div>
               {a.body && <p className="mt-1.5 text-sm text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{a.body}</p>}
@@ -272,6 +292,53 @@ function Announcements({ block }: { block: Extract<Block, { type: 'announcements
         </div>
       )}
     </Section>
+  )
+}
+
+/** The owner's "New announcement", right on their community page */
+function AnnounceComposer({ uid, block, live }: { uid: string; block: string; live: CommunityPost[] }) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [pinned, setPinned] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const reset = () => { setTitle(''); setBody(''); setPinned(false); setErr(''); setOpen(false) }
+  async function post() {
+    if (!title.trim()) return
+    setBusy(true); setErr('')
+    try {
+      if (pinned) await Promise.all(live.filter((p) => p.pinned).map((p) => pinPost(live, p.id, false))) // one pinned at a time
+      await addPost({ community: uid, block, kind: 'announcement', title: title.trim(), text: body.trim(), pinned })
+      reset()
+    } catch { setErr('Couldn\'t post it — check your connection and try again.') } finally { setBusy(false) }
+  }
+  if (!open) return (
+    <button type="button" onClick={() => setOpen(true)}
+      className="mb-4 w-full rounded-md border border-dashed border-[color:var(--b-line)] py-2.5 text-sm font-bold text-[color:var(--b-accent)] inline-flex items-center justify-center gap-2 hover:bg-[color:var(--b-hover)] transition-colors">
+      <Plus size={16} />New announcement
+    </button>
+  )
+  return (
+    <div className="mb-4 rounded-md border border-[color:var(--b-line)] bg-[color:var(--b-hover)] p-3.5">
+      <input value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} autoFocus placeholder="Headline — e.g. New badge drops Friday"
+        className="w-full bg-transparent [font-family:var(--b-title-font)] text-base font-bold text-[color:var(--b-title)] placeholder:text-[color:var(--b-muted)] outline-none" />
+      <textarea value={body} maxLength={1500} onChange={(e) => setBody(e.target.value)} placeholder="The details (optional)"
+        className="mt-1.5 w-full min-h-[70px] resize-y bg-transparent text-sm text-[color:var(--b-text)] placeholder:text-[color:var(--b-muted)] outline-none" />
+      <div className="flex items-center gap-2 border-t border-[color:var(--b-hair)] pt-2.5">
+        <button type="button" onClick={() => setPinned((p) => !p)}
+          className={cn('inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-bold', pinned ? 'border-[color:var(--b-accent)] text-[color:var(--b-accent)]' : 'border-[color:var(--b-line)] text-[color:var(--b-muted)]')}>
+          <Pin size={12} />{pinned ? 'Pinned to the top' : 'Pin to the top'}
+        </button>
+        <span className="flex-1" />
+        <button type="button" onClick={reset} className="px-2.5 py-1 text-xs font-bold text-[color:var(--b-muted)] hover:text-[color:var(--b-title)]">Cancel</button>
+        <button type="button" onClick={post} disabled={busy || !title.trim()}
+          className="rounded-md px-3 py-1.5 text-xs font-bold disabled:opacity-40 inline-flex items-center gap-1.5" style={{ background: 'var(--b-accent)', color: 'var(--b-bg)' }}>
+          {busy && <Loader2 size={12} className="animate-spin" />}Announce
+        </button>
+      </div>
+      {err && <p className="mt-2 text-xs font-semibold text-[#b8402f]">{err}</p>}
+    </div>
   )
 }
 

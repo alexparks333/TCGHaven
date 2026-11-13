@@ -59,6 +59,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   (up to `MAX_TABS`): Home always first, then the creator's own pages — add, rename, reorder, delete; picking
   one switches the page on the left to it. Members sits beside the page (Page details → Members beside the
   page). `CommunityStudio demo={…}` draws it with a sample community and never saves (dev checks).
+- **Posting on the page** (2026-11-12, `lib/communityPosts.ts`). The Creator Studio is only a page's **layout and
+  look**; what the owner puts up — Creator Wall posts and announcements — is added on their own community page
+  (`ctx.owner` = the owner viewing it, not the Studio): "Pin something up" (words, a picture via
+  `lib/creatorUpload.ts`, the paper) and "New announcement" (headline, details, pin to the top), with take-down /
+  pin / remove on each (confirmed). Stored in `community_posts/{id}` `{ community, block, kind, text, title?,
+  image?, note?, pinned?, at }` — its own collection, so a Studio save of `communities/{uid}.page` can never
+  overwrite a post. Older posts saved inside the block (`block.posts` / `block.items`) still show, merged in,
+  and can be removed in the Studio's Content tab.
 - **Creator Wall** (2026-11-12, `components/community/CreatorWall.tsx`). The creator's posts pinned to a flat
   cork board (`.cork-board` / `.cork-note` in globals.css): words on paper notes held by a pin, pictures as
   prints held by tape, each tilted a little (steady per post id) and straightened on hover; packed in CSS

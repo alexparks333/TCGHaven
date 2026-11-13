@@ -83,6 +83,20 @@ service cloud.firestore {
     }
 
     // A creator's community profile (barebones for now): name, tagline, about, colour
+    // What a community's owner posts on their page (lib/communityPosts.ts): Creator Wall posts and
+    // announcements. Anyone signed in reads; only the owner (community == their uid) writes.
+    match /community_posts/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && notBanned() && request.resource.data.community == request.auth.uid
+        && request.resource.data.kind in ['wall', 'announcement']
+        && request.resource.data.text is string && request.resource.data.text.size() <= 2000
+        && request.resource.data.keys().hasOnly(['community', 'block', 'kind', 'text', 'title', 'image', 'note', 'pinned', 'at']);
+      allow update: if signedIn() && resource.data.community == request.auth.uid
+        && request.resource.data.community == resource.data.community
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'title', 'note', 'pinned']);
+      allow delete: if signedIn() && (resource.data.community == request.auth.uid || isAdmin());
+    }
+
     // Reactions on a Creator Wall's posts (lib/wallReactions.ts): one doc per member per reaction per post;
     // anyone signed in reads; a member (or the creator) adds or takes back only their own.
     match /wall_reactions/{id} {
