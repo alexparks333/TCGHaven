@@ -14,6 +14,70 @@ export interface BlockStyle {
   grain?: boolean; corners?: boolean; border?: boolean
   radius?: number      // px, 0–28
   frame?: boolean      // a Picture: sit it on a panel (mat) of the background colour
+  // Each block type's own options (the first part of its Style panel)
+  wall?: WallStyle
+  leader?: { headers?: boolean; highlight?: boolean; pin?: number }           // Badge Achievements
+  cards?: { columns?: number; names?: boolean; round?: number }              // Highlighted Cards
+  layout?: { align?: 'left' | 'center'; size?: number; items?: 'filled' | 'outlined' | 'plain' } // About, Text, Announcements
+  picture?: { height?: number }
+}
+
+// ── The Creator Wall's board ──
+export type WallSurface = 'cork' | 'felt' | 'wood' | 'chalk' | 'linen' | 'plain'
+export interface WallStyle {
+  surface?: WallSurface; color?: string; texture?: number   // 0–1
+  frame?: 'none' | 'thin' | 'thick'; frameColor?: string
+  holders?: 'mixed' | 'pins' | 'tape' | 'none'; pinColor?: string // '' = a mix of colours
+  tilt?: number          // 0–1.5 × the usual turn
+  columns?: 1 | 2 | 3; shown?: number
+}
+export const WALL_SURFACES: Array<{ id: WallSurface; name: string; color: string }> = [
+  { id: 'cork', name: 'Cork', color: '#c49a6c' },
+  { id: 'felt', name: 'Felt', color: '#3f5e46' },
+  { id: 'wood', name: 'Wood', color: '#9a6a40' },
+  { id: 'chalk', name: 'Chalkboard', color: '#2f3a33' },
+  { id: 'linen', name: 'Linen', color: '#ddd0b6' },
+  { id: 'plain', name: 'Plain', color: '#e9dcc0' },
+]
+export function wallLook(w: WallStyle = {}) {
+  const surface = w.surface ?? 'cork'
+  return {
+    surface, color: w.color ?? WALL_SURFACES.find((x) => x.id === surface)!.color, texture: w.texture ?? 0.7,
+    frame: w.frame ?? 'thick', frameColor: w.frameColor ?? '#7a5230',
+    holders: w.holders ?? 'mixed', pinColor: w.pinColor ?? '', tilt: w.tilt ?? 1,
+    columns: w.columns ?? 2, shown: w.shown ?? 6,
+  }
+}
+const rgba = (hex: string, a: number) => { const [r, g, b] = rgb(hex); return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a)).toFixed(3)})` }
+/** A board surface as flat CSS — one colour with its pattern (specks, fibres, grain, weave), never shading */
+export function surfaceCss(surface: WallSurface, color: string, texture: number): React.CSSProperties {
+  const dk = mix(color, '#000000', 0.45), lt = mix(color, '#ffffff', 0.45), t = texture
+  switch (surface) {
+    case 'cork': return {
+      backgroundColor: color,
+      backgroundImage: `radial-gradient(circle at 30% 40%, ${rgba(dk, 0.6 * t)} 0 0.9px, transparent 1.3px), radial-gradient(circle at 70% 70%, ${rgba(lt, 0.55 * t)} 0 0.8px, transparent 1.2px), radial-gradient(circle at 50% 20%, ${rgba(dk, 0.45 * t)} 0 1.1px, transparent 1.5px)`,
+      backgroundSize: '7px 7px, 9px 9px, 13px 11px',
+    }
+    case 'felt': return {
+      backgroundColor: color,
+      backgroundImage: `radial-gradient(circle at 50% 50%, ${rgba(lt, 0.18 * t)} 0 0.6px, transparent 0.9px), radial-gradient(circle at 20% 80%, ${rgba(dk, 0.3 * t)} 0 0.6px, transparent 0.9px)`,
+      backgroundSize: '3px 3px, 4px 5px',
+    }
+    case 'wood': return {
+      backgroundColor: color,
+      backgroundImage: `repeating-linear-gradient(90deg, transparent 0 138px, ${rgba(dk, 0.55 * t)} 138px 140px), repeating-linear-gradient(0deg, transparent 0 7px, ${rgba(dk, 0.16 * t)} 7px 8px, transparent 8px 19px, ${rgba(lt, 0.12 * t)} 19px 20px)`,
+    }
+    case 'chalk': return {
+      backgroundColor: color,
+      backgroundImage: `radial-gradient(circle at 40% 60%, ${rgba('#ffffff', 0.07 * t)} 0 1px, transparent 1.6px), radial-gradient(circle at 80% 20%, ${rgba('#ffffff', 0.05 * t)} 0 1.4px, transparent 2px)`,
+      backgroundSize: '9px 9px, 23px 17px',
+    }
+    case 'linen': return {
+      backgroundColor: color,
+      backgroundImage: `repeating-linear-gradient(0deg, ${rgba(dk, 0.14 * t)} 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, ${rgba(dk, 0.1 * t)} 0 1px, transparent 1px 4px)`,
+    }
+    default: return { backgroundColor: color }
+  }
 }
 
 export const BLOCK_FONTS: Array<{ id: FontId; name: string; css: string; title: boolean; body: boolean; upper?: boolean }> = [

@@ -107,7 +107,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
       </div>
 
       {/* ── Beside it: the selected block's editor, or the page's details ── */}
-      <div className="space-y-4 lg:sticky lg:top-4">
+      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-themed lg:pr-1">
         {sel ? (
           <BlockEditor uid={uid} block={sel} community={c} mode={mode} onMode={setMode} onCommunity={set} onDone={() => setSelected(null)} onDelete={() => remove(sel.id)}
             onChange={(b) => setBlocks(blocks.map((x) => (x.id === b.id ? b : x)))} />

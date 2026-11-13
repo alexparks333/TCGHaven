@@ -1,7 +1,7 @@
 'use client'
 
 // The Creator Wall as fans see it (docs/creators.md "Creator Wall"): the creator's posts pinned to a flat
-// cork board — words on paper notes held by a pin, pictures as prints held by tape — each turned a little,
+// board (cork by default — its surface, colour, frame, holders, tilt and columns are the block's Style → Board) — words on paper notes held by a pin, pictures as prints held by tape — each turned a little,
 // newest first. Tap one to read it whole. Under each, the reactions (lib/wallReactions.ts): members and the
 // creator tap ♥ / 👍 / 🃏, everyone sees the counts. Flat on purpose — no fake-3D shading.
 
@@ -13,9 +13,9 @@ import { Section, timeAgo, type BlockContext } from '@/components/community/bloc
 import { badgeArt } from '@/lib/badgeAssets'
 import { NOTE_COLOURS, type Block, type WallPost } from '@/lib/communityBlocks'
 import { REACTIONS, useWallReactions, type ReactionDef } from '@/lib/wallReactions'
+import { surfaceCss, wallLook } from '@/lib/blockStyle'
 import { cn } from '@/lib/utils'
 
-const SHOWN = 6
 const PINS = ['#b8402f', '#3f6e8c', '#5d7a3a', '#b8862b', '#7a4a8c']
 
 /** A steady little number from a post's id — its tilt and pin colour stay the same every visit */
@@ -44,7 +44,12 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   const [open, setOpen] = useState<WallPost | null>(null)
   const rx = useWallReactions(ctx.uid, user?.uid ?? null, posts.map((p) => p.id))
   const canReact = !!user && !!ctx.canReact
+  const w = wallLook(block.style?.wall) // the board: its surface, frame, holders, tilt, columns (Style → Board)
+  const SHOWN = w.shown
   const shown = all ? posts : posts.slice(0, SHOWN)
+  const pinOf = (h: number) => w.pinColor || PINS[h % PINS.length]
+  const board: React.CSSProperties = { ...surfaceCss(w.surface, w.color, w.texture), border: w.frame === 'none' ? 'none' : `${w.frame === 'thin' ? 2 : 6}px solid ${w.frameColor}` }
+  const cols = w.columns === 1 ? 'columns-1' : w.columns === 3 ? 'columns-1 sm:columns-2 lg:columns-3' : 'columns-1 sm:columns-2'
 
   const Reactions = ({ p }: { p: WallPost }) => (
     <div className="mt-2.5 flex flex-wrap gap-1">
@@ -66,24 +71,24 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
 
   return (
     <Section title={block.title || 'Creator Wall'} icon={<Sparkles size={19} />} sub={`Pinned up by ${ctx.community.name}`}>
-      <div className="cork-board rounded-md p-4 sm:p-6">
+      <div className="rounded-md p-4 sm:p-6" style={board}>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
-            <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full" style={{ background: PINS[0] }} />
+            {w.holders !== 'none' && <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-black/20" style={{ background: pinOf(0) }} />}
             <p className="text-sm text-[#5c4a35]">Nothing pinned up yet.</p>
           </div>
         ) : (
-          <div className="columns-1 sm:columns-2 gap-6 pt-1">
+          <div className={cn(cols, 'gap-6 pt-1')}>
             {shown.map((p) => {
-              const h = hash(p.id), tilt = [-2.5, -1.5, -0.8, 0.8, 1.6, 2.4][h % 6]
+              const h = hash(p.id), tilt = [-2.5, -1.5, -0.8, 0.8, 1.6, 2.4][h % 6] * w.tilt
+              const holder = w.holders === 'mixed' ? (p.image ? 'tape' : 'pin') : w.holders
               const paper = NOTE_COLOURS.find((c) => c.id === p.note)?.color ?? (p.image ? '#fbf8f1' : NOTE_COLOURS[0].color)
               return (
                 <article key={p.id} onClick={() => setOpen(p)} style={{ '--tilt': `${tilt}deg`, background: paper } as React.CSSProperties}
                   className={cn('cork-note relative cursor-pointer border border-[#2b2014]/10 break-inside-avoid mb-7 w-full inline-block align-top', p.image ? 'p-2.5 pb-3' : 'px-4 pt-5 pb-3')}>
                   {/* held up by tape (a picture) or a pin (words) — flat */}
-                  {p.image
-                    ? <span className="absolute left-1/2 -top-2.5 w-16 h-5 -translate-x-1/2 bg-[#f3ead2]/75 border border-[#2b2014]/[0.06]" style={{ rotate: `${-tilt * 1.5}deg` }} />
-                    : <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-black/20" style={{ background: PINS[h % PINS.length] }} />}
+                  {holder === 'tape' && <span className="absolute left-1/2 -top-2.5 w-16 h-5 -translate-x-1/2 bg-[#f3ead2]/75 border border-[#2b2014]/[0.06]" style={{ rotate: `${-tilt * 1.5 || -2}deg` }} />}
+                  {holder === 'pins' || holder === 'pin' ? <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-black/20" style={{ background: pinOf(h) }} /> : null}
                   {p.image && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={badgeArt(p.image, 800)} alt="" className="w-full aspect-[4/3] object-cover" />
