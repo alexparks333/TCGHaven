@@ -93,20 +93,23 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
-      <CommunityHeader community={community} className="rounded-3xl shadow-[0_24px_50px_-28px_rgba(40,25,10,0.8)]" />
+      <div className="relative">
+        <CommunityHeader community={community} className="rounded-3xl shadow-[0_24px_50px_-28px_rgba(40,25,10,0.8)]" />
+        {/* The community's emblem, half over the header's bottom edge in a frosted frame */}
+        <div className="absolute left-5 md:left-9 bottom-0 translate-y-1/2 z-[5] w-[104px] h-[104px] md:w-[136px] md:h-[136px] rounded-[32px] p-2 md:p-2.5 bg-[#3a2a1a]/25 backdrop-blur-md ring-1 ring-white/35 shadow-[0_16px_34px_-12px_rgba(30,18,8,0.65)]">
+          <div className="w-full h-full rounded-[24px] flex items-center justify-center pinbook-serif text-5xl md:text-6xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.25)]"
+            style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${community.color} 82%, white), ${community.color} 55%, color-mix(in srgb, ${community.color} 70%, black))` }}>
+            {(community.name.trim()[0] || '★').toUpperCase()}
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_300px] items-start">
         {/* ── Who it is ── */}
         <div className="min-w-0 lg:col-start-1 lg:row-start-1 px-2 md:px-4">
-          <div className="flex flex-col sm:flex-row sm:items-end gap-x-6 gap-y-4">
-            {/* The community's emblem, pressed into the header's edge */}
-            <div className="-mt-12 md:-mt-14 relative shrink-0 w-24 h-24 md:w-28 md:h-28 rounded-[28px] p-1.5 bg-[#f3e9d3] shadow-[0_12px_28px_-10px_rgba(40,25,10,0.6)]">
-              <div className="w-full h-full rounded-[22px] flex items-center justify-center pinbook-serif text-5xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.2)]"
-                style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${community.color} 82%, white), ${community.color} 55%, color-mix(in srgb, ${community.color} 70%, black))` }}>
-                {(community.name.trim()[0] || '★').toUpperCase()}
-              </div>
-            </div>
-            <div className="min-w-0 flex-1 sm:pb-1">
+          {/* beside the emblem (below it on a phone) */}
+          <div className="pt-16 sm:pt-4 sm:pl-[124px] md:pl-[164px]">
+            <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">Community</p>
               <h1 className="pinbook-serif text-3xl md:text-[40px] font-bold text-ink leading-[1.05] mt-0.5">{community.name}</h1>
               {community.tagline && <p className="mt-1.5 text-base md:text-lg italic text-slate-500" style={{ fontFamily: 'Georgia, serif' }}>{community.tagline}</p>}
