@@ -333,6 +333,9 @@ export function PicturePlacer({ src, fit: fit0, onChange, aspect, area = { left:
 }) {
   const coverRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number; fit: PictureFit } | null>(null)
+  // A wide frame (a page header) sits in a wide stage; a tall one (a cover, a page) in a squarish one
+  const wideFrame = aspect > 1.4
+  const stageAspect = wideFrame ? aspect / 1.55 : 1.05
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
   const ar = natural ? natural.w / natural.h : fit0?.ar
   // Not placed yet: as it's shown before placing (filling the frame)
@@ -353,9 +356,11 @@ export function PicturePlacer({ src, fit: fit0, onChange, aspect, area = { left:
   )
   return (
     <div>
-      {/* The frame's outline in the middle of a bigger stage, so the picture can hang far past it */}
+      {/* The frame's outline in the middle of a bigger stage, so the picture can hang far past it — the stage
+          is shaped for the frame (tall for a cover or page, wide for a header) so the frame always fits */}
       <div
-        className="relative mx-auto w-full max-w-[300px] aspect-[1.05] rounded-xl overflow-hidden bg-[repeating-conic-gradient(#d9ccb0_0%_25%,#e8dcc2_0%_50%)] [background-size:16px_16px] touch-none cursor-grab active:cursor-grabbing"
+        style={{ aspectRatio: String(stageAspect), maxWidth: wideFrame ? undefined : 300 }}
+        className="relative mx-auto w-full rounded-xl overflow-hidden bg-[repeating-conic-gradient(#d9ccb0_0%_25%,#e8dcc2_0%_50%)] [background-size:16px_16px] touch-none cursor-grab active:cursor-grabbing"
         onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture?.(e.pointerId); drag.current = { x: e.clientX, y: e.clientY, fit } }}
         onPointerMove={(e) => {
           const d = drag.current, cover = coverRef.current
@@ -368,7 +373,7 @@ export function PicturePlacer({ src, fit: fit0, onChange, aspect, area = { left:
         onWheel={(e) => change({ ...fit, scale: clamp(fit.scale * (e.deltaY < 0 ? 1.06 : 1 / 1.06), 0.1, 10) })}
       >
         {/* The frame, in the middle */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[80%]" style={{ aspectRatio: String(aspect) }}>
+        <div className={cn('absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2', wideFrame ? 'w-[82%]' : 'h-[80%]')} style={{ aspectRatio: String(aspect) }}>
           {/* What's off the frame, faded */}
           <div className="absolute inset-y-0" style={{ left: `${area.left}%`, width: `${area.width}%` }}>{img(true)}</div>
           {/* What's on it, clipped to its area, then anything drawn over it */}

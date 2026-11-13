@@ -232,7 +232,7 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
     <Portal>
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-[#2b2014]/50 backdrop-blur-[2px]" onClick={onClose} />
-        <div role="dialog" aria-modal="true" aria-label="Header picture" className="haven-panel haven-grain relative w-full max-w-xl !p-6 shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
+        <div role="dialog" aria-modal="true" aria-label="Header picture" className="haven-panel haven-grain relative w-full max-w-3xl !p-6 shadow-[0_30px_60px_-20px_rgba(40,25,10,0.6)]">
           <div className="flex items-center gap-3">
             <span className="haven-medallion w-10 h-10"><ImagePlus size={18} /></span>
             <div className="min-w-0 flex-1">
@@ -245,7 +245,8 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
             {look.header ? (
               <>
                 <PicturePlacer src={badgeArt(look.header, 1920)!} fit={look.headerFit} onChange={(headerFit) => onChange({ ...look, headerFit })}
-                  aspect={HEADER_ASPECT} base={`linear-gradient(135deg, ${c.color}, #0b0b12)`} fillLabel="Fill header" />
+                  aspect={HEADER_ASPECT} base={`linear-gradient(135deg, ${c.color}, #0b0b12)`} fillLabel="Fill header"
+                  overlay={<div className="absolute inset-0 pointer-events-none" style={{ background: `linear-gradient(to bottom, transparent 35%, rgba(10,6,2,${look.headerShade ?? 0.35}))` }} /> /* the darkening, as on the page */} />
                 <ValueSlider label="Darken" min={0} max={1} step={0.05} value={look.headerShade ?? 0.35} onChange={(v) => onChange({ ...look, headerShade: v })} />
                 <p className="mt-1 text-[11px] text-slate-500">Darkens it toward the bottom so your page&rsquo;s name and text read on top.</p>
                 <div className="mt-4 flex items-center gap-2">
