@@ -17,6 +17,7 @@ import { useFriends } from '@/components/friends/FriendsProvider'
 import { BadgePin } from '@/components/badges/BadgePin'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
+import { Corners, Divider } from '@/components/creator/Ornaments'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
 import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
@@ -90,99 +91,118 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
 }) {
   const { myBadges: progress } = useFriends()
   return (
-    <div className="flex flex-col pb-10">
+    <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
-      <CommunityHeader community={community} className="rounded-2xl shadow-[0_18px_40px_-24px_rgba(40,25,10,0.7)]" />
+      <CommunityHeader community={community} className="rounded-3xl shadow-[0_24px_50px_-28px_rgba(40,25,10,0.8)]" />
 
-      {/* Who it is · the book (top right on a computer; after the name on a phone) · the sections */}
-      <div className="grid gap-x-6 gap-y-5 lg:grid-cols-[minmax(0,1fr)_260px] items-start">
-        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
-          <div className="relative px-4 md:px-6 flex flex-col md:flex-row md:items-end gap-x-5 gap-y-3">
-            {/* only the badge-like initial hangs over the header — the text sits below it */}
-            <div className="-mt-10 md:-mt-12 w-20 h-20 md:w-24 md:h-24 rounded-3xl border-4 border-[#f3e9d3] shadow-lg flex items-center justify-center text-4xl font-black text-white shrink-0" style={{ background: community.color }}>
-              {(community.name.trim()[0] || '★').toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1 md:pt-4">
-              <h1 className="pinbook-serif text-2xl md:text-3xl font-bold text-ink leading-tight">{community.name}</h1>
-              {community.tagline && <p className="text-sm text-slate-500 mt-1">{community.tagline}</p>}
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
-                <span className="flex items-center gap-1.5"><Users size={14} /><b className="text-ink">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
-                {creator && (
-                  <Link href={profilePath(uid, creator.username)} className="flex items-center gap-1.5 hover:text-ink">
-                    <Avatar seed={uid} name={creator.displayName} photoURL={creator.photoURL} size={20} />by {creator.displayName}
-                  </Link>
-                )}
+      <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,1fr)_300px] items-start">
+        {/* ── Who it is ── */}
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1 px-2 md:px-4">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-x-6 gap-y-4">
+            {/* The community's emblem, pressed into the header's edge */}
+            <div className="-mt-12 md:-mt-14 relative shrink-0 w-24 h-24 md:w-28 md:h-28 rounded-[28px] p-1.5 bg-[#f3e9d3] shadow-[0_12px_28px_-10px_rgba(40,25,10,0.6)]">
+              <div className="w-full h-full rounded-[22px] flex items-center justify-center pinbook-serif text-5xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.2)]"
+                style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${community.color} 82%, white), ${community.color} 55%, color-mix(in srgb, ${community.color} 70%, black))` }}>
+                {(community.name.trim()[0] || '★').toUpperCase()}
               </div>
-              {(community.games?.length ?? 0) > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {community.games!.map((g) => <span key={g} className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>)}
-                </div>
-              )}
             </div>
-            <div className="shrink-0">
+            <div className="min-w-0 flex-1 sm:pb-1">
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">Community</p>
+              <h1 className="pinbook-serif text-3xl md:text-[40px] font-bold text-ink leading-[1.05] mt-0.5">{community.name}</h1>
+              {community.tagline && <p className="mt-1.5 text-base md:text-lg italic text-slate-500" style={{ fontFamily: 'Georgia, serif' }}>{community.tagline}</p>}
+            </div>
+          </div>
+
+          {/* Members · the creator · games — then Join */}
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            <span className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-1.5"><Users size={15} /><b className="text-ink tabular-nums">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
+            {creator && (
+              <Link href={profilePath(uid, creator.username)} className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-2 hover:text-ink">
+                <Avatar seed={uid} name={creator.displayName} photoURL={creator.photoURL} size={20} />by <b className="text-ink">{creator.displayName}</b>
+              </Link>
+            )}
+            {(community.games ?? []).map((g) => (
+              <span key={g} className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}</span>
+            ))}
+            <div className="basis-full sm:basis-auto sm:ml-auto mt-2 sm:mt-0">
               {mine ? (
                 // the Studio is computers-only — no link to it in the app or on a phone
                 studio === 'computer' ? <Link href="/creator" className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
               ) : (
                 <button type="button" onClick={toggle} disabled={busy}
-                  className={isMember ? 'group btn-secondary !bg-slate-950 border border-slate-700 !text-ink' : 'btn-primary px-6'}>
-                  {busy ? <Loader2 size={16} className="animate-spin" /> : isMember ? <><Check size={16} className="group-hover:hidden" /><LogOut size={16} className="hidden group-hover:block" /></> : <Sparkles size={16} />}
-                  {isMember ? <><span className="group-hover:hidden">Joined</span><span className="hidden group-hover:inline">Leave</span></> : 'Join community'}
+                  className={isMember ? 'group btn-secondary !bg-slate-950 border border-slate-700 !text-ink' : 'btn-primary px-7 py-3 text-base shadow-[0_10px_22px_-10px_rgba(122,82,48,0.8)]'}>
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : isMember ? <><Check size={16} className="group-hover:hidden" /><LogOut size={16} className="hidden group-hover:block" /></> : <Sparkles size={17} />}
+                  {isMember ? <><span className="group-hover:hidden">Joined</span><span className="hidden group-hover:inline">Leave</span></> : 'Join the community'}
                 </button>
               )}
             </div>
           </div>
-          {error && <p className="px-6 mt-2 text-xs text-red-600">{error}</p>}
+          {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
         </div>
 
-        {/* The book: top right, hanging over the header's corner (on a phone: right after the name) */}
-        <aside className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:-mt-28 relative z-10 flex flex-col items-center">
-          {book ? (
-            // The showcase: the creator's book under a warm spotlight, turning toward you on hover
-            <div className="relative w-full rounded-2xl card-glass overflow-hidden px-5 pt-5 pb-5 flex lg:flex-col items-center gap-5 shadow-[0_24px_48px_-22px_rgba(40,25,10,0.65)]">
-              <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(70% 50% at 50% 30%, rgba(246,214,140,0.5), rgba(246,214,140,0.12) 55%, transparent 75%)' }} aria-hidden />
-              <p className="relative hidden lg:block text-[10px] font-bold uppercase tracking-[0.24em] text-[#8a6420]">✦ The Creator Book ✦</p>
-              <button type="button" onClick={() => setOpen(true)} aria-label={`Open ${book.book.name}`}
-                className="group relative w-[120px] lg:w-[200px] aspect-[0.71] shrink-0 [perspective:900px] outline-none">
-                <span className="absolute left-1/2 bottom-[-10px] w-[80%] h-5 -translate-x-1/2 rounded-[50%] bg-[#3a2410]/35 blur-md transition-all duration-300 group-hover:w-[70%] group-hover:opacity-70" aria-hidden />
-                <span className="absolute inset-0 transition-transform duration-500 ease-out [transform-style:preserve-3d] group-hover:[transform:rotateY(-14deg)_rotateX(4deg)_translateY(-6px)]" style={{ containerType: 'inline-size' }}>
-                  <BookThickness look={book.book.coverStyle} />
-                  <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
-                  {/* light catching the cover */}
-                  <span className="absolute inset-0 rounded-[10px] pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500 mix-blend-overlay" style={{ background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.55) 48%, transparent 62%)' }} />
-                </span>
-              </button>
-              <div className="relative min-w-0 flex-1 lg:text-center">
-                <p className="lg:hidden text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a6420]">The Creator Book</p>
-                <p className="pinbook-serif text-lg lg:text-xl font-bold text-ink leading-tight">{book.book.name}</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect{chaptersOf(book) > 1 ? ` · ${chaptersOf(book)} chapters` : ''}
-                </p>
-                <button type="button" onClick={() => setOpen(true)} className="btn-primary mt-3 lg:w-full justify-center"><BookOpen size={15} />Open the book</button>
-                <p className="text-[11px] text-slate-500 mt-2">
-                  {isMember || mine ? 'Collect the cards to earn these pins.' : 'Join to collect these pins in your own pin book.'}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="w-full rounded-2xl card-glass p-4 text-sm text-slate-500 text-center">{community.name} hasn&rsquo;t made their book yet.</div>
-          )}
+        {/* ── The book: a big picture of it, slanted on the page, over the header's corner ── */}
+        <aside className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:-mt-48 relative z-10 flex justify-center">
+          {book ? <ShowcaseBook book={book} onOpen={() => setOpen(true)} />
+            : <p className="pinbook-serif text-sm text-slate-500 text-center py-6">{community.name} hasn&rsquo;t made their book yet.</p>}
         </aside>
 
+        {/* ── The sections the creator switched on ── */}
         <div className="min-w-0 flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
           {sectionOn(community, 'about') && (
-            <section className="card-glass p-5 md:p-6">
-              <h2 className="pinbook-serif text-lg font-bold text-ink mb-2">About</h2>
-              <p className="text-sm text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
-            </section>
+            <Section title="About">
+              <p className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
+            </Section>
           )}
           {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
           {sectionOn(community, 'members') && <NewestMembers community={uid} members={members} />}
         </div>
-
       </div>
 
       {open && book && <BookViewer book={book.book} defs={book.badges} badges={isMember || mine ? progress : null} onClose={() => setOpen(false)} />}
+    </div>
+  )
+}
+
+/** A section of the page: a paper card with an engraved title and corner flourishes */
+function Section({ title, icon, sub, children }: { title: string; icon?: React.ReactNode; sub?: string; children: React.ReactNode }) {
+  return (
+    <section className="haven-panel haven-grain relative !p-6 md:!p-7">
+      <Corners inset={8} size={30} />
+      <h2 className="pinbook-serif text-xl font-bold text-ink flex items-center gap-2.5">{icon}{title}</h2>
+      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+      <Divider className="mt-3 mb-4" />
+      {children}
+    </section>
+  )
+}
+
+/** The creator's book, shown off: a big picture of it standing slanted on the page with its shadow;
+ *  it turns to follow the pointer (light sweeping the cover), and a click opens it over the page */
+function ShowcaseBook({ book, onOpen }: { book: CreatorBook; onOpen: () => void }) {
+  const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
+  const ry = -18 + (tilt ? (tilt.x - 0.5) * 30 : 0), rx = 7 + (tilt ? (0.5 - tilt.y) * 18 : 0)
+  return (
+    <div className="flex flex-col items-center">
+      <button type="button" onClick={onOpen} aria-label={`Open ${book.book.name}`}
+        onPointerMove={(e) => { if (e.pointerType !== 'mouse') return; const r = e.currentTarget.getBoundingClientRect(); setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }) }}
+        onPointerLeave={() => setTilt(null)}
+        className="relative w-[200px] md:w-[250px] lg:w-[280px] aspect-[0.71] outline-none [perspective:1100px] cursor-pointer">
+        {/* its shadow on the page, moving opposite the tilt */}
+        <span aria-hidden className="absolute left-[8%] right-[2%] bottom-[-7%] h-[12%] rounded-[50%] bg-[#2b1a0c]/40 blur-xl transition-transform duration-200"
+          style={{ transform: `translateX(${(-ry - 18) * 0.6}px) scaleX(${tilt ? 0.92 : 1})` }} />
+        <span className="absolute inset-0 transition-transform duration-200 ease-out [transform-style:preserve-3d]"
+          style={{ transform: `rotateY(${ry}deg) rotateX(${rx}deg) rotateZ(-2deg) ${tilt ? 'translateY(-8px) scale(1.02)' : ''}`, containerType: 'inline-size', filter: 'drop-shadow(18px 26px 22px rgba(40,22,8,0.45)) drop-shadow(4px 6px 4px rgba(40,22,8,0.35))' }}>
+          <BookThickness look={book.book.coverStyle} />
+          <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
+          {/* the light catching the cover as it turns */}
+          <span aria-hidden className="absolute inset-0 rounded-[10px] pointer-events-none mix-blend-overlay transition-opacity duration-200"
+            style={{ opacity: tilt ? 1 : 0.35, background: `linear-gradient(${105 + (tilt ? (tilt.x - 0.5) * 60 : 0)}deg, transparent 25%, rgba(255,255,255,0.6) ${45 + (tilt ? (tilt.x - 0.5) * 30 : 0)}%, transparent 65%)` }} />
+        </span>
+      </button>
+      <p className="mt-8 pinbook-serif text-lg font-bold text-ink text-center leading-tight">{book.book.name}</p>
+      <p className="mt-1 text-xs text-slate-500 text-center">
+        {book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect{chaptersOf(book) > 1 ? ` · ${chaptersOf(book)} chapters` : ''} · <span className="text-[#8a6420] font-semibold">click to open</span>
+      </p>
     </div>
   )
 }
@@ -202,9 +222,7 @@ export function AchievementBoard({ community, book, sample }: { community: strin
   const defOf = (id: string) => book?.badges.find((b) => b.id === id)
   const shown = (list ?? []).filter((a) => defOf(a.badge)) // badges still in the book
   return (
-    <section className="card-glass p-5 md:p-6">
-      <h2 className="pinbook-serif text-lg font-bold text-ink mb-1 flex items-center gap-2"><Trophy size={17} className="text-[#b8862b]" />Achievement Badge Board</h2>
-      <p className="text-xs text-slate-500 mb-4">The newest members to earn a badge from this book.</p>
+    <Section title="Achievement Badge Board" icon={<Trophy size={19} className="text-[#b8862b]" />} sub="The newest members to earn a badge from this book.">
       {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
         : shown.length === 0 ? <p className="text-sm text-slate-500">No one has earned a badge yet — collect the cards and be the first.</p>
         : (
@@ -229,7 +247,7 @@ export function AchievementBoard({ community, book, sample }: { community: strin
             })}
           </ol>
         )}
-    </section>
+    </Section>
   )
 }
 
@@ -252,8 +270,7 @@ function NewestMembers({ community, members }: { community: string; members: num
       .then(setList).catch(() => setList([]))
   }, [community, members])
   return (
-    <section className="card-glass p-5 md:p-6">
-      <h2 className="pinbook-serif text-lg font-bold text-ink mb-3">Newest members</h2>
+    <Section title="Newest members">
       {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
         : list.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
         : (
@@ -266,7 +283,7 @@ function NewestMembers({ community, members }: { community: string; members: num
             ))}
           </div>
         )}
-    </section>
+    </Section>
   )
 }
 

@@ -20,9 +20,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   in the top right over the header's corner (after the name on a phone), the name, tagline, members and
   Join, then the sections the creator switched on (`page.sections`, `COMMUNITY_SECTIONS` / `sectionOn()`):
   About, the Achievement Badge Board and Newest members (`newestMembers()`, sorted in the browser — no
-  extra index); the Community Discussion Board is listed as Coming soon. The book is a showcase
-  ("The Creator Book": the cover under a warm spotlight, turning toward you on hover, its badges and
-  chapters, Open the book). The Studio's Community tab shows this page exactly as fans see it on the left
+  extra index); the Community Discussion Board is listed as Coming soon. The book is shown off, not
+  in a card (`ShowcaseBook`): a big picture of it standing slanted on the page over the header's corner, with
+  its shadow; it turns to follow the pointer with light sweeping the cover, and a click opens it over the
+  page. The rest is paper (`Section`: engraved titles, a fleuron divider, corner flourishes) under a title
+  area with the community's emblem, name, tagline, member / creator / game chips and Join. The Studio's Community tab shows this page exactly as fans see it on the left
   (`CommunityView`, no editing controls on it), and everything to change it on the right — Page details
   (header picture: upload, drag and zoom with `PicturePlacer`, Darken; colour; name; tagline; games; About)
   and Page sections. Changes show on the left at once and save themselves. `saveCommunity` uses `mergeFields`; firestore.rules lets `communities` carry `page`.
