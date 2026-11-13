@@ -94,7 +94,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           <div className="relative z-[100] flex gap-2 shrink-0">
             {!arranging && (
               <button type="button" onClick={() => setEditing('new')}
-                className="rounded-md bg-[#2b2014] px-3.5 py-2 text-sm font-bold text-[#fbf6ea] inline-flex items-center gap-1.5 hover:bg-[#3d2e1d] transition-colors">
+                className="rounded-md bg-[#2b2014]/45 px-3.5 py-2 text-sm font-bold text-[#fbf6ea] inline-flex items-center gap-1.5 hover:bg-[#2b2014]/85 transition-colors">
                 <Plus size={16} />New note
               </button>
             )}
@@ -102,7 +102,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
               <button type="button" onClick={() => { setArranging((a) => !a); setSelected(null) }}
                 // arranging is for a computer (on a phone the notes stack)
                 className={cn('hidden sm:inline-flex rounded-md px-3.5 py-2 text-sm font-bold items-center gap-1.5 transition-colors',
-                  arranging ? 'bg-[#2b2014] text-[#fbf6ea]' : 'bg-[#f6eedb] text-[#2b2014] border border-[#2b2014]/25 hover:bg-[#fbf6ea]')}>
+                  arranging ? 'bg-[#2b2014]/80 text-[#fbf6ea] hover:bg-[#2b2014]/90' : 'bg-[#f6eedb]/45 text-[#2b2014] border border-[#2b2014]/20 hover:bg-[#f6eedb]/85')}>
                 {arranging ? <><Check size={16} />Done arranging</> : <><Move size={16} />Arrange the board</>}
               </button>
             )}
