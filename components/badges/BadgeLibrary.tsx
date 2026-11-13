@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeft, Award, Users } from 'lucide-react'
+import { ArrowLeft, Award, Check, Users } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { BLANK_COVER, CoverSpine, coverArea, spineOf } from '@/components/badges/CoverSpine'
@@ -481,7 +481,7 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
                     <div key={set.id} className="mx-auto w-full max-w-[240px] text-center">
                       <div className="text-sm font-bold text-ink truncate">{set.name}</div>
                       {!isHaven(set) && set.subtitle && <div className="text-[11px] text-slate-500 truncate">{set.subtitle.replace(/\s*·\s*Creator Book$/, '')}</div>}
-                      <CompletionBar set={set} earned={earned} total={inSet.length} />
+                      <CompletionBar earned={earned} total={inSet.length} />
                     </div>
                   )
                 })}
@@ -533,32 +533,30 @@ function BookHeader({ set, badges, ownerName, isMe }: { set: BadgeSet; badges: S
 
 // How full a book is: fills in the book's own colours as pins are earned (animates in), and turns
 // gold with a shine once every pin in it is earned.
-function CompletionBar({ set, earned, total }: { set: BadgeSet; earned: number; total: number }) {
-  const [shown, setShown] = useState(0)
+function CompletionBar({ earned, total }: { earned: number; total: number }) {
   const pct = total ? Math.round((earned / total) * 100) : 0
-  useEffect(() => {
-    const r = requestAnimationFrame(() => setShown(pct))
-    return () => cancelAnimationFrame(r)
-  }, [pct])
   const complete = total > 0 && earned === total
+  // A finished book: a parchment ribbon with notched ends, engraved — still, no shine (TCG Haven's flat style)
+  if (complete) {
+    return (
+      <div className="mt-2 flex justify-center">
+        <span className="relative inline-flex items-center gap-1 px-[18px] py-[4px] whitespace-nowrap bg-[#efe2c2] text-[#5a3a1c] border-y border-[#b8995f]"
+          style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 9px) 50%, 100% 100%, 0 100%, 9px 50%)' }}>
+          <Check size={13} strokeWidth={3} className="text-[#7a5230]" />
+          <span className="pinbook-serif text-[11px] font-bold uppercase tracking-[0.08em]">Book complete</span>
+        </span>
+      </div>
+    )
+  }
+  // On its way: a flat parchment track filling in walnut, the count beside it
   return (
     <div className="mt-2">
-      <div className="relative h-2.5 rounded-full bg-slate-700/60 border border-slate-600/50 overflow-hidden shadow-[inset_0_1px_2px_rgba(60,35,15,0.35)]">
-        <div
-          className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-1000 ease-out', complete && 'badge-bar-complete')}
-          style={{
-            width: `${shown}%`,
-            background: complete
-              ? 'linear-gradient(90deg, #b8862b, #fbe7a1, #d4a640)'
-              : `linear-gradient(90deg, ${set.cover.from}, ${set.cover.accent})`,
-          }}
-        />
+      <div className="h-2 rounded-full bg-[#e6d6b0] border border-[#c9b48a] overflow-hidden">
+        <div className="h-full rounded-full bg-[#7a5230] transition-[width] duration-700 ease-out" style={{ width: `${pct}%` }} />
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
-        <span className={complete ? 'text-amber-600' : 'text-slate-500'}>
-          {!total ? 'First pins coming soon' : complete ? 'Book complete!' : `${earned} / ${total} ${total === 1 ? 'pin' : 'pins'}`}
-        </span>
-        {total > 0 && <span className="text-slate-500">{pct}%</span>}
+      <div className="mt-1.5 flex justify-between text-[11px] font-semibold text-slate-500">
+        <span>{!total ? 'First pins coming soon' : `${earned} / ${total} ${total === 1 ? 'pin' : 'pins'}`}</span>
+        {total > 0 && <span className="tabular-nums">{pct}%</span>}
       </div>
     </div>
   )
