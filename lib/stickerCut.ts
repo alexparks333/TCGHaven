@@ -15,6 +15,8 @@ function polar(n: number, r: (t: number) => number, c = 50) {
   const pts = Array.from({ length: n }, (_, i) => { const t = (i / n) * Math.PI * 2 - Math.PI / 2, k = r(t); return `${r2(c + Math.cos(t) * k)} ${r2(c + Math.sin(t) * k)}` })
   return `M${pts.join('L')}Z`
 }
+/** A circle, drawn the same way round as everything else (so overlapping pieces join into one outline) */
+const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 ${-r * 2} 0Z`
 const star = (points: number, inner: number, wobble = 0) =>
   polar(points * 2, (t) => ((Math.round(((t + Math.PI / 2) / (Math.PI * 2)) * points * 2) % 2) ? 50 * inner : 50) * (1 + wobble * Math.sin(t * 7)))
 function stamp(w: number, h: number, bite = 4.2) {
@@ -44,7 +46,7 @@ export const STICKER_SHAPES = [
   { id: 'stamp', name: 'Stamp', w: 84, h: 100, d: stamp(84, 100) },
   { id: 'ticket', name: 'Ticket', w: 100, h: 56, d: 'M6 0H94A6 6 0 0 0 100 6V20A8 8 0 0 0 100 36V50A6 6 0 0 0 94 56H6A6 6 0 0 0 0 50V36A8 8 0 0 0 0 20V6A6 6 0 0 0 6 0Z' },
   { id: 'burst', name: 'Burst', w: 100, h: 100, d: star(12, 0.7, 0.06) },
-  { id: 'cloud', name: 'Cloud', w: 100, h: 72, d: 'M22 70A20 20 0 0 1 18 31A22 22 0 0 1 52 14A24 24 0 0 1 90 32A19 19 0 0 1 80 70Z' },
+  { id: 'cloud', name: 'Cloud', w: 100, h: 72, d: `${circle(22, 47, 20)}${circle(48, 31, 26)}${circle(77, 41, 21)}M22 47V67H77V47Z` },
   { id: 'speech', name: 'Speech', w: 100, h: 92, d: 'M14 2H86A12 12 0 0 1 98 14V58A12 12 0 0 1 86 70H46L22 90L28 70H14A12 12 0 0 1 2 58V14A12 12 0 0 1 14 2Z' },
   { id: 'bolt', name: 'Bolt', w: 76, h: 100, d: 'M48 0L4 58H34L22 100L74 36H44L58 0Z' },
   { id: 'flower', name: 'Flower', w: 100, h: 100, d: polar(240, (t) => 27 + 23 * Math.pow(Math.abs(Math.cos(t * 3)), 0.55)) },
@@ -55,6 +57,24 @@ export const STICKER_SHAPES = [
   { id: 'splat', name: 'Splat', w: 100, h: 100, d: polar(220, (t) => 37 + 4 * Math.sin(t * 5 + 1) + 3 * Math.sin(t * 9) + 8 * Math.pow(Math.max(0, Math.sin(t * 7 + 0.4)), 14) + 6 * Math.pow(Math.max(0, Math.sin(t * 4 - 0.8)), 18)) },
 ] as const
 export const stickerShapeOf = (id?: string) => STICKER_SHAPES.find((x) => x.id === id) ?? STICKER_SHAPES[0]
+
+/** A shape outline's real extent (measured by the browser), so nothing pokes out of the picture and there's no
+ *  wasted margin — curves and spikes don't always stay inside the box they were drawn in */
+const boxes = new Map<string, { x: number; y: number; w: number; h: number }>()
+export function shapeBox(def: { d: string; w: number; h: number }) {
+  if (!boxes.has(def.d)) {
+    let b = { x: 0, y: 0, w: def.w, h: def.h }
+    if (typeof document !== 'undefined') {
+      const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'), path = document.createElementNS(ns, 'path')
+      svg.setAttribute('style', 'position:absolute;width:0;height:0;overflow:hidden'); path.setAttribute('d', def.d)
+      svg.appendChild(path); document.body.appendChild(svg)
+      try { const r = path.getBBox(); if (r.width > 0 && r.height > 0) b = { x: r.x, y: r.y, w: r.width, h: r.height } } catch { /* keep the drawn box */ }
+      svg.remove()
+    }
+    boxes.set(def.d, b)
+  }
+  return boxes.get(def.d)!
+}
 const MAX = 720
 
 // the photo, loaded once per session (re-cutting while the owner drags it inside the shape must be quick)
@@ -103,11 +123,11 @@ export async function makeSticker(src: string, shape: StickerShape | string, bor
     return toBlob(out)
   } else {
     // the shape at its own proportions, as big as the photo allows; the photo fills it, centred
-    const def = stickerShapeOf(shape)
-    const f = Math.min(w / def.w, h / def.h), cw = def.w * f, ch = def.h * f
+    const def = stickerShapeOf(shape), box = shapeBox(def)
+    const f = Math.min(w / box.w, h / box.h), cw = box.w * f, ch = box.h * f
     cut = canvas(cw, ch)
     const g = cut.getContext('2d')!
-    g.save(); g.scale(cw / def.w, ch / def.h); g.clip(new Path2D(def.d)); g.setTransform(1, 0, 0, 1, 0, 0)
+    g.save(); g.scale(cw / box.w, ch / box.h); g.translate(-box.x, -box.y); g.clip(new Path2D(def.d)); g.setTransform(1, 0, 0, 1, 0, 0)
     const zw = w * zoom, zh = h * zoom // the owner's zoom, then their move (kept so the photo always fills the shape)
     g.drawImage(img, (cw - zw) / 2 + offset(pan, zw - cw, 'x'), (ch - zh) / 2 + offset(pan, zh - ch, 'y'), zw, zh)
     g.restore()

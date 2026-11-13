@@ -13,7 +13,7 @@ import { badgeArt } from '@/lib/badgeAssets'
 import { NOTE_COLOURS, type NoteLook, type WallPost } from '@/lib/communityBlocks'
 import { luminance, mix } from '@/lib/blockStyle'
 import { uploadCreatorPicture, uploadCreatorPng } from '@/lib/creatorUpload'
-import { STICKER_SHAPES, makeSticker } from '@/lib/stickerCut'
+import { STICKER_SHAPES, makeSticker, shapeBox } from '@/lib/stickerCut'
 import { cn } from '@/lib/utils'
 
 export const PINS = ['#b8402f', '#3f6e8c', '#5d7a3a', '#b8862b', '#7a4a8c']
@@ -374,7 +374,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
                           <span className="h-7 flex items-center justify-center">
                             {sh.id === 'cutout'
                               ? <Scissors size={20} strokeWidth={1.8} />
-                              : <svg viewBox={`-3 -3 ${sh.w + 6} ${sh.h + 6}`} className="h-7 w-auto max-w-[32px]" aria-hidden>
+                              : <svg viewBox={(({ x, y, w, h }) => `${x - 3} ${y - 3} ${w + 6} ${h + 6}`)(shapeBox(sh))} className="h-7 w-auto max-w-[32px]" aria-hidden>
                                   <path d={sh.d} fill={on ? '#f3d58a' : '#c9a35c'} stroke={on ? '#fbf6ea' : '#fbf6ea'} strokeWidth="5" strokeLinejoin="round" paintOrder="stroke" />
                                 </svg>}
                           </span>
