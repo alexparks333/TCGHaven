@@ -89,7 +89,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   `post.look` (`NoteLook`). Two kinds: **Note** and **Polaroid** (`look.kind` — a real instant photo: matte frame in
   `POLAROID_FRAMES` (`look.pframe`; classic white, cream, black, colour editions), thin even borders and the deep
   bottom strip with a marker caption, the photo square (or `fit: 'whole'`) recessed with a sheen — `.polaroid` CSS).
-  The owner's **New note** / **Sticker** / **Arrange the board** sit at the top right of the board, always above
+  The owner's **New note** (a note, polaroid or sticker — its Kind) / **Arrange the board** sit at the top right of the board, always above
   the notes (z-index), even one placed over that corner. A third kind, **Sticker** (`lib/stickerCut.ts`, all in the
   browser — no AI service): upload a photo and it's cut out — **Cut out** flood-fills a plain background away from
   the picture's edges (a "Cut" sensitivity slider; a PNG with its own see-through edge keeps it), or a shape

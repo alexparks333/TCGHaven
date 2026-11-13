@@ -7,7 +7,7 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check, Star } from 'lucide-react'
+import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { timeAgo, useLook, type BlockContext } from '@/components/community/blocks'
 import { NoteCard, NoteEditor, PINS, PushPin, Tape, hash } from '@/components/community/WallNote'
@@ -41,7 +41,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   const posts: Array<WallPost & { live?: boolean }> = [...live.map((p) => ({ id: p.id, text: p.text, image: p.image, note: p.note, look: p.look, place: p.place, at: p.at, live: true })), ...block.posts]
     .sort((a, b) => b.at - a.at)
   const [open, setOpen] = useState<WallPost | null>(null)
-  const [editing, setEditing] = useState<WallPost | 'new' | 'sticker' | null>(null) // the owner's note editor
+  const [editing, setEditing] = useState<WallPost | 'new' | null>(null) // the owner's note editor
   const [arranging, setArranging] = useState(false) // the owner moving, turning and sizing notes on the board
   const [selected, setSelected] = useState<string | null>(null)
   const rx = useWallReactions(ctx.uid, user?.uid ?? null, posts.map((p) => p.id))
@@ -96,12 +96,6 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
               <button type="button" onClick={() => setEditing('new')}
                 className="rounded-md bg-[#2b2014] px-3.5 py-2 text-sm font-bold text-[#fbf6ea] inline-flex items-center gap-1.5 hover:bg-[#3d2e1d] transition-colors">
                 <Plus size={16} />New note
-              </button>
-            )}
-            {!arranging && (
-              <button type="button" onClick={() => setEditing('sticker')}
-                className="rounded-md bg-[#f6eedb] px-3.5 py-2 text-sm font-bold text-[#2b2014] border border-[#2b2014]/25 inline-flex items-center gap-1.5 hover:bg-[#fbf6ea] transition-colors">
-                <Star size={15} />Sticker
               </button>
             )}
             {posts.some((p) => p.live) && (
@@ -162,7 +156,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           </div>
         </div>, document.body)}
       {editing && ctx.owner && (
-        <NoteEditor uid={ctx.uid} post={typeof editing === 'string' ? undefined : editing} startKind={editing === 'sticker' ? 'sticker' : undefined} board={surfaceCss(w.surface, w.color, w.texture)}
+        <NoteEditor uid={ctx.uid} post={typeof editing === 'string' ? undefined : editing} board={surfaceCss(w.surface, w.color, w.texture)}
           boardHolder={w.holders === 'pins' ? 'pin' : w.holders}
           onSave={async (n) => {
             if (typeof editing === 'string') {
