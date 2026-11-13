@@ -59,6 +59,13 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   (up to `MAX_TABS`): Home always first, then the creator's own pages — add, rename, reorder, delete; picking
   one switches the page on the left to it. Members sits beside the page (Page details → Members beside the
   page). `CommunityStudio demo={…}` draws it with a sample community and never saves (dev checks).
+- **Opening the book** (2026-11-12, `components/community/OpeningBook.tsx`). Clicking the showcase book squares it
+  up off its tilt, then it lifts, flies to the middle on a curve, takes the open book's shape and its cover swings
+  open onto the real book over a dimmed page; closing reverses it and sets it down in its spot, where it tilts
+  again. It's the Badges shelf's own flying book (`BadgeLibrary`'s exported `Flyer`, timings and phases — `lift`
+  and `land` added to both, `defs` for creator books), so the two always move alike. Upright phones use
+  `PhoneBook` (wrapped in `ExtraBooksProvider` with the creator's book). The spine's place is measured from the
+  open book's own column (`edge`), not the window.
 - **Posting on the page** (2026-11-12, `lib/communityPosts.ts`). The Creator Studio is only a page's **layout and
   look**; what the owner puts up — Creator Wall posts and announcements — is added on their own community page
   (`ctx.owner` = the owner viewing it, not the Studio): "Pin something up" (words, a picture via

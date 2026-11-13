@@ -5,9 +5,9 @@
 // sections the creator switched on (About, Newest members — lib/creatorBooks.ts COMMUNITY_SECTIONS).
 // Shown only while its creator can still run one (lib/communities.ts getCommunity). docs/creators.md.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette } from 'lucide-react'
+import { Loader2, Users, Check, LogOut, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette } from 'lucide-react'
 import { BlockView, type BlockContext } from '@/components/community/blocks'
 import { blockName, homeBlocks, tabBlocks, type Block } from '@/lib/communityBlocks'
 import { AuthGuard } from '@/components/auth/AuthGuard'
@@ -16,7 +16,7 @@ import { Avatar } from '@/components/friends/Avatar'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
 import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestMembers, useMyCommunities, type CommunityEntry } from '@/lib/communities'
 import { useFriends } from '@/components/friends/FriendsProvider'
-import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
+import { loadBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
 import { blockLook } from '@/lib/blockStyle'
 import { DEV_MEMBER_EVENT, DEV_MEMBER_CLEAR_EVENT, type DevMember } from '@/lib/devBoard'
@@ -26,8 +26,7 @@ import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
-import { BadgeBook } from '@/components/badges/BadgeBook'
-import { useScrollLock } from '@/lib/useScrollLock'
+import { OpeningBook } from '@/components/community/OpeningBook'
 import { GAME_COLORS, GAME_LABELS } from '@/lib/types'
 
 export default function CommunityPage({ uid }: { uid: string }) {
@@ -104,6 +103,15 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   // The open tab's blocks: Home's, or one of the creator's pages
   const blocks = current ? tabBlocks(current) : homeBlocks(community)
   const ctx: BlockContext = { uid, community, book, canReact: isMember || mine, owner: mine && !builder }
+  // The showcase book opening: it squares up off its tilt, then lifts off and flies open (OpeningBook)
+  const showRef = useRef<HTMLSpanElement>(null)
+  const fromRect = useRef<DOMRect | null>(null)
+  const [straight, setStraight] = useState(false)
+  const openBook = () => {
+    if (open) return
+    setStraight(true)
+    setTimeout(() => { fromRect.current = showRef.current?.getBoundingClientRect() ?? null; setOpen(true) }, 200)
+  }
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
@@ -175,7 +183,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
 
         {/* ── The book: a big picture of it, slanted on the page, over the header's corner ── */}
         <aside className="lg:col-start-2 lg:row-start-1 lg:-mt-48 relative z-10 flex flex-col items-center">
-          {book ? <ShowcaseBook book={book} onOpen={() => setOpen(true)} />
+          {book ? <ShowcaseBook book={book} coverRef={showRef} straight={straight} away={open} onOpen={openBook} />
             : <p className="pinbook-serif text-sm text-slate-500 text-center py-6">{community.name} hasn&rsquo;t made their book yet.</p>}
         </aside>
 
@@ -194,7 +202,12 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         )}
       </div>
 
-      {open && book && <BookViewer book={book.book} defs={book.badges} badges={isMember || mine ? progress : null} onClose={() => setOpen(false)} />}
+      {open && book && (
+        <OpeningBook book={book} badges={isMember || mine ? progress : null} isMe={isMember || mine}
+          from={fromRect.current ?? showRef.current?.getBoundingClientRect() ?? new DOMRect(window.innerWidth / 2 - 100, 120, 200, 282)}
+          getSpot={() => showRef.current?.getBoundingClientRect() ?? null}
+          onClosed={() => { setOpen(false); requestAnimationFrame(() => setStraight(false)) }} />
+      )}
     </div>
   )
 }
@@ -260,25 +273,32 @@ function BlockBuilder({ blocks, ctx, builder }: { blocks: Block[]; ctx: BlockCon
 
 /** The creator's book, shown off: a big picture of it standing slanted on the page with its shadow;
  *  it turns to follow the pointer (light sweeping the cover), and a click opens it over the page */
-function ShowcaseBook({ book, onOpen }: { book: CreatorBook; onOpen: () => void }) {
+function ShowcaseBook({ book, onOpen, coverRef, straight, away }: {
+  book: CreatorBook; onOpen: () => void
+  coverRef: React.Ref<HTMLSpanElement> // the book itself, measured for the opening flight
+  straight: boolean                     // squared up as it lifts off to open (and as it's set back down)
+  away: boolean                         // it's out — open, or flying — so its spot is empty
+}) {
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
-  const ry = -18 + (tilt ? (tilt.x - 0.5) * 30 : 0), rx = 7 + (tilt ? (0.5 - tilt.y) * 18 : 0)
+  const t = straight ? null : tilt
+  const ry = straight ? 0 : -18 + (t ? (t.x - 0.5) * 30 : 0), rx = straight ? 0 : 7 + (t ? (0.5 - t.y) * 18 : 0)
   return (
     <div className="flex flex-col items-center">
       <button type="button" onClick={onOpen} aria-label={`Open ${book.book.name}`}
         onPointerMove={(e) => { if (e.pointerType !== 'mouse') return; const r = e.currentTarget.getBoundingClientRect(); setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }) }}
         onPointerLeave={() => setTilt(null)}
+        style={away ? { visibility: 'hidden' } : undefined}
         className="relative w-[200px] md:w-[250px] lg:w-[280px] aspect-[0.71] outline-none [perspective:1100px] cursor-pointer">
         {/* its shadow on the page, moving opposite the tilt */}
         <span aria-hidden className="absolute left-[8%] right-[2%] bottom-[-7%] h-[12%] rounded-[50%] bg-[#2b1a0c]/40 blur-xl transition-transform duration-200"
-          style={{ transform: `translateX(${(-ry - 18) * 0.6}px) scaleX(${tilt ? 0.92 : 1})` }} />
-        <span className="absolute inset-0 transition-transform duration-200 ease-out [transform-style:preserve-3d]"
-          style={{ transform: `rotateY(${ry}deg) rotateX(${rx}deg) rotateZ(-2deg) ${tilt ? 'translateY(-8px) scale(1.02)' : ''}`, containerType: 'inline-size', filter: 'drop-shadow(18px 26px 22px rgba(40,22,8,0.45)) drop-shadow(4px 6px 4px rgba(40,22,8,0.35))' }}>
+          style={{ transform: `translateX(${(-ry - 18) * 0.6}px) scaleX(${t ? 0.92 : 1})` }} />
+        <span ref={coverRef} className="absolute inset-0 transition-transform duration-200 ease-out [transform-style:preserve-3d]"
+          style={{ transform: `rotateY(${ry}deg) rotateX(${rx}deg) rotateZ(${straight ? 0 : -2}deg) ${t ? 'translateY(-8px) scale(1.02)' : ''}`, containerType: 'inline-size', filter: 'drop-shadow(18px 26px 22px rgba(40,22,8,0.45)) drop-shadow(4px 6px 4px rgba(40,22,8,0.35))' }}>
           <BookThickness look={book.book.coverStyle} />
           <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
           {/* the light catching the cover as it turns */}
           <span aria-hidden className="absolute inset-0 rounded-[10px] pointer-events-none mix-blend-overlay transition-opacity duration-200"
-            style={{ opacity: tilt ? 1 : 0.35, background: `linear-gradient(${105 + (tilt ? (tilt.x - 0.5) * 60 : 0)}deg, transparent 25%, rgba(255,255,255,0.6) ${45 + (tilt ? (tilt.x - 0.5) * 30 : 0)}%, transparent 65%)` }} />
+            style={{ opacity: t ? 1 : straight ? 0 : 0.35, background: `linear-gradient(${105 + (t ? (t.x - 0.5) * 60 : 0)}deg, transparent 25%, rgba(255,255,255,0.6) ${45 + (t ? (t.x - 0.5) * 30 : 0)}%, transparent 65%)` }} />
         </span>
       </button>
     </div>
@@ -378,19 +398,3 @@ export function MembersColumn({ community, book, members, sample }: { community:
   )
 }
 
-function BookViewer({ book, defs, badges, onClose }: { book: Parameters<typeof BadgeBook>[0]['set']; defs: Parameters<typeof BookCover>[0]['defs']; badges: SharedBadges | null; onClose: () => void }) {
-  useScrollLock(true)
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm">
-      <div className="flex items-center gap-3 px-5 py-3 text-white">
-        <BookOpen size={18} />
-        <p className="font-bold truncate">{book.name}</p>
-        <button type="button" onClick={onClose} className="ml-auto p-2 rounded-full bg-white/10 hover:bg-white/20" aria-label="Close"><X size={18} /></button>
-      </div>
-      <div className="flex-1 overflow-auto px-3 pb-6 flex items-start justify-center">
-        {/* a member's own progress fills it in (their badges include this community's — lib/creatorShelf.ts) */}
-        <div className="w-full max-w-[1100px]"><BadgeBook set={book} defs={defs} badges={badges} isMe={!!badges} /></div>
-      </div>
-    </div>
-  )
-}

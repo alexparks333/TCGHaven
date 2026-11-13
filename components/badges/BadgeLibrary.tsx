@@ -23,10 +23,11 @@ import { badgeAsset } from '@/lib/badgeAssets'
 // open spread as the book glides back to the middle, then it flies home to its (empty) spot on the
 // shelf. Used on the Badges page and a profile's Badges tab.
 
-const FLY_MS = 560
-const GROW_MS = 240 // the closed book changing shape in place (shelf book ↔ the open book's cover)
-const TURN_MS = 900
-const REVEAL_MS = 60 // the cover has landed: swap it for the real book (they look identical)
+export const FLY_MS = 560
+export const LIFT_MS = 200 // the book rising off its spot before it flies (and setting down when it's back)
+export const GROW_MS = 240 // the closed book changing shape in place (shelf book ↔ the open book's cover)
+export const TURN_MS = 900
+export const REVEAL_MS = 60 // the cover has landed: swap it for the real book (they look identical)
 // Shared by the cover swing and the glide, so they move as one.
 const EASE = 'cubic-bezier(0.55, 0.05, 0.25, 1)'
 
@@ -35,11 +36,13 @@ const EASE = 'cubic-bezier(0.55, 0.05, 0.25, 1)'
 // shape in place, in the middle of the page, to become the open book's cover (grow) or back (settle).
 // The open book fills the window on desktop, so its cover isn't the shelf book's shape — flying
 // with a stretch made the book squash and then snap to the shelf's look as it landed.
-type Phase = 'measure' | 'fly' | 'flyGo' | 'grow' | 'turn' | 'reveal'
+// lift: it rises off its spot (a little bigger, its shadow spreading) before it flies
+export type Phase = 'measure' | 'fly' | 'lift' | 'flyGo' | 'grow' | 'turn' | 'reveal'
 // prep: the open cover is laid over the open book (they look identical) and the shelf is laid out
 // unseen, to find the book's spot · shut: the cover swings shut · settle: back to the shelf book's
 // shape · home: it flies to its spot
-type ClosePhase = 'prep' | 'shut' | 'settle' | 'home'
+// land: back in its spot, it sets down (the lift undone) before the shelf takes over
+export type ClosePhase = 'prep' | 'shut' | 'settle' | 'home' | 'land'
 type View =
   | { mode: 'shelf' }
   | { mode: 'opening'; set: BadgeSet; from: DOMRect; to?: DOMRect; phase: Phase }
@@ -163,7 +166,8 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
     if (view.mode !== 'opening') return
     let t: ReturnType<typeof setTimeout> | undefined
     let raf = 0
-    if (view.phase === 'fly') raf = requestAnimationFrame(() => requestAnimationFrame(() => setView((v) => (v.mode === 'opening' ? { ...v, phase: 'flyGo' } : v))))
+    if (view.phase === 'fly') raf = requestAnimationFrame(() => requestAnimationFrame(() => setView((v) => (v.mode === 'opening' ? { ...v, phase: 'lift' } : v))))
+    if (view.phase === 'lift') t = setTimeout(() => setView((v) => (v.mode === 'opening' ? { ...v, phase: 'flyGo' } : v)), LIFT_MS)
     if (view.phase === 'flyGo') t = setTimeout(() => setView((v) => (v.mode === 'opening' ? { ...v, phase: 'grow' } : v)), FLY_MS + 60)
     if (view.phase === 'grow') t = setTimeout(() => setView((v) => (v.mode === 'opening' ? { ...v, phase: 'turn' } : v)), GROW_MS + 80)
     if (view.phase === 'turn') t = setTimeout(() => setView((v) => (v.mode === 'opening' ? { ...v, phase: 'reveal' } : v)), TURN_MS)
@@ -191,7 +195,8 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
       setView((v) => (v.mode === 'closing' ? { ...v, phase: 'settle' } : v))
     }, TURN_MS)
     if (view.phase === 'settle') t = setTimeout(() => setView((v) => (v.mode === 'closing' ? { ...v, phase: 'home' } : v)), GROW_MS + 80)
-    if (view.phase === 'home') t = setTimeout(() => setView({ mode: 'shelf' }), FLY_MS + 40)
+    if (view.phase === 'home') t = setTimeout(() => setView((v) => (v.mode === 'closing' ? { ...v, phase: 'land' } : v)), FLY_MS + 30)
+    if (view.phase === 'land') t = setTimeout(() => setView({ mode: 'shelf' }), LIFT_MS + 20)
     return () => { if (t) clearTimeout(t); cancelAnimationFrame(raf) }
   }, [view])
 
@@ -238,12 +243,12 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
       <div
         style={closing ? {
           // closing: the right page stays while the cover swings shut over it and glides back left
-          visibility: closing.phase === 'home' || closing.phase === 'settle' ? 'hidden' : 'visible',
+          visibility: closing.phase === 'home' || closing.phase === 'land' || closing.phase === 'settle' ? 'hidden' : 'visible',
           clipPath: clip,
           transform: closing.phase === 'prep' ? undefined : `translateX(${-closing.to.width / 2}px)`,
           transition: closing.phase === 'shut' ? `transform ${TURN_MS}ms ${EASE}` : undefined,
         } : {
-          visibility: phase === 'measure' || phase === 'fly' || phase === 'flyGo' || phase === 'grow' ? 'hidden' : 'visible',
+          visibility: phase === 'measure' || phase === 'fly' || phase === 'lift' || phase === 'flyGo' || phase === 'grow' ? 'hidden' : 'visible',
           clipPath: clip,
           transform: settled ? undefined : `translateX(${-shift}px)`,
           transition: phase === 'turn' ? `transform ${TURN_MS}ms ${EASE}` : undefined,
@@ -254,7 +259,7 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
       {opening?.to && (
         <Flyer
           set={opening.set} badges={badges} isMe={isMe} full={full} spot={opening.from} to={opening.to} spread={0}
-          at={phase === 'fly' ? 'shelf' : phase === 'flyGo' ? 'mid' : 'cover'}
+          at={phase === 'fly' || phase === 'lift' ? 'shelf' : phase === 'flyGo' ? 'mid' : 'cover'} lifted={phase === 'lift' || phase === 'flyGo'}
           turned={phase === 'turn' || phase === 'reveal'} fade={phase === 'reveal'}
           anim={phase === 'flyGo' ? 'fly' : phase === 'grow' ? 'grow' : phase === 'turn' ? 'turn' : null}
         />
@@ -263,7 +268,7 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
       {closing && (
         <div
           className="absolute inset-x-0 top-0"
-          style={{ visibility: closing.phase === 'home' || closing.phase === 'settle' ? 'visible' : 'hidden', opacity: closing.phase === 'home' || closing.phase === 'settle' ? 1 : 0, transition: 'opacity 320ms ease' }}
+          style={{ visibility: closing.phase === 'home' || closing.phase === 'land' || closing.phase === 'settle' ? 'visible' : 'hidden', opacity: closing.phase === 'home' || closing.phase === 'land' || closing.phase === 'settle' ? 1 : 0, transition: 'opacity 320ms ease' }}
         >
           <Shelf {...shelf} badges={badges} full={full} onOpen={() => {}} intro={false} away={closing.set.id} />
         </div>
@@ -271,9 +276,9 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
       {closing?.spot && (
         <Flyer
           set={closing.set} badges={badges} isMe={isMe} full={full} spot={closing.spot} to={closing.to} spread={closing.spread}
-          at={closing.phase === 'home' ? 'shelf' : closing.phase === 'settle' ? 'mid' : 'cover'}
+          at={closing.phase === 'home' || closing.phase === 'land' ? 'shelf' : closing.phase === 'settle' ? 'mid' : 'cover'} lifted={closing.phase === 'settle' || closing.phase === 'home'}
           turned={closing.phase === 'prep'} fade={false}
-          anim={closing.phase === 'shut' ? 'turn' : closing.phase === 'settle' ? 'grow' : closing.phase === 'home' ? 'home' : null}
+          anim={closing.phase === 'shut' ? 'turn' : closing.phase === 'settle' ? 'grow' : closing.phase === 'home' ? 'home' : closing.phase === 'land' ? 'land' : null}
         />
       )}
     </div>
@@ -286,15 +291,17 @@ export function BadgeLibrary({ ownerName, badges: realBadges, isMe, full = false
 // — a pure rotateY(0 → −180°) around the spine. Sharing one element made the browser blend the
 // fly's resize into the swing whenever their timing overlapped, squashing the cover flat instead
 // of turning it.
-function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, anim }: {
+export function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, anim, lifted = false, defs }: {
   set: BadgeSet; badges: SharedBadges | null; isMe: boolean; full: boolean
+  defs?: BadgeDef[]                // a creator's book: its own badges (not in TCG Haven's catalog)
+  lifted?: boolean                 // raised off the page: a touch bigger, its shadow spread under it
   spot: DOMRect                    // the book's spot on the shelf
   to: DOMRect                      // where the cover lies on the open book (its right half)
   spread: number                   // the spread the inside of the cover shows
   at: 'shelf' | 'mid' | 'cover'    // in its shelf spot · mid-page in the shelf book's shape · the open book's cover
   turned: boolean                  // the cover swung open
   fade: boolean                    // the real book has taken over
-  anim: 'fly' | 'home' | 'grow' | 'turn' | null // which motion is running
+  anim: 'fly' | 'home' | 'grow' | 'turn' | 'land' | null // which motion is running
 }) {
   const shift = to.width / 2
   const left = to.left - shift // centred
@@ -305,6 +312,8 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
     : at === 'mid' ? { left: left + (to.width - mw) / 2, top: to.top, width: mw, height: mh }
     : { left, top: to.top, width: to.width, height: to.height }
   const move = (ms: number, curve: string) => ['left', 'top', 'width', 'height'].map((k) => `${k} ${ms}ms ${curve}`).join(', ')
+  // In flight the across and the up/down motions ease differently, so the book travels on a gentle curve
+  const arc = (ms: number, across: string, upDown: string) => [`left ${ms}ms ${across}`, `width ${ms}ms ${across}`, `top ${ms}ms ${upDown}`, `height ${ms}ms ${upDown}`].join(', ')
   const turning = turned
   const swinging = anim === 'turn'
   const hidden: React.CSSProperties = { backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }
@@ -315,13 +324,18 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
         className="absolute"
         style={{
           ...rect,
-          transition: anim === 'fly' ? move(FLY_MS, 'cubic-bezier(0.22, 0.8, 0.25, 1)')
-            : anim === 'home' ? move(FLY_MS, 'cubic-bezier(0.5, 0, 0.3, 1)')
+          transition: anim === 'fly' ? arc(FLY_MS, 'cubic-bezier(0.3, 0.75, 0.3, 1)', 'cubic-bezier(0.15, 0.9, 0.3, 1)')
+            : anim === 'home' ? arc(FLY_MS, 'cubic-bezier(0.45, 0, 0.25, 1)', 'cubic-bezier(0.62, 0, 0.35, 1)')
             : anim === 'grow' ? move(GROW_MS, 'cubic-bezier(0.3, 0, 0.2, 1)')
             : 'none',
           opacity: fade ? 0 : 1,
         }}
       >
+        {/* Its shadow on the page while it's lifted — spreading as it rises, gathering as it sets down */}
+        <div aria-hidden className="absolute left-[4%] right-[4%] -bottom-[7%] h-[12%] rounded-[50%] bg-[#1c120a] blur-xl"
+          style={{ opacity: lifted && at !== 'cover' ? 0.45 : 0, transform: lifted ? 'scale(1.08)' : 'scale(0.85)', transition: `opacity ${LIFT_MS}ms ease, transform ${LIFT_MS}ms ease` }} />
+        {/* 1½ · lift — raised off the page, a touch bigger */}
+        <div className="absolute inset-0" style={{ transform: lifted ? 'translateY(-10px) scale(1.045)' : 'none', transition: `transform ${anim === 'grow' ? GROW_MS : LIFT_MS}ms cubic-bezier(0.2, 0.8, 0.2, 1)` }}>
         {/* The closed book's thickness and shadow: there while it's shut, gone as it opens */}
         <BookThickness look={set.coverStyle} style={{ opacity: at === 'cover' ? 0 : 1, transition: anim === 'grow' ? `opacity ${GROW_MS}ms ease` : 'none' }} />
         {/* 2 · glide (+ the perspective, looking from the spine) */}
@@ -345,7 +359,7 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
             }}
           >
             <div className="absolute inset-0" style={hidden}>
-              <BookCover set={set} badges={badges} />
+              <BookCover set={set} badges={badges} defs={defs} />
               {/* Light falloff: the front of the cover darkens as it turns away */}
               <div
                 className="absolute inset-0 rounded-[14px] bg-black"
@@ -357,7 +371,7 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
                 lightens as it lands. */}
             <div className="absolute inset-0 overflow-hidden" style={{ ...hidden, transform: 'rotateY(180deg)' }}>
               <div className="absolute left-0 top-0" style={{ width: to.width * 2 }}>
-                <BadgeBook set={set} badges={badges} isMe={isMe} full={full} coverOnly startSpread={spread} />
+                <BadgeBook set={set} badges={badges} isMe={isMe} full={full} coverOnly startSpread={spread} defs={defs} />
               </div>
               <div
                 className="absolute inset-0 bg-black"
@@ -365,6 +379,7 @@ function Flyer({ set, badges, isMe, full, spot, to, spread, at, turned, fade, an
               />
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
