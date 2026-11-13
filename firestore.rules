@@ -83,14 +83,14 @@ service cloud.firestore {
     }
 
     // A creator's community profile (barebones for now): name, tagline, about, colour
-    // What a community's owner posts on their page (lib/communityPosts.ts): Creator Wall posts and
-    // announcements. Anyone signed in reads; only the owner (community == their uid) writes.
+    // What a community's owner puts up on their page (lib/communityPosts.ts): Creator Wall posts,
+    // announcements and Highlighted Cards. Anyone signed in reads; only the owner (community == their uid) writes.
     match /community_posts/{id} {
       allow read: if signedIn();
       allow create: if signedIn() && notBanned() && request.resource.data.community == request.auth.uid
-        && request.resource.data.kind in ['wall', 'announcement']
+        && request.resource.data.kind in ['wall', 'announcement', 'card']
         && request.resource.data.text is string && request.resource.data.text.size() <= 2000
-        && request.resource.data.keys().hasOnly(['community', 'block', 'kind', 'text', 'title', 'image', 'note', 'pinned', 'at']);
+        && request.resource.data.keys().hasOnly(['community', 'block', 'kind', 'text', 'title', 'image', 'note', 'pinned', 'slot', 'at']);
       allow update: if signedIn() && resource.data.community == request.auth.uid
         && request.resource.data.community == resource.data.community
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'title', 'note', 'pinned']);
