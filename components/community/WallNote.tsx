@@ -134,7 +134,7 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
       <article onClick={onClick} style={{ '--tilt': `${tilt}deg` } as React.CSSProperties} className={cn('cork-note relative', onClick && 'cursor-pointer', className)}>
         {top}
         {/* the tape / pin go on the sleeve itself (it's narrower than the note) */}
-        <div className="relative mx-auto w-[84%]">
+        <div className={cn('relative mx-auto w-[84%]', l.price !== false && c && 'mb-5' /* room for the price ribbon */)}>
           {holder === 'tape' && <Tape snug />}
           {holder === 'pin' && <PushPin color={pinColor} tilt={[-14, -6, 8, 14][hash(post.id) % 4]} />}
           <div className="relative rounded-[7px] p-[3.2%] pt-[5%]" style={{ background: sl.bg, boxShadow: `inset 0 0 0 1px ${sl.edge}, 0 1px 2px rgba(0,0,0,0.35), 0 4px 8px -4px rgba(0,0,0,0.3)` }}>
@@ -771,17 +771,17 @@ function useCardPrice(card?: { id: string; game?: string }) {
   return price
 }
 
-/** The price on a little manila tag tied to the sleeve's corner */
+/** The price on a ribbon across the bottom middle of the sleeve: a band with its two notched tails folded behind */
 function PriceTag({ card }: { card: { id: string; game?: string } }) {
   const price = useCardPrice(card)
   if (!price) return null
+  const tail = 'absolute top-[7px] w-[22px] h-full bg-[#7d2119]'
   return (
-    <span className="absolute -right-[10%] top-[12%] rotate-[9deg] pointer-events-none flex items-center">
-      {/* the string */}
-      <svg width="22" height="14" viewBox="0 0 22 14" className="-mr-1" aria-hidden><path d="M1 2C7 1 12 10 21 7" fill="none" stroke="#efe6d2" strokeWidth="1.2" /></svg>
-      <span className="relative pl-3 pr-2 py-1 text-[12px] font-bold tabular-nums text-[#2b2014] bg-[#e9d6a7] shadow-[0_1px_2px_rgba(0,0,0,0.3)]"
-        style={{ clipPath: 'polygon(9px 0, 100% 0, 100% 100%, 9px 100%, 0 50%)' }}>
-        <i className="absolute left-[7px] top-1/2 -translate-y-1/2 w-[4px] h-[4px] rounded-full bg-[#8a6a3a]" />
+    <span className="absolute left-1/2 -bottom-[16px] -translate-x-1/2 z-[2] pointer-events-none whitespace-nowrap">
+      {/* the tails, behind and a little lower, with a V cut in each end */}
+      <span className={cn(tail, '-left-[14px]')} style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 7px 50%)' }} />
+      <span className={cn(tail, '-right-[14px]')} style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 7px) 50%, 100% 100%, 0 100%)' }} />
+      <span className="relative block px-5 py-1.5 bg-[#b23a2f] text-[#fbf3e0] text-[17px] font-bold tabular-nums tracking-wide shadow-[0_2px_3px_rgba(0,0,0,0.3)]">
         {formatCurrency(price)}
       </span>
     </span>
