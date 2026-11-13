@@ -95,7 +95,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   return (
     <section className="relative isolate px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6" style={board}>
       <header className="mb-4 flex items-start gap-3 flex-wrap">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[13rem] flex-1">{/* the title keeps its room; on a narrow board the buttons drop below it */}
           <h2 className="font-bold flex items-center gap-2.5 leading-tight [&>svg]:shrink-0"
             style={{ fontFamily: l.titleFont, fontSize: `${1.25 * l.titleSize}rem`, color: ink }}><Sparkles size={19} />{block.title || 'Creator Wall'}</h2>
           <p className="text-xs mt-1" style={{ color: mix(ink, w.color, 0.18) }}>Pinned up by {ctx.community.name}</p>

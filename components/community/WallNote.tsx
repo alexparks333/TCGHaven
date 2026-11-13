@@ -42,13 +42,14 @@ export function PushPin({ color, tilt = -12 }: { color: string; tilt?: number })
   )
 }
 
-/** Two strips of tape across the top corners, flat, with torn ends */
-export function Tape() {
-  const strip = 'absolute -top-2 w-[58px] h-[19px] pointer-events-none z-[1] [clip-path:polygon(4%_0,12%_10%,8%_25%,14%_42%,6%_58%,12%_75%,5%_100%,95%_100%,88%_85%,94%_68%,87%_50%,95%_33%,89%_16%,96%_0)]'
+/** Two strips of tape across the top corners. `snug`: a smaller thing (a card sleeve) — the strips sit lower and
+ *  further in, so they cross its corners rather than hang off them */
+export function Tape({ snug = false }: { snug?: boolean }) {
+  const strip = 'absolute w-[58px] h-[19px] pointer-events-none z-[1] [clip-path:polygon(4%_0,12%_10%,8%_25%,14%_42%,6%_58%,12%_75%,5%_100%,95%_100%,88%_85%,94%_68%,87%_50%,95%_33%,89%_16%,96%_0)]'
   const look = { background: 'repeating-linear-gradient(90deg, rgba(246,238,219,0.86) 0 3px, rgba(236,225,198,0.86) 3px 6px)' }
   return <>
-    <span className={cn(strip, '-left-4 -rotate-[38deg]')} style={look} />
-    <span className={cn(strip, '-right-4 rotate-[38deg]')} style={look} />
+    <span className={cn(strip, snug ? 'top-[3px] -left-[13px]' : '-top-2 -left-4', '-rotate-[38deg]')} style={look} />
+    <span className={cn(strip, snug ? 'top-[3px] -right-[13px]' : '-top-2 -right-4', 'rotate-[38deg]')} style={look} />
   </>
 }
 
@@ -134,11 +135,12 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
         {top}
         {/* the tape / pin go on the sleeve itself (it's narrower than the note) */}
         <div className="relative mx-auto w-[84%]">
-          {held}
+          {holder === 'tape' && <Tape snug />}
+          {holder === 'pin' && <PushPin color={pinColor} tilt={[-14, -6, 8, 14][hash(post.id) % 4]} />}
           <div className="relative rounded-[7px] p-[3.2%] pt-[5%]" style={{ background: sl.bg, boxShadow: `inset 0 0 0 1px ${sl.edge}, 0 1px 2px rgba(0,0,0,0.35), 0 4px 8px -4px rgba(0,0,0,0.3)` }}>
             {c?.imageUrl
               // eslint-disable-next-line @next/next/no-img-element
-              ? <img src={cardImage(c.imageUrl, full ? 'full' : 'grid') ?? c.imageUrl} alt={c.name} draggable={false} className="block w-full aspect-[63/88] object-cover rounded-[4.5%]" />
+              ? <img src={cardImage(c.imageUrl, 'full') ?? c.imageUrl} alt={c.name} draggable={false} className="block w-full aspect-[63/88] object-cover rounded-[4.5%]" />
               : <div className="w-full aspect-[63/88] rounded-[4.5%] bg-[#2b2014]/30 flex items-center justify-center text-[11px] font-bold text-white/80">Pick a card</div>}
             {/* the plastic: a sheen across it, the open top a touch brighter */}
             <span className="absolute inset-0 rounded-[7px] pointer-events-none" style={{ background: `linear-gradient(118deg, rgba(255,255,255,${sl.sheen}) 0%, rgba(255,255,255,${sl.sheen / 4}) 30%, transparent 31%, transparent 64%, rgba(255,255,255,${sl.sheen / 2}) 65%, transparent 74%)` }} />
