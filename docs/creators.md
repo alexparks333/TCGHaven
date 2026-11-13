@@ -59,6 +59,16 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   (up to `MAX_TABS`): Home always first, then the creator's own pages — add, rename, reorder, delete; picking
   one switches the page on the left to it. Members sits beside the page (Page details → Members beside the
   page). `CommunityStudio demo={…}` draws it with a sample community and never saves (dev checks).
+- **Creator Wall** (2026-11-12, `components/community/CreatorWall.tsx`). The creator's posts pinned to a flat
+  cork board (`.cork-board` / `.cork-note` in globals.css): words on paper notes held by a pin, pictures as
+  prints held by tape, each tilted a little (steady per post id) and straightened on hover; packed in CSS
+  columns, newest first, 6 shown then "See all". Tap one to read it whole. The composer picks the paper
+  (`NOTE_COLOURS`, `WallPost.note`). **Reactions** (`lib/wallReactions.ts`): ♥ / 👍 / 🃏 under each post, for
+  members and the creator (`ctx.canReact`); `wall_reactions/{community}_{post}_{member}_{reaction}`, one live
+  query per wall, counts added up in the browser, toggles shown at once. Add a reaction by adding it to
+  `REACTIONS` (the rules accept any `^[a-z0-9-]{1,24}$` id); the creator's own art goes in its `art`
+  (e.g. `/reactions/heart.png` in `public/`). Dev panel → Community → "Fake reactions on every post".
+  Kept flat on purpose — the owner doesn't want fake-3D shading anywhere on community pages.
 - **Block styles** (2026-11-12, `lib/blockStyle.ts`, `components/creator/BlockStyleEditor.tsx`). Every block has a
   palette button in the Studio's hover toolbar → the side panel's **Style** tab (clicking the block opens
   **Content**): 8 themes (Parchment, Walnut, Cream, Ink, Forest, Burgundy, Navy, Stone) or any colours

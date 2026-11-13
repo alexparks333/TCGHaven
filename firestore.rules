@@ -83,6 +83,21 @@ service cloud.firestore {
     }
 
     // A creator's community profile (barebones for now): name, tagline, about, colour
+    // Reactions on a Creator Wall's posts (lib/wallReactions.ts): one doc per member per reaction per post;
+    // anyone signed in reads; a member (or the creator) adds or takes back only their own.
+    match /wall_reactions/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && notBanned()
+        && request.resource.data.member == request.auth.uid
+        && request.resource.data.reaction is string && request.resource.data.reaction.matches('^[a-z0-9-]{1,24}$')
+        && request.resource.data.post is string && request.resource.data.post.size() <= 40
+        && id == request.resource.data.community + '_' + request.resource.data.post + '_' + request.auth.uid + '_' + request.resource.data.reaction
+        && (request.auth.uid == request.resource.data.community
+          || exists(/databases/$(database)/documents/community_members/$(request.resource.data.community + '_' + request.auth.uid)))
+        && request.resource.data.keys().hasOnly(['community', 'post', 'member', 'reaction', 'at']);
+      allow delete: if signedIn() && (request.auth.uid == resource.data.member || request.auth.uid == resource.data.community || isAdmin());
+    }
+
     // The Achievement Badge Board (lib/communities.ts recordAchievement): a member's own app records each
     // badge they earn from a community they belong to; anyone signed in reads; the member, the community's
     // creator or staff can remove one.

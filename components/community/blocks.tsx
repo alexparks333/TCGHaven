@@ -17,6 +17,7 @@ import { watchAchievements, type Achievement, type CommunityEntry } from '@/lib/
 import type { CreatorBook } from '@/lib/creatorBooks'
 import type { Block } from '@/lib/communityBlocks'
 import { blockLook, lookVars, panelStyle, type BlockLook } from '@/lib/blockStyle'
+import { CreatorWall } from '@/components/community/CreatorWall'
 import { DEV_EARNER_EVENT, DEV_EARNER_CLEAR_EVENT, type DevEarner } from '@/lib/devBoard'
 import { badgeArt } from '@/lib/badgeAssets'
 import { cardImage } from '@/lib/cardImage'
@@ -24,7 +25,7 @@ import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { CardZoomOverlay, type ZoomCardData } from '@/components/pages/CardexPage'
 import { cn } from '@/lib/utils'
 
-export interface BlockContext { uid: string; community: CommunityEntry; book: CreatorBook | null }
+export interface BlockContext { uid: string; community: CommunityEntry; book: CreatorBook | null; canReact?: boolean /* a member, or the creator */ }
 
 /** The look of the block being drawn (lib/blockStyle.ts), from BlockView */
 const LookCtx = createContext<BlockLook>(blockLook('text'))
@@ -236,35 +237,6 @@ export function AchievementBoard({ community, book, title, sample }: { community
             </ol>
           </div>
         )}
-    </Section>
-  )
-}
-
-/** The Creator Wall: the creator's own posts — words and pictures — newest first */
-function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wall' }>; ctx: BlockContext }) {
-  const posts = [...block.posts].sort((a, b) => b.at - a.at)
-  const c = ctx.community
-  return (
-    <Section title={block.title || 'Creator Wall'} icon={<Sparkles size={19} />} sub={`Straight from ${c.name}`}>
-      {posts.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">Nothing posted yet.</p> : (
-        <div className="space-y-5">
-          {posts.map((p, i) => (
-            <article key={p.id} className={cn('flex gap-3.5', i > 0 && 'pt-5 border-t border-[color:var(--b-hair)]')}>
-              <span className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center pinbook-serif text-lg font-bold text-white shadow-[inset_0_-3px_6px_rgba(0,0,0,0.25)]" style={{ background: c.color }}>
-                {(c.name.trim()[0] || '★').toUpperCase()}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm"><b className="text-[color:var(--b-title)]">{c.name}</b> <span className="text-xs text-[color:var(--b-muted)]">· {timeAgo(p.at)}</span></p>
-                {p.text && <p className="mt-1 text-[15px] text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{p.text}</p>}
-                {p.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={badgeArt(p.image, 1200)} alt="" className="mt-3 w-full max-h-[460px] object-cover rounded-xl shadow-[0_10px_24px_-14px_rgba(40,25,10,0.6)]" />
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
     </Section>
   )
 }

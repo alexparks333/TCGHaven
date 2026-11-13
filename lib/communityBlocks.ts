@@ -9,7 +9,16 @@ import type { Community, CommunityTab } from './creatorBooks'
 
 export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' | 'text' | 'picture' | 'board'
 
-export interface WallPost { id: string; text: string; image?: string; at: number }
+export interface WallPost { id: string; text: string; image?: string; at: number; note?: string /* NOTE_COLOURS id */ }
+/** The papers a Creator Wall post can be pinned up on */
+export const NOTE_COLOURS = [
+  { id: 'paper', name: 'Paper', color: '#f6eedb' },
+  { id: 'yellow', name: 'Yellow', color: '#f1e2a4' },
+  { id: 'rose', name: 'Rose', color: '#efcfc6' },
+  { id: 'sky', name: 'Sky', color: '#cfdde6' },
+  { id: 'sage', name: 'Sage', color: '#d6e0c4' },
+  { id: 'white', name: 'White', color: '#fbf8f1' },
+]
 export interface Announcement { id: string; title: string; body: string; at: number; pinned?: boolean }
 
 /** Every block also carries its look (lib/blockStyle.ts) — only what the creator changed */

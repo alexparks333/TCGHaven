@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award, Trophy, Sparkles, Trash2, Users } from 'lucide-react'
+import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award, Trophy, Sparkles, Trash2, Users, Heart } from 'lucide-react'
 import { fakeEarner, sendDevEarner, clearDevEarners, sendDevMember, clearDevMembers } from '@/lib/devBoard'
+import { sendDevReactions } from '@/lib/wallReactions'
 import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT, readDevBadgePct } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -187,6 +188,11 @@ function Panel({ uid }: { uid: string }) {
           </button>
           <button onClick={() => { clearDevMembers(); setMessage('Fake members cleared.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
             <Trash2 size={15} />Clear fake members
+          </button>
+
+          <div className="flex items-center gap-2 text-xs font-bold text-ink px-1 mt-2 mb-1"><Heart size={13} />Creator Wall</div>
+          <button onClick={() => { sendDevReactions(); setMessage('Reactions added to every post on the wall.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+            <Heart size={15} />Fake reactions on every post
           </button>
 
           <Link href={`/c/${uid}`} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink mt-2')}>

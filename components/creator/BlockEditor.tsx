@@ -13,7 +13,7 @@ import { CardPicker } from '@/components/creator/BadgeMaker'
 import { BlockStyleEditor } from '@/components/creator/BlockStyleEditor'
 import { appStorage } from '@/lib/firebase/appStorage'
 import { badgeArt } from '@/lib/badgeAssets'
-import { BLOCK_TYPES, MAX_POSTS, blockName, newId, type Block, type BlockType } from '@/lib/communityBlocks'
+import { BLOCK_TYPES, MAX_POSTS, NOTE_COLOURS, blockName, newId, type Block, type BlockType } from '@/lib/communityBlocks'
 import type { Community } from '@/lib/creatorBooks'
 import { cn } from '@/lib/utils'
 
@@ -177,11 +177,12 @@ function Fields({ uid, block, community, onChange, onCommunity }: { uid: string;
 function WallFields({ uid, block, onChange }: { uid: string; block: Extract<Block, { type: 'wall' }>; onChange: (b: Block) => void }) {
   const [text, setText] = useState('')
   const [image, setImage] = useState<string | undefined>()
+  const [note, setNote] = useState('paper')
   const file = useRef<HTMLInputElement>(null)
   const { busy, up } = useUpload(uid)
   const post = () => {
     if (!text.trim() && !image) return
-    onChange({ ...block, posts: [{ id: newId(), text: text.trim(), image, at: Date.now() }, ...block.posts].slice(0, MAX_POSTS) })
+    onChange({ ...block, posts: [{ id: newId(), text: text.trim(), at: Date.now(), note, ...(image ? { image } : {}) }, ...block.posts].slice(0, MAX_POSTS) })
     setText(''); setImage(undefined)
   }
   return (
@@ -190,6 +191,13 @@ function WallFields({ uid, block, onChange }: { uid: string; block: Extract<Bloc
       <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">New post</p>
         <textarea value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} className="input-field mt-1.5 text-sm min-h-[100px] resize-y" placeholder="Share something with your members…" />
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-slate-500 mr-1">Paper</span>
+          {NOTE_COLOURS.map((c) => (
+            <button key={c.id} type="button" onClick={() => setNote(c.id)} title={c.name} aria-label={`Paper: ${c.name}`}
+              className={cn('w-6 h-6 rounded-[3px] border border-black/15', note === c.id && 'outline outline-2 outline-offset-1 outline-[#7a5230]')} style={{ background: c.color }} />
+          ))}
+        </div>
         {image && (
           <div className="relative mt-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}

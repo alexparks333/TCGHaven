@@ -103,7 +103,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   const pick = (id: string) => { setOwnTab(id); onTab?.(id) }
   // The open tab's blocks: Home's, or one of the creator's pages
   const blocks = current ? tabBlocks(current) : homeBlocks(community)
-  const ctx: BlockContext = { uid, community, book }
+  const ctx: BlockContext = { uid, community, book, canReact: isMember || mine }
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
