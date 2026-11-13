@@ -677,12 +677,12 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
         }
       }
       for (const p of clues.promos) for (const c of ix.byNum.get(numKey(p)) ?? []) offer('pokemon', c, 55, `promo ${c.number}`)
-      // Only cards whose number really is a letter (Unseen Forces' Unowns): read as a letter it's as
-      // good as a number; from a look-alike digit ("8/28" for B/28) the name has to back it up
+      // Only cards whose number really is a letter (Unseen Forces' Unowns): read as a letter it counts
+      // the same as "number/total" (52); from a look-alike digit ("8/28" for B/28) the name has to back it up
       for (const f of clues.letterNums) {
         for (const c of ix.byNum.get(numKey(f.letter)) ?? []) {
           if (!/^[A-Z]$/.test(String(c.number ?? ''))) continue
-          offer('pokemon', c, f.read ? 48 : 36, `number ${f.letter}/${f.den}${f.read ? '' : '?'}`)
+          offer('pokemon', c, f.read ? 52 : 36, `number ${f.letter}/${f.den}${f.read ? '' : '?'}`)
         }
       }
       // A number alone low on the card: weaker than "number/total", so the name has to agree. Its

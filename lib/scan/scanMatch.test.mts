@@ -500,6 +500,10 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   assert.equal(ids(unownLines('8/28 *'))[0], 'ex10-B')       // B read as 8 — still ahead of Swellow #8
   assert.equal(ids(unownLines('G/28'))[0], 'ex10-G')
   assert.ok(ids(unownLines('8/28')).indexOf('ex10-8') !== 0)
+  // A clean letter number is decisive like any number: the owner's holo Unown B (2026-11-13, the AI
+  // only 0.26 alike under foil shine, another Unown 0.45) scored 89 and was asked — now added
+  assert.ok(top(unownLines('B/28 *'))[0].score >= 90)
+  assert.equal(decide([{ key: 'b', score: top(unownLines('B/28 *'))[0].score, exact: true }, { key: 'j', score: 65, exact: false }, { key: 'pic', score: 65, exact: false }], undefined, [0.26, 0.26, 0.45]).status, 'matched')
 }
 
 console.log('scan matching: all tests passed')

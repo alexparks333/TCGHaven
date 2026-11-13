@@ -66,12 +66,20 @@ function trayOption(m: ScanMatch & { final?: number; distance?: number | null },
   return {
     key: m.key,
     title: m.name,
-    subtitle: [m.setName, m.number ? `#${m.number}` : '', m.language === 'ja' ? 'Japanese' : '', slab?.grade ? `${slab.company} ${slab.grade}` : ''].filter(Boolean).join(' · '),
+    // A card printed in only one finish (Unseen Forces' Unown B: holo only) has no Finish row to
+    // pick from, so its finish goes here — "Unseen Forces · #B · Holo"
+    subtitle: [m.setName, m.number ? `#${m.number}` : '', onlyFinish(m), m.language === 'ja' ? 'Japanese' : '', slab?.grade ? `${slab.company} ${slab.grade}` : ''].filter(Boolean).join(' · '),
     price: m.price > 0 ? formatCurrency(m.price) : '',
     imageUrl: cardImage(m.imageUrl, 'grid') ?? m.imageUrl,
     printings: (m.printings ?? []).map((p) => ({ key: p.key, label: p.label, price: p.price > 0 ? formatCurrency(p.price) : '' })),
     detail: `text ${m.score}${m.final !== undefined ? ` → ${m.final}` : ''}${typeof m.distance === 'number' ? ` · picture ${m.distance.toFixed(3)}` : ''}${ai} · ${m.why}${m.exact || m.why === 'picture' ? '' : ' · name only'}`,
   }
+}
+
+/** The finish of a card that has just one printing, when it isn't the plain one ('' otherwise) */
+function onlyFinish(m: ScanMatch): string {
+  const p = m.printings ?? []
+  return p.length === 1 && !/normal|unlimited$/i.test(p[0].key) && p[0].label !== 'Normal' ? p[0].label : ''
 }
 
 /** A printing key ("1st:normal", "unlimited:reverse") as shown in the card sheet's Finish row */
