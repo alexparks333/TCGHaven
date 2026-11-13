@@ -711,17 +711,17 @@
 .pinbook-tab-shut {
   width: clamp(36px, 6vw, 84px);
   transform: translateX(-8px);
-  color: #f6ead0;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
-  background-image: linear-gradient(90deg, rgba(0, 0, 0, 0.32), transparent 30%), linear-gradient(180deg, var(--leather-from, #6a6e75), var(--leather-to, #33363b));
+  background-image: linear-gradient(90deg, rgba(0, 0, 0, 0.32), transparent 30%), linear-gradient(180deg, var(--tab-shut-from, var(--leather-from, #6a6e75)), var(--tab-shut-to, var(--leather-to, #33363b)));
+  color: var(--tab-ink-shut, #f6ead0);
 }
 .pinbook-tab-shut:hover { transform: translateX(-2px); filter: brightness(1.15); }
 /* The open chapter: gilded, standing proud of the others */
 .pinbook-tab-open {
   width: clamp(40px, 6.6vw, 92px);
-  color: #2e1d06;
   text-shadow: 0 1px 0 rgba(255, 245, 215, 0.6);
-  background-image: linear-gradient(90deg, rgba(0, 0, 0, 0.14), transparent 25%), linear-gradient(180deg, #fbe4a6, #d3a64c 55%, #eccd80);
+  background-image: linear-gradient(90deg, rgba(0, 0, 0, 0.14), transparent 25%), linear-gradient(180deg, var(--tab-open-a, #fbe4a6), var(--tab-open-b, #d3a64c) 55%, var(--tab-open-c, #eccd80));
+  color: var(--tab-ink-open, #2e1d06);
   box-shadow: 4px 4px 14px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.55);
   z-index: 1;
 }
@@ -744,6 +744,17 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* A creator's chapter tabs (Page Design → Chapter tabs, lib/badges.ts tabLook) */
+.pinbook-tabs-square .pinbook-tab { border-radius: 0 3px 3px 0; }
+.pinbook-tabs-pointed .pinbook-tab { border-radius: 0; padding-right: 16px; border: none; clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 50%, calc(100% - 11px) 100%, 0 100%); }
+.pinbook-tabs-ribbon .pinbook-tab { border-radius: 0; padding-right: 16px; border: none; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%); }
+.pinbook-tabs-flat .pinbook-tab { text-shadow: none; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.18); }
+.pinbook-tabs-flat .pinbook-tab-shut { background-image: none; background-color: var(--tab-shut-from, var(--leather-from, #6a6e75)); }
+.pinbook-tabs-flat .pinbook-tab-open { background-image: none; background-color: var(--tab-open-b, #d3a64c); }
+.pinbook-tabs-numbers .pinbook-tab-label { display: none !important; }
+.pinbook-tabs-numbers .pinbook-tab-shut { width: 40px; }
+.pinbook-tabs-numbers .pinbook-tab-open { width: 50px; }
+.pinbook-tabs-names .pinbook-tab-num { display: none; }
 /* Page-turn arrows (BadgeBook ArrowButton): frosted smoky grey */
 .pinbook-arrow {
   color: rgba(255, 255, 255, 0.92);

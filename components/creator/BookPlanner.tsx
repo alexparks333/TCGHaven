@@ -19,8 +19,9 @@ import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
-import { INSIDE_DEFAULTS, PIN_SHADOW, insideLook, isLive, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type InsideStyle } from '@/lib/badges'
+import { INSIDE_DEFAULTS, PIN_SHADOW, TAB_SHAPES, insideLook, isLive, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type ChapterTabStyle, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
+import { ChapterTabs } from '@/components/badges/BadgeBook'
 import { Corners } from '@/components/creator/Ornaments'
 import { cn } from '@/lib/utils'
 
@@ -84,12 +85,14 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] items-start" style={inside.style /* the trim colour for the side panel too */}>
     {/* The book stays in the middle of the window while the edit panel beside it scrolls */}
-    <div ref={stick.ref} className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-12 md:!py-10 xl:sticky xl:self-start')} style={{ ...inside.style, top: stick.top }}>
+    <div ref={stick.ref} className={cn(inside.className, 'haven-panel haven-grain relative !px-3 !py-8 md:!px-[84px] md:!py-10 xl:sticky xl:self-start')} style={{ ...inside.style, top: stick.top }}>
       {/* It lies open on the binder paper, inside a thin rule with engraved corners */}
       <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
       <Corners inset={12} size={44} />
       {/* The open book: leather all round, two felt pages, trim frames */}
-      <div className="pinbook-rim relative mx-auto max-w-[980px] rounded-[18px] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})`, padding: 'calc(1.6% * var(--edge-k, 1))' }}>
+      <div className="pinbook-rim relative mx-auto max-w-[980px] rounded-[18px] shadow-[0_24px_50px_-20px_rgba(0,0,0,0.6)]" style={{ background: `linear-gradient(150deg, ${from}, ${to})`, padding: 'calc(1.6% * var(--edge-k, 1))', ['--leather-from' as string]: from, ['--leather-to' as string]: to }}>
+        {/* The chapter tabs on the edge, as fans see them (Page Design → Chapter tabs): click one to go there */}
+        {chapters.length > 0 && <div className="hidden md:block"><ChapterTabs chapters={chapters} open={left?.chapterIndex ?? right?.chapterIndex ?? 0} onPick={goTo} /></div>}
         <div className="pinbook-rim-stitch absolute inset-[0.8%] rounded-[14px] border border-dashed pointer-events-none" style={{ borderColor: book.cover.accent + '70' }} />
         <div className="relative grid grid-cols-1 md:grid-cols-2 gap-0">
           <Page page={left} accent={accent} side="left" onAdd={onAdd} onEdit={onEdit} onRename={onRenameChapter} />
@@ -291,6 +294,9 @@ function InsidePanel({ uid, part, style, onChange, onRevert, coverImage }: { uid
       <Group id="rings" open={open} setOpen={setOpen} icon={Link2} title="Center rings" summary={s.binding === 'none' ? 'None' : bindingOf(s.binding)?.name ?? 'Silver rings (classic)'}>
         <RingsPicker s={s} page={page} set={set} />
       </Group>
+      <Group id="tabs" open={open} setOpen={setOpen} icon={BookOpen} title="Chapter tabs" summary={tabSummary(s.tabs)}>
+        <TabsPicker s={s} set={set} />
+      </Group>
       <Group id="edge" open={open} setOpen={setOpen} icon={BookOpen} title="Book edge" summary={edgeName ? `${edgeName}${s.edgeStitch === false ? '' : ' · stitched'}` : 'The book’s usual rim'}>
         <EdgePicker s={s} set={set} coverImage={coverImage} />
       </Group>
@@ -307,6 +313,42 @@ function InsidePanel({ uid, part, style, onChange, onRevert, coverImage }: { uid
             <button type="button" onClick={() => setReverting(false)} className="py-1.5 text-sm font-semibold text-slate-500 hover:text-ink">Cancel</button>
           </div>
         </PaperDialog>
+      )}
+    </div>
+  )
+}
+
+function tabSummary(t: ChapterTabStyle | undefined) {
+  if (!t) return 'Classic leather and gold'
+  return [TAB_SHAPES.find((x) => x.id === (t.shape ?? 'rounded'))!.name, t.finish === 'flat' ? 'flat' : 'leather',
+    t.labels === 'numbers' ? 'numbers only' : t.labels === 'names' ? 'names only' : ''].filter(Boolean).join(' · ')
+}
+
+/** The chapter tabs on the book's edge: their shape, finish, colours and what they show — the book beside it shows them live */
+function TabsPicker({ s, set }: { s: InsideStyle; set: (p: Partial<InsideStyle>) => void }) {
+  const t = s.tabs ?? {}
+  const put = (p: Partial<ChapterTabStyle>) => set({ tabs: { ...t, ...p } })
+  const seg = <T extends string>(label: string, value: T, options: ReadonlyArray<{ id: T; name: string }>, on: (v: T) => void) => (
+    <div className="mb-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button key={o.id} type="button" onClick={() => on(o.id)} aria-pressed={value === o.id}
+            className={cn('haven-chip px-2.5 py-1 text-xs font-semibold', value === o.id && 'haven-chip-on')}>{o.name}</button>
+        ))}
+      </div>
+    </div>
+  )
+  return (
+    <div>
+      <p className="text-xs text-slate-500 mb-3">The tabs that stick out of your book’s edge, one per chapter. The open chapter’s tab stands out.</p>
+      {seg('Shape', t.shape ?? 'rounded', TAB_SHAPES, (v) => put({ shape: v }))}
+      {seg('Finish', t.finish ?? 'leather', [{ id: 'leather', name: 'Leather' }, { id: 'flat', name: 'Flat' }] as const, (v) => put({ finish: v }))}
+      {seg('Shows', t.labels ?? 'both', [{ id: 'both', name: 'Number and name' }, { id: 'numbers', name: 'Number only' }, { id: 'names', name: 'Name only' }] as const, (v) => put({ labels: v }))}
+      <ColorPick label="Tabs" value={t.color ?? '#6a3f22'} palette={[...EDGE_COLORS, ...ACCENT_COLORS]} onChange={(c) => put({ color: c })} />
+      <ColorPick label="Open chapter’s tab" value={t.openColor ?? '#d3a64c'} palette={[...ACCENT_COLORS, ...EDGE_COLORS]} onChange={(c) => put({ openColor: c })} />
+      {s.tabs && (
+        <button type="button" onClick={() => set({ tabs: undefined })} className="mt-2 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Classic tabs</button>
       )}
     </div>
   )

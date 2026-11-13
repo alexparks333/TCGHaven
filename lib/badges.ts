@@ -85,6 +85,37 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   bindingColor?: string; bindingColor2?: string; bindingColor3?: string // its colour parts (BindingDef.colors)
   bindingParams?: Record<string, Record<string, number>>             // per binding: its own sliders
   pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
+  tabs?: ChapterTabStyle    // the chapter tabs on the book's right edge (Page Design → Chapter tabs); unset = the classic tabs
+}
+/** The chapter tabs' look (BadgeBook ChapterTabs; globals.css `.pinbook-tabs-*`). Unset parts keep the classic tabs:
+ *  rounded leather in the cover's colours, the open chapter's gilded, numeral and name. */
+export interface ChapterTabStyle {
+  shape?: 'rounded' | 'square' | 'pointed' | 'ribbon'
+  finish?: 'leather' | 'flat'
+  color?: string      // the closed tabs (default: the cover's leather)
+  openColor?: string  // the open chapter's tab (default: gold)
+  labels?: 'both' | 'numbers' | 'names'
+}
+export const TAB_SHAPES = [
+  { id: 'rounded', name: 'Rounded' }, { id: 'square', name: 'Square' }, { id: 'pointed', name: 'Pointed' }, { id: 'ribbon', name: 'Ribbon' },
+] as const
+/** Cream or dark lettering, whichever reads on a tab of colour `hex` */
+function tabInk(hex: string) {
+  const h = hex.replace('#', '').padEnd(6, '0')
+  const [r, g, b] = [0, 2, 4].map((i) => (parseInt(h.slice(i, i + 2), 16) || 0) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? '#2e1d06' : '#f6ead0'
+}
+/** The chapter tabs' classes and variables (on the book's root, with insideLook's) */
+export function tabLook(t: ChapterTabStyle | undefined): { className: string; style: Record<string, string> } {
+  if (!t) return { className: '', style: {} }
+  return {
+    className: [t.shape && t.shape !== 'rounded' && `pinbook-tabs-${t.shape}`, t.finish === 'flat' && 'pinbook-tabs-flat',
+      t.labels && t.labels !== 'both' && `pinbook-tabs-${t.labels}`].filter(Boolean).join(' '),
+    style: {
+      ...(t.color && { '--tab-shut-from': t.color, '--tab-shut-to': `color-mix(in srgb, ${t.color} 58%, black)`, '--tab-ink-shut': tabInk(t.color) }),
+      ...(t.openColor && { '--tab-open-a': `color-mix(in srgb, ${t.openColor} 55%, white)`, '--tab-open-b': t.openColor, '--tab-open-c': `color-mix(in srgb, ${t.openColor} 75%, white)`, '--tab-ink-open': tabInk(t.openColor) }),
+    },
+  }
 }
 export const INSIDE_DEFAULTS = { page: '#2a221c', trim: '#d6b168' }
 export const PIN_SHADOW = { strength: 0.6, blur: 10, spread: 3 }
@@ -109,6 +140,7 @@ export function pinShadowCss(s: InsideStyle): string {
  *  and friends). Unset = nothing (the classic inside). coverImage: for a "Cover picture" edge. */
 export function insideLook(s: InsideStyle | undefined, coverImage?: string): { className: string; style: Record<string, string> } {
   if (!s) return { className: '', style: {} }
+  const tabs = tabLook(s.tabs)
   const page = s.page || INSIDE_DEFAULTS.page, trim = s.trim || INSIDE_DEFAULTS.trim
   const pattern = patternCss(s)
   const frame = s.frame !== false ? frameCss(s, trim) : null
@@ -117,8 +149,9 @@ export function insideLook(s: InsideStyle | undefined, coverImage?: string): { c
   const fade = Math.max(0, Math.min(1, s.pageImageFade ?? 0.4))
   return {
     className: ['pinbook-styled', pattern && 'pinbook-patterned', frame && 'pinbook-framed', edge && 'pinbook-edged', s.edgeStitch === false && 'pinbook-no-stitch',
-      picture && 'pinbook-imaged', picture && s.pageImageFit?.ar && 'pinbook-image-placed', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture'].filter(Boolean).join(' '),
+      picture && 'pinbook-imaged', picture && s.pageImageFit?.ar && 'pinbook-image-placed', s.frame === false && 'pinbook-no-frame', s.texture === false && 'pinbook-no-texture', tabs.className].filter(Boolean).join(' '),
     style: {
+      ...tabs.style,
       '--page': page, '--trim': trim,
       '--page-solid': `color-mix(in srgb, ${page} 70%, black)`,
       '--pin-shadow': pinShadowCss(s),
