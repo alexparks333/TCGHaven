@@ -79,6 +79,7 @@ TCGHaven/
 │   ├── pageEdges.ts                ← Creator Book page edges (Cover → Page edges)
 │   ├── studioDevice.ts             ← The Creator Studio is computers-only (not in the app, not on phones)
 │   ├── creatorShelf.ts             ← Joined communities' creator books: earned by members, on their shelf
+│   ├── communityBlocks.ts          ← Community page blocks (About, Badge Achievements, Creator Wall, Announcements, Highlighted Cards, Text, Picture)
 │   ├── scan/                       ← The card scanner's site side (card-scanner.md):
 │   │   ├── scanMatch.ts            ←   OCR lines → catalog candidates (pure; `npm run test:scan`)
 │   │   ├── decide.ts               ←   text score + picture (tiles, AI similarity) → matched / pick / none

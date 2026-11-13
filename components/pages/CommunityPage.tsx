@@ -7,20 +7,20 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Trophy } from 'lucide-react'
+import { Loader2, Users, Check, LogOut, BookOpen, X, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2 } from 'lucide-react'
+import { BlockView, type BlockContext } from '@/components/community/blocks'
+import { blockName, homeBlocks, tabBlocks, type Block } from '@/lib/communityBlocks'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
-import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestAchievements, newestMembers, useMyCommunities, type Achievement, type CommunityEntry } from '@/lib/communities'
+import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestMembers, useMyCommunities, type CommunityEntry } from '@/lib/communities'
 import { useFriends } from '@/components/friends/FriendsProvider'
-import { BadgePin } from '@/components/badges/BadgePin'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
-import { Corners, Divider } from '@/components/creator/Ornaments'
+import { Divider } from '@/components/creator/Ornaments'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
-import { sectionOn, useCreatorBook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
-import { badgeArt } from '@/lib/badgeAssets'
+import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -85,11 +85,12 @@ function Body({ uid }: { uid: string }) {
 }
 
 /** The page itself, from its data — split from Body so it can be drawn without signing in (dev checks) */
-export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen, tab: tabProp, onTab }: {
+export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen, tab: tabProp, onTab, builder }: {
   uid: string; community: CommunityEntry; creator: Profile | null; members: number | null; mine: boolean
   studio: ReturnType<typeof useStudioDevice>; isMember: boolean; busy: boolean; error: string; toggle: () => void
   book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
   tab?: string; onTab?: (id: string) => void // the tab showing, when the Studio picks it (else the page keeps its own)
+  builder?: PageBuilder                      // the Studio: build the open tab's blocks right on the page
 }) {
   const { myBadges: progress } = useFriends()
   // Home, then the creator's own pages
@@ -98,6 +99,9 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   const picked = tabProp ?? ownTab
   const current = tabs.find((t) => t.id === picked)
   const pick = (id: string) => { setOwnTab(id); onTab?.(id) }
+  // The open tab's blocks: Home's, or one of the creator's pages
+  const blocks = current ? tabBlocks(current) : homeBlocks(community)
+  const ctx: BlockContext = { uid, community, book }
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
@@ -173,16 +177,11 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             : <p className="pinbook-serif text-sm text-slate-500 text-center py-6">{community.name} hasn&rsquo;t made their book yet.</p>}
         </aside>
 
-        {/* ── The sections the creator switched on ── */}
-        <div className="min-w-0 flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
-          {current ? <TabPage tab={current} /> : <>
-          {sectionOn(community, 'about') && (
-            <Section title="About">
-              <p className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
-            </Section>
-          )}
-          {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
-          </>}
+        {/* ── The open tab's blocks ── */}
+        <div className={cn('min-w-0 flex flex-col lg:col-start-1 lg:row-start-2', builder ? 'gap-0' : 'gap-6')}>
+          {builder ? <BlockBuilder blocks={blocks} ctx={ctx} builder={builder} />
+            : blocks.length ? blocks.map((b) => <BlockView key={b.id} block={b} ctx={ctx} />)
+            : <p className="text-sm text-slate-500 text-center py-10">Nothing here yet.</p>}
         </div>
 
         {/* Members, top collectors first: beside the sections, level with the first one (after them on a phone) */}
@@ -198,31 +197,57 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   )
 }
 
-/** One of the creator's own pages (a tab after Home): its picture, then its text */
-function TabPage({ tab }: { tab: CommunityTab }) {
-  return (
-    <Section title={tab.title || 'Untitled'}>
-      {tab.image && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={badgeArt(tab.image, 1200)} alt="" className="w-full max-h-[420px] object-cover rounded-xl mb-5 shadow-[0_10px_24px_-14px_rgba(40,25,10,0.6)]" />
-      )}
-      {tab.body.trim()
-        ? <div className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{tab.body}</div>
-        : <p className="text-sm text-slate-500 italic">Nothing here yet.</p>}
-    </Section>
-  )
+/** What the Studio's builder does with the page's blocks */
+export interface PageBuilder {
+  selected: string | null
+  onSelect: (id: string) => void
+  onInsert: (at: number) => void
+  onMove: (id: string, d: -1 | 1) => void
+  onDelete: (id: string) => void
 }
 
-/** A section of the page: a paper card with an engraved title and corner flourishes */
-function Section({ title, icon, sub, children }: { title: string; icon?: React.ReactNode; sub?: string; children: React.ReactNode }) {
+/** The blocks with the builder round them: a "+" between each (and a big one at the end), and on each
+ *  block an outline on hover, its name, move up / down and delete — click a block to edit it */
+function BlockBuilder({ blocks, ctx, builder }: { blocks: Block[]; ctx: BlockContext; builder: PageBuilder }) {
+  const Insert = ({ at, last }: { at: number; last?: boolean }) => last ? (
+    <button type="button" onClick={() => builder.onInsert(at)}
+      className="mt-4 w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] hover:bg-[#f6eedb]/70 py-5 text-sm font-bold text-[#7a5230] inline-flex items-center justify-center gap-2 transition-colors">
+      <Plus size={18} />Add a block
+    </button>
+  ) : (
+    <div className="group/ins relative h-6 flex items-center justify-center">
+      <span className="absolute inset-x-0 top-1/2 h-px bg-[#7a5230] opacity-0 group-hover/ins:opacity-60 transition-opacity" />
+      <button type="button" onClick={() => builder.onInsert(at)} aria-label="Add a block here"
+        className="relative z-10 rounded-full bg-[#7a5230] text-[#fbf6ea] w-6 h-6 flex items-center justify-center opacity-0 group-hover/ins:opacity-100 focus:opacity-100 transition-opacity shadow"><Plus size={14} /></button>
+    </div>
+  )
   return (
-    <section className="haven-panel haven-grain relative !p-6 md:!p-7">
-      <Corners inset={8} size={30} />
-      <h2 className="pinbook-serif text-xl font-bold text-ink flex items-center gap-2.5">{icon}{title}</h2>
-      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
-      <Divider className="mt-3 mb-4" />
-      {children}
-    </section>
+    <>
+      <Insert at={0} />
+      {blocks.map((b, i) => {
+        const on = builder.selected === b.id
+        return (
+          <div key={b.id}>
+            <div className={cn('group/blk relative rounded-[18px] transition-shadow', on ? 'shadow-[0_0_0_3px_#7a5230]' : 'hover:shadow-[0_0_0_2px_rgba(122,82,48,0.55)]')}>
+              <BlockView block={b} ctx={ctx} />
+              {/* clicks select the block (the block's own links and buttons are for fans) */}
+              <button type="button" onClick={() => builder.onSelect(b.id)} className="absolute inset-0 z-10 rounded-[18px] cursor-pointer" aria-label={`Edit ${blockName(b.type)}`} />
+              <div className={cn('absolute -top-3.5 left-4 right-4 z-20 flex items-center gap-1 transition-opacity', on ? 'opacity-100' : 'opacity-0 group-hover/blk:opacity-100')}>
+                <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[11px] font-bold shadow">{blockName(b.type)}</span>
+                <span className="flex-1" />
+                <span className="flex items-center rounded-full bg-[#f6eedb] border border-[#c4ae83] shadow">
+                  <button type="button" disabled={i === 0} onClick={() => builder.onMove(b.id, -1)} className="p-1.5 text-slate-500 hover:text-ink disabled:opacity-30" aria-label="Move up"><ArrowUp size={13} /></button>
+                  <button type="button" disabled={i === blocks.length - 1} onClick={() => builder.onMove(b.id, 1)} className="p-1.5 text-slate-500 hover:text-ink disabled:opacity-30" aria-label="Move down"><ArrowDown size={13} /></button>
+                  <button type="button" onClick={() => builder.onDelete(b.id)} className="p-1.5 text-slate-500 hover:text-red-600" aria-label="Delete this block"><Trash2 size={13} /></button>
+                </span>
+              </div>
+            </div>
+            {i < blocks.length - 1 && <Insert at={i + 1} />}
+          </div>
+        )
+      })}
+      <Insert at={blocks.length} last />
+    </>
   )
 }
 
@@ -251,57 +276,6 @@ function ShowcaseBook({ book, onOpen }: { book: CreatorBook; onOpen: () => void 
       </button>
     </div>
   )
-}
-
-/** The Achievement Badge Board: the newest members to earn one of this creator's badges */
-export function AchievementBoard({ community, book, sample }: { community: string; book: CreatorBook | null; sample?: Array<Achievement & { profile: Profile | null }> /* dev checks */ }) {
-  const [list, setList] = useState<Array<Achievement & { profile: Profile | null }> | null>(sample ?? null)
-  useEffect(() => {
-    if (sample) return
-    newestAchievements(community, 10)
-      .then((rows) => Promise.all(rows.map(async (r) => ({ ...r, profile: await getProfile(r.member).catch(() => null) }))))
-      .then(setList).catch(() => setList([]))
-  }, [community, sample])
-  const defOf = (id: string) => book?.badges.find((b) => b.id === id)
-  const shown = (list ?? []).filter((a) => defOf(a.badge)) // badges still in the book
-  return (
-    <Section title="Achievement Badge Board" icon={<Trophy size={19} className="text-[#b8862b]" />} sub="The newest members to earn a badge from this book.">
-      {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
-        : shown.length === 0 ? <p className="text-sm text-slate-500">No one has earned a badge yet — collect the cards and be the first.</p>
-        : (
-          <ol className="space-y-2">
-            {shown.map((a, i) => {
-              const def = defOf(a.badge)!
-              return (
-                <li key={a.member + a.badge} className={cn('flex items-center gap-3 rounded-xl p-2.5', i === 0 ? 'bg-[#f6e7c4] border border-[#d6b168]/60' : 'hover:bg-slate-900/50')}>
-                  <span className="relative shrink-0 w-12 h-[54px] flex items-center justify-center drop-shadow-[0_3px_4px_rgba(0,0,0,0.35)]">
-                    <BadgePin art={def.art} imageUrl={def.imageUrl} size={46} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-ink truncate">
-                      <Link href={a.profile ? profilePath(a.member, a.profile.username) : '#'} className="font-bold hover:underline">{a.profile?.displayName ?? 'A collector'}</Link>
-                      <span className="text-slate-500"> earned </span><b className="pinbook-serif">{def.name}</b>
-                    </span>
-                    <span className="block text-[11px] text-slate-500">{timeAgo(a.earnedAt)}{i === 0 && ' · newest'}</span>
-                  </span>
-                  <Avatar seed={a.member} name={a.profile?.displayName ?? 'Collector'} photoURL={a.profile?.photoURL} size={32} />
-                </li>
-              )
-            })}
-          </ol>
-        )}
-    </Section>
-  )
-}
-
-function timeAgo(ms: number) {
-  const m = Math.round((Date.now() - ms) / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m} min ago`
-  const h = Math.round(m / 60)
-  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
-  const d = Math.round(h / 24)
-  return d < 30 ? `${d} day${d === 1 ? '' : 's'} ago` : new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 interface RankedMember { uid: string; profile: Profile | null; badges: number; cards: number; hidden: boolean; joinedAt: number }

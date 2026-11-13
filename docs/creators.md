@@ -40,11 +40,19 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   **Achievement Badge Board** — `community_achievements/{community}_{member}_{badge}` (`recordAchievement`;
   skipped while the member's badges are private; rules: only the member, only while a member) — shown
   newest first (`newestAchievements`, sorted in the browser).
-- **Community page tabs** (`Community.page.tabs`, up to `MAX_TABS` 8): under the Join button, **Home** (always
-  first — About, the Achievement Badge Board; Members beside it) then the creator's own pages (`CommunityTab`:
-  a name, text up to 4000, an optional picture uploaded to `creators/{uid}/tab-*`). In the Studio's Community
-  tab, **Tabs** adds, renames, reorders (after Home) and deletes them and writes the open one; picking a tab
-  there switches the page on the left to it (`CommunityView tab / onTab`).
+- **Community page blocks** (2026-11-12, `lib/communityBlocks.ts`, drawn by `components/community/blocks.tsx`).
+  Every tab is an ordered list of blocks: **About** (the community's description), **Badge Achievements**
+  (newest earners), **Creator Wall** (the creator's own posts — text and a picture, newest first, up to
+  `MAX_POSTS`), **Announcements** (one pinned on top), **Highlighted Cards** (picked with BadgeMaker's
+  `CardPicker`, looked at big with a tap), **Text**, **Picture**, and **Community Board** (listed, Coming
+  soon). Home's are `page.home` (before blocks: About + the board, `homeBlocks()`); a tab's are
+  `page.tabs[i].blocks` (before blocks: its picture + text, `tabBlocks()`). In the Studio the page is built in
+  place (`CommunityView builder={…}`): a "+" between blocks and **Add a block** at the end open the menu
+  (`AddBlockMenu`; About and Badge Achievements once a page), hovering a block outlines it with its name and
+  move up / down / delete, and clicking one opens its editor in the side panel (`BlockEditor`). **Tabs**
+  (up to `MAX_TABS`): Home always first, then the creator's own pages — add, rename, reorder, delete; picking
+  one switches the page on the left to it. Members sits beside the page (Page details → Members beside the
+  page). `CommunityStudio demo={…}` draws it with a sample community and never saves (dev checks).
 - **Computers only** (2026-11-12). The Creator Studio is a web-on-a-computer tool: never in the iPhone or
   Android app — even for creators — and not on a phone or a window under 1024 px (`lib/studioDevice.ts`
   `useStudioDevice()`). There `/creator` shows "The Creator Studio is on computers" with the link to copy;

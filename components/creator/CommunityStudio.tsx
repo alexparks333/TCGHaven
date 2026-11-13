@@ -7,9 +7,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowDown, ArrowUp, Home, Plus, Trash2, Check, Copy, Eye, ExternalLink, Loader2, Pencil, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
-import { useCommunity, saveCommunity, COMMUNITY_SECTIONS, HEADER_ASPECT, MAX_TABS, newTabId, type Community, type CommunityLook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
-import { CommunityView } from '@/components/pages/CommunityPage'
+import { ArrowDown, ArrowUp, Home, Plus, Trash2, Check, Copy, Eye, ExternalLink, Loader2, Pencil, BookOpen, ImagePlus, X } from 'lucide-react'
+import { useCommunity, saveCommunity, HEADER_ASPECT, MAX_TABS, newTabId, type Community, type CommunityLook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
+import { blockName, homeBlocks, newBlock, tabBlocks, type Block } from '@/lib/communityBlocks'
+import { AddBlockMenu, BlockEditor } from '@/components/creator/BlockEditor'
+import { CommunityView, type PageBuilder } from '@/components/pages/CommunityPage'
 import { BANNERS } from '@/components/creator/CreateCommunity'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { isLive } from '@/lib/badges'
@@ -23,14 +25,17 @@ import { BookCover } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 
 
-export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: CreatorBook | null; onEditBook: () => void }) {
-  const { community, loaded } = useCommunity(uid)
+export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; book: CreatorBook | null; onEditBook: () => void; demo?: Community /* dev checks: this community, never saved */ }) {
+  const live = useCommunity(demo ? null : uid)
+  const community = demo ?? live.community, loaded = demo ? true : live.loaded
   const [draft, setDraft] = useState<Community | null>(null)
   const [state, setState] = useState<'saved' | 'saving' | 'error' | 'name'>('saved')
   const [members, setMembers] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [headerOpen, setHeaderOpen] = useState(false)
   const [tabOpen, setTabOpen] = useState('home') // the tab being edited, and shown on the left
+  const [selected, setSelected] = useState<string | null>(null) // the block being edited
+  const [adding, setAdding] = useState<number | null>(null)     // "+" pressed: where the new block goes
   const [viewing, setViewing] = useState(false) // the book opened from the page
   // Fans see only the published badges
   const liveBook = book && { ...book, badges: book.badges.filter(isLive) }
@@ -49,6 +54,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
     setDraft(next)
     clearTimeout(timer.current)
     if (next.name.trim().length < 2) { setState('name'); return }
+    if (demo) return // dev checks never save
     setState('saving')
     pending.current = () => {
       pending.current = undefined
@@ -66,22 +72,45 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   }
 
   const c = draft
+  // The open tab's blocks, built right on the page (lib/communityBlocks.ts)
+  const tabsArr = c.page?.tabs ?? []
+  const curTab = tabsArr.find((t) => t.id === tabOpen)
+  const blocks = curTab ? tabBlocks(curTab) : homeBlocks(c)
+  const setBlocks = (next: Block[]) => set({ page: curTab
+    ? { ...(c.page ?? {}), tabs: tabsArr.map((t) => (t.id === curTab.id ? { id: t.id, title: t.title, blocks: next } : t)) }
+    : { ...(c.page ?? {}), home: next } })
+  const sel = blocks.find((b) => b.id === selected) ?? null
+  const remove = (id: string) => {
+    const b = blocks.find((x) => x.id === id)
+    const full = b && ((b.type === 'wall' && b.posts.length) || (b.type === 'announcements' && b.items.length) || (b.type === 'text' && b.body.trim()) || (b.type === 'cards' && b.cards.length) || (b.type === 'picture' && b.image))
+    if (full && !confirm(`Delete this ${blockName(b!.type)} block and everything in it?`)) return
+    setBlocks(blocks.filter((x) => x.id !== id)); if (selected === id) setSelected(null)
+  }
+  const builder: PageBuilder = {
+    selected, onSelect: setSelected, onInsert: setAdding, onDelete: remove,
+    onMove: (id, d) => { const i = blocks.findIndex((b) => b.id === id), n = [...blocks]; [n[i], n[i + d]] = [n[i + d], n[i]]; setBlocks(n) },
+  }
+  const openTab = (id: string) => { setTabOpen(id); setSelected(null) }
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
       {/* ── The page exactly as fans see it (CommunityPage's CommunityView) — every change on the right shows here at once ── */}
       <div className="min-w-0">
         <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 flex items-center gap-1.5">
-          <Eye size={13} />Your community page — exactly what fans see
+          <Eye size={13} />Your community page — exactly what fans see · <span className="normal-case tracking-normal font-semibold text-[#7a5230]">click + to add a block, click a block to edit it</span>
         </p>
         <div className="rounded-2xl border border-[#d6c49f] bg-slate-900 p-3 md:p-5">
           <CommunityView uid={uid} community={{ uid, ...c }} creator={null} members={members} mine={false} studio="computer"
             isMember={false} busy={false} error="" toggle={() => {}} book={liveBook} open={viewing} setOpen={setViewing}
-            tab={tabOpen} onTab={setTabOpen} />
+            tab={tabOpen} onTab={openTab} builder={builder} />
         </div>
       </div>
 
-      {/* ── Beside it ── */}
+      {/* ── Beside it: the selected block's editor, or the page's details ── */}
       <div className="space-y-4 lg:sticky lg:top-4">
+        {sel ? (
+          <BlockEditor uid={uid} block={sel} community={c} onCommunity={set} onDone={() => setSelected(null)} onDelete={() => remove(sel.id)}
+            onChange={(b) => setBlocks(blocks.map((x) => (x.id === b.id ? b : x)))} />
+        ) : <>
         <div className="haven-panel">
           <div className="flex items-center gap-2">
             <span className={cn('text-xs font-semibold flex items-center gap-1.5', state === 'error' ? 'text-red-600' : 'text-slate-500')}>
@@ -131,14 +160,17 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
               )
             })}
           </div>
-          <label className="mt-2.5 block text-[11px] font-semibold text-slate-500">
-            <span className="flex justify-between">About<span className="font-normal tabular-nums">{c.about.length}/600</span></span>
-            <textarea value={c.about} maxLength={600} onChange={(e) => set({ about: e.target.value })} className="input-field mt-1 text-sm min-h-[110px] resize-y" placeholder="Who you are, what you collect, what members get…" />
-          </label>
+          <button type="button" onClick={() => set({ page: { ...(c.page ?? {}), sections: { ...(c.page?.sections ?? {}), members: !(c.page?.sections?.members ?? true) } } })}
+            className="mt-3 w-full flex items-center gap-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] px-3 py-2 text-left">
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">Members beside the page</span><span className="block text-[11px] text-slate-500">Top collectors first</span></span>
+            <span className={cn('w-9 h-5 shrink-0 rounded-full p-0.5 transition-colors', (c.page?.sections?.members ?? true) ? 'bg-violet-600' : 'bg-slate-700')}>
+              <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', (c.page?.sections?.members ?? true) && 'translate-x-4')} />
+            </span>
+          </button>
         </div>
 
         {/* The page's tabs: Home, then the creator's own pages — pick one to edit it (the page on the left shows it) */}
-        <TabsEditor uid={uid} c={c} set={set} open={tabOpen} onOpen={setTabOpen} />
+        <TabsEditor c={c} set={set} open={tabOpen} onOpen={openTab} />
 
         {/* The book fans collect on the page */}
         <div className="haven-panel flex items-center gap-4">
@@ -163,44 +195,12 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
           )}
         </div>
 
-        {/* Which sections fans see on the page */}
-        <div className="haven-panel">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Page sections</p>
-          <div className="mt-2.5 space-y-2">
-            {COMMUNITY_SECTIONS.map((sec) => {
-              const on = sec.ready && (c.page?.sections?.[sec.id] ?? true)
-              return (
-                <button key={sec.id} type="button" disabled={!sec.ready}
-                  onClick={() => set({ page: { ...(c.page ?? {}), sections: { ...(c.page?.sections ?? {}), [sec.id]: !on } } })}
-                  className="w-full flex items-center gap-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] px-3 py-2 text-left disabled:opacity-60 disabled:cursor-default">
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-ink">{sec.name}</span>
-                    <span className="block text-[11px] text-slate-500 leading-snug">{sec.hint}</span>
-                  </span>
-                  {sec.ready ? (
-                    <span className={cn('w-9 h-5 shrink-0 rounded-full p-0.5 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
-                      <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', on && 'translate-x-4')} />
-                    </span>
-                  ) : <span className="shrink-0 rounded-full bg-[#e6d7b6] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Coming soon</span>}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* What's coming */}
-        <div className="rounded-[0.875rem] border border-dashed border-[#c4ae83] p-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Coming soon</p>
-          <div className="mt-2.5 space-y-2.5">
-            {([[Megaphone, 'News posts', 'Tell members about new badges and drops'], [CalendarDays, 'Events', 'Limited-time badges and collecting challenges']] as const).map(([Icon, t, d]) => (
-              <div key={t} className="flex items-start gap-3">
-                <span className="haven-medallion w-8 h-8 shrink-0"><Icon size={14} /></span>
-                <div><p className="text-sm font-semibold text-ink">{t}</p><p className="text-[11px] text-slate-500">{d}</p></div>
-              </div>
-            ))}
-          </div>
-        </div>
+        </>}
       </div>
+      {adding !== null && (
+        <AddBlockMenu has={(t) => blocks.some((b) => b.type === t)} onClose={() => setAdding(null)}
+          onPick={(t) => { const b = newBlock(t); setBlocks([...blocks.slice(0, adding), b, ...blocks.slice(adding)]); setAdding(null); setSelected(b.id) }} />
+      )}
       {headerOpen && <HeaderEditor uid={uid} c={c} onChange={(page) => set({ page })} onClose={() => setHeaderOpen(false)} />}
     </div>
   )
@@ -277,33 +277,17 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
   )
 }
 
-/** The page's tabs: Home (always first), then the creator's own pages — add, rename, reorder, delete,
- *  and write each one (a picture and text) */
-function TabsEditor({ uid, c, set, open, onOpen }: { uid: string; c: Community; set: (p: Partial<Community>) => void; open: string; onOpen: (id: string) => void }) {
+/** The page's tabs: Home (always first), then the creator's own pages — add, rename, reorder and delete
+ *  them; pick one to build it (its blocks show on the left) */
+function TabsEditor({ c, set, open, onOpen }: { c: Community; set: (p: Partial<Community>) => void; open: string; onOpen: (id: string) => void }) {
   const tabs = c.page?.tabs ?? []
   const save = (next: CommunityTab[]) => set({ page: { ...(c.page ?? {}), tabs: next } })
   const tab = tabs.find((t) => t.id === open)
-  const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-  const update = (id: string, p: Partial<CommunityTab>) => save(tabs.map((t) => (t.id === id ? { ...t, ...p } : t)))
   const move = (i: number, d: -1 | 1) => { const n = [...tabs]; [n[i], n[i + d]] = [n[i + d], n[i]]; save(n) }
-  async function upload(file: File | undefined) {
-    if (!file || !tab) return
-    setBusy(true)
-    try {
-      const blob = await shrink(file)
-      const r = ref(appStorage, `creators/${uid}/tab-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`)
-      await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
-      update(tab.id, { image: await getDownloadURL(r) })
-    } catch { /* the picture stays as it was */ } finally {
-      setBusy(false)
-      if (input.current) input.current.value = ''
-    }
-  }
   return (
     <div className="haven-panel">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Tabs</p>
-      <p className="text-[11px] text-slate-500 mt-0.5">Under your Join button. Home comes first; add your own pages after it.</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">Under your Join button. Pick one to build it on the left.</p>
       <div className="mt-2.5 space-y-1.5">
         <button type="button" onClick={() => onOpen('home')}
           className={cn('w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold', open === 'home' ? 'border-[#7a5230] bg-[#f6eedb] text-ink' : 'border-[#d6c49f] text-slate-500 hover:text-ink')}>
@@ -319,39 +303,14 @@ function TabsEditor({ uid, c, set, open, onOpen }: { uid: string; c: Community; 
           </div>
         ))}
         {tabs.length < MAX_TABS && (
-          <button type="button" onClick={() => { const t = { id: newTabId(), title: 'New page', body: '' }; save([...tabs, t]); onOpen(t.id) }}
-            className="w-full rounded-xl border border-dashed border-[#c4ae83] py-2 text-sm font-semibold text-[#7a5230] hover:bg-[#f6eedb] inline-flex items-center justify-center gap-1.5"><Plus size={14} />Add a page</button>
+          <button type="button" onClick={() => { const t: CommunityTab = { id: newTabId(), title: 'New page', blocks: [newBlock('text')] }; save([...tabs, t]); onOpen(t.id) }}
+            className="w-full rounded-xl border border-dashed border-[#c4ae83] py-2 text-sm font-semibold text-[#7a5230] hover:bg-[#f6eedb] inline-flex items-center justify-center gap-1.5"><Plus size={14} />Add a tab</button>
         )}
       </div>
-
-      {/* The open tab's content */}
       {tab && (
-        <div className="mt-4 pt-4 border-t border-[#d6c49f]">
-          <label className="block text-[11px] font-semibold text-slate-500">Tab name
-            <input value={tab.title} maxLength={24} onChange={(e) => update(tab.id, { title: e.target.value })} className="input-field mt-1 text-sm font-semibold" placeholder="e.g. Rules, Events, Giveaways" />
-          </label>
-          <p className="mt-3 text-[11px] font-semibold text-slate-500">Picture <span className="font-normal">· optional, at the top</span></p>
-          {tab.image ? (
-            <div className="mt-1.5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={badgeArt(tab.image, 640)} alt="" className="w-full h-28 object-cover rounded-xl border border-[#d6c49f]" />
-              <div className="mt-2 flex gap-2">
-                <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">{busy ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}Change</button>
-                <button type="button" onClick={() => update(tab.id, { image: undefined })} className="haven-chip px-3 py-1.5 text-xs font-semibold">Remove</button>
-              </div>
-            </div>
-          ) : (
-            <button type="button" onClick={() => input.current?.click()} disabled={busy}
-              className="mt-1.5 w-full rounded-xl border border-dashed border-[#c4ae83] py-3 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center justify-center gap-1.5">
-              {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}{busy ? 'Uploading…' : 'Add a picture'}
-            </button>
-          )}
-          <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
-          <label className="mt-3 block text-[11px] font-semibold text-slate-500">
-            <span className="flex justify-between">Text<span className="font-normal tabular-nums">{tab.body.length}/4000</span></span>
-            <textarea value={tab.body} maxLength={4000} onChange={(e) => update(tab.id, { body: e.target.value })} className="input-field mt-1 text-sm min-h-[160px] resize-y" placeholder="Write this page — rules, events, giveaways, anything for your members." />
-          </label>
-        </div>
+        <label className="mt-3 block text-[11px] font-semibold text-slate-500">This tab&rsquo;s name
+          <input value={tab.title} maxLength={24} onChange={(e) => save(tabs.map((t) => (t.id === tab.id ? { ...t, title: e.target.value } : t)))} className="input-field mt-1 text-sm font-semibold" placeholder="e.g. Rules, Events, Giveaways" />
+        </label>
       )}
     </div>
   )

@@ -12,6 +12,7 @@
 // suspended / former creators' books are hidden and come back unchanged.
 // Uploaded art and covers: Storage creators/{uid}/… (storage.rules).
 
+import type { Block } from './communityBlocks'
 import { useEffect, useState } from 'react'
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase/config'
@@ -50,6 +51,7 @@ export interface CommunityLook {
   headerFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (PicturePlacer); unset = fills it
   headerShade?: number                                    // 0–1: darkens it toward the bottom so the text reads (default 0.35)
   sections?: Partial<Record<CommunitySection, boolean>>   // sections switched on / off
+  home?: Block[]                                          // Home's blocks (lib/communityBlocks.ts); unset = About + the badge board
   tabs?: CommunityTab[]                                   // the creator's own pages, as tabs after Home (in order)
 }
 
@@ -57,8 +59,9 @@ export interface CommunityLook {
 export interface CommunityTab {
   id: string
   title: string    // the tab's name (up to 24 letters)
-  body: string     // its text (up to 4000)
-  image?: string   // an optional picture at the top (Storage URL)
+  blocks?: Block[] // its blocks (lib/communityBlocks.ts)
+  body?: string    // before blocks: its text — read through tabBlocks()
+  image?: string   // before blocks: a picture at the top
 }
 export const MAX_TABS = 8
 export const newTabId = () => 't' + Math.random().toString(36).slice(2, 9)

@@ -414,7 +414,7 @@ function gameOf(slot: BadgeSlot): Game | undefined {
 }
 
 /** Cards fans collect: search the catalog, tap to add — each card is one spot of the badge */
-function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: BadgeSlot[]) => void }) {
+export function CardPicker({ slots, onChange, title = 'What do fans collect?', hint = 'Pick the cards. Owning one of each earns the badge — fans see their progress fill up in your book.' }: { slots: BadgeSlot[]; onChange: (s: BadgeSlot[]) => void; title?: string; hint?: string }) {
   const [game, setGame] = useState<Game>('pokemon')
   const [q, setQ] = useState('')
   const [results, setResults] = useState<CardSearchResult[]>([])
@@ -461,8 +461,8 @@ function CardPicker({ slots, onChange }: { slots: BadgeSlot[]; onChange: (s: Bad
   }
   return (
     <div>
-      <h3 className="text-lg font-bold text-ink">What do fans collect?</h3>
-      <p className="text-sm text-slate-400 mt-1">Pick the cards. Owning one of each earns the badge — fans see their progress fill up in your book.</p>
+      <h3 className="text-lg font-bold text-ink">{title}</h3>
+      <p className="text-sm text-slate-400 mt-1">{hint}</p>
       {/* The picked cards: a summary — tap it to review them all big, with their details */}
       <button type="button" onClick={() => setReviewing(true)} disabled={slots.length === 0}
         className="group mt-4 w-full rounded-2xl border border-slate-800 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-950/60 p-3 flex items-center gap-3 text-left transition-colors disabled:cursor-default">
