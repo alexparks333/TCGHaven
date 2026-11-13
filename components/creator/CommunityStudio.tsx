@@ -253,7 +253,6 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
                   <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
                     {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
                   </button>
-                  <button type="button" onClick={() => onChange({ ...look, header: undefined, headerFit: undefined })} className="ml-auto haven-chip px-3 py-1.5 text-xs font-semibold">Remove — use my colour</button>
                 </div>
               </>
             ) : (
