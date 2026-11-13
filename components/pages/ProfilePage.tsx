@@ -14,6 +14,7 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { useMyCommunities } from '@/lib/communities'
+import { useCommunity } from '@/lib/creatorBooks'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
@@ -115,6 +116,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   const { user } = useAuth()
   const { friends } = useFriends()
   const { communities } = useMyCommunities(isMe ? profile.uid : null)
+  const owned = useCommunity(isMe ? profile.uid : null).community // the community you run, if any
   const [editing, setEditing] = useState(false)
   const [bio, setBio] = useState(profile.bio)
   const [saving, setSaving] = useState(false)
@@ -232,11 +234,18 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
               </Link>
             </div>
           )}
+          {isMe && owned && (
+            <Link href={`/c/${profile.uid}`} className="md:hidden mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-[#7a5230]">
+              <Users size={14} />Your community: <span className="truncate">{owned.name || 'Open'}</span><ChevronRight size={14} />
+            </Link>
+          )}
         </div>
 
         {/* Right side: your privacy switches, or the friend action */}
         {isMe ? (
           <div className="flex gap-3 items-start pl-3 md:pl-5 pt-3 md:pt-4 md:row-span-2">
+            <div className="hidden md:flex flex-col gap-2 w-[204px] shrink-0">
+            <div className="flex gap-3">
             {/* Friend count, in the Friends page's stat-tile style */}
             <Link
               href="/friends"
@@ -253,6 +262,20 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
               <div className="text-xl font-bold leading-none text-ink">{communities.length}</div>
               <div className="text-[11px] font-semibold text-slate-500 mt-1">{communities.length === 1 ? 'Community' : 'Communities'}</div>
             </Link>
+            </div>
+            {/* The community you run — straight to its page */}
+            {owned && (
+              <Link href={`/c/${profile.uid}`} title={`Go to ${owned.name || 'your community'}`}
+                className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-[#7a5230] px-3 py-2 transition-colors">
+                <Users size={15} className="shrink-0 text-[#7a5230]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">Your community</span>
+                  <span className="block text-sm font-bold text-ink truncate mt-0.5">{owned.name || 'Your community'}</span>
+                </span>
+                <ChevronRight size={15} className="shrink-0 text-slate-500" />
+              </Link>
+            )}
+            </div>
             <PrivacyBox profile={profile} onSaved={onSaved} />
           </div>
         ) : action ? (

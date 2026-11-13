@@ -13,12 +13,37 @@ import { Section, timeAgo, type BlockContext } from '@/components/community/bloc
 import { badgeArt } from '@/lib/badgeAssets'
 import { NOTE_COLOURS, type Block, type WallPost } from '@/lib/communityBlocks'
 import { REACTIONS, useWallReactions, type ReactionDef } from '@/lib/wallReactions'
-import { surfaceCss, wallLook } from '@/lib/blockStyle'
+import { mix, surfaceCss, wallLook } from '@/lib/blockStyle'
 import { addPost, removePost, useBlockPosts } from '@/lib/communityPosts'
 import { uploadCreatorPicture } from '@/lib/creatorUpload'
 import { cn } from '@/lib/utils'
 
 const PINS = ['#b8402f', '#3f6e8c', '#5d7a3a', '#b8862b', '#7a4a8c']
+
+/** A pushpin, flat: a round cap, its waist and flange in two shades of the pin colour, a steel point */
+function PushPin({ color, tilt = -12 }: { color: string; tilt?: number }) {
+  const dark = mix(color, '#000000', 0.32), light = mix(color, '#ffffff', 0.38)
+  return (
+    <svg width="29" height="37" viewBox="0 0 22 28" aria-hidden className="absolute left-1/2 -top-[20px] -translate-x-1/2 pointer-events-none z-[1]" style={{ rotate: `${tilt}deg` }}>
+      <path d="M11 17.5 L12.6 27" stroke="#8d939b" strokeWidth="1.5" strokeLinecap="round" />
+      <ellipse cx="11" cy="17.2" rx="6.2" ry="2.1" fill={dark} />
+      <path d="M8 9.5 h6 v7.3 a3 1.1 0 0 1 -6 0 Z" fill={dark} />
+      <ellipse cx="11" cy="7.6" rx="8" ry="5.4" fill={color} />
+      <ellipse cx="11" cy="9.6" rx="8" ry="3.2" fill={dark} opacity="0.35" />
+      <ellipse cx="8.4" cy="5.6" rx="2.6" ry="1.5" fill={light} />
+    </svg>
+  )
+}
+
+/** Two strips of tape across the top corners, flat, with torn ends */
+function Tape() {
+  const strip = 'absolute -top-2 w-[58px] h-[19px] pointer-events-none z-[1] [clip-path:polygon(4%_0,12%_10%,8%_25%,14%_42%,6%_58%,12%_75%,5%_100%,95%_100%,88%_85%,94%_68%,87%_50%,95%_33%,89%_16%,96%_0)]'
+  const look = { background: 'repeating-linear-gradient(90deg, rgba(246,238,219,0.86) 0 3px, rgba(236,225,198,0.86) 3px 6px)' }
+  return <>
+    <span className={cn(strip, '-left-4 -rotate-[38deg]')} style={look} />
+    <span className={cn(strip, '-right-4 rotate-[38deg]')} style={look} />
+  </>
+}
 
 /** A steady little number from a post's id — its tilt and pin colour stay the same every visit */
 function hash(s: string) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h) }
@@ -80,7 +105,8 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
       <div className="rounded-md p-4 sm:p-6" style={board}>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
-            {w.holders !== 'none' && <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-black/20" style={{ background: pinOf(0) }} />}
+            {/* the empty note is held up the way the creator chose (Style → Board → Held by) */}
+            {w.holders === 'tape' ? <Tape /> : w.holders !== 'none' && <PushPin color={pinOf(0)} />}
             <p className="text-sm text-[#5c4a35]">Nothing pinned up yet.</p>
           </div>
         ) : (
@@ -93,8 +119,8 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                 <article key={p.id} onClick={() => setOpen(p)} style={{ '--tilt': `${tilt}deg`, background: paper } as React.CSSProperties}
                   className={cn('cork-note relative cursor-pointer border border-[#2b2014]/10 break-inside-avoid mb-7 w-full inline-block align-top', p.image ? 'p-2.5 pb-3' : 'px-4 pt-5 pb-3')}>
                   {/* held up by tape (a picture) or a pin (words) — flat */}
-                  {holder === 'tape' && <span className="absolute left-1/2 -top-2.5 w-16 h-5 -translate-x-1/2 bg-[#f3ead2]/75 border border-[#2b2014]/[0.06]" style={{ rotate: `${-tilt * 1.5 || -2}deg` }} />}
-                  {holder === 'pins' || holder === 'pin' ? <span className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-3 rounded-full border border-black/20" style={{ background: pinOf(h) }} /> : null}
+                  {holder === 'tape' && <Tape />}
+                  {holder === 'pins' || holder === 'pin' ? <PushPin color={pinOf(h)} tilt={[-14, -6, 8, 14][h % 4]} /> : null}
                   {ctx.owner && p.live && (
                     <button type="button" aria-label="Take this post down" title="Take this post down"
                       onClick={(e) => { e.stopPropagation(); if (confirm('Take this post off the wall? This can\'t be undone.')) removePost(p.id).catch(() => alert('Couldn\'t take it down — check your connection.')) }}
