@@ -8,7 +8,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, ImagePlus, Loader2, Trash2, AlignLeft, AlignCenter, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react'
+import { X, ImagePlus, Loader2, Trash2, Scissors, AlignLeft, AlignCenter, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react'
 import { badgeArt } from '@/lib/badgeAssets'
 import { NOTE_COLOURS, type NoteLook, type WallPost } from '@/lib/communityBlocks'
 import { luminance, mix } from '@/lib/blockStyle'
@@ -272,7 +272,8 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
       <div className="absolute inset-0 bg-[#2b2014]/60" onClick={close} />
       <div className="relative w-full max-w-5xl max-h-[94vh] flex flex-col md:flex-row overflow-hidden rounded-[10px] border border-[#2b2014]/20 bg-[#f6eedb] shadow-[0_20px_50px_-20px_rgba(0,0,0,0.6)]">
         {/* the note, hanging on a piece of the board */}
-        <div className="relative md:flex-1 min-h-[300px] overflow-y-auto flex items-start justify-center px-6 pt-12 pb-10" style={board}>
+        {/* a sticker sits in the middle of the board; a note hangs from near the top */}
+        <div className={cn('relative md:flex-1 min-h-[300px] overflow-y-auto flex justify-center px-6', sticker ? 'items-center py-10' : 'items-start pt-12 pb-10')} style={board}>
           <div className={cn('w-full relative', sticker ? 'max-w-[300px]' : 'max-w-[360px]')}>
             {sticker && cutting && <Loader2 size={20} className="absolute -top-8 left-1/2 -translate-x-1/2 animate-spin text-[#2b2014]" />}
             <NoteCard post={preview} holder={holder} pinColor={look.pinColor || PINS[0]} tilt={0} full edit={{ value: text, onChange: setText }}>
@@ -348,12 +349,22 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
                   </div>
                   {sticker ? (<>
                   <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Shape</p>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-4 gap-1.5">
                     {STICKER_SHAPES.map((sh) => {
                       const on = (look.shape ?? 'cutout') === sh.id
                       return (
-                        <button key={sh.id} type="button" onClick={() => put({ shape: sh.id === 'cutout' ? undefined : sh.id })} aria-pressed={on}
-                          className={cn('rounded-md border py-1.5 text-[11.5px] font-semibold', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}>{sh.name}</button>
+                        <button key={sh.id} type="button" onClick={() => put({ shape: sh.id === 'cutout' ? undefined : sh.id })} aria-pressed={on} title={sh.name}
+                          className={cn('rounded-md border pt-2 pb-1 px-0.5 flex flex-col items-center gap-1 text-[10px] font-semibold leading-tight', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 text-[#4a3320] hover:bg-black/5')}>
+                          {/* the shape itself, drawn from the same outline that cuts the photo */}
+                          <span className="h-7 flex items-center justify-center">
+                            {sh.id === 'cutout'
+                              ? <Scissors size={20} strokeWidth={1.8} />
+                              : <svg viewBox={`-3 -3 ${sh.w + 6} ${sh.h + 6}`} className="h-7 w-auto max-w-[32px]" aria-hidden>
+                                  <path d={sh.d} fill={on ? '#f3d58a' : '#c9a35c'} stroke={on ? '#fbf6ea' : '#fbf6ea'} strokeWidth="5" strokeLinejoin="round" paintOrder="stroke" />
+                                </svg>}
+                          </span>
+                          <span className="truncate max-w-full">{sh.name}</span>
+                        </button>
                       )
                     })}
                   </div>

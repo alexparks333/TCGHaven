@@ -92,8 +92,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   The owner's **New note** (a note, polaroid or sticker — its Kind) / **Arrange the board** sit at the top right of the board, always above
   the notes (z-index), even one placed over that corner. A third kind, **Sticker** (`lib/stickerCut.ts`, all in the
   browser — no AI service): upload a photo and it's cut out — **Cut out** flood-fills a plain background away from
-  the picture's edges (a "Cut" sensitivity slider; a PNG with its own see-through edge keeps it), or a shape
-  (circle, heart, star, seal, rounded) — then a white die-cut border (none / thin / thick: the solid part grown
+  the picture's edges (a "Cut" sensitivity slider; a PNG with its own see-through edge keeps it), or one of 18 shapes
+  (`STICKER_SHAPES`, each one SVG outline that both cuts the photo via Path2D and draws its button: circle, heart,
+  star, seal, rounded, trading card, stamp — a perforated white paper edge — ticket, burst, cloud, speech, bolt,
+  flower, gem, shield, arch, hexagon, splat) — then a white die-cut border (none / thin / thick: the solid part grown
   outward, smoothed, so thin stems don't spike). The finished PNG is uploaded (`uploadCreatorPng`); the original
   stays in `look.src` with `shape` / `border` / `tol`, so it can be re-cut later. Stickers have no time or
   reactions and don't open; they start at 0.7× and more turned. Clicking a note while arranging brings it to the front. **Placing on the board**

@@ -8,11 +8,53 @@
 
 import { badgeAsset } from './badgeAssets'
 
-export type StickerShape = 'cutout' | 'circle' | 'heart' | 'star' | 'scallop' | 'rounded'
-export const STICKER_SHAPES: Array<{ id: StickerShape; name: string }> = [
-  { id: 'cutout', name: 'Cut out' }, { id: 'circle', name: 'Circle' }, { id: 'heart', name: 'Heart' },
-  { id: 'star', name: 'Star' }, { id: 'scallop', name: 'Seal' }, { id: 'rounded', name: 'Rounded' },
-]
+// Every shape is one SVG outline in its own box (w × h) — the same path cuts the photo (canvas Path2D) and draws
+// its button in the editor, so what you pick is what you get.
+const r2 = (n: number) => Math.round(n * 10) / 10
+function polar(n: number, r: (t: number) => number, c = 50) {
+  const pts = Array.from({ length: n }, (_, i) => { const t = (i / n) * Math.PI * 2 - Math.PI / 2, k = r(t); return `${r2(c + Math.cos(t) * k)} ${r2(c + Math.sin(t) * k)}` })
+  return `M${pts.join('L')}Z`
+}
+const star = (points: number, inner: number, wobble = 0) =>
+  polar(points * 2, (t) => ((Math.round(((t + Math.PI / 2) / (Math.PI * 2)) * points * 2) % 2) ? 50 * inner : 50) * (1 + wobble * Math.sin(t * 7)))
+function stamp(w: number, h: number, bite = 4.2) {
+  // a postage stamp's perforated edge: little half-circle bites all round
+  const side = (x0: number, y0: number, x1: number, y1: number) => {
+    const len = Math.hypot(x1 - x0, y1 - y0), n = Math.max(2, Math.round(len / (bite * 2.6))), dx = (x1 - x0) / n, dy = (y1 - y0) / n
+    const ux = (x1 - x0) / len, uy = (y1 - y0) / len // along the edge
+    let d = ''
+    for (let i = 0; i < n; i++) {
+      const sx = x0 + dx * (i + 0.5) - ux * bite, sy = y0 + dy * (i + 0.5) - uy * bite
+      d += `L${r2(sx)} ${r2(sy)}A${r2(bite)} ${r2(bite)} 0 0 0 ${r2(sx + ux * bite * 2)} ${r2(sy + uy * bite * 2)}`
+    }
+    return d + `L${x1} ${y1}`
+  }
+  return `M0 0${side(0, 0, w, 0)}${side(w, 0, w, h)}${side(w, h, 0, h)}${side(0, h, 0, 0)}Z`
+}
+
+export type StickerShape = typeof STICKER_SHAPES[number]['id']
+export const STICKER_SHAPES = [
+  { id: 'cutout', name: 'Cut out', w: 100, h: 100, d: '' },
+  { id: 'circle', name: 'Circle', w: 100, h: 100, d: 'M0 50a50 50 0 1 0 100 0a50 50 0 1 0 -100 0Z' },
+  { id: 'heart', name: 'Heart', w: 100, h: 100, d: 'M50 94C12 68 -3 38 13 17C27 0 46 5 50 22C54 5 73 0 87 17C103 38 88 68 50 94Z' },
+  { id: 'star', name: 'Star', w: 100, h: 100, d: star(5, 0.47) },
+  { id: 'scallop', name: 'Seal', w: 100, h: 100, d: polar(180, (t) => 45 + 5 * Math.cos(t * 16)) },
+  { id: 'rounded', name: 'Rounded', w: 100, h: 100, d: 'M18 0H82A18 18 0 0 1 100 18V82A18 18 0 0 1 82 100H18A18 18 0 0 1 0 82V18A18 18 0 0 1 18 0Z' },
+  { id: 'card', name: 'Trading card', w: 63, h: 88, d: 'M5 0H58A5 5 0 0 1 63 5V83A5 5 0 0 1 58 88H5A5 5 0 0 1 0 83V5A5 5 0 0 1 5 0Z' },
+  { id: 'stamp', name: 'Stamp', w: 84, h: 100, d: stamp(84, 100) },
+  { id: 'ticket', name: 'Ticket', w: 100, h: 56, d: 'M6 0H94A6 6 0 0 0 100 6V20A8 8 0 0 0 100 36V50A6 6 0 0 0 94 56H6A6 6 0 0 0 0 50V36A8 8 0 0 0 0 20V6A6 6 0 0 0 6 0Z' },
+  { id: 'burst', name: 'Burst', w: 100, h: 100, d: star(12, 0.7, 0.06) },
+  { id: 'cloud', name: 'Cloud', w: 100, h: 72, d: 'M22 70A20 20 0 0 1 18 31A22 22 0 0 1 52 14A24 24 0 0 1 90 32A19 19 0 0 1 80 70Z' },
+  { id: 'speech', name: 'Speech', w: 100, h: 92, d: 'M14 2H86A12 12 0 0 1 98 14V58A12 12 0 0 1 86 70H46L22 90L28 70H14A12 12 0 0 1 2 58V14A12 12 0 0 1 14 2Z' },
+  { id: 'bolt', name: 'Bolt', w: 76, h: 100, d: 'M48 0L4 58H34L22 100L74 36H44L58 0Z' },
+  { id: 'flower', name: 'Flower', w: 100, h: 100, d: polar(240, (t) => 27 + 23 * Math.pow(Math.abs(Math.cos(t * 3)), 0.55)) },
+  { id: 'gem', name: 'Gem', w: 100, h: 90, d: 'M22 2H78L98 30L50 88L2 30Z' },
+  { id: 'shield', name: 'Shield', w: 88, h: 100, d: 'M44 1L86 14V44C86 70 68 89 44 99C20 89 2 70 2 44V14Z' },
+  { id: 'arch', name: 'Arch', w: 78, h: 100, d: 'M0 100V39A39 39 0 0 1 78 39V100Z' },
+  { id: 'hexagon', name: 'Hexagon', w: 100, h: 100, d: polar(6, () => 50) },
+  { id: 'splat', name: 'Splat', w: 100, h: 100, d: polar(220, (t) => 37 + 4 * Math.sin(t * 5 + 1) + 3 * Math.sin(t * 9) + 8 * Math.pow(Math.max(0, Math.sin(t * 7 + 0.4)), 14) + 6 * Math.pow(Math.max(0, Math.sin(t * 4 - 0.8)), 18)) },
+] as const
+export const stickerShapeOf = (id?: string) => STICKER_SHAPES.find((x) => x.id === id) ?? STICKER_SHAPES[0]
 const MAX = 720
 
 function load(src: string): Promise<HTMLImageElement> {
@@ -26,7 +68,7 @@ function load(src: string): Promise<HTMLImageElement> {
 const canvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c }
 
 /** The finished sticker as a PNG. tolerance: how far from the background colour still counts as background (Cut out). */
-export async function makeSticker(src: string, shape: StickerShape, border: 0 | 1 | 2, tolerance = 42): Promise<Blob> {
+export async function makeSticker(src: string, shape: StickerShape | string, border: 0 | 1 | 2, tolerance = 42): Promise<Blob> {
   const img = await load(src)
   const k = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k)
@@ -37,12 +79,24 @@ export async function makeSticker(src: string, shape: StickerShape, border: 0 | 
     g.drawImage(img, 0, 0, w, h)
     removeBackground(g, w, h, tolerance)
     cut = trim(cut)
+  } else if (shape === 'stamp') {
+    // a postage stamp: the photo on a white paper whose edge is perforated all round (the perforations are the
+    // paper's own edge, so it skips the smoothed sticker border)
+    const f = Math.min(w / 84, h / 100), pw = 84 * f, ph = 100 * f, pad = Math.round(Math.max(pw, ph) * 0.09)
+    const out = canvas(pw + pad * 2, ph + pad * 2), g = out.getContext('2d')!
+    g.fillStyle = '#fbfaf5'; g.fill(new Path2D(stamp(out.width, out.height, Math.max(out.width, out.height) * 0.024)))
+    g.save(); g.beginPath(); g.rect(pad, pad, pw, ph); g.clip()
+    g.drawImage(img, pad + (pw - w) / 2, pad + (ph - h) / 2, w, h)
+    g.restore()
+    return toBlob(out)
   } else {
-    const side = Math.min(w, h)
-    cut = canvas(side, side)
+    // the shape at its own proportions, as big as the photo allows; the photo fills it, centred
+    const def = stickerShapeOf(shape)
+    const f = Math.min(w / def.w, h / def.h), cw = def.w * f, ch = def.h * f
+    cut = canvas(cw, ch)
     const g = cut.getContext('2d')!
-    g.save(); shapePath(g, shape, side); g.clip()
-    g.drawImage(img, (side - w) / 2, (side - h) / 2, w, h) // centred, filling the shape
+    g.save(); g.scale(cw / def.w, ch / def.h); g.clip(new Path2D(def.d)); g.setTransform(1, 0, 0, 1, 0, 0)
+    g.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h)
     g.restore()
   }
   return toBlob(withBorder(cut, [0, 12, 24][border]))
@@ -122,30 +176,6 @@ function withBorder(c: HTMLCanvasElement, px: number) {
   }
   g.drawImage(c, px + 2, px + 2)
   return out
-}
-
-function shapePath(g: CanvasRenderingContext2D, shape: StickerShape, s: number) {
-  const c = s / 2
-  g.beginPath()
-  if (shape === 'circle') g.arc(c, c, c, 0, Math.PI * 2)
-  if (shape === 'rounded') g.roundRect(0, 0, s, s, s * 0.18)
-  if (shape === 'star') {
-    for (let i = 0; i < 10; i++) { const r = i % 2 ? c * 0.48 : c, t = -Math.PI / 2 + (i * Math.PI) / 5; g.lineTo(c + Math.cos(t) * r, c + Math.sin(t) * r * 1.02 + s * 0.04) }
-    g.closePath()
-  }
-  if (shape === 'scallop') {
-    const n = 16
-    for (let i = 0; i <= 360; i++) { const t = (i / 360) * Math.PI * 2, r = c * (0.9 + 0.1 * Math.cos(t * n)); g.lineTo(c + Math.cos(t) * r, c + Math.sin(t) * r) }
-    g.closePath()
-  }
-  if (shape === 'heart') {
-    g.moveTo(c, s * 0.92)
-    g.bezierCurveTo(s * 0.12, s * 0.58, -s * 0.02, s * 0.3, s * 0.2, s * 0.13)
-    g.bezierCurveTo(s * 0.36, 0, c, s * 0.06, c, s * 0.24)
-    g.bezierCurveTo(c, s * 0.06, s * 0.64, 0, s * 0.8, s * 0.13)
-    g.bezierCurveTo(s * 1.02, s * 0.3, s * 0.88, s * 0.58, c, s * 0.92)
-    g.closePath()
-  }
 }
 
 const toBlob = (c: HTMLCanvasElement) => new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('png'))), 'image/png'))
