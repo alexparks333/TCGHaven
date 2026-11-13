@@ -2,7 +2,7 @@
 // posts and announcements. Written by the owner right on their community page — never in the Creator
 // Studio, which is only the page's layout and look. Highlighted Cards are posts too (kind 'card', one card each) (communities/{uid}.page). Kept in their own collection
 // so a Studio save of the layout can never overwrite a post.
-//   community_posts/{id}  { community, block, kind: 'wall' | 'announcement' | 'card', text, title?, image?, note?, look? (a wall note's layout), pinned?, slot?, at }
+//   community_posts/{id}  { community, block, kind: 'wall' | 'announcement' | 'card', text, title?, image?, note?, look? (a wall note's layout), place? (where it's pinned on the board), pinned?, slot?, at }
 // Anyone signed in reads; only the community's owner (community == their uid) writes (firestore.rules).
 // Older posts kept inside the block (block.posts / block.items, before this) still show, merged in.
 
@@ -10,11 +10,11 @@ import { useEffect, useState } from 'react'
 import { addDoc, collection, deleteDoc, deleteField, doc, onSnapshot, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore'
 import { db } from './firebase/config'
 import type { BadgeSlot } from './badges'
-import type { NoteLook } from './communityBlocks'
+import type { NoteLook, NotePlace } from './communityBlocks'
 
 export interface CommunityPost {
   id: string; community: string; block: string; kind: 'wall' | 'announcement' | 'card'
-  text: string; title?: string; image?: string; note?: string; look?: NoteLook; pinned?: boolean; slot?: BadgeSlot; at: number
+  text: string; title?: string; image?: string; note?: string; look?: NoteLook; place?: NotePlace; pinned?: boolean; slot?: BadgeSlot; at: number
 }
 
 /** A block's posts, live, newest first */
@@ -31,10 +31,11 @@ export function useBlockPosts(community: string, block: string) {
   return posts
 }
 
-export async function addPost(p: Omit<CommunityPost, 'id' | 'at'>) {
+/** Add a post; its id */
+export async function addPost(p: Omit<CommunityPost, 'id' | 'at'>): Promise<string> {
   // Firestore refuses undefined anywhere — a JSON round trip drops it (a picked card's details can have gaps)
   const clean = JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined && v !== ''))))
-  await addDoc(collection(db, 'community_posts'), { text: '', ...clean, at: serverTimestamp() })
+  return (await addDoc(collection(db, 'community_posts'), { text: '', ...clean, at: serverTimestamp() })).id
 }
 export const removePost = (id: string) => deleteDoc(doc(db, 'community_posts', id))
 
@@ -45,7 +46,7 @@ export async function pinPost(posts: CommunityPost[], id: string, on: boolean) {
   await b.commit()
 }
 /** Change a post. `image: null` takes its picture off; the rest is JSON-cleaned (Firestore refuses undefined). */
-export function editPost(id: string, patch: Partial<Pick<CommunityPost, 'text' | 'title' | 'note' | 'look'>> & { image?: string | null }) {
+export function editPost(id: string, patch: Partial<Pick<CommunityPost, 'text' | 'title' | 'note' | 'look' | 'place'>> & { image?: string | null }) {
   const { image, ...rest } = patch
   const clean = JSON.parse(JSON.stringify(rest))
   return updateDoc(doc(db, 'community_posts', id), { ...clean, ...(image === null ? { image: deleteField() } : image ? { image } : {}) })

@@ -86,7 +86,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   picture (shown whole at its own shape, never cropped: above / below / left / right of the words, small /
   medium / large, photo border / thin line / none), the words (Print / Handwritten / Typewriter / Elegant,
   size, alignment) and what holds it up (the board's choice / pin + colour / tape / nothing) — all in
-  `post.look` (`NoteLook`). Saving a change: `editPost()` (`image: null` takes the picture off). The rules
+  `post.look` (`NoteLook`). Two kinds: **Note** and **Polaroid** (`look.kind` — the photo in a dark window, whole
+  or `square`, over a deep strip with a handwritten caption). **Placing on the board**
+  (`components/community/WallBoard.tsx`): notes hang wherever the owner pinned them, not in rows — the board is
+  `BOARD_W` (900) units wide, scaled to fit the page; each note's `post.place` = `{x, y, r, s, z}` (centre,
+  turn°, size, stacking). **Arrange the board** (owner, computer): drag to move, the round handle turns (snaps
+  straight near 0°), the corner sizes (0.55–1.9×); a picked note comes to the front; each change saves on
+  letting go. A new note goes up near the top middle and the board opens for arranging with it picked. Notes
+  never placed hang in loose tilted columns from the top. Phones (board under 560px) stack the notes. Saving a change: `editPost()` (`image: null` takes the picture off). The rules
   allow `look` on create and `image` / `look` on update. **Reactions** (`lib/wallReactions.ts`): ♥ / 👍 / 🃏 under each post, for
   members and the creator (`ctx.canReact`); `wall_reactions/{community}_{post}_{member}_{reaction}`, one live
   query per wall, counts added up in the browser, toggles shown at once. Add a reaction by adding it to

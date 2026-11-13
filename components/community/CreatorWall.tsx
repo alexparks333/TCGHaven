@@ -7,10 +7,11 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil } from 'lucide-react'
+import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { timeAgo, useLook, type BlockContext } from '@/components/community/blocks'
 import { NoteCard, NoteEditor, PINS, PushPin, Tape, hash } from '@/components/community/WallNote'
+import { BOARD_W, WallBoard } from '@/components/community/WallBoard'
 import { type Block, type WallPost } from '@/lib/communityBlocks'
 import { REACTIONS, useWallReactions, type ReactionDef } from '@/lib/wallReactions'
 import { lookVars, luminance, mix, surfaceCss, wallLook } from '@/lib/blockStyle'
@@ -37,16 +38,15 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   const { user } = useAuth()
   // The owner's posts (community_posts, put up on the page) and any older ones saved inside the block
   const live = useBlockPosts(ctx.uid, block.id)
-  const posts: Array<WallPost & { live?: boolean }> = [...live.map((p) => ({ id: p.id, text: p.text, image: p.image, note: p.note, look: p.look, at: p.at, live: true })), ...block.posts]
+  const posts: Array<WallPost & { live?: boolean }> = [...live.map((p) => ({ id: p.id, text: p.text, image: p.image, note: p.note, look: p.look, place: p.place, at: p.at, live: true })), ...block.posts]
     .sort((a, b) => b.at - a.at)
-  const [all, setAll] = useState(false)
   const [open, setOpen] = useState<WallPost | null>(null)
   const [editing, setEditing] = useState<WallPost | 'new' | null>(null) // the owner's note editor
+  const [arranging, setArranging] = useState(false) // the owner moving, turning and sizing notes on the board
+  const [selected, setSelected] = useState<string | null>(null)
   const rx = useWallReactions(ctx.uid, user?.uid ?? null, posts.map((p) => p.id))
   const canReact = !!user && !!ctx.canReact
   const w = wallLook(block.style?.wall) // the board: its surface, frame, holders, tilt, columns (Style → Board)
-  const SHOWN = w.shown
-  const shown = all ? posts : posts.slice(0, SHOWN)
   const pinOf = (h: number) => w.pinColor || PINS[h % PINS.length]
   // held up the note's own way, else the board's (Style → Board → Held by; "mixed": tape for pictures, pins for words)
   const holderOf = (p: WallPost): 'pin' | 'tape' | 'none' => p.look?.holder ?? (w.holders === 'mixed' ? (p.image ? 'tape' : 'pin') : w.holders === 'pins' ? 'pin' : w.holders as 'tape' | 'none')
@@ -61,7 +61,6 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
     borderRadius: l.radius,
     '--b-accent': ink, '--b-line': mix(ink, w.color, 0.55), '--b-hover': mix(ink, w.color, 0.9),
   } as React.CSSProperties
-  const cols = w.columns === 1 ? 'columns-1' : w.columns === 3 ? 'columns-1 sm:columns-2 lg:columns-3' : 'columns-1 sm:columns-2'
 
   const Reactions = ({ p }: { p: WallPost }) => (
     <div className="mt-2.5 flex flex-wrap gap-1">
@@ -89,11 +88,25 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
         <p className="text-xs mt-1" style={{ color: mix(ink, w.color, 0.18) }}>Pinned up by {ctx.community.name}</p>
       </header>
       {ctx.owner && (
-        <button type="button" onClick={() => setEditing('new')}
-          className="mb-5 w-full rounded-md border border-dashed border-[color:var(--b-line)] py-2.5 text-sm font-bold text-[color:var(--b-accent)] inline-flex items-center justify-center gap-2 hover:bg-[color:var(--b-hover)] transition-colors">
-          <Plus size={16} />Pin up a note
-        </button>
+        // the owner: write a note, then place it on the board (drag, turn, size)
+        <div className="mb-5 flex gap-2">
+          {!arranging && (
+            <button type="button" onClick={() => setEditing('new')}
+              className="flex-1 rounded-md border border-dashed border-[color:var(--b-line)] py-2.5 text-sm font-bold text-[color:var(--b-accent)] inline-flex items-center justify-center gap-2 hover:bg-[color:var(--b-hover)] transition-colors">
+              <Plus size={16} />Pin up a note
+            </button>
+          )}
+          {posts.some((p) => p.live) && (
+            <button type="button" onClick={() => { setArranging((a) => !a); setSelected(null) }}
+              // arranging is for a computer (on a phone the notes stack)
+              className={cn('hidden sm:inline-flex rounded-md py-2.5 px-4 text-sm font-bold items-center justify-center gap-2 transition-colors',
+                arranging ? 'flex-1 bg-[#2b2014] text-[#fbf6ea]' : 'border border-dashed border-[color:var(--b-line)] text-[color:var(--b-accent)] hover:bg-[color:var(--b-hover)]')}>
+              {arranging ? <><Check size={16} />Done arranging</> : <><Move size={16} />Arrange the board</>}
+            </button>
+          )}
+        </div>
       )}
+      {arranging && <p className="-mt-3 mb-3 text-xs font-semibold" style={{ color: mix(ink, w.color, 0.18) }}>Drag a note to move it · the round handle turns it · the corner makes it bigger or smaller. Each change saves when you let go.</p>}
       <div>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
@@ -102,13 +115,13 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
             <p className="text-sm text-[#5c4a35]">Nothing pinned up yet.</p>
           </div>
         ) : (
-          <div className={cn(cols, 'gap-6 pt-1')}>
-            {shown.map((p) => {
-              const h = hash(p.id), tilt = [-2.5, -1.5, -0.8, 0.8, 1.6, 2.4][h % 6] * w.tilt
+          <WallBoard posts={posts} arranging={arranging} selected={selected} onSelect={setSelected} tiltK={w.tilt} columns={w.columns}
+            onOpen={(p) => setOpen(p)} onPlace={(id, place) => { editPost(id, { place }).catch(() => alert('Couldn\'t save where that note goes — check your connection.')) }}
+            renderNote={(p) => {
+              const h = hash(p.id)
               return (
-                <NoteCard key={p.id} post={p} holder={holderOf(p)} pinColor={p.look?.pinColor || pinOf(h)} tilt={tilt} onClick={() => setOpen(p)}
-                  className="break-inside-avoid mb-7 w-full inline-block align-top"
-                  top={ctx.owner && p.live && (
+                <NoteCard post={p} holder={holderOf(p)} pinColor={p.look?.pinColor || pinOf(h)}
+                  top={ctx.owner && p.live && !arranging && (
                     // the owner's own note: change it, or take it down
                     <span className="absolute -top-2.5 -right-2.5 z-[2] flex gap-1 opacity-0 [.cork-note:hover_&]:opacity-100 focus-within:opacity-100 transition-opacity">
                       <button type="button" aria-label="Change this note" title="Change this note" onClick={(e) => { e.stopPropagation(); setEditing(p) }}
@@ -122,17 +135,11 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                   <Reactions p={p} />
                 </NoteCard>
               )
-            })}
-          </div>
+            }} />
         )}
       </div>
-      {posts.length > SHOWN && (
-        <button type="button" onClick={() => setAll((a) => !a)} className="mt-3 w-full text-xs font-semibold text-[color:var(--b-accent)] hover:underline">
-          {all ? 'Show fewer' : `See all ${posts.length} posts`}
-        </button>
-      )}
 
-      {open && typeof document !== 'undefined' && createPortal(
+      {open && !arranging && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => setOpen(null)}>
           <div className="fixed inset-0 bg-[#2b2014]/55" />
           <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} className="relative w-full max-w-xl my-auto">
@@ -147,7 +154,14 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
         <NoteEditor uid={ctx.uid} post={editing === 'new' ? undefined : editing} board={surfaceCss(w.surface, w.color, w.texture)}
           boardHolder={w.holders === 'pins' ? 'pin' : w.holders}
           onSave={async (n) => {
-            if (editing === 'new') await addPost({ community: ctx.uid, block: block.id, kind: 'wall', text: n.text, image: n.image, note: n.note, look: n.look })
+            if (editing === 'new') {
+              // it goes up near the top middle of the board, a little turned, on top of the others — then the
+              // board opens for arranging with it picked, so the owner can put it exactly where they want
+              const z = Math.max(0, ...posts.map((p) => p.place?.z ?? 0)) + 1
+              const id = await addPost({ community: ctx.uid, block: block.id, kind: 'wall', text: n.text, image: n.image, note: n.note, look: n.look,
+                place: { x: BOARD_W / 2, y: 190, r: [-3, 2, -1.5, 3.5][Date.now() % 4], s: 1, z } })
+              setArranging(true); setSelected(id)
+            }
             else await editPost(editing.id, { text: n.text, note: n.note, look: n.look, image: n.image ?? null })
           }}
           onClose={() => setEditing(null)} />

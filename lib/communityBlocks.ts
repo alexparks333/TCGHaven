@@ -9,11 +9,17 @@ import type { Community, CommunityTab } from './creatorBooks'
 
 export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' | 'text' | 'picture' | 'board'
 
-export interface WallPost { id: string; text: string; image?: string; at: number; note?: string /* NOTE_COLOURS id */; look?: NoteLook }
+export interface WallPost { id: string; text: string; image?: string; at: number; note?: string /* NOTE_COLOURS id */; look?: NoteLook; place?: NotePlace }
+/** Where the owner pinned a note on the board (components/community/WallBoard.tsx): its centre in board units
+ *  (the board is BOARD_W units wide, scaled to fit the page), its turn in degrees, its size (1 = normal) and
+ *  its stacking order. Unset = laid out on its own until the owner places it. */
+export interface NotePlace { x: number; y: number; r: number; s: number; z: number }
 /** How one Creator Wall note is laid out — set by the owner in the note editor (components/community/WallNote.tsx).
  *  Every part is optional: unset = a picture on top at full width with a white photo border, the page's
  *  body font at medium size, held the way the board says (Style → Board → Held by). */
 export interface NoteLook {
+  kind?: 'note' | 'polaroid'                // a paper note, or a polaroid (the picture over a written strip)
+  square?: boolean                          // a polaroid's photo squared off (cropped to fill) instead of whole
   pic?: 'top' | 'bottom' | 'left' | 'right' // where the picture sits around the words
   picSize?: 's' | 'm' | 'l'                 // how much of the note it takes
   frame?: 'photo' | 'line' | 'none'         // a white photo border, a thin line, or nothing

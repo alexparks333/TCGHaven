@@ -72,8 +72,9 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
   top?: React.ReactNode      // over the note's corner (the owner's buttons)
 }) {
   const l = post.look ?? {}
-  const paper = paperOf(post), ink = inkOn(paper)
-  const font = NOTE_FONTS.find((f) => f.id === (l.font ?? 'print'))!
+  const polaroid = l.kind === 'polaroid'
+  const paper = polaroid && !post.note ? '#fbfaf6' : paperOf(post), ink = inkOn(paper)
+  const font = NOTE_FONTS.find((f) => f.id === (l.font ?? (polaroid ? 'hand' : 'print')))!
   const pic = l.pic ?? 'top', side = pic === 'left' || pic === 'right'
   const w = (side ? PIC_W.side : PIC_W.top)[l.picSize ?? (side ? 'm' : 'l')]
   const frame = l.frame ?? 'photo'
@@ -93,6 +94,30 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
       ? <AutoText value={edit.value} onChange={edit.onChange} style={textStyle} placeholder="Write on your note…" />
       : <p className={cn('whitespace-pre-line break-words', !full && 'line-clamp-[10]')} style={textStyle}>{post.text}</p>
   )
+
+  // A polaroid: the photo in a dark window at the top (the whole picture, or squared off if the owner chose
+  // Square), a deep strip below with the caption written on it
+  if (polaroid) {
+    const caption = edit
+      ? <AutoText value={edit.value} onChange={edit.onChange} style={{ ...textStyle, textAlign: l.align ?? 'center' }} placeholder="Write a caption…" min={34} />
+      : post.text && <p className={cn('whitespace-pre-line break-words', !full && 'line-clamp-3')} style={{ ...textStyle, textAlign: l.align ?? 'center' }}>{post.text}</p>
+    return (
+      <article onClick={onClick} style={{ '--tilt': `${tilt}deg`, background: paper, color: ink } as React.CSSProperties}
+        className={cn('cork-note relative border border-black/10 p-3 pb-2', onClick && 'cursor-pointer', className)}>
+        {holder === 'tape' && <Tape />}
+        {holder === 'pin' && <PushPin color={pinColor} tilt={[-14, -6, 8, 14][hash(post.id) % 4]} />}
+        {top}
+        <div className={cn('bg-[#1d1a17] overflow-hidden', l.square && 'aspect-square')}>
+          {post.image
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={badgeArt(post.image, full ? 1600 : 800)} alt="" className={cn('block w-full', l.square ? 'h-full object-cover' : 'h-auto')} />
+            : <div className="aspect-square flex items-center justify-center text-[11px] font-semibold uppercase tracking-[0.14em] text-white/35">No photo yet</div>}
+        </div>
+        <div className="min-h-[52px] pt-2.5 pb-1 flex flex-col justify-center">{caption}</div>
+        {children}
+      </article>
+    )
+  }
 
   return (
     <article onClick={onClick} style={{ '--tilt': `${tilt}deg`, background: paper, color: ink } as React.CSSProperties}
@@ -118,11 +143,11 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
 }
 
 /** A text box that grows with its words — looks exactly like the note's text */
-function AutoText({ value, onChange, style, placeholder }: { value: string; onChange: (v: string) => void; style: React.CSSProperties; placeholder: string }) {
+function AutoText({ value, onChange, style, placeholder, min = 72 }: { value: string; onChange: (v: string) => void; style: React.CSSProperties; placeholder: string; min?: number }) {
   const ref = useRef<HTMLTextAreaElement>(null)
-  useLayoutEffect(() => { const t = ref.current; if (t) { t.style.height = '0px'; t.style.height = `${Math.max(t.scrollHeight, 72)}px` } })
+  useLayoutEffect(() => { const t = ref.current; if (t) { t.style.height = '0px'; t.style.height = `${Math.max(t.scrollHeight, min)}px` } })
   return (
-    <textarea ref={ref} value={value} maxLength={2000} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={3} autoFocus
+    <textarea ref={ref} value={value} maxLength={2000} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={1} autoFocus
       className="block w-full resize-none bg-transparent outline-none placeholder:opacity-45 rounded-sm focus:bg-black/[0.03]" style={{ ...style, color: style.color }} />
   )
 }
@@ -134,18 +159,18 @@ export function NoteEditor({ uid, post, board, boardHolder, onSave, onClose }: {
   post?: WallPost
   board: React.CSSProperties          // the board's surface, so the note's seen where it'll hang
   boardHolder: 'pin' | 'tape' | 'none' | 'mixed'
-  onSave: (n: { text: string; image?: string; note: string; look: NoteLook }) => Promise<void>
+  onSave: (n: { text: string; image?: string; note?: string; look: NoteLook }) => Promise<void>
   onClose: () => void
 }) {
   const [text, setText] = useState(post?.text ?? '')
   const [image, setImage] = useState<string | undefined>(post?.image)
-  const [note, setNote] = useState(post?.note ?? 'paper')
+  const [note, setNote] = useState(post?.note ?? '') // '' = the kind's own (paper for a note, white for a polaroid)
   const [look, setLook] = useState<NoteLook>(post?.look ?? {})
   const [busy, setBusy] = useState<'' | 'pic' | 'save'>('')
   const [err, setErr] = useState('')
   const file = useRef<HTMLInputElement>(null)
   const put = (p: Partial<NoteLook>) => setLook((l) => ({ ...l, ...p }))
-  const changed = !post || text !== post.text || image !== post.image || note !== (post.note ?? 'paper') || JSON.stringify(look) !== JSON.stringify(post.look ?? {})
+  const changed = !post || text !== post.text || image !== post.image || note !== (post.note ?? '') || JSON.stringify(look) !== JSON.stringify(post.look ?? {})
   const empty = !text.trim() && !image
 
   // Esc closes (asking first if there's unsaved work)
@@ -163,7 +188,7 @@ export function NoteEditor({ uid, post, board, boardHolder, onSave, onClose }: {
   async function save() {
     if (empty) return
     setBusy('save'); setErr('')
-    try { await onSave({ text: text.trim(), image, note, look }); onClose() }
+    try { await onSave({ text: text.trim(), image, note: note || undefined, look }); onClose() }
     catch { setErr('Couldn\'t save it — check your connection and try again.'); setBusy('') }
   }
 
@@ -197,7 +222,25 @@ export function NoteEditor({ uid, post, board, boardHolder, onSave, onClose }: {
             <button type="button" onClick={close} className="p-1 text-[#5c4a35] hover:text-[#2b2014]" aria-label="Close"><X size={18} /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 text-[#2b2014]">
-            <Part label="Paper">
+            <Part label="Kind">
+              <div className="grid grid-cols-2 gap-1.5">
+                {([['note', 'Note'], ['polaroid', 'Polaroid']] as const).map(([id, name]) => {
+                  const on = (look.kind ?? 'note') === id
+                  return (
+                    <button key={id} type="button" onClick={() => put({ kind: id === 'note' ? undefined : id })} aria-pressed={on}
+                      className={cn('rounded-md border p-2 flex flex-col items-center gap-1.5 text-xs font-bold', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}>
+                      {/* a little drawing of each */}
+                      {id === 'note'
+                        ? <span className="w-9 h-10 bg-[#f1e2a4] border border-black/15 -rotate-3 flex flex-col gap-1 p-1.5 pt-2.5"><i className="h-[2px] bg-black/25" /><i className="h-[2px] bg-black/25" /><i className="h-[2px] w-2/3 bg-black/25" /></span>
+                        : <span className="w-9 h-11 bg-[#fbfaf6] border border-black/15 rotate-3 p-1 pb-3"><i className="block w-full aspect-square bg-[#3b4a5a]" /></span>}
+                      {name}
+                    </button>
+                  )
+                })}
+              </div>
+            </Part>
+
+            <Part label={look.kind === 'polaroid' ? 'Frame' : 'Paper'}>
               <div className="flex flex-wrap gap-1.5">
                 {NOTE_COLOURS.map((c) => (
                   <button key={c.id} type="button" onClick={() => setNote(c.id)} title={c.name} aria-label={`Paper: ${c.name}`} aria-pressed={note === c.id}
@@ -215,6 +258,11 @@ export function NoteEditor({ uid, post, board, boardHolder, onSave, onClose }: {
                     </button>
                     <button type="button" onClick={() => setImage(undefined)} className="rounded-md border border-[#2b2014]/20 px-2.5 text-xs font-bold inline-flex items-center gap-1 hover:bg-black/5" aria-label="Take the picture off"><Trash2 size={13} /></button>
                   </div>
+                  {look.kind === 'polaroid' ? (<>
+                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Photo</p>
+                  <Seg value={look.square ? 'square' : 'whole'} onPick={(v) => put({ square: v === 'square' || undefined })}
+                    options={[{ id: 'whole', name: 'Whole picture' }, { id: 'square', name: 'Square' }]} />
+                  </>) : (<>
                   <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Where it goes</p>
                   <Seg value={pic} onPick={(v) => put({ pic: v === 'top' ? undefined : v })} options={[
                     { id: 'top', name: 'Above', icon: <ArrowUp size={13} /> }, { id: 'bottom', name: 'Below', icon: <ArrowDown size={13} /> },
@@ -226,6 +274,7 @@ export function NoteEditor({ uid, post, board, boardHolder, onSave, onClose }: {
                   <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Edge</p>
                   <Seg value={look.frame ?? 'photo'} onPick={(v) => put({ frame: v === 'photo' ? undefined : v })}
                     options={[{ id: 'photo', name: 'Photo border' }, { id: 'line', name: 'Thin line' }, { id: 'none', name: 'None' }]} />
+                  </>)}
                 </>
               ) : (
                 <button type="button" onClick={() => file.current?.click()} disabled={!!busy} className="w-full rounded-md border border-dashed border-[#2b2014]/30 py-2 text-xs font-bold inline-flex items-center justify-center gap-1.5 hover:bg-black/5">
@@ -238,14 +287,14 @@ export function NoteEditor({ uid, post, board, boardHolder, onSave, onClose }: {
             <Part label="Words">
               <div className="grid grid-cols-2 gap-1.5">
                 {NOTE_FONTS.map((f) => (
-                  <button key={f.id} type="button" onClick={() => put({ font: f.id === 'print' ? undefined : f.id })} aria-pressed={(look.font ?? 'print') === f.id}
-                    className={cn('rounded-md border py-1.5 text-[13px]', (look.font ?? 'print') === f.id ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}
+                  <button key={f.id} type="button" onClick={() => put({ font: f.id })} aria-pressed={(look.font ?? (look.kind === 'polaroid' ? 'hand' : 'print')) === f.id}
+                    className={cn('rounded-md border py-1.5 text-[13px]', (look.font ?? (look.kind === 'polaroid' ? 'hand' : 'print')) === f.id ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}
                     style={{ fontFamily: f.css, fontSize: 13 * f.k }}>{f.name}</button>
                 ))}
               </div>
               <div className="mt-2 flex gap-1.5">
                 <div className="flex-1"><Seg value={look.size ?? 'm'} onPick={(v) => put({ size: v === 'm' ? undefined : v })} options={[{ id: 's', name: 'Small' }, { id: 'm', name: 'Medium' }, { id: 'l', name: 'Large' }]} /></div>
-                <Seg value={look.align ?? 'left'} onPick={(v) => put({ align: v === 'left' ? undefined : v })} options={[
+                <Seg value={look.align ?? (look.kind === 'polaroid' ? 'center' : 'left')} onPick={(v) => put({ align: v })} options={[
                   { id: 'left', name: '', icon: <AlignLeft size={14} />, label: 'Align left' }, { id: 'center', name: '', icon: <AlignCenter size={14} />, label: 'Centre' },
                 ]} />
               </div>
