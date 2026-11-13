@@ -131,9 +131,10 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
     const c = l.card, sl = SLEEVES[l.sleeve ?? 'clear']
     return (
       <article onClick={onClick} style={{ '--tilt': `${tilt}deg` } as React.CSSProperties} className={cn('cork-note relative', onClick && 'cursor-pointer', className)}>
-        {held}
         {top}
+        {/* the tape / pin go on the sleeve itself (it's narrower than the note) */}
         <div className="relative mx-auto w-[84%]">
+          {held}
           <div className="relative rounded-[7px] p-[3.2%] pt-[5%]" style={{ background: sl.bg, boxShadow: `inset 0 0 0 1px ${sl.edge}, 0 1px 2px rgba(0,0,0,0.35), 0 4px 8px -4px rgba(0,0,0,0.3)` }}>
             {c?.imageUrl
               // eslint-disable-next-line @next/next/no-img-element
