@@ -8,7 +8,7 @@ import type { CatalogKey, Game, Language } from '../types'
 import { loadVisibleCatalog, invalidateCatalogCache } from '../api/catalog'
 import { getPokemonSets } from '../api/pokemon'
 import { getSetsForGame } from '../api/search'
-import { readClues, matchScan, catalogIndex, printedName, fold, type ScanCandidate, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
+import { readClues, matchScan, catalogIndex, printedName, fold, tagBonus, type ScanCandidate, type OcrLine, type ScanCard, type ScanCatalog, type ScanCatalogKey, type SlabLabel } from './scanMatch'
 import { pictureSearch, pictureSimilarity, warmPictures, pictureManifest } from './picture'
 
 export interface ScanMatch {
@@ -80,7 +80,7 @@ async function scanCatalog(key: ScanCatalogKey): Promise<ScanCatalog & { cards: 
   const cards = await loadVisibleCatalog<RawCard>(key as CatalogKey)
   if (key === 'pokemon') {
     const sets = await getPokemonSets().catch(() => [])
-    return { key, cards, sets: sets.map((s) => ({ id: s.id, name: s.name, total: s.total })) }
+    return { key, cards, sets: sets.map((s) => ({ id: s.id, name: s.name, total: s.total, ...(s.printedTotal && { printedTotal: s.printedTotal }) })) }
   }
   if (key === 'pokemon-jp') {
     const sets = await getSetsForGame('pokemon', 'ja').catch(() => [])
@@ -167,10 +167,12 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerpr
   // A name read off the card that many printings share (24+ Unowns) brings in only some of them;
   // a picture find with that same name gets the name's text score — it's one of those cards, and
   // decide.ts's "name + clear picture" rule can then name it (a real Unown B scan, 2026-11-10)
-  const nameScore = new Map<string, ScanCandidate>()
+  // (the name's score without its own card's letter bonus — "Unown [C]" read in the text must not
+  // carry over to a picture find that's Unown [Z]: each gets its own, tagBonus)
+  const nameScore = new Map<string, number>()
   for (const c of found) {
-    const k = baseName(c.name)
-    if (!c.exact && c.why.startsWith('name') && (nameScore.get(k)?.score ?? -1) < c.score) nameScore.set(k, c)
+    const k = baseName(c.name), sc = c.score - tagBonus(c.name, clues)
+    if (!c.exact && c.why.startsWith('name') && (nameScore.get(k) ?? -1) < sc) nameScore.set(k, sc)
   }
   for (const h of hits) {
     if (h.similarity < PICTURE_HIT_MIN || have.has(`${h.catalog}:${h.id}`)) continue
@@ -178,8 +180,8 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerpr
     const card = cat && (catalogIndex(cat).byId.get(h.id) as RawCard | undefined)
     if (!card) continue // hidden or gone from the catalog since it was fingerprinted
     const named = nameScore.get(baseName(card.name))
-    found.push(named
-      ? { catalog: h.catalog, id: h.id, name: card.name, score: named.score, why: 'name + picture', exact: false }
+    found.push(named !== undefined
+      ? { catalog: h.catalog, id: h.id, name: card.name, score: Math.max(0, Math.min(100, named + tagBonus(card.name, clues))), why: 'name + picture', exact: false }
       : { catalog: h.catalog, id: h.id, name: card.name, score: 0, why: 'picture', exact: false })
     have.add(`${h.catalog}:${h.id}`)
   }

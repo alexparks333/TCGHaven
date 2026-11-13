@@ -605,6 +605,9 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
   // Sets the app lists: GitHub's (minus any shadowed) + the TCGplayer-built ones
   const ghSetList = ghSets.filter((s) => !shadowed.has(s.id)).map((s) => ({
     id: s.id, name: s.name, series: s.series ?? '', releaseDate: s.releaseDate ?? '', total: s.total ?? 0,
+    // the size printed on the cards ("57/105") when it leaves out secret rares (Neo Destiny: 105 of
+    // 113) — the scanner matches a card's "/105" against it
+    ...(s.printedTotal && s.printedTotal !== s.total && { printedTotal: s.printedTotal }),
     images: { symbol: s.images?.symbol ?? '', logo: s.images?.logo ?? '' },
   }))
   // A claimed set TCGplayer no longer lists keeps its entry (its cards stay in the catalog)

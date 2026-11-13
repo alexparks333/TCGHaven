@@ -36,6 +36,7 @@ export interface PokemonSet {
   series: string
   releaseDate: string
   total: number
+  printedTotal?: number   // printed on the cards ("57/105") when it leaves out the secret rares
   images: { symbol: string; logo: string }
   source?: string
 }

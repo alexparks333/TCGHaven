@@ -154,6 +154,18 @@ About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
     finds now get the name's score and are compared first, so the card is added.
 - The owner's verdict: "working pretty nicely exactly how I want it".
 
+## Old Unowns and printed set sizes (2026-11-13)
+
+- **Printed set size.** A card's "57/105" is matched against the size printed on the cards. The
+  Pokémon sync now keeps it as `printedTotal` when it differs from the full count (Neo Destiny:
+  105 printed, 113 with its secret rares; from the GitHub data, `pokemon-tcgplayer.mjs`). An exact
+  match is worth +14, a fitting one +10. It takes effect after the next Pokémon sync.
+- **The letter in the text.** Old Unowns print only "Unown" as the name; the letter is in the text
+  ("as long as Unown [C] is your Active Pokémon"). `readClues` collects "name [X]" tags, and
+  `tagBonus` gives that letter's card +12 and another letter's −12. A picture-only find that shares
+  the name gets its own letter's bonus, never the one the text gave another letter (a real scan put
+  Unown [Z] first that way).
+
 ## When a server isn't ready: "busy", never a guess (2026-11-13)
 
 A server keeps each game's catalog in memory. On 2026-11-13, right after two deploys, some fresh
@@ -171,11 +183,12 @@ answered. Three guards now:
 ## The real-scan check (every deploy)
 
 `.github/workflows/checks.yml` starts the production build and runs **64 real iPhone scans**
-through it (`npm run test:realscans -- <url>`, `scripts/scanner-realscans.mts`). Each scan is judged
+through it (`npm run test:realscans -- <url>`, `scripts/scanner-realscans.mts`) — 66 since the
+same day's Unown [C] and misread Zangoose. Each scan is judged
 exactly as the phone would (`decide.ts` `shortlist` → `decide` → `trayVerdict`, shared with
 `scanner.ts`), searching all 12 games. The deploy is blocked when:
 - any scan would be **added as the wrong card**;
-- fewer than 38 are added right, or fewer than 48 have the right card first (2026-11-13: 40 and 50).
+- fewer than 39 are added right, or fewer than 49 have the right card first (2026-11-13: 41 and 51).
 
 Text only (37 / 48 measured; limits 35 / 46) when the test file's fingerprints come from a different
 model than the published one, e.g. right after a retrain. The test file

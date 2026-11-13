@@ -48,7 +48,7 @@ export interface ScanCatalog {
   key: ScanCatalogKey
   cards: ScanCard[]
   // Pokémon sets (EN: id + total incl. secret rares; JP: id + name "SV4K: Ancient Roar")
-  sets?: Array<{ id: string; name: string; total?: number }>
+  sets?: Array<{ id: string; name: string; total?: number; printedTotal?: number }>
 }
 
 export interface ScanCandidate {
@@ -79,6 +79,7 @@ export interface ScanClues {
   nameLines: string[]         // the biggest text — most likely the card name
   topLines: string[]          // text along the top edge, where Pokémon and Magic print the name
   words: Set<string>          // every folded word read, for name matching
+  tags: Set<string>           // a name with a bracketed letter in the card's text, "unown:C" ("as long as Unown [C] is…")
   japanese: boolean
   jaNames: string[]           // a Japanese card's Pokémon name, translated ("リザードンex" → "charizard ex"), folded
   pokemonWords: boolean       // "HP", "Weakness", "Retreat" — printed on every Pokémon card
@@ -164,6 +165,16 @@ export function printedName(name: string): string {
   return name.split(' // ')[0].replace(/\s+[([][^)\]]*[)\]]/g, '').trim() || name
 }
 
+/** "Unown [C]" read in the text: +12 for that letter's card, −12 for another letter's (0 when the
+ *  card has no bracketed letter, or none was read) */
+export function tagBonus(name: string, clues: Pick<ScanClues, 'tags'>): number {
+  const tag = /\s\[([A-Za-z!?])\]/.exec(name.split(' // ')[0])
+  if (!tag || !clues.tags.size) return 0
+  const base = fold(printedName(name))
+  if (clues.tags.has(`${base}:${tag[1].toUpperCase()}`)) return 12
+  return Array.from(clues.tags).some((t) => t.startsWith(`${base}:`)) ? -12 : 0
+}
+
 /** How much of a card name was read on the card, 0–1 (OCR slips of a letter or two allowed) */
 export function nameScore(name: string, words: Set<string>): number {
   const tokens = fold(name).split(' ').filter((t) => t.length >= 2)
@@ -192,7 +203,7 @@ const FRACTION = new RegExp(`(?:^|[^A-Za-z0-9])([A-Z]{0,4}?)(${DIGITISH}{1,3})([
 export function readClues(lines: OcrLine[], barcodes?: string[]): ScanClues {
   const clues: ScanClues = {
     fractions: [], letterNums: [], promos: [], starPromo: [], opCodes: [], ygoCodes: [], fabCodes: [], jpPromos: [], lorcanaSet: [], mtgSets: [], loneNumbers: [],
-    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), japanese: false, jaNames: [], pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
+    bottomTokens: [], bottomNumbers: [], nameLines: [], words: new Set(), tags: new Set(), japanese: false, jaNames: [], pokemonWords: false, slab: null, riftboundPromo: false, topLines: [], yugiohWords: false,
   }
   const add = <T>(arr: T[], v: T, same: (a: T) => boolean) => { if (!arr.some(same)) arr.push(v) }
 
@@ -201,6 +212,8 @@ export function readClues(lines: OcrLine[], barcodes?: string[]): ScanClues {
     if (/[\u3040-\u30ff\u4e00-\u9faf\uff66-\uff9f]/.test(raw)) clues.japanese = true
     const text = latin(raw)
     for (const w of fold(text).split(' ')) if (w) clues.words.add(w)
+    // Old Unowns print only "Unown" as the name; the letter is in the text ("Unown [C]", or "(C]")
+    for (const m of Array.from(text.matchAll(/([A-Za-z][A-Za-z'-]+)\s?[[(]\s?([A-Z!?])\s?[\])]/g))) clues.tags.add(`${fold(m[1])}:${m[2]}`)
 
     for (const m of Array.from(text.matchAll(FRACTION))) {
       const digits = toDigits(m[2]), den = parseInt(toDigits(m[4]), 10)
@@ -478,6 +491,7 @@ interface CatIndex {
   names: Map<string, ScanCard[]>     // folded name (and printed name) → cards
   marks: Map<string, Set<string>>    // Japanese set mark → set ids
   totals: Map<string, number>        // set id → card count
+  printed: Map<string, number>       // set id → the size printed on its cards, when it's smaller (no secret rares)
 }
 const indexCache = new Map<string, { sig: string; at: number; index: CatIndex }>()
 const INDEX_TTL_MS = 10 * 60 * 1000
@@ -487,7 +501,7 @@ export function catalogIndex(cat: ScanCatalog): CatIndex {
   const sig = `${cat.cards.length}|${cat.cards[0]?.id}|${cat.cards[cat.cards.length - 1]?.id}|${cat.sets?.length ?? 0}`
   const hit = indexCache.get(cat.key)
   if (hit && hit.sig === sig && Date.now() - hit.at < INDEX_TTL_MS) return hit.index
-  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), byYgoCode: new Map(), byFabCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map() }
+  const index: CatIndex = { byId: new Map(), byNum: new Map(), byOpCode: new Map(), byYgoCode: new Map(), byFabCode: new Map(), bySet: new Map(), rb: new Map(), names: new Map(), marks: new Map(), totals: new Map(), printed: new Map() }
   for (const c of cat.cards) {
     index.byId.set(c.id, c)
     const k = numKey(c.number)
@@ -514,6 +528,7 @@ export function catalogIndex(cat: ScanCatalog): CatIndex {
   }
   for (const st of cat.sets ?? []) {
     index.totals.set(st.id, st.total ?? 0)
+    if (st.printedTotal) index.printed.set(st.id, st.printedTotal)
     const mk = jpSetMark(st.name)
     if (!mk) continue
     if (!index.marks.has(mk)) index.marks.set(mk, new Set())
@@ -634,6 +649,7 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
       wrongName = true
     }
     if (hints.size) score += hints.has(catalog) ? 6 : -12
+    score += tagBonus(c.name, clues)
     // Japanese text on the card → the Japanese catalog; none at all → probably not Japanese
     if (catalog === 'pokemon-jp') score += clues.japanese ? 10 : -15
     else if (clues.japanese && catalog === 'pokemon') score -= 15
@@ -669,8 +685,10 @@ export function matchScan(clues: ScanClues, catalogs: ScanCatalog[]): ScanCandid
         for (const c of ix.byNum.get(numKey(`${f.pre}${f.num}${f.suf}`)) ?? []) {
           let sc = 38
           const total = ix.totals.get(c.set ?? '') ?? 0
+          // "/105" on a Neo Destiny card: its printed size, not the 113 with its secret rares
+          const exactSize = f.den === total || f.den === ix.printed.get(c.set ?? '')
           if (total) {
-            if (f.den <= total) sc += f.pre === '' && f.den === total ? 14 : 10
+            if (f.den <= total) sc += f.pre === '' && exactSize ? 14 : 10
             else if (f.den > total + 5) sc -= 20
           }
           offer('pokemon', c, sc, `number ${f.pre}${f.num}/${f.den}`)

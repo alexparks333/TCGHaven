@@ -23,6 +23,8 @@ const pokemon: ScanCatalog = {
     { id: 'ex10-G', name: 'Unown', number: 'G', set: 'ex10' },
     { id: 'dp1-66', name: 'Unown [B]', number: '66', set: 'dp1' },
     { id: 'ex10-8', name: 'Swellow', number: '8', set: 'ex10' },
+    { id: 'neo4-57', name: 'Unown [C]', number: '57', set: 'neo4' },
+    { id: 'dp4-57', name: 'Unown [G]', number: '57', set: 'dp4' },
   ],
   sets: [
     { id: 'sv1', name: 'Scarlet & Violet', total: 258 },
@@ -34,6 +36,8 @@ const pokemon: ScanCatalog = {
     { id: 'swshp', name: 'SWSH Black Star Promos', total: 304 },
     { id: 'ex10', name: 'Unseen Forces', total: 115 },
     { id: 'dp1', name: 'Diamond & Pearl', total: 130 },
+    { id: 'neo4', name: 'Neo Destiny', total: 113, printedTotal: 105 },   // 105 printed + 8 secret (Shining)
+    { id: 'dp4', name: 'Great Encounters', total: 106 },
   ],
 }
 const pokemonJp: ScanCatalog = {
@@ -504,6 +508,16 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   // only 0.26 alike under foil shine, another Unown 0.45) scored 89 and was asked — now added
   assert.ok(top(unownLines('B/28 *'))[0].score >= 90)
   assert.equal(decide([{ key: 'b', score: top(unownLines('B/28 *'))[0].score, exact: true }, { key: 'j', score: 65, exact: false }, { key: 'pic', score: 65, exact: false }], undefined, [0.26, 0.26, 0.45]).status, 'matched')
+
+  // A real Neo Destiny Unown [C] scan (2026-11-13): the name is just "Unown", the letter is in the
+  // text, and "57/105" is Neo Destiny's printed size (113 with its secret rares) — it used to tie
+  // with Great Encounters' Unown [G] #57/106
+  const neoUnown = [L('Unown', 0.03), L('40 HP', 0.03), L('Symbol Pokémon. Length: 1\' 8", Weight: 11 lbs.', 0.3), L('Pokémon Power:', 0.35),
+    L("as Unown [C] is your Active Pokémon, whenever your opponent's", 0.4), L('Hidden Power', 0.6), L('57/105', 0.95)]
+  assert.equal(ids(neoUnown)[0], 'neo4-57')
+  assert.ok(top(neoUnown)[0].score - top(neoUnown)[1].score >= 15, 'the letter and the set size settle it')
+  assert.equal(ids(neoUnown.filter((l) => !l.text.includes('[C]')))[0], 'neo4-57') // the size alone still puts it first
+  assert.equal(ids([L('Unown', 0.03), L('as Unown [G] is your Active Pokémon', 0.4), L('57/106', 0.95)])[0], 'dp4-57')
 }
 
 console.log('scan matching: all tests passed')
