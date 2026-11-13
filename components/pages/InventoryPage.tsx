@@ -747,11 +747,11 @@ export default function InventoryPage() {
                           )}
                           <PrintingTags card={rep} />
                         </div>
-                        {/* Phone: "Set ✨ · $X ea", matching Portfolio's rows; desktop keeps number + foil (set/qty have columns) */}
+                        {/* Phone: "Set ✨ · $X ea", matching Portfolio's rows; desktop: number + foil + "$X ea" (set/qty have columns) */}
                         <div className="md:hidden text-xs text-slate-500">
                           {rep.set} {rep.isFoil && '✨'}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}
                         </div>
-                        <div className="hidden md:block text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}</div>
+                        <div className="hidden md:block text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
                         {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
@@ -939,7 +939,7 @@ export default function InventoryPage() {
                       <div className="md:hidden text-xs text-slate-500">
                         {card.set} {card.isFoil && '✨'}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}
                       </div>
-                      <div className="hidden md:block text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
+                      <div className="hidden md:block text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
                       {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
