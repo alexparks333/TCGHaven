@@ -90,7 +90,6 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
 }) {
   const { myBadges: progress } = useFriends()
-  const wide = useWide()
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
@@ -145,11 +144,9 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         </div>
 
         {/* ── The book: a big picture of it, slanted on the page, over the header's corner ── */}
-        <aside className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:-mt-48 relative z-10 flex flex-col items-center gap-8">
+        <aside className="lg:col-start-2 lg:row-start-1 lg:-mt-48 relative z-10 flex flex-col items-center">
           {book ? <ShowcaseBook book={book} onOpen={() => setOpen(true)} />
             : <p className="pinbook-serif text-sm text-slate-500 text-center py-6">{community.name} hasn&rsquo;t made their book yet.</p>}
-          {/* Members, top collectors first — beside the sections on a computer */}
-          {wide && sectionOn(community, 'members') && <MembersColumn community={uid} book={book} members={members} />}
         </aside>
 
         {/* ── The sections the creator switched on ── */}
@@ -160,9 +157,14 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             </Section>
           )}
           {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
-          {/* on a phone, Members comes after the sections */}
-          {!wide && sectionOn(community, 'members') && <MembersColumn community={uid} book={book} members={members} />}
         </div>
+
+        {/* Members, top collectors first: beside the sections, level with the first one (after them on a phone) */}
+        {sectionOn(community, 'members') && (
+          <div className="min-w-0 lg:col-start-2 lg:row-start-2">
+            <MembersColumn community={uid} book={book} members={members} />
+          </div>
+        )}
       </div>
 
       {open && book && <BookViewer book={book.book} defs={book.badges} badges={isMember || mine ? progress : null} onClose={() => setOpen(false)} />}
@@ -259,18 +261,6 @@ function timeAgo(ms: number) {
   if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`
   const d = Math.round(h / 24)
   return d < 30 ? `${d} day${d === 1 ? '' : 's'} ago` : new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-/** A computer-sized window (the lg layout) — Members sits beside the sections there, after them on a phone */
-function useWide() {
-  const [wide, setWide] = useState(true)
-  useEffect(() => {
-    const m = window.matchMedia('(min-width: 1024px)')
-    const f = () => setWide(m.matches)
-    f(); m.addEventListener('change', f)
-    return () => m.removeEventListener('change', f)
-  }, [])
-  return wide
 }
 
 interface RankedMember { uid: string; profile: Profile | null; badges: number; cards: number; hidden: boolean; joinedAt: number }
