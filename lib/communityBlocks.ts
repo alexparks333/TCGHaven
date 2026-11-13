@@ -19,7 +19,8 @@ export interface NotePlace { x: number; y: number; r: number; s: number; z: numb
  *  body font at medium size, held the way the board says (Style → Board → Held by). */
 export interface NoteLook {
   kind?: 'note' | 'polaroid'                // a paper note, or a polaroid (the picture over a written strip)
-  square?: boolean                          // a polaroid's photo squared off (cropped to fill) instead of whole
+  fit?: 'square' | 'whole'                  // a polaroid's photo: square like the real thing (default), or the whole picture
+  pframe?: string                           // a polaroid's frame (WallNote POLAROID_FRAMES id; default classic white)
   pic?: 'top' | 'bottom' | 'left' | 'right' // where the picture sits around the words
   picSize?: 's' | 'm' | 'l'                 // how much of the note it takes
   frame?: 'photo' | 'line' | 'none'         // a white photo border, a thin line, or nothing

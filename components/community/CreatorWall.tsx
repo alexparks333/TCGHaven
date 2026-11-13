@@ -82,31 +82,33 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
 
   return (
     <section className="relative px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6" style={board}>
-      <header className="mb-4">
-        <h2 className="font-bold flex items-center gap-2.5 leading-tight [&>svg]:shrink-0"
-          style={{ fontFamily: l.titleFont, fontSize: `${1.25 * l.titleSize}rem`, color: ink }}><Sparkles size={19} />{block.title || 'Creator Wall'}</h2>
-        <p className="text-xs mt-1" style={{ color: mix(ink, w.color, 0.18) }}>Pinned up by {ctx.community.name}</p>
-      </header>
-      {ctx.owner && (
-        // the owner: write a note, then place it on the board (drag, turn, size)
-        <div className="mb-5 flex gap-2">
-          {!arranging && (
-            <button type="button" onClick={() => setEditing('new')}
-              className="flex-1 rounded-md border border-dashed border-[color:var(--b-line)] py-2.5 text-sm font-bold text-[color:var(--b-accent)] inline-flex items-center justify-center gap-2 hover:bg-[color:var(--b-hover)] transition-colors">
-              <Plus size={16} />Pin up a note
-            </button>
-          )}
-          {posts.some((p) => p.live) && (
-            <button type="button" onClick={() => { setArranging((a) => !a); setSelected(null) }}
-              // arranging is for a computer (on a phone the notes stack)
-              className={cn('hidden sm:inline-flex rounded-md py-2.5 px-4 text-sm font-bold items-center justify-center gap-2 transition-colors',
-                arranging ? 'flex-1 bg-[#2b2014] text-[#fbf6ea]' : 'border border-dashed border-[color:var(--b-line)] text-[color:var(--b-accent)] hover:bg-[color:var(--b-hover)]')}>
-              {arranging ? <><Check size={16} />Done arranging</> : <><Move size={16} />Arrange the board</>}
-            </button>
-          )}
+      <header className="mb-4 flex items-start gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <h2 className="font-bold flex items-center gap-2.5 leading-tight [&>svg]:shrink-0"
+            style={{ fontFamily: l.titleFont, fontSize: `${1.25 * l.titleSize}rem`, color: ink }}><Sparkles size={19} />{block.title || 'Creator Wall'}</h2>
+          <p className="text-xs mt-1" style={{ color: mix(ink, w.color, 0.18) }}>Pinned up by {ctx.community.name}</p>
         </div>
-      )}
-      {arranging && <p className="-mt-3 mb-3 text-xs font-semibold" style={{ color: mix(ink, w.color, 0.18) }}>Drag a note to move it · the round handle turns it · the corner makes it bigger or smaller. Each change saves when you let go.</p>}
+        {ctx.owner && (
+          // the owner, top right of the board: write a note, then place it (drag, turn, size)
+          <div className="flex gap-2 shrink-0">
+            {!arranging && (
+              <button type="button" onClick={() => setEditing('new')}
+                className="rounded-md bg-[#2b2014] px-3.5 py-2 text-sm font-bold text-[#fbf6ea] inline-flex items-center gap-1.5 hover:bg-[#3d2e1d] transition-colors">
+                <Plus size={16} />New note
+              </button>
+            )}
+            {posts.some((p) => p.live) && (
+              <button type="button" onClick={() => { setArranging((a) => !a); setSelected(null) }}
+                // arranging is for a computer (on a phone the notes stack)
+                className={cn('hidden sm:inline-flex rounded-md px-3.5 py-2 text-sm font-bold items-center gap-1.5 transition-colors',
+                  arranging ? 'bg-[#2b2014] text-[#fbf6ea]' : 'bg-[#f6eedb] text-[#2b2014] border border-[#2b2014]/25 hover:bg-[#fbf6ea]')}>
+                {arranging ? <><Check size={16} />Done arranging</> : <><Move size={16} />Arrange the board</>}
+              </button>
+            )}
+          </div>
+        )}
+      </header>
+      {arranging && <p className="-mt-1 mb-3 text-xs font-semibold" style={{ color: mix(ink, w.color, 0.18) }}>Drag a note to move it · the round handle turns it · the corner makes it bigger or smaller. Each change saves when you let go.</p>}
       <div>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
@@ -131,7 +133,8 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                         className="w-7 h-7 rounded-full bg-[#2b2014] text-[#fbf6ea] flex items-center justify-center"><X size={14} /></button>
                     </span>
                   )}>
-                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>
+                  {/* a polaroid keeps its strip for the caption: just the reactions under it (the time shows when opened) */}
+                  {p.look?.kind !== 'polaroid' && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
                   <Reactions p={p} />
                 </NoteCard>
               )

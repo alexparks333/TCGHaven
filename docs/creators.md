@@ -86,8 +86,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   picture (shown whole at its own shape, never cropped: above / below / left / right of the words, small /
   medium / large, photo border / thin line / none), the words (Print / Handwritten / Typewriter / Elegant,
   size, alignment) and what holds it up (the board's choice / pin + colour / tape / nothing) — all in
-  `post.look` (`NoteLook`). Two kinds: **Note** and **Polaroid** (`look.kind` — the photo in a dark window, whole
-  or `square`, over a deep strip with a handwritten caption). **Placing on the board**
+  `post.look` (`NoteLook`). Two kinds: **Note** and **Polaroid** (`look.kind` — a real instant photo: matte frame in
+  `POLAROID_FRAMES` (`look.pframe`; classic white, cream, black, colour editions), thin even borders and the deep
+  bottom strip with a marker caption, the photo square (or `fit: 'whole'`) recessed with a sheen — `.polaroid` CSS).
+  The owner's **New note** / **Arrange the board** sit at the top right of the board. **Placing on the board**
   (`components/community/WallBoard.tsx`): notes hang wherever the owner pinned them, not in rows — the board is
   `BOARD_W` (900) units wide, scaled to fit the page; each note's `post.place` = `{x, y, r, s, z}` (centre,
   turn°, size, stacking). **Arrange the board** (owner, computer): drag to move, the round handle turns (snaps
