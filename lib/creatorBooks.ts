@@ -50,7 +50,18 @@ export interface CommunityLook {
   headerFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (PicturePlacer); unset = fills it
   headerShade?: number                                    // 0–1: darkens it toward the bottom so the text reads (default 0.35)
   sections?: Partial<Record<CommunitySection, boolean>>   // sections switched on / off
+  tabs?: CommunityTab[]                                   // the creator's own pages, as tabs after Home (in order)
 }
+
+/** A tab on a community page after Home: a page the creator names and writes (e.g. "Rules", "Events") */
+export interface CommunityTab {
+  id: string
+  title: string    // the tab's name (up to 24 letters)
+  body: string     // its text (up to 4000)
+  image?: string   // an optional picture at the top (Storage URL)
+}
+export const MAX_TABS = 8
+export const newTabId = () => 't' + Math.random().toString(36).slice(2, 9)
 /** The header's shape — fixed, so a placed picture looks the same on every screen */
 export const HEADER_ASPECT = 4
 

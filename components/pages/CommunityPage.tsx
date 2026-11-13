@@ -19,7 +19,8 @@ import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
 import { Corners, Divider } from '@/components/creator/Ornaments'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
-import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
+import { sectionOn, useCreatorBook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
+import { badgeArt } from '@/lib/badgeAssets'
 import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -84,12 +85,19 @@ function Body({ uid }: { uid: string }) {
 }
 
 /** The page itself, from its data — split from Body so it can be drawn without signing in (dev checks) */
-export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen }: {
+export function CommunityView({ uid, community, creator, members, mine, studio, isMember, busy, error, toggle, book, open, setOpen, tab: tabProp, onTab }: {
   uid: string; community: CommunityEntry; creator: Profile | null; members: number | null; mine: boolean
   studio: ReturnType<typeof useStudioDevice>; isMember: boolean; busy: boolean; error: string; toggle: () => void
   book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
+  tab?: string; onTab?: (id: string) => void // the tab showing, when the Studio picks it (else the page keeps its own)
 }) {
   const { myBadges: progress } = useFriends()
+  // Home, then the creator's own pages
+  const tabs = community.page?.tabs ?? []
+  const [ownTab, setOwnTab] = useState('home')
+  const picked = tabProp ?? ownTab
+  const current = tabs.find((t) => t.id === picked)
+  const pick = (id: string) => { setOwnTab(id); onTab?.(id) }
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
@@ -141,6 +149,22 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             </div>
           </div>
           {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+
+          {/* The page's tabs: Home, then the creator's own pages */}
+          {(
+            <nav className="mt-6 -mx-2 md:-mx-4 flex gap-1 overflow-x-auto no-scrollbar border-b border-[#d6c49f]" aria-label="Community pages">
+              {[{ id: 'home', title: 'Home' }, ...tabs].map((t) => {
+                const on = (current?.id ?? 'home') === t.id
+                return (
+                  <button key={t.id} type="button" onClick={() => pick(t.id)}
+                    className={cn('relative shrink-0 px-4 md:px-5 py-2.5 pinbook-serif text-[15px] font-bold transition-colors whitespace-nowrap', on ? 'text-ink' : 'text-slate-500 hover:text-ink')}>
+                    {t.title || 'Untitled'}
+                    <span className={cn('absolute left-3 right-3 -bottom-px h-[3px] rounded-full transition-colors', on ? 'bg-[#7a5230]' : 'bg-transparent')} />
+                  </button>
+                )
+              })}
+            </nav>
+          )}
         </div>
 
         {/* ── The book: a big picture of it, slanted on the page, over the header's corner ── */}
@@ -151,12 +175,14 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
 
         {/* ── The sections the creator switched on ── */}
         <div className="min-w-0 flex flex-col gap-6 lg:col-start-1 lg:row-start-2">
+          {current ? <TabPage tab={current} /> : <>
           {sectionOn(community, 'about') && (
             <Section title="About">
               <p className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{community.about || 'No description yet.'}</p>
             </Section>
           )}
           {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
+          </>}
         </div>
 
         {/* Members, top collectors first: beside the sections, level with the first one (after them on a phone) */}
@@ -169,6 +195,21 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
 
       {open && book && <BookViewer book={book.book} defs={book.badges} badges={isMember || mine ? progress : null} onClose={() => setOpen(false)} />}
     </div>
+  )
+}
+
+/** One of the creator's own pages (a tab after Home): its picture, then its text */
+function TabPage({ tab }: { tab: CommunityTab }) {
+  return (
+    <Section title={tab.title || 'Untitled'}>
+      {tab.image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={badgeArt(tab.image, 1200)} alt="" className="w-full max-h-[420px] object-cover rounded-xl mb-5 shadow-[0_10px_24px_-14px_rgba(40,25,10,0.6)]" />
+      )}
+      {tab.body.trim()
+        ? <div className="text-[15px] text-slate-400 whitespace-pre-line leading-relaxed">{tab.body}</div>
+        : <p className="text-sm text-slate-500 italic">Nothing here yet.</p>}
+    </Section>
   )
 }
 

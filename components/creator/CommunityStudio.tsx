@@ -7,8 +7,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, Copy, Eye, ExternalLink, Loader2, Pencil, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
-import { useCommunity, saveCommunity, COMMUNITY_SECTIONS, HEADER_ASPECT, type Community, type CommunityLook, type CreatorBook } from '@/lib/creatorBooks'
+import { ArrowDown, ArrowUp, Home, Plus, Trash2, Check, Copy, Eye, ExternalLink, Loader2, Pencil, Megaphone, CalendarDays, BookOpen, ImagePlus, X } from 'lucide-react'
+import { useCommunity, saveCommunity, COMMUNITY_SECTIONS, HEADER_ASPECT, MAX_TABS, newTabId, type Community, type CommunityLook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
 import { CommunityView } from '@/components/pages/CommunityPage'
 import { BANNERS } from '@/components/creator/CreateCommunity'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
@@ -30,6 +30,7 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
   const [members, setMembers] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [headerOpen, setHeaderOpen] = useState(false)
+  const [tabOpen, setTabOpen] = useState('home') // the tab being edited, and shown on the left
   const [viewing, setViewing] = useState(false) // the book opened from the page
   // Fans see only the published badges
   const liveBook = book && { ...book, badges: book.badges.filter(isLive) }
@@ -74,7 +75,8 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
         </p>
         <div className="rounded-2xl border border-[#d6c49f] bg-slate-900 p-3 md:p-5">
           <CommunityView uid={uid} community={{ uid, ...c }} creator={null} members={members} mine={false} studio="computer"
-            isMember={false} busy={false} error="" toggle={() => {}} book={liveBook} open={viewing} setOpen={setViewing} />
+            isMember={false} busy={false} error="" toggle={() => {}} book={liveBook} open={viewing} setOpen={setViewing}
+            tab={tabOpen} onTab={setTabOpen} />
         </div>
       </div>
 
@@ -134,6 +136,9 @@ export function CommunityStudio({ uid, book, onEditBook }: { uid: string; book: 
             <textarea value={c.about} maxLength={600} onChange={(e) => set({ about: e.target.value })} className="input-field mt-1 text-sm min-h-[110px] resize-y" placeholder="Who you are, what you collect, what members get…" />
           </label>
         </div>
+
+        {/* The page's tabs: Home, then the creator's own pages — pick one to edit it (the page on the left shows it) */}
+        <TabsEditor uid={uid} c={c} set={set} open={tabOpen} onOpen={setTabOpen} />
 
         {/* The book fans collect on the page */}
         <div className="haven-panel flex items-center gap-4">
@@ -269,5 +274,85 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
         </div>
       </div>
     </Portal>
+  )
+}
+
+/** The page's tabs: Home (always first), then the creator's own pages — add, rename, reorder, delete,
+ *  and write each one (a picture and text) */
+function TabsEditor({ uid, c, set, open, onOpen }: { uid: string; c: Community; set: (p: Partial<Community>) => void; open: string; onOpen: (id: string) => void }) {
+  const tabs = c.page?.tabs ?? []
+  const save = (next: CommunityTab[]) => set({ page: { ...(c.page ?? {}), tabs: next } })
+  const tab = tabs.find((t) => t.id === open)
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const update = (id: string, p: Partial<CommunityTab>) => save(tabs.map((t) => (t.id === id ? { ...t, ...p } : t)))
+  const move = (i: number, d: -1 | 1) => { const n = [...tabs]; [n[i], n[i + d]] = [n[i + d], n[i]]; save(n) }
+  async function upload(file: File | undefined) {
+    if (!file || !tab) return
+    setBusy(true)
+    try {
+      const blob = await shrink(file)
+      const r = ref(appStorage, `creators/${uid}/tab-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`)
+      await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
+      update(tab.id, { image: await getDownloadURL(r) })
+    } catch { /* the picture stays as it was */ } finally {
+      setBusy(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+  return (
+    <div className="haven-panel">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Tabs</p>
+      <p className="text-[11px] text-slate-500 mt-0.5">Under your Join button. Home comes first; add your own pages after it.</p>
+      <div className="mt-2.5 space-y-1.5">
+        <button type="button" onClick={() => onOpen('home')}
+          className={cn('w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold', open === 'home' ? 'border-[#7a5230] bg-[#f6eedb] text-ink' : 'border-[#d6c49f] text-slate-500 hover:text-ink')}>
+          <Home size={14} />Home<span className="ml-auto text-[10px] font-normal">always first</span>
+        </button>
+        {tabs.map((t, i) => (
+          <div key={t.id} className={cn('flex items-center gap-1 rounded-xl border pl-3 pr-1 py-1', open === t.id ? 'border-[#7a5230] bg-[#f6eedb]' : 'border-[#d6c49f]')}>
+            <button type="button" onClick={() => onOpen(t.id)} className="min-w-0 flex-1 text-left text-sm font-semibold text-ink truncate py-1">{t.title || 'Untitled'}</button>
+            <button type="button" disabled={i === 0} onClick={() => move(i, -1)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink disabled:opacity-30" aria-label="Move up"><ArrowUp size={13} /></button>
+            <button type="button" disabled={i === tabs.length - 1} onClick={() => move(i, 1)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink disabled:opacity-30" aria-label="Move down"><ArrowDown size={13} /></button>
+            <button type="button" onClick={() => { if (confirm(`Delete the “${t.title || 'Untitled'}” tab and everything on it?`)) { save(tabs.filter((x) => x.id !== t.id)); if (open === t.id) onOpen('home') } }}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-red-600" aria-label={`Delete ${t.title}`}><Trash2 size={13} /></button>
+          </div>
+        ))}
+        {tabs.length < MAX_TABS && (
+          <button type="button" onClick={() => { const t = { id: newTabId(), title: 'New page', body: '' }; save([...tabs, t]); onOpen(t.id) }}
+            className="w-full rounded-xl border border-dashed border-[#c4ae83] py-2 text-sm font-semibold text-[#7a5230] hover:bg-[#f6eedb] inline-flex items-center justify-center gap-1.5"><Plus size={14} />Add a page</button>
+        )}
+      </div>
+
+      {/* The open tab's content */}
+      {tab && (
+        <div className="mt-4 pt-4 border-t border-[#d6c49f]">
+          <label className="block text-[11px] font-semibold text-slate-500">Tab name
+            <input value={tab.title} maxLength={24} onChange={(e) => update(tab.id, { title: e.target.value })} className="input-field mt-1 text-sm font-semibold" placeholder="e.g. Rules, Events, Giveaways" />
+          </label>
+          <p className="mt-3 text-[11px] font-semibold text-slate-500">Picture <span className="font-normal">· optional, at the top</span></p>
+          {tab.image ? (
+            <div className="mt-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={badgeArt(tab.image, 640)} alt="" className="w-full h-28 object-cover rounded-xl border border-[#d6c49f]" />
+              <div className="mt-2 flex gap-2">
+                <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">{busy ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}Change</button>
+                <button type="button" onClick={() => update(tab.id, { image: undefined })} className="haven-chip px-3 py-1.5 text-xs font-semibold">Remove</button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => input.current?.click()} disabled={busy}
+              className="mt-1.5 w-full rounded-xl border border-dashed border-[#c4ae83] py-3 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center justify-center gap-1.5">
+              {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}{busy ? 'Uploading…' : 'Add a picture'}
+            </button>
+          )}
+          <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
+          <label className="mt-3 block text-[11px] font-semibold text-slate-500">
+            <span className="flex justify-between">Text<span className="font-normal tabular-nums">{tab.body.length}/4000</span></span>
+            <textarea value={tab.body} maxLength={4000} onChange={(e) => update(tab.id, { body: e.target.value })} className="input-field mt-1 text-sm min-h-[160px] resize-y" placeholder="Write this page — rules, events, giveaways, anything for your members." />
+          </label>
+        </div>
+      )}
+    </div>
   )
 }

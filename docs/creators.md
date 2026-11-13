@@ -40,6 +40,11 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   **Achievement Badge Board** — `community_achievements/{community}_{member}_{badge}` (`recordAchievement`;
   skipped while the member's badges are private; rules: only the member, only while a member) — shown
   newest first (`newestAchievements`, sorted in the browser).
+- **Community page tabs** (`Community.page.tabs`, up to `MAX_TABS` 8): under the Join button, **Home** (always
+  first — About, the Achievement Badge Board; Members beside it) then the creator's own pages (`CommunityTab`:
+  a name, text up to 4000, an optional picture uploaded to `creators/{uid}/tab-*`). In the Studio's Community
+  tab, **Tabs** adds, renames, reorders (after Home) and deletes them and writes the open one; picking a tab
+  there switches the page on the left to it (`CommunityView tab / onTab`).
 - **Computers only** (2026-11-12). The Creator Studio is a web-on-a-computer tool: never in the iPhone or
   Android app — even for creators — and not on a phone or a window under 1024 px (`lib/studioDevice.ts`
   `useStudioDevice()`). There `/creator` shows "The Creator Studio is on computers" with the link to copy;
