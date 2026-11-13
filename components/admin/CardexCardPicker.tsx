@@ -54,13 +54,14 @@ export function fetchSetCards(game: Game, setName: string): Promise<CatalogRow[]
   return setCache.get(key)!
 }
 
-export default function CardexCardPicker({ game, games, onAdd, onClose, title, addLabel }: {
+export default function CardexCardPicker({ game, games, onAdd, onClose, title, addLabel, layer = 80 }: {
   game: Game
   games?: Game[]                        // switchable games (the Creator Studio: all of them); slots then carry `game`
   onAdd: (slots: BadgeSlot[]) => void
   onClose: () => void
   title?: string                        // e.g. adding to one slot: 'Add cards to "Lee Sin"'
   addLabel?: (n: number) => string
+  layer?: number                        // its z-index — raised when it opens over another popup (the Creator Wall's note editor)
 }) {
   const [picked, setPicked] = useState<Map<string, CatalogCard>>(new Map())
   const gameOf = useRef(new Map<string, Game>()) // each picked card's game (the picker can switch games)
@@ -147,7 +148,7 @@ export default function CardexCardPicker({ game, games, onAdd, onClose, title, a
   const toggle = (r: string) => setAlsoCount((s) => { const n = new Set(s); if (n.has(r)) n.delete(r); else n.add(r); return n })
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex flex-col bg-slate-950" role="dialog" aria-label="Pick cards from the Cardex">
+    <div className="fixed inset-0 flex flex-col bg-slate-950" style={{ zIndex: layer }} role="dialog" aria-label="Pick cards from the Cardex">
       <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 px-5 py-3 border-b border-slate-800">
         <div>
           <div className="text-base font-bold text-ink">{title ?? 'Pick cards from the Cardex'}</div>

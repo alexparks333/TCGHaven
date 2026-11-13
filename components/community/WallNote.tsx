@@ -644,7 +644,8 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
           <div className="absolute inset-0 bg-[#2b2014]/55" onClick={() => setPicking(false)} />
           <div role="dialog" aria-modal="true" aria-label="Pick a card" className="haven-panel relative w-full max-w-3xl max-h-[90vh] overflow-y-auto !p-5">
             <button type="button" onClick={() => setPicking(false)} className="absolute top-3 right-3 z-[1] p-1 text-[#5c4a35] hover:text-[#2b2014]" aria-label="Close"><X size={18} /></button>
-            <CardPicker slots={[]} title="Pick a card" hint="Search or browse the Cardex — tap the card to put it in the sleeve."
+            <CardPicker slots={[]} title="Pick a card" hint="Search or browse the Cardex — tap the card to put it in the sleeve." layer={110}
+              cardexTitle="Pick a card for the sleeve" cardexAdd={() => 'Put it in the sleeve'}
               onChange={(sl: BadgeSlot[]) => {
                 const s0 = sl[sl.length - 1] as (BadgeSlot & { game?: string }) | undefined, c = s0?.cards?.[0]
                 if (!s0) return

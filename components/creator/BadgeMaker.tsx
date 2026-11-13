@@ -414,7 +414,11 @@ function gameOf(slot: BadgeSlot): Game | undefined {
 }
 
 /** Cards fans collect: search the catalog, tap to add — each card is one spot of the badge */
-export function CardPicker({ slots, onChange, title = 'What do fans collect?', hint = 'Pick the cards. Owning one of each earns the badge — fans see their progress fill up in your book.' }: { slots: BadgeSlot[]; onChange: (s: BadgeSlot[]) => void; title?: string; hint?: string }) {
+export function CardPicker({ slots, onChange, title = 'What do fans collect?', hint = 'Pick the cards. Owning one of each earns the badge — fans see their progress fill up in your book.', layer, cardexTitle = 'Pick cards for this badge', cardexAdd = (n: number) => `Add ${n || ''} card${n === 1 ? '' : 's'} to the badge` }: {
+  slots: BadgeSlot[]; onChange: (s: BadgeSlot[]) => void; title?: string; hint?: string
+  layer?: number                       // opened over another popup: the Cardex and the card view go above it
+  cardexTitle?: string; cardexAdd?: (n: number) => string // the full-screen Cardex's wording
+}) {
   const [game, setGame] = useState<Game>('pokemon')
   const [q, setQ] = useState('')
   const [results, setResults] = useState<CardSearchResult[]>([])
@@ -544,11 +548,10 @@ export function CardPicker({ slots, onChange, title = 'What do fans collect?', h
         })}
       </div>
       {/* On the page itself: inside the panel (animated with a transform) a fixed overlay would be boxed in */}
-      {typeof document !== 'undefined' && createPortal(<CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly />, document.body)}
+      {typeof document !== 'undefined' && createPortal(<div className="relative" style={layer ? { zIndex: layer } : undefined}><CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly /></div>, document.body)}
       {cardex && (
-        <CardexCardPicker game={game} games={GAMES} onAdd={addFromCardex} onClose={() => setCardex(false)}
-          title="Pick cards for this badge"
-          addLabel={(n) => `Add ${n || ''} card${n === 1 ? '' : 's'} to the badge`} />
+        <CardexCardPicker game={game} games={GAMES} onAdd={addFromCardex} onClose={() => setCardex(false)} layer={layer}
+          title={cardexTitle} addLabel={cardexAdd} />
       )}
     </div>
   )
