@@ -45,7 +45,7 @@ const TURN_MS = 750
 
 // One Badge Set's book. `full`: the Badges page, where on desktop the book stretches to fill the
 // window; otherwise (a profile's Badges tab) it keeps a book's proportions at full width.
-export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly = false, startSpread = 0, onSpreadChange, defs }: {
+export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly = false, startSpread = 0, onSpreadChange, defs, room = 190 }: {
   set: BadgeSet
   /** A creator book's badges (lib/creatorBooks.ts) — TCG Haven's own come from the catalog */
   defs?: BadgeDef[]
@@ -58,6 +58,8 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   isMe: boolean
   full?: boolean
   coverRef?: React.Ref<HTMLDivElement>
+  /** Not `full`: the window height around the book that isn't book (headers, the page dots) — it's sized so the whole book fits */
+  room?: number
 }) {
   const { catalog } = useBadgeCatalog()
   const setBadges = useMemo(() => defs ?? badgesInSet(catalog, set.id), [defs, catalog, set.id])
@@ -277,8 +279,10 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       {/* In a profile the book keeps a book's proportions, so it's capped by the window's height
           (the whole book always fits on screen); on the Badges page it fills the page instead. */}
       <div
-        className={cn('relative w-full mx-auto', chapters.length ? 'pl-7 pr-12 sm:pl-12 sm:pr-28' : 'px-7 sm:px-12')}
-        style={full ? undefined : { maxWidth: 'max(360px, calc((100dvh - 190px) * 1.42 + 96px))' }}
+        // The book is centred on its own: the chapter tabs hang into the right-hand margin, and the left
+        // margin matches it, so the tabs never pull the book off-centre.
+        className={cn('relative w-full mx-auto', chapters.length ? 'px-12 sm:px-28' : 'px-7 sm:px-12')}
+        style={full ? undefined : { maxWidth: `max(360px, calc((100dvh - ${room}px) * 1.42 + ${chapters.length ? 224 : 96}px))` }}
       >
 
         <ArrowButton side="left" disabled={spread === 0 || !!turn} onClick={() => flip(-1)} />

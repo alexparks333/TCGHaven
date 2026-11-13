@@ -112,9 +112,9 @@ export function OpeningBook({ book, badges, isMe, from, getSpot, onClosed }: {
         <p className="font-bold truncate">{set.name}</p>
         <button type="button" onClick={close} className="ml-auto p-2 rounded-full bg-white/10 hover:bg-white/20" aria-label="Close the book"><X size={18} /></button>
       </div>
-      <div className="absolute inset-0 pt-14 px-3 pb-6 flex items-start justify-center" style={{ overflowY: s.mode === 'open' ? 'auto' : 'hidden' }}
+      <div className="absolute inset-0 pt-14 px-2 pb-3 flex justify-center" style={{ overflowY: s.mode === 'open' ? 'auto' : 'hidden' }}
         onClick={(e) => { if (e.target === e.currentTarget) close() }}>
-        <div ref={boxRef} className="w-full max-w-[1100px]"
+        <div ref={boxRef} className="w-full my-auto"
           style={closing ? {
             visibility: closing.phase === 'home' || closing.phase === 'land' || closing.phase === 'settle' ? 'hidden' : 'visible',
             clipPath: clip,
@@ -126,7 +126,7 @@ export function OpeningBook({ book, badges, isMe, from, getSpot, onClosed }: {
             transform: settled ? undefined : `translateX(${-shift}px)`,
             transition: phase === 'turn' ? `transform ${TURN_MS}ms ${EASE}` : undefined,
           }}>
-          <BadgeBook set={set} defs={defs} badges={badges} isMe={isMe} coverRef={coverRef} onSpreadChange={(n) => { spread.current = n }} />
+          <BadgeBook set={set} defs={defs} badges={badges} isMe={isMe} coverRef={coverRef} room={92} onSpreadChange={(n) => { spread.current = n }} />
         </div>
       </div>
       {opening?.to && (
