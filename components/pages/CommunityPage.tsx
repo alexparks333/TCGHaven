@@ -206,16 +206,9 @@ function ShowcaseBook({ book, onOpen }: { book: CreatorBook; onOpen: () => void 
             style={{ opacity: tilt ? 1 : 0.35, background: `linear-gradient(${105 + (tilt ? (tilt.x - 0.5) * 60 : 0)}deg, transparent 25%, rgba(255,255,255,0.6) ${45 + (tilt ? (tilt.x - 0.5) * 30 : 0)}%, transparent 65%)` }} />
         </span>
       </button>
-      <p className="mt-8 pinbook-serif text-lg font-bold text-ink text-center leading-tight">{book.book.name}</p>
-      <p className="mt-1 text-xs text-slate-500 text-center">
-        {book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect{chaptersOf(book) > 1 ? ` · ${chaptersOf(book)} chapters` : ''} · <span className="text-[#8a6420] font-semibold">click to open</span>
-      </p>
     </div>
   )
 }
-
-/** How many chapters the book's badges fill */
-const chaptersOf = (b: CreatorBook) => new Set(b.badges.map((x) => x.page)).size
 
 /** The Achievement Badge Board: the newest members to earn one of this creator's badges */
 export function AchievementBoard({ community, book, sample }: { community: string; book: CreatorBook | null; sample?: Array<Achievement & { profile: Profile | null }> /* dev checks */ }) {
