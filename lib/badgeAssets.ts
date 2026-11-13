@@ -11,5 +11,12 @@ export function badgeAsset(url: string | undefined): string | undefined {
  *  become tens of KB. The 3D view keeps using badgeAsset() for the full picture. */
 export function badgeArt(url: string | undefined, width = 1080): string | undefined {
   if (!url || !url.startsWith('https://firebasestorage.googleapis.com/')) return badgeAsset(url)
-  return `/_next/image?url=${encodeURIComponent(url)}&w=${width}&q=85`
+  return `/_next/image?url=${encodeURIComponent(url)}&w=${optimizerWidth(width)}&q=85`
+}
+
+// The widths Next's image optimizer accepts (its default imageSizes + deviceSizes — next.config.js sets
+// neither); any other `w` is refused with a 400 and the picture shows broken. Ask for the next size up.
+const OPTIMIZER_WIDTHS = [16, 32, 48, 64, 96, 128, 256, 384, 640, 750, 828, 1080, 1200, 1920, 2048, 3840]
+function optimizerWidth(w: number) {
+  return OPTIMIZER_WIDTHS.find((x) => x >= w) ?? 3840
 }
