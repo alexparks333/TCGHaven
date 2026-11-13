@@ -16,7 +16,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   - once loaded, the doors part, the seal zooms past, and the Studio rises in (`.studio-reveal`). Animations live in globals.css (`.studio-*`), and reduced motion gets a simple fade.
 - **The community page** (`/c/{uid}`, components/pages/CommunityPage.tsx — `CommunityView` draws it from its data).
   A header picture (`CommunityHeader`, a fixed 4 : 1 shape so a placement looks the same on any screen;
-  `Community.page.header` / `headerFit` / `headerShade`, else the banner colour), the creator's book pinned
+  `Community.page.header` / `headerFit` / `headerShade`, else plain light tan `BLANK_HEADER` — no colour picker; creators are expected to add a photo), the creator's book pinned
   in the top right over the header's corner (after the name on a phone), the name, tagline, members and
   Join, then the sections the creator switched on (`page.sections`, `COMMUNITY_SECTIONS` / `sectionOn()`):
   About and the Achievement Badge Board, with **Members** in the narrow column under the book (after the
@@ -28,7 +28,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   page. The rest is paper (`Section`: engraved titles, a fleuron divider, corner flourishes) under a title
   area with the community's emblem, name, tagline, member / creator / game chips and Join. The Studio's Community tab shows this page exactly as fans see it on the left
   (`CommunityView`, no editing controls on it), and everything to change it on the right — Page details
-  (header picture: upload, drag and zoom with `PicturePlacer`, Darken; colour; name; tagline; games; About)
+  (header picture: upload, drag and zoom with `PicturePlacer`, Darken; name; tagline; games; About)
   and Page sections. Changes show on the left at once and save themselves. `saveCommunity` uses `mergeFields`; firestore.rules lets `communities` carry `page`.
 - **Earning creator badges** (2026-11-12, `lib/creatorShelf.ts`). Joining a community makes its creator's
   published badges yours to earn: FriendsProvider checks the collection against TCG Haven's catalog plus

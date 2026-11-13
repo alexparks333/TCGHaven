@@ -12,7 +12,7 @@ import { useCommunity, saveCommunity, HEADER_ASPECT, MAX_TABS, newTabId, type Co
 import { blockName, homeBlocks, newBlock, tabBlocks, type Block } from '@/lib/communityBlocks'
 import { AddBlockMenu, BlockEditor } from '@/components/creator/BlockEditor'
 import { CommunityView, type PageBuilder } from '@/components/pages/CommunityPage'
-import { BANNERS } from '@/components/creator/CreateCommunity'
+import { BLANK_HEADER } from '@/components/creator/CommunityHeader'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { isLive } from '@/lib/badges'
 import { PicturePlacer, ValueSlider, shrink } from '@/components/creator/CoverDesigner'
@@ -135,13 +135,6 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
           <button type="button" onClick={() => setHeaderOpen(true)} className="mt-2.5 w-full haven-chip px-3 py-2 text-sm font-semibold inline-flex items-center justify-center gap-2">
             <ImagePlus size={15} />{c.page?.header ? 'Change header picture' : 'Add a header picture'}
           </button>
-          <p className="mt-3 text-[11px] font-semibold text-slate-500">Colour {c.page?.header && <span className="font-normal">· shows round your page and when there&rsquo;s no picture</span>}</p>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {BANNERS.map((col) => (
-              <button key={col} type="button" onClick={() => set({ color: col })} aria-label={`Colour ${col}`}
-                className={cn('w-6 h-6 rounded-full', c.color === col ? 'ring-2 ring-offset-2 ring-offset-[#efe4cc] ring-[#7a5230]' : 'hover:ring-1 hover:ring-[#c4ae83]')} style={{ background: col }} />
-            ))}
-          </div>
           <label className="mt-3 block text-[11px] font-semibold text-slate-500">Name
             <input value={c.name} maxLength={40} onChange={(e) => set({ name: e.target.value })} className="input-field mt-1 text-sm font-semibold" placeholder="Your community’s name" />
           </label>
@@ -250,7 +243,7 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
             {look.header ? (
               <>
                 <PicturePlacer src={badgeArt(look.header, 1920)!} fit={look.headerFit} onChange={(headerFit) => onChange({ ...look, headerFit })}
-                  aspect={HEADER_ASPECT} base={`linear-gradient(135deg, ${c.color}, #0b0b12)`} fillLabel="Fill header"
+                  aspect={HEADER_ASPECT} base={BLANK_HEADER} fillLabel="Fill header"
                   overlay={<div className="absolute inset-0 pointer-events-none" style={{ background: `linear-gradient(to bottom, transparent 35%, rgba(10,6,2,${look.headerShade ?? 0.35}))` }} /> /* the darkening, as on the page */} />
                 <ValueSlider label="Darken" min={0} max={1} step={0.05} value={look.headerShade ?? 0.35} onChange={(v) => onChange({ ...look, headerShade: v })} />
                 <p className="mt-1 text-[11px] text-slate-500">Darkens it toward the bottom so your page&rsquo;s name and text read on top.</p>
