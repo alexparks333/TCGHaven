@@ -159,9 +159,21 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
       {open && !arranging && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 sm:p-8 overflow-y-auto" onClick={() => setOpen(null)}>
           <div className="fixed inset-0 bg-[#2b2014]/55" />
-          <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} className="relative w-full max-w-xl my-auto">
+          <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} className="relative w-full max-w-xl my-auto mb-16">
             <NoteCard post={open} holder={holderOf(open)} pinColor={open.look?.pinColor || pinOf(hash(open.id))} full poll={open.look?.kind === 'poll' ? pollOf(open) : undefined} className="!p-5 sm:!p-7"
-              top={<button type="button" onClick={() => setOpen(null)} className="absolute top-2 right-2 z-[2] p-1.5 opacity-60 hover:opacity-100" aria-label="Close"><X size={18} /></button>}>
+              top={<>
+                <button type="button" onClick={() => setOpen(null)} className="absolute top-2 right-2 z-[2] p-1.5 opacity-60 hover:opacity-100" aria-label="Close"><X size={18} /></button>
+                {/* the owner's own note, opened: change it or take it down — always reachable, even when the note sits
+                    under the board's buttons on the wall */}
+                {ctx.owner && (open as WallPost & { live?: boolean }).live && (
+                  <span className="absolute -bottom-12 left-1/2 -translate-x-1/2 z-[2] flex gap-2">
+                    <button type="button" onClick={() => { const p = open; setOpen(null); setEditing(p) }}
+                      className="rounded-md bg-[#2b2014] px-3.5 py-2 text-sm font-bold text-[#fbf6ea] inline-flex items-center gap-1.5 whitespace-nowrap"><Pencil size={14} />Change</button>
+                    <button type="button" onClick={() => { if (confirm('Take this off the wall? This can\'t be undone.')) { removePost(open.id).catch(() => alert('Couldn\'t take it down — check your connection.')); setOpen(null) } }}
+                      className="rounded-md bg-[#f6eedb] border border-[#2b2014]/25 px-3.5 py-2 text-sm font-bold text-[#2b2014] inline-flex items-center gap-1.5 whitespace-nowrap"><X size={14} />Take down</button>
+                  </span>
+                )}
+              </>}>
               <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-50">{ctx.community.name} · {timeAgo(open.at)}</p>
               {open.look?.kind !== 'poll' && <Reactions p={open} />}
             </NoteCard>
