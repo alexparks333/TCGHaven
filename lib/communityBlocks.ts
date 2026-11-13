@@ -23,6 +23,7 @@ export interface NoteLook {
   shape?: string                            // a sticker's cut (lib/stickerCut.ts STICKER_SHAPES id; unset = Cut out)
   border?: 0 | 1 | 2                        // a sticker's white border: none / thin / thick
   tol?: number                              // a sticker's Cut out sensitivity
+  pan?: { x: number; y: number; z: number } // a sticker's photo moved / zoomed inside its shape (lib/stickerCut.ts StickerPan)
   fit?: 'square' | 'whole'                  // a polaroid's photo: square like the real thing (default), or the whole picture
   pframe?: string                           // a polaroid's frame (WallNote POLAROID_FRAMES id; default classic white)
   pic?: 'top' | 'bottom' | 'left' | 'right' // where the picture sits around the words

@@ -57,7 +57,13 @@ export const STICKER_SHAPES = [
 export const stickerShapeOf = (id?: string) => STICKER_SHAPES.find((x) => x.id === id) ?? STICKER_SHAPES[0]
 const MAX = 720
 
+// the photo, loaded once per session (re-cutting while the owner drags it inside the shape must be quick)
+const loaded = new Map<string, Promise<HTMLImageElement>>()
 function load(src: string): Promise<HTMLImageElement> {
+  if (!loaded.has(src)) loaded.set(src, loadImage(src).catch((e) => { loaded.delete(src); throw e }))
+  return loaded.get(src)!
+}
+function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -68,7 +74,12 @@ function load(src: string): Promise<HTMLImageElement> {
 const canvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c }
 
 /** The finished sticker as a PNG. tolerance: how far from the background colour still counts as background (Cut out). */
-export async function makeSticker(src: string, shape: StickerShape | string, border: 0 | 1 | 2, tolerance = 42): Promise<Blob> {
+/** Where the photo sits inside a shape: x / y from -1 to 1 across as far as it can move each way, z its zoom (1 = just fills) */
+export interface StickerPan { x: number; y: number; z: number }
+const offset = (pan: StickerPan | undefined, over: number, axis: 'x' | 'y') => Math.max(-1, Math.min(1, pan?.[axis] ?? 0)) * Math.max(0, over) / 2
+
+export async function makeSticker(src: string, shape: StickerShape | string, border: 0 | 1 | 2, tolerance = 42, pan?: StickerPan): Promise<Blob> {
+  const zoom = Math.max(1, Math.min(4, pan?.z ?? 1))
   const img = await load(src)
   const k = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k)
@@ -86,7 +97,8 @@ export async function makeSticker(src: string, shape: StickerShape | string, bor
     const out = canvas(pw + pad * 2, ph + pad * 2), g = out.getContext('2d')!
     g.fillStyle = '#fbfaf5'; g.fill(new Path2D(stamp(out.width, out.height, Math.max(out.width, out.height) * 0.024)))
     g.save(); g.beginPath(); g.rect(pad, pad, pw, ph); g.clip()
-    g.drawImage(img, pad + (pw - w) / 2, pad + (ph - h) / 2, w, h)
+    const zw = w * zoom, zh = h * zoom
+    g.drawImage(img, pad + (pw - zw) / 2 + offset(pan, zw - pw, 'x'), pad + (ph - zh) / 2 + offset(pan, zh - ph, 'y'), zw, zh)
     g.restore()
     return toBlob(out)
   } else {
@@ -96,7 +108,8 @@ export async function makeSticker(src: string, shape: StickerShape | string, bor
     cut = canvas(cw, ch)
     const g = cut.getContext('2d')!
     g.save(); g.scale(cw / def.w, ch / def.h); g.clip(new Path2D(def.d)); g.setTransform(1, 0, 0, 1, 0, 0)
-    g.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h)
+    const zw = w * zoom, zh = h * zoom // the owner's zoom, then their move (kept so the photo always fills the shape)
+    g.drawImage(img, (cw - zw) / 2 + offset(pan, zw - cw, 'x'), (ch - zh) / 2 + offset(pan, zh - ch, 'y'), zw, zh)
     g.restore()
   }
   return toBlob(withBorder(cut, [0, 12, 24][border]))

@@ -118,7 +118,7 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
         {top}
         {post.image
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={badgeArt(post.image, full ? 1200 : 640)} alt="" draggable={false} className="block w-full h-auto [filter:drop-shadow(0_1px_1px_rgba(0,0,0,0.35))_drop-shadow(0_3px_5px_rgba(0,0,0,0.18))]" />
+          ? <img src={badgeArt(post.image, full ? 1200 : 640)} alt="" draggable={false} className="block w-full h-auto object-contain pointer-events-none [filter:drop-shadow(0_1px_1px_rgba(0,0,0,0.35))_drop-shadow(0_3px_5px_rgba(0,0,0,0.18))]" />
           : <div className="aspect-square rounded-full border-2 border-dashed border-white/70 flex items-center justify-center text-xs font-bold text-white/80">Add a photo</div>}
       </article>
     )
@@ -213,8 +213,10 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
   const file = useRef<HTMLInputElement>(null)
   const put = (p: Partial<NoteLook>) => setLook((l) => ({ ...l, ...p }))
   const sticker = look.kind === 'sticker'
+  const canPan = sticker && !!image && (look.shape ?? 'cutout') !== 'cutout' // a shape: the photo can move inside it
   const origImage = post?.look?.kind === 'sticker' ? post.look.src ?? post.image : post?.image
-  const cutKey = JSON.stringify([image, look.shape ?? 'cutout', look.border ?? 2, look.tol ?? 42])
+  const cutKey = JSON.stringify([image, look.shape ?? 'cutout', look.border ?? 2, look.tol ?? 42, look.pan])
+  const [panning, setPanning] = useState(false)
   // the sticker, cut afresh (a moment after the last change) whenever its photo, shape, border or sensitivity changes
   useEffect(() => {
     if (!sticker || !image) return
@@ -222,11 +224,11 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
     const t = setTimeout(async () => {
       setCutting(true)
       try {
-        const blob = await makeSticker(image, look.shape ?? 'cutout', look.border ?? 2, look.tol ?? 42)
+        const blob = await makeSticker(image, look.shape ?? 'cutout', look.border ?? 2, look.tol ?? 42, look.pan)
         if (live) setCut((old) => { if (old) URL.revokeObjectURL(old.url); return { key: cutKey, blob, url: URL.createObjectURL(blob) } })
       } catch { if (live) setErr('Couldn\'t cut that picture — try another.') }
       finally { if (live) setCutting(false) }
-    }, 160)
+    }, panning ? 0 : 160) // while the photo's being dragged inside the shape, re-cut at once
     return () => { live = false; clearTimeout(t) }
   }, [sticker, cutKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const changed = !post || text !== post.text || image !== origImage || note !== (post.note ?? '') || JSON.stringify(look) !== JSON.stringify(post.look ?? {})
@@ -253,7 +255,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
         const same = post?.look?.kind === 'sticker' && image === origImage && JSON.stringify(look) === JSON.stringify(post.look)
         let url = post?.image
         if (!same) {
-          const c = cut?.key === cutKey ? cut : { blob: await makeSticker(image!, look.shape ?? 'cutout', look.border ?? 2, look.tol ?? 42) }
+          const c = cut?.key === cutKey ? cut : { blob: await makeSticker(image!, look.shape ?? 'cutout', look.border ?? 2, look.tol ?? 42, look.pan) }
           url = await uploadCreatorPng(uid, c.blob)
         }
         await onSave({ text: '', image: url, look: { ...look, src: image } })
@@ -274,7 +276,20 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
         {/* the note, hanging on a piece of the board */}
         {/* a sticker sits in the middle of the board; a note hangs from near the top */}
         <div className={cn('relative md:flex-1 min-h-[300px] overflow-y-auto flex justify-center px-6', sticker ? 'items-center py-10' : 'items-start pt-12 pb-10')} style={board}>
-          <div className={cn('w-full relative', sticker ? 'max-w-[300px]' : 'max-w-[360px]')}>
+          <div className={cn('relative', sticker ? 'w-[min(520px,82%)]' : 'w-full max-w-[360px]', canPan && 'cursor-grab active:cursor-grabbing touch-none select-none')}
+            // a sticker in a shape: drag the photo around inside it, scroll to zoom
+            onPointerDown={canPan ? (e) => {
+              e.preventDefault()
+              const el = e.currentTarget, w = el.getBoundingClientRect().width, start = { px: e.clientX, py: e.clientY, x: look.pan?.x ?? 0, y: look.pan?.y ?? 0 }
+              setPanning(true)
+              const move = (ev: PointerEvent) => {
+                const k = 2.4 / w // a drag across the sticker moves the photo about as far as it can go
+                put({ pan: { z: look.pan?.z ?? 1, x: clamp1(start.x + (ev.clientX - start.px) * k), y: clamp1(start.y + (ev.clientY - start.py) * k) } })
+              }
+              const up = () => { setPanning(false); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+              window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+            } : undefined}
+            onWheel={canPan ? (e) => put({ pan: { x: look.pan?.x ?? 0, y: look.pan?.y ?? 0, z: Math.max(1, Math.min(4, (look.pan?.z ?? 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08))) } }) : undefined}>
             {sticker && cutting && <Loader2 size={20} className="absolute -top-8 left-1/2 -translate-x-1/2 animate-spin text-[#2b2014]" />}
             <NoteCard post={preview} holder={holder} pinColor={look.pinColor || PINS[0]} tilt={0} full edit={{ value: text, onChange: setText }}>
               {!image && !sticker && (
@@ -376,6 +391,12 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, onSave, o
                       <span className="shrink-0">More</span>
                     </label>
                   </>)}
+                  {canPan && (
+                    <label className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-[#5c4a35]">
+                      <span className="shrink-0 w-[44px]">Zoom</span>
+                      <input type="range" min={1} max={4} step={0.05} value={look.pan?.z ?? 1} onChange={(e) => put({ pan: { x: look.pan?.x ?? 0, y: look.pan?.y ?? 0, z: Number(e.target.value) } })} className="flex-1 accent-[#7a5230]" aria-label="Zoom the photo inside the shape" />
+                    </label>
+                  )}
                   <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">White border</p>
                   <Seg value={String(look.border ?? 2) as '0' | '1' | '2'} onPick={(v) => put({ border: Number(v) as 0 | 1 | 2 })}
                     options={[{ id: '0', name: 'None' }, { id: '1', name: 'Thin' }, { id: '2', name: 'Thick' }]} />
@@ -470,3 +491,5 @@ function Seg<T extends string>({ value, onPick, options }: { value: T; onPick: (
     </div>
   )
 }
+
+const clamp1 = (v: number) => Math.max(-1, Math.min(1, v))

@@ -97,7 +97,9 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   star, seal, rounded, trading card, stamp — a perforated white paper edge — ticket, burst, cloud, speech, bolt,
   flower, gem, shield, arch, hexagon, splat) — then a white die-cut border (none / thin / thick: the solid part grown
   outward, smoothed, so thin stems don't spike). The finished PNG is uploaded (`uploadCreatorPng`); the original
-  stays in `look.src` with `shape` / `border` / `tol`, so it can be re-cut later. Stickers have no time or
+  stays in `look.src` with `shape` / `border` / `tol`, so it can be re-cut later. In a shape, the owner drags the photo around inside it in the
+  preview and zooms it (slider or scroll) — `look.pan` `{x, y, z}` (x / y −1…1 of how far it can move, so it
+  always fills the shape); while dragging it's re-cut every frame (the photo is loaded once per session). Stickers have no time or
   reactions and don't open; they start at 0.7× and more turned. Clicking a note while arranging brings it to the front. **Placing on the board**
   (`components/community/WallBoard.tsx`): notes hang wherever the owner pinned them, not in rows — the board is
   `BOARD_W` (900) units wide, scaled to fit the page; each note's `post.place` = `{x, y, r, s, z}` (centre,
