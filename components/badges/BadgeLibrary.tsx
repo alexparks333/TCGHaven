@@ -407,6 +407,7 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
   const isHaven = (set: BadgeSet) => bookCollection(set) === HAVEN_COLLECTION
   const haven = catalog.sets.filter(isHaven), community = catalog.sets.filter((x) => !isHaven(x))
   const books = collection === 'community' ? community : haven
+  const cols = useShelfColumns(full)
   // progress over the books on this shelf
   const tally = books.reduce((t, set) => {
     const inSet = badgesInSet(catalog, set.id)
@@ -419,7 +420,7 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
       <div className="mb-7 flex flex-wrap items-end gap-x-6 gap-y-4">
         {/* the same room for either title, so switching shelves never moves the toggle */}
         <div className="min-w-0 sm:min-w-[23rem] flex-1">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">{isMe ? 'Your pin books' : 'Pin books'}</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">{isMe ? 'Your badge books' : 'Badge books'}</p>
           <h1 className="pinbook-serif text-3xl md:text-[36px] font-bold text-ink leading-[1.05] mt-0.5 sm:whitespace-nowrap">{collection === 'community' ? 'Community Badges' : 'Haven Badges'}</h1>
           <p className="mt-1.5 text-sm text-slate-500">
             {books.length === 0 ? (collection === 'community' ? 'Badges from the communities you join' : 'No books yet')
@@ -433,40 +434,54 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
         <div className="max-w-md mx-auto my-10 text-center rounded-2xl border border-dashed border-[#c9b48a] bg-[#efe4cc]/60 px-6 py-10">
           <div className="mx-auto mb-4 w-14 h-14 rounded-2xl bg-[#7a5230] text-[#fbf6ea] flex items-center justify-center"><Users size={26} /></div>
           <p className="pinbook-serif text-xl font-bold text-ink">{isMe ? 'No community books yet' : 'No community books'}</p>
-          <p className="mt-1.5 text-sm text-slate-500">{isMe ? 'Join a community and its pin book lands here — collect the cards to earn its badges.' : 'They haven’t joined any communities yet.'}</p>
+          <p className="mt-1.5 text-sm text-slate-500">{isMe ? 'Join a community and its badge book lands here — collect the cards to earn its badges.' : 'They haven’t joined any communities yet.'}</p>
           {isMe && <Link href="/friends#communities" className="btn-primary mt-5 !inline-flex"><Users size={15} />Find communities</Link>}
         </div>
       ) : (
-        // The books stand on wooden shelves: each book's ledge runs into the gaps, so a row reads as one shelf
-        <div className={cn('grid gap-x-6 sm:gap-x-8 gap-y-10', full ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')}>
-          {books.map((set) => {
-            const inSet = badgesInSet(catalog, set.id)
-            const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
-            return (
-              <div key={set.id} className="flex flex-col items-center">
-                <button
-                  data-book={set.id}
-                  onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
-                  onPointerEnter={() => preloadSet(set)}
-                  onPointerDown={() => preloadSet(set)}
-                  onFocus={() => preloadSet(set)}
-                  style={away === set.id ? { visibility: 'hidden' } : undefined}
-                  className="badge-book-tile group relative z-[1] w-full max-w-[240px] aspect-[0.71] outline-none"
-                  aria-label={`Open the ${set.name} pin book`}
-                >
-                  <BookThickness look={set.coverStyle} />
-                  <span data-cover className="absolute inset-0"><BookCover set={set} badges={badges} /></span>
-                </button>
-                {/* the shelf: a walnut plank, its lit top edge and the shadow it casts */}
-                <div aria-hidden className="relative self-stretch -mx-3 sm:-mx-4 -mt-1.5 h-3.5 rounded-[2px] bg-[#6e4b2c] shadow-[inset_0_2px_0_#8f6a44,0_6px_10px_-6px_rgba(40,22,8,0.6)]" />
-                <div className="mt-3 w-full max-w-[240px] text-center">
-                  <div className="text-sm font-bold text-ink truncate">{set.name}</div>
-                  {!isHaven(set) && set.subtitle && <div className="text-[11px] text-slate-500 truncate">{set.subtitle.replace(/\s*·\s*Creator Book$/, '')}</div>}
-                  <CompletionBar set={set} earned={earned} total={inSet.length} />
-                </div>
+        // A bookcase: each row of books stands on one walnut shelf running the whole width — its top surface (what the
+        // books stand on) and its front edge — with the books' names under it
+        <div className="flex flex-col gap-10">
+          {rowsOf(books, cols).map((row, r) => (
+            <div key={r}>
+              <div className="grid gap-x-6 sm:gap-x-8 items-end px-3 sm:px-5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                {row.map((set) => (
+                  <div key={set.id} className="flex justify-center">
+                    <button
+                      data-book={set.id}
+                      onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
+                      onPointerEnter={() => preloadSet(set)}
+                      onPointerDown={() => preloadSet(set)}
+                      onFocus={() => preloadSet(set)}
+                      style={away === set.id ? { visibility: 'hidden' } : undefined}
+                      className="badge-book-tile group relative z-[1] -mb-[6px] w-full max-w-[240px] aspect-[0.71] outline-none"
+                      aria-label={`Open the ${set.name} pin book`}
+                    >
+                      <BookThickness look={set.coverStyle} />
+                      <span data-cover className="absolute inset-0"><BookCover set={set} badges={badges} /></span>
+                    </button>
+                  </div>
+                ))}
               </div>
-            )
-          })}
+              {/* the shelf: its top (lit, seen from just above) and its front edge, with the shadow under it */}
+              <div aria-hidden>
+                <div className="h-[12px] rounded-t-[3px] bg-[#9a6f45] border-t border-[#b98e60]" />
+                <div className="h-[16px] rounded-b-[3px] bg-[#6b4528] shadow-[0_10px_14px_-8px_rgba(40,22,8,0.55)] [background-image:linear-gradient(180deg,rgba(0,0,0,0.12),transparent_40%)]" />
+              </div>
+              <div className="mt-3 grid gap-x-6 sm:gap-x-8 px-3 sm:px-5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                {row.map((set) => {
+                  const inSet = badgesInSet(catalog, set.id)
+                  const earned = inSet.filter((b) => badgeTier(b, badges?.progress[b.id]) > 0).length
+                  return (
+                    <div key={set.id} className="mx-auto w-full max-w-[240px] text-center">
+                      <div className="text-sm font-bold text-ink truncate">{set.name}</div>
+                      {!isHaven(set) && set.subtitle && <div className="text-[11px] text-slate-500 truncate">{set.subtitle.replace(/\s*·\s*Creator Book$/, '')}</div>}
+                      <CompletionBar set={set} earned={earned} total={inSet.length} />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -700,3 +715,17 @@ export function BookCover({ set, badges, defs, emptyLabel = 'Coming soon' }: { s
     </div>
   )
 }
+
+/** How many books stand on a shelf at this window width (the same steps as the page's layout) */
+function useShelfColumns(full: boolean) {
+  const steps = full ? [[1280, 5], [1024, 4], [640, 3]] : [[1024, 4], [640, 3]]
+  const pick = () => (typeof window === 'undefined' ? 4 : steps.find(([w]) => window.innerWidth >= w)?.[1] ?? 2)
+  const [n, setN] = useState(pick)
+  useEffect(() => {
+    const on = () => setN(pick())
+    on(); window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [full]) // eslint-disable-line react-hooks/exhaustive-deps
+  return n
+}
+const rowsOf = <T,>(list: T[], n: number) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, i * n + n))
