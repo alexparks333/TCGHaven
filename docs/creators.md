@@ -19,8 +19,10 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   `Community.page.header` / `headerFit` / `headerShade`, else the banner colour), the creator's book pinned
   in the top right over the header's corner (after the name on a phone), the name, tagline, members and
   Join, then the sections the creator switched on (`page.sections`, `COMMUNITY_SECTIONS` / `sectionOn()`):
-  About, the Achievement Badge Board and Newest members (`newestMembers()`, sorted in the browser — no
-  extra index); the Community Discussion Board is listed as Coming soon. The book is shown off, not
+  About and the Achievement Badge Board, with **Members** in the narrow column under the book (after the
+  sections on a phone): top collectors first — most of this book's badges earned, then most cards collected
+  toward them, from each member's shared badges (`MembersColumn`; private ones last, marked) — members from
+  `newestMembers()` (sorted in the browser — no extra index); the Community Discussion Board is listed as Coming soon. The book is shown off, not
   in a card (`ShowcaseBook`): a big picture of it standing slanted on the page over the header's corner, with
   its shadow; it turns to follow the pointer with light sweeping the cover, and a click opens it over the
   page. The rest is paper (`Section`: engraved titles, a fleuron divider, corner flourishes) under a title

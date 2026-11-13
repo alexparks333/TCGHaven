@@ -15,7 +15,7 @@ import { getProfile, profilePath, type Profile } from '@/lib/firebase/friends'
 import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestAchievements, newestMembers, useMyCommunities, type Achievement, type CommunityEntry } from '@/lib/communities'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { BadgePin } from '@/components/badges/BadgePin'
-import type { SharedBadges } from '@/lib/firebase/badges'
+import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
 import { Corners, Divider } from '@/components/creator/Ornaments'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
@@ -90,6 +90,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
   book: CreatorBook | null; open: boolean; setOpen: (o: boolean) => void
 }) {
   const { myBadges: progress } = useFriends()
+  const wide = useWide()
   return (
     <div className="flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
@@ -144,9 +145,11 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         </div>
 
         {/* ── The book: a big picture of it, slanted on the page, over the header's corner ── */}
-        <aside className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:-mt-48 relative z-10 flex justify-center">
+        <aside className="lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:-mt-48 relative z-10 flex flex-col items-center gap-8">
           {book ? <ShowcaseBook book={book} onOpen={() => setOpen(true)} />
             : <p className="pinbook-serif text-sm text-slate-500 text-center py-6">{community.name} hasn&rsquo;t made their book yet.</p>}
+          {/* Members, top collectors first — beside the sections on a computer */}
+          {wide && sectionOn(community, 'members') && <MembersColumn community={uid} book={book} members={members} />}
         </aside>
 
         {/* ── The sections the creator switched on ── */}
@@ -157,7 +160,8 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             </Section>
           )}
           {sectionOn(community, 'badgeBoard') && <AchievementBoard community={uid} book={book} />}
-          {sectionOn(community, 'members') && <NewestMembers community={uid} members={members} />}
+          {/* on a phone, Members comes after the sections */}
+          {!wide && sectionOn(community, 'members') && <MembersColumn community={uid} book={book} members={members} />}
         </div>
       </div>
 
@@ -264,29 +268,86 @@ function timeAgo(ms: number) {
   return d < 30 ? `${d} day${d === 1 ? '' : 's'} ago` : new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-/** The newest collectors to join */
-function NewestMembers({ community, members }: { community: string; members: number | null }) {
-  const [list, setList] = useState<Array<{ uid: string; profile: Profile | null }> | null>(null)
+/** A computer-sized window (the lg layout) — Members sits beside the sections there, after them on a phone */
+function useWide() {
+  const [wide, setWide] = useState(true)
   useEffect(() => {
-    newestMembers(community, 12)
-      .then((rows) => Promise.all(rows.map(async (r) => ({ uid: r.uid, profile: await getProfile(r.uid).catch(() => null) }))))
-      .then(setList).catch(() => setList([]))
-  }, [community, members])
+    const m = window.matchMedia('(min-width: 1024px)')
+    const f = () => setWide(m.matches)
+    f(); m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [])
+  return wide
+}
+
+interface RankedMember { uid: string; profile: Profile | null; badges: number; cards: number; hidden: boolean; joinedAt: number }
+
+/** The community's members, top collectors first: most of this book's badges earned, then the most
+ *  cards collected toward them (from each member's shared badges; members who keep theirs private
+ *  come last, marked hidden) */
+export function MembersColumn({ community, book, members, sample }: { community: string; book: CreatorBook | null; members: number | null; sample?: RankedMember[] /* dev checks */ }) {
+  const [list, setList] = useState<RankedMember[] | null>(sample ?? null)
+  const [all, setAll] = useState(false)
+  const ids = (book?.badges ?? []).map((b) => b.id).join(',')
+  useEffect(() => {
+    if (sample) return
+    let live = true
+    const badgeIds = ids ? ids.split(',') : []
+    newestMembers(community, 100)
+      .then((rows) => Promise.all(rows.map(async (r) => {
+        const [profile, shared] = await Promise.all([getProfile(r.uid).catch(() => null), loadBadges(r.uid)])
+        if (shared === 'private') return { uid: r.uid, profile, badges: 0, cards: 0, hidden: true, joinedAt: r.joinedAt }
+        return {
+          uid: r.uid, profile, hidden: false, joinedAt: r.joinedAt,
+          badges: badgeIds.filter((id) => shared.earned[id]).length,
+          cards: badgeIds.reduce((n, id) => n + (shared.progress[id]?.[0] ?? 0), 0),
+        }
+      })))
+      .then((rows) => {
+        if (!live) return
+        rows.sort((a, b) => Number(a.hidden) - Number(b.hidden) || b.badges - a.badges || b.cards - a.cards || a.joinedAt - b.joinedAt)
+        setList(rows)
+      })
+      .catch(() => { if (live) setList([]) })
+    return () => { live = false }
+  }, [community, ids, members, sample])
+  const shown = list ? (all ? list : list.slice(0, 12)) : []
+  const medal = ['#d6b168', '#c7ccd3', '#c08552']
   return (
-    <Section title="Newest members">
+    <section className="haven-panel haven-grain relative w-full !p-5">
+      <div className="flex items-baseline justify-between">
+        <h2 className="pinbook-serif text-xl font-bold text-ink">Members</h2>
+        <span className="text-xs text-slate-500 tabular-nums">{members ?? list?.length ?? '–'}</span>
+      </div>
+      <p className="text-[11px] text-slate-500">Top collectors first</p>
+      <Divider className="mt-2.5 mb-3" />
       {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
         : list.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
         : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-3">
-            {list.map(({ uid, profile }) => (
-              <Link key={uid} href={profile ? profilePath(uid, profile.username) : '#'} className="flex flex-col items-center gap-1.5 rounded-xl p-2 hover:bg-slate-900/60 text-center">
-                <Avatar seed={uid} name={profile?.displayName ?? 'Collector'} photoURL={profile?.photoURL} size={44} />
-                <span className="text-xs font-semibold text-ink truncate w-full">{profile?.displayName ?? 'Collector'}</span>
-              </Link>
+          <ol className="space-y-1">
+            {shown.map((m, i) => (
+              <li key={m.uid}>
+                <Link href={m.profile ? profilePath(m.uid, m.profile.username) : '#'} className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 hover:bg-[#f6eedb]">
+                  <span className={cn('w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold tabular-nums', !m.hidden && i < 3 ? 'text-[#2b2014] shadow-[inset_0_-2px_3px_rgba(0,0,0,0.2)]' : 'text-slate-500')}
+                    style={!m.hidden && i < 3 ? { background: `radial-gradient(circle at 35% 30%, #fff8e0, ${medal[i]} 60%)` } : undefined}>
+                    {m.hidden ? '–' : i + 1}
+                  </span>
+                  <Avatar seed={m.uid} name={m.profile?.displayName ?? 'Collector'} photoURL={m.profile?.photoURL} size={30} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-ink truncate">{m.profile?.displayName ?? 'Collector'}</span>
+                    <span className="block text-[11px] text-slate-500 truncate">
+                      {m.hidden ? 'Badges kept private' : `${m.badges} badge${m.badges === 1 ? '' : 's'} · ${m.cards} card${m.cards === 1 ? '' : 's'}`}
+                    </span>
+                  </span>
+                </Link>
+              </li>
             ))}
-          </div>
+          </ol>
         )}
-    </Section>
+      {list && list.length > 12 && (
+        <button type="button" onClick={() => setAll((a) => !a)} className="mt-2 w-full text-xs font-semibold text-[#7a5230] hover:underline">{all ? 'Show fewer' : `Show all ${list.length}`}</button>
+      )}
+    </section>
   )
 }
 

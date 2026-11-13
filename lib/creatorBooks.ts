@@ -37,7 +37,7 @@ export interface Community {
 export type CommunitySection = 'about' | 'members' | 'badgeBoard' | 'discussion'
 export const COMMUNITY_SECTIONS: Array<{ id: CommunitySection; name: string; hint: string; ready: boolean }> = [
   { id: 'about', name: 'About', hint: 'Who you are and what members get', ready: true },
-  { id: 'members', name: 'Newest members', hint: 'The latest collectors to join', ready: true },
+  { id: 'members', name: 'Members', hint: 'Your members, top collectors first (beside the page)', ready: true },
   { id: 'badgeBoard', name: 'Achievement Badge Board', hint: 'The newest members to earn one of your badges', ready: true },
   { id: 'discussion', name: 'Community Discussion Board', hint: 'Posts members upvote, like a forum', ready: false },
 ]
