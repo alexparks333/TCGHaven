@@ -84,13 +84,14 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
   const topZ = Math.max(0, ...Object.values(places).map((p) => p.z))
   const height = Math.max(minHeight, ...posts.map((p) => { const pl = places[p.id]; return pl.y + ((heights[p.id] ?? 300) * pl.s) / 2 + 40 })) + (arranging ? 220 : 0)
 
-  // dragging: move, turn or size — saved on letting go
+  // dragging: move, turn or size — saved on letting go. A note may hang off the board's edges (over its frame,
+  // its title, past its sides) — on purpose, it's a creative board; only kept from vanishing entirely
   useEffect(() => {
     const move = (e: PointerEvent) => {
       const d = drag.current; if (!d) return
       moved.current = true
       let next = d.start
-      if (d.kind === 'move') next = { ...d.start, x: clamp(d.start.x + (e.clientX - d.px) / k, 20, BOARD_W - 20), y: Math.max(30, d.start.y + (e.clientY - d.py) / k) }
+      if (d.kind === 'move') next = { ...d.start, x: clamp(d.start.x + (e.clientX - d.px) / k, -NOTE_W * 0.4, BOARD_W + NOTE_W * 0.4), y: Math.max(-120, d.start.y + (e.clientY - d.py) / k) }
       if (d.kind === 'turn') {
         let r = d.start.r + angle(d.cx, d.cy, e.clientX, e.clientY) - d.a0
         r = ((r + 540) % 360) - 180
