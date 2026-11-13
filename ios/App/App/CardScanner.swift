@@ -554,7 +554,7 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         trayFade.frame = CGRect(origin: CGPoint(x: tray.contentOffset.x, y: 0), size: tray.bounds.size)
         let w = max(1, tray.bounds.width), fade: CGFloat = 56 / w
         let moreRight = tray.contentOffset.x + tray.bounds.width < tray.contentSize.width - 2
-        let moreLeft = tray.contentOffset.x > 2
+        let moreLeft = tray.contentOffset.x > -tray.adjustedContentInset.left + 2
         trayFade.colors = [(moreLeft ? UIColor.clear : UIColor.black).cgColor, UIColor.black.cgColor,
                            UIColor.black.cgColor, (moreRight ? UIColor.clear : UIColor.black).cgColor]
         trayFade.locations = [0, NSNumber(value: Double(fade)), NSNumber(value: Double(1 - fade)), 1]
@@ -1296,7 +1296,9 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
             }
             self.items.insert(item, at: 0)
             self.tray.insertItems(at: [IndexPath(item: 0, section: 0)])
-            self.tray.scrollToItem(at: IndexPath(item: 0, section: 0), at: .left, animated: true)
+            // All the way to the start, margin included — lining the card itself up with the edge
+            // left the tray 16 pt in, so the new card sat under the "more this way" fade
+            self.tray.setContentOffset(CGPoint(x: -self.tray.adjustedContentInset.left, y: 0), animated: true)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { self.updateTrayFade() }
             if merged.isEmpty {
                 self.endActive(id: id, result: "Couldn’t read that card — try again")
