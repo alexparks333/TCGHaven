@@ -445,7 +445,9 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
             <div key={r}>
               <div className="grid gap-x-6 sm:gap-x-8 items-end px-3 sm:px-5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
                 {row.map((set) => (
-                  <div key={set.id} className="flex justify-center">
+                  <div key={set.id} className="relative flex justify-center">
+                    {/* where it stands: its shadow pooled on the shelf, darkest right under it */}
+                    <span aria-hidden className="absolute z-[1] -bottom-[9px] left-1/2 -translate-x-1/2 w-[96%] max-w-[232px] h-[16px] rounded-[50%] bg-[#1c0f05]/55 blur-[5px] pointer-events-none" />
                     <button
                       data-book={set.id}
                       onClick={(e) => onOpen(set, e.currentTarget.querySelector('[data-cover]') as HTMLElement)}
@@ -453,7 +455,7 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
                       onPointerDown={() => preloadSet(set)}
                       onFocus={() => preloadSet(set)}
                       style={away === set.id ? { visibility: 'hidden' } : undefined}
-                      className="badge-book-tile group relative z-[1] -mb-[6px] w-full max-w-[240px] aspect-[0.71] outline-none"
+                      className="badge-book-tile group relative z-[2] -mb-[11px] w-full max-w-[240px] aspect-[0.71] outline-none"
                       aria-label={`Open the ${set.name} pin book`}
                     >
                       <BookThickness look={set.coverStyle} />
@@ -463,9 +465,13 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
                 ))}
               </div>
               {/* the shelf: its top (lit, seen from just above) and its front edge, with the shadow under it */}
-              <div aria-hidden>
-                <div className="h-[12px] rounded-t-[3px] bg-[#9a6f45] border-t border-[#b98e60]" />
-                <div className="h-[16px] rounded-b-[3px] bg-[#6b4528] shadow-[0_10px_14px_-8px_rgba(40,22,8,0.55)] [background-image:linear-gradient(180deg,rgba(0,0,0,0.12),transparent_40%)]" />
+              <div aria-hidden className="relative">
+                {/* the top, seen from just above: narrower at the back, darker where it meets the wall, wood grain along it */}
+                <div className="h-[20px] [clip-path:polygon(1.2%_0,98.8%_0,100%_100%,0_100%)]"
+                  style={{ background: 'repeating-linear-gradient(90deg, rgba(60,32,12,0.10) 0 2px, transparent 2px 9px, rgba(255,230,190,0.06) 9px 11px, transparent 11px 23px), linear-gradient(180deg, #5c3b20 0%, #8c6038 45%, #b38450 100%)' }} />
+                {/* the front edge: a lit lip along its top, the grain running across, darkening underneath */}
+                <div className="h-[22px] rounded-b-[4px] shadow-[0_22px_26px_-14px_rgba(30,15,5,0.7),0_4px_6px_-2px_rgba(30,15,5,0.35)]"
+                  style={{ background: 'linear-gradient(180deg, rgba(255,226,180,0.55) 0 1px, transparent 1px), repeating-linear-gradient(90deg, rgba(40,20,6,0.16) 0 1px, transparent 1px 7px, rgba(255,220,170,0.07) 7px 9px, transparent 9px 17px), linear-gradient(180deg, #7a5030 0%, #6a4426 55%, #4f3119 100%)' }} />
               </div>
               <div className="mt-3 grid gap-x-6 sm:gap-x-8 px-3 sm:px-5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
                 {row.map((set) => {
