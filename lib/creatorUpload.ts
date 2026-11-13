@@ -23,3 +23,10 @@ export async function uploadCreatorPicture(uid: string, file: File, prefix = 'bl
   await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
   return getDownloadURL(r)
 }
+
+/** Upload a finished PNG as it is (e.g. a Creator Wall sticker) to creators/{uid}/{prefix}-{time}.png; its download URL */
+export async function uploadCreatorPng(uid: string, blob: Blob, prefix = 'sticker'): Promise<string> {
+  const r = ref(appStorage, `creators/${uid}/${prefix}-${Date.now()}.png`)
+  await uploadBytes(r, blob, { contentType: 'image/png' })
+  return getDownloadURL(r)
+}

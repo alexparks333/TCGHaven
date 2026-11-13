@@ -89,7 +89,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   `post.look` (`NoteLook`). Two kinds: **Note** and **Polaroid** (`look.kind` — a real instant photo: matte frame in
   `POLAROID_FRAMES` (`look.pframe`; classic white, cream, black, colour editions), thin even borders and the deep
   bottom strip with a marker caption, the photo square (or `fit: 'whole'`) recessed with a sheen — `.polaroid` CSS).
-  The owner's **New note** / **Arrange the board** sit at the top right of the board. **Placing on the board**
+  The owner's **New note** / **Sticker** / **Arrange the board** sit at the top right of the board, always above
+  the notes (z-index), even one placed over that corner. A third kind, **Sticker** (`lib/stickerCut.ts`, all in the
+  browser — no AI service): upload a photo and it's cut out — **Cut out** flood-fills a plain background away from
+  the picture's edges (a "Cut" sensitivity slider; a PNG with its own see-through edge keeps it), or a shape
+  (circle, heart, star, seal, rounded) — then a white die-cut border (none / thin / thick: the solid part grown
+  outward, smoothed, so thin stems don't spike). The finished PNG is uploaded (`uploadCreatorPng`); the original
+  stays in `look.src` with `shape` / `border` / `tol`, so it can be re-cut later. Stickers have no time or
+  reactions and don't open; they start at 0.7× and more turned. Clicking a note while arranging brings it to the front. **Placing on the board**
   (`components/community/WallBoard.tsx`): notes hang wherever the owner pinned them, not in rows — the board is
   `BOARD_W` (900) units wide, scaled to fit the page; each note's `post.place` = `{x, y, r, s, z}` (centre,
   turn°, size, stacking). **Arrange the board** (owner, computer): drag to move, the round handle turns (snaps

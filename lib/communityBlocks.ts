@@ -18,7 +18,11 @@ export interface NotePlace { x: number; y: number; r: number; s: number; z: numb
  *  Every part is optional: unset = a picture on top at full width with a white photo border, the page's
  *  body font at medium size, held the way the board says (Style → Board → Held by). */
 export interface NoteLook {
-  kind?: 'note' | 'polaroid'                // a paper note, or a polaroid (the picture over a written strip)
+  kind?: 'note' | 'polaroid' | 'sticker'    // a paper note, a polaroid, or a die-cut sticker (lib/stickerCut.ts)
+  src?: string                              // a sticker's original photo (post.image is the finished cut PNG)
+  shape?: 'cutout' | 'circle' | 'heart' | 'star' | 'scallop' | 'rounded' // a sticker's cut
+  border?: 0 | 1 | 2                        // a sticker's white border: none / thin / thick
+  tol?: number                              // a sticker's Cut out sensitivity
   fit?: 'square' | 'whole'                  // a polaroid's photo: square like the real thing (default), or the whole picture
   pframe?: string                           // a polaroid's frame (WallNote POLAROID_FRAMES id; default classic white)
   pic?: 'top' | 'bottom' | 'left' | 'right' // where the picture sits around the words

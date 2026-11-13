@@ -7,7 +7,7 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check } from 'lucide-react'
+import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check, Star } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { timeAgo, useLook, type BlockContext } from '@/components/community/blocks'
 import { NoteCard, NoteEditor, PINS, PushPin, Tape, hash } from '@/components/community/WallNote'
@@ -41,7 +41,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
   const posts: Array<WallPost & { live?: boolean }> = [...live.map((p) => ({ id: p.id, text: p.text, image: p.image, note: p.note, look: p.look, place: p.place, at: p.at, live: true })), ...block.posts]
     .sort((a, b) => b.at - a.at)
   const [open, setOpen] = useState<WallPost | null>(null)
-  const [editing, setEditing] = useState<WallPost | 'new' | null>(null) // the owner's note editor
+  const [editing, setEditing] = useState<WallPost | 'new' | 'sticker' | null>(null) // the owner's note editor
   const [arranging, setArranging] = useState(false) // the owner moving, turning and sizing notes on the board
   const [selected, setSelected] = useState<string | null>(null)
   const rx = useWallReactions(ctx.uid, user?.uid ?? null, posts.map((p) => p.id))
@@ -90,11 +90,18 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
         </div>
         {ctx.owner && (
           // the owner, top right of the board: write a note, then place it (drag, turn, size)
-          <div className="flex gap-2 shrink-0">
+          // always above the notes, even one placed over the corner
+          <div className="relative z-[100] flex gap-2 shrink-0">
             {!arranging && (
               <button type="button" onClick={() => setEditing('new')}
                 className="rounded-md bg-[#2b2014] px-3.5 py-2 text-sm font-bold text-[#fbf6ea] inline-flex items-center gap-1.5 hover:bg-[#3d2e1d] transition-colors">
                 <Plus size={16} />New note
+              </button>
+            )}
+            {!arranging && (
+              <button type="button" onClick={() => setEditing('sticker')}
+                className="rounded-md bg-[#f6eedb] px-3.5 py-2 text-sm font-bold text-[#2b2014] border border-[#2b2014]/25 inline-flex items-center gap-1.5 hover:bg-[#fbf6ea] transition-colors">
+                <Star size={15} />Sticker
               </button>
             )}
             {posts.some((p) => p.live) && (
@@ -108,7 +115,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           </div>
         )}
       </header>
-      {arranging && <p className="-mt-1 mb-3 text-xs font-semibold" style={{ color: mix(ink, w.color, 0.18) }}>Drag a note to move it · the round handle turns it · the corner makes it bigger or smaller. Each change saves when you let go.</p>}
+      {arranging && <p className="relative z-[100] -mt-1 mb-3 text-xs font-semibold" style={{ color: mix(ink, w.color, 0.18) }}>Drag a note to move it · the round handle turns it · the corner makes it bigger or smaller. Each change saves when you let go.</p>}
       <div>
         {posts.length === 0 ? (
           <div className="mx-auto max-w-[240px] -rotate-2 bg-[#f6eedb] border border-[#2b2014]/10 px-5 pt-6 pb-5 text-center relative">
@@ -118,7 +125,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           </div>
         ) : (
           <WallBoard posts={posts} arranging={arranging} selected={selected} onSelect={setSelected} tiltK={w.tilt} columns={w.columns}
-            onOpen={(p) => setOpen(p)} onPlace={(id, place) => { editPost(id, { place }).catch(() => alert('Couldn\'t save where that note goes — check your connection.')) }}
+            onOpen={(p) => { if (p.look?.kind !== 'sticker') setOpen(p) }} onPlace={(id, place) => { editPost(id, { place }).catch(() => alert('Couldn\'t save where that note goes — check your connection.')) }}
             renderNote={(p) => {
               const h = hash(p.id)
               return (
@@ -133,9 +140,10 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                         className="w-7 h-7 rounded-full bg-[#2b2014] text-[#fbf6ea] flex items-center justify-center"><X size={14} /></button>
                     </span>
                   )}>
-                  {/* a polaroid keeps its strip for the caption: just the reactions under it (the time shows when opened) */}
-                  {p.look?.kind !== 'polaroid' && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
-                  <Reactions p={p} />
+                  {/* a polaroid keeps its strip for the caption: just the reactions under it (the time shows when opened);
+                      a sticker is decoration — nothing under it */}
+                  {p.look?.kind !== 'polaroid' && p.look?.kind !== 'sticker' && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
+                  {p.look?.kind !== 'sticker' && <Reactions p={p} />}
                 </NoteCard>
               )
             }} />
@@ -154,15 +162,15 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
           </div>
         </div>, document.body)}
       {editing && ctx.owner && (
-        <NoteEditor uid={ctx.uid} post={editing === 'new' ? undefined : editing} board={surfaceCss(w.surface, w.color, w.texture)}
+        <NoteEditor uid={ctx.uid} post={typeof editing === 'string' ? undefined : editing} startKind={editing === 'sticker' ? 'sticker' : undefined} board={surfaceCss(w.surface, w.color, w.texture)}
           boardHolder={w.holders === 'pins' ? 'pin' : w.holders}
           onSave={async (n) => {
-            if (editing === 'new') {
+            if (typeof editing === 'string') {
               // it goes up near the top middle of the board, a little turned, on top of the others — then the
               // board opens for arranging with it picked, so the owner can put it exactly where they want
               const z = Math.max(0, ...posts.map((p) => p.place?.z ?? 0)) + 1
               const id = await addPost({ community: ctx.uid, block: block.id, kind: 'wall', text: n.text, image: n.image, note: n.note, look: n.look,
-                place: { x: BOARD_W / 2, y: 190, r: [-3, 2, -1.5, 3.5][Date.now() % 4], s: 1, z } })
+                place: { x: BOARD_W / 2, y: 190, r: [-3, 2, -1.5, 3.5][Date.now() % 4] * (n.look.kind === 'sticker' ? 3 : 1), s: n.look.kind === 'sticker' ? 0.7 : 1, z } })
               setArranging(true); setSelected(id)
             }
             else await editPost(editing.id, { text: n.text, note: n.note, look: n.look, image: n.image ?? null })
