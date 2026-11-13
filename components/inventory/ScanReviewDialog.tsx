@@ -135,14 +135,14 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
     setSaving(true)
     setError(null)
     const known: Card[] = [...allCards]
-    // The inventory lists newest first: the first card scanned gets the latest time, so the
-    // batch reads top to bottom in the order it was scanned
+    // The inventory lists newest first: the last card scanned gets the latest time, so it sits on
+    // top — like adding the cards one by one (the owner asked for this, 2026-11-13)
     const startedAt = Date.now()
     let done = 0
     try {
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]
-        const now = new Date(startedAt - i).toISOString()
+        const now = new Date(startedAt - (rows.length - 1 - i)).toISOString()
         const cr = rowsFor(row) as CardSearchResult[]
         const { result, price, isFoil } = picked(row, cr)
         const match = row.options[row.choice]

@@ -169,6 +169,12 @@ About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
     chips as Add Card;
   - then each card's printing, condition and quantity. A card scanned twice in the same condition
     becomes one row with quantity 2.
+  - "Add N" saves the batch so the **last card scanned is the newest**: it sits on top of the
+    Inventory (newest first), just like adding the cards one by one. The owner asked for this on
+    2026-11-13; before that, the first card scanned was on top.
+- **Screen stays awake** while the scanner is open: on the iPhone `isIdleTimerDisabled` is on from
+  `viewDidAppear` to `viewWillDisappear`; on Android `FLAG_KEEP_SCREEN_ON` is set on the scanner
+  dialog. Normal auto-lock comes back when the scanner closes.
 
 ## Graded slabs: the cert number (2026-11-11)
 

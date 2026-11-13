@@ -573,8 +573,16 @@ final class ScannerViewController: UIViewController, AVCaptureVideoDataOutputSam
         searchWaiting.removeValue(forKey: requestId)?(options)
     }
 
+    // While the scanner is up the screen never dims or locks (scanning a stack hands-free can go
+    // past the auto-lock time); normal auto-lock comes back as soon as it closes
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        UIApplication.shared.isIdleTimerDisabled = false
         setTorch(on: false)
         motion.stopDeviceMotionUpdates()
         sessionQueue.async { if self.session.isRunning { self.session.stopRunning() } }
