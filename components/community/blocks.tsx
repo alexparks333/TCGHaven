@@ -47,6 +47,17 @@ export function timeAgo(ms: number) {
   return d < 30 ? `${d} day${d === 1 ? '' : 's'} ago` : new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/** timeAgo, phone-short: "now", "5m", "3h", "2d", "4w" */
+function shortAgo(ms: number) {
+  const m = Math.round((Date.now() - ms) / 60000)
+  if (m < 1) return 'now'
+  if (m < 60) return m + 'm'
+  const h = Math.round(m / 60)
+  if (h < 24) return h + 'h'
+  const d = Math.round(h / 24)
+  return d < 30 ? d + 'd' : Math.round(d / 7) + 'w'
+}
+
 /** One block, as fans see it */
 export function BlockView({ block, ctx }: { block: Block; ctx: BlockContext }) {
   switch (block.type) {
@@ -101,32 +112,61 @@ export function AchievementBoard({ community, book, title, sample }: { community
   const defOf = (id: string) => book?.badges.find((b) => b.id === id)
   const shown = (list ?? []).filter((a) => defOf(a.badge)) // badges still in the book
   return (
-    <Section title={title || 'Badge Achievements'} icon={<Trophy size={19} className="text-[#b8862b]" />} sub="The newest members to earn a badge from this book.">
-      {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
-        : shown.length === 0 ? <p className="text-sm text-slate-500">No one has earned a badge yet — collect the cards and be the first.</p>
+    <section className="relative overflow-hidden rounded-2xl text-[#efe3c8] ring-1 ring-[#d6b168]/25 shadow-[0_22px_44px_-24px_rgba(20,12,4,0.85)]"
+      style={{ background: 'radial-gradient(120% 80% at 50% -10%, #3a2a18 0%, #1d150d 55%, #140e08 100%)' }}>
+      {/* a faint gold sheen along the top edge */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#e7c37a]/70 to-transparent" />
+      <header className="flex items-center gap-3 px-5 md:px-6 pt-5 pb-4">
+        <span className="w-9 h-9 rounded-lg flex items-center justify-center bg-gradient-to-b from-[#e9c77e] to-[#a8771f] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_2px_6px_rgba(0,0,0,0.5)]">
+          <Trophy size={18} className="text-[#2a1c0c]" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="pinbook-serif text-base sm:text-lg md:text-xl font-bold tracking-wide text-[#f3dfae] leading-tight">{title || 'Badge Achievements'}</h2>
+          <p className="text-[11px] text-[#a8957a]">The newest badges earned from this book</p>
+        </div>
+        <span className="flex items-center gap-1.5 rounded-full bg-[#e7c37a]/10 ring-1 ring-[#e7c37a]/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#e7c37a]">
+          <span className="relative flex w-1.5 h-1.5"><span className="absolute inset-0 rounded-full bg-[#7fdc8a] animate-ping opacity-70" /><span className="relative w-1.5 h-1.5 rounded-full bg-[#7fdc8a]" /></span>
+          Live
+        </span>
+      </header>
+      {list === null ? <div className="px-6 pb-6"><Loader2 size={18} className="animate-spin text-[#a8957a]" /></div>
+        : shown.length === 0 ? <p className="px-6 pb-6 text-sm text-[#a8957a]">No one has earned a badge yet — collect the cards and be the first.</p>
         : (
-          <ol className="space-y-2">
-            {shown.map((a, i) => {
-              const def = defOf(a.badge)!
-              return (
-                <li key={a.member + a.badge} className={cn('flex items-center gap-3 rounded-xl p-2.5', i === 0 ? 'bg-[#f6e7c4] border border-[#d6b168]/60' : 'hover:bg-slate-900/50')}>
-                  <span className="relative shrink-0 w-12 h-[54px] flex items-center justify-center drop-shadow-[0_3px_4px_rgba(0,0,0,0.35)]">
-                    <BadgePin art={def.art} imageUrl={def.imageUrl} size={46} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm text-ink truncate">
-                      <Link href={a.profile ? profilePath(a.member, a.profile.username) : '#'} className="font-bold hover:underline">{a.profile?.displayName ?? 'A collector'}</Link>
-                      <span className="text-slate-500"> earned </span><b className="pinbook-serif">{def.name}</b>
+          <div className="px-3 md:px-4 pb-4">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] gap-3 px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a785e]">
+              <span>Collector</span><span className="sm:block">Badge</span><span className="text-right">Earned</span>
+            </div>
+            <ol className="space-y-1">
+              {shown.map((a, i) => {
+                const def = defOf(a.badge)!
+                const name = a.profile?.displayName ?? 'A collector'
+                return (
+                  <li key={a.member + a.badge}
+                    className={cn('relative grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] items-center gap-3 h-12 sm:h-11 px-3 rounded-lg transition-colors',
+                      i === 0 ? 'bg-gradient-to-r from-[#e7c37a]/[0.16] via-[#e7c37a]/[0.06] to-transparent ring-1 ring-[#e7c37a]/30'
+                        : i % 2 ? 'bg-white/[0.035] hover:bg-white/[0.07]' : 'bg-white/[0.015] hover:bg-white/[0.07]')}>
+                    {i === 0 && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-[#e7c37a] shadow-[0_0_8px_#e7c37a]" />}
+                    <Link href={a.profile ? profilePath(a.member, a.profile.username) : '#'} className="flex items-center gap-2.5 min-w-0 group">
+                      <span className="shrink-0 rounded-full ring-1 ring-[#e7c37a]/40"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} /></span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-semibold text-[#f3e7cf] group-hover:text-[#f3dfae] group-hover:underline underline-offset-2">{name}</span>
+                        <span className="sm:hidden block truncate pinbook-serif text-[11px] font-bold text-[#e7c37a]">{def.name}</span>
+                      </span>
+                    </Link>
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="relative shrink-0 w-8 h-9 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">
+                        <BadgePin art={def.art} imageUrl={def.imageUrl} size={30} />
+                      </span>
+                      <span className="hidden sm:block truncate pinbook-serif text-[13px] font-bold text-[#e7c37a]">{def.name}</span>
                     </span>
-                    <span className="block text-[11px] text-slate-500">{timeAgo(a.earnedAt)}{i === 0 && ' · newest'}</span>
-                  </span>
-                  <Avatar seed={a.member} name={a.profile?.displayName ?? 'Collector'} photoURL={a.profile?.photoURL} size={32} />
-                </li>
-              )
-            })}
-          </ol>
+                    <span className="text-right text-[11px] tabular-nums whitespace-nowrap text-[#a8957a]"><span className={cn(i === 0 && 'text-[#e7c37a] font-semibold')}><span className="hidden sm:inline">{timeAgo(a.earnedAt)}</span><span className="sm:hidden">{shortAgo(a.earnedAt)}</span></span></span>
+                  </li>
+                )
+              })}
+            </ol>
+          </div>
         )}
-    </Section>
+    </section>
   )
 }
 
