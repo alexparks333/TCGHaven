@@ -1091,6 +1091,11 @@
   35% { max-height: 48px; opacity: 0; transform: translateX(-28px); }
   100% { max-height: 48px; opacity: 1; transform: none; }
 }
+@keyframes board-row-leave {
+  0% { max-height: 48px; opacity: 1; }
+  45% { opacity: 0; transform: translateX(28px); }
+  100% { max-height: 0; opacity: 0; transform: translateX(28px); border-bottom-width: 0; }
+}
 @keyframes board-row-flash { 0%, 40% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes board-pin-pop {
   0%, 40% { transform: scale(0.2) rotate(-24deg); opacity: 0; }
@@ -1099,9 +1104,11 @@
 }
 .board-row-in { animation: board-row-in 0.45s ease-out backwards; }
 .board-row-arrive { animation: board-row-arrive 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; overflow: hidden; }
+.board-row-leave { animation: board-row-leave 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards; overflow: hidden; }
 .board-row-flash { animation: board-row-flash 2.4s ease-out forwards; }
 .board-pin-pop { animation: board-pin-pop 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) {
   .board-row-in, .board-row-arrive, .board-row-flash, .board-pin-pop { animation: none; }
+  .board-row-leave { display: none; }
   .board-row-flash { opacity: 0; }
 }

@@ -43,7 +43,9 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   leaderboard (`AchievementBoard`): rows of collector · badge · time ago; the first load fades in row by row,
   a new earner slides in at the top with a gold flash and a pin pop (`board-row-*` in globals.css). Testing:
   the Dev panel's **Community** tab sends fake earners to every board on the page (`lib/devBoard.ts`, a
-  window event — this device only, nothing saved, dev server only).
+  window event — this device only, nothing saved, dev server only); it also adds fake Members. The board keeps the
+  newest 6: when a 7th arrives the oldest slides off the bottom (`board-row-leave`). Every real name on the board
+  and in Members links to the profile (`profilePath`, falling back to /profile/{uid}).
 - **Community page blocks** (2026-11-12, `lib/communityBlocks.ts`, drawn by `components/community/blocks.tsx`).
   Every tab is an ordered list of blocks: **About** (the community's description), **Badge Achievements**
   (newest earners), **Creator Wall** (the creator's own posts — text and a picture, newest first, up to

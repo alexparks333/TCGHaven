@@ -121,7 +121,7 @@ function BlockBody({ block, ctx }: { block: Block; ctx: BlockContext }) {
 }
 
 interface BoardRow { key: string; member: string; badge: string; earnedAt: number; profile: Profile | null; fake?: boolean }
-const BOARD_ROWS = 10
+const BOARD_ROWS = 6 // the newest six; when a seventh arrives the oldest slides off the bottom
 
 /** Badge Achievements: a dark leaderboard of the newest members to earn one of this creator's badges. It
  *  stays live (watchAchievements): a new earner slides in at the top with a gold flash and their pin pops
@@ -173,6 +173,19 @@ export function AchievementBoard({ community, book, title, sample }: { community
   shown.forEach((a) => { if (!entry.current.has(a.key)) entry.current.set(a.key, loaded.current ? "arrive" : "in") })
   useEffect(() => { if (real !== null) loaded.current = true }, [real])
 
+  // A row pushed off the bottom stays a moment to slide away (board-row-leave)
+  const [leaving, setLeaving] = useState<BoardRow[]>([])
+  const before = useRef<BoardRow[]>([])
+  const shownKeys = shown.map((a) => a.key).join()
+  useEffect(() => {
+    const gone = before.current.filter((r) => !shown.some((a) => a.key === r.key))
+    before.current = shown
+    if (!gone.length) return
+    setLeaving((l) => [...l, ...gone])
+    const t = setTimeout(() => setLeaving((l) => l.filter((r) => !gone.includes(r))), 900)
+    return () => clearTimeout(t)
+  }, [shownKeys]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const cols = 'grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] items-center gap-3'
   return (
     <Section title={title || 'Badge Achievements'} icon={<Trophy size={19} />} sub="The newest badges earned from this book.">
@@ -184,24 +197,30 @@ export function AchievementBoard({ community, book, title, sample }: { community
               <span>Collector</span><span>Badge</span><span className="text-right">Earned</span>
             </div>
             <ol>
-              {shown.map((a, i) => {
+              {[...shown, ...leaving.filter((r) => !shown.some((a) => a.key === r.key))].map((a, i) => {
+                const out = i >= shown.length // sliding off the bottom
                 const def = defOf(a.badge)!
                 const name = a.profile?.displayName ?? 'A collector'
                 const how = entry.current.get(a.key)
                 return (
                   <li key={a.key}
                     className={cn(cols, 'relative h-12 sm:h-11 px-3 border-b border-[color:var(--b-hair)] last:border-b-0 transition-colors duration-700',
-                      i === 0 ? 'bg-[color:var(--b-tint)]' : 'hover:bg-[color:var(--b-hover)]', how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
-                    style={how === 'in' ? { animationDelay: `${i * 70}ms` } : undefined}>
+                      i === 0 ? 'bg-[color:var(--b-tint)]' : 'hover:bg-[color:var(--b-hover)]', out ? 'board-row-leave pointer-events-none' : how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
+                    style={how === 'in' && !out ? { animationDelay: `${i * 70}ms` } : undefined}>
                     {how === 'arrive' && <span className="board-row-flash absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--b-accent) 40%, transparent), color-mix(in srgb, var(--b-accent) 15%, transparent) 50%, transparent)' }} />}
                     {i === 0 && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[color:var(--b-accent)]" />}
-                    <Link href={a.profile?.username ? profilePath(a.member, a.profile.username) : '#'} className="relative flex items-center gap-2.5 min-w-0 group">
+                    {(() => {
+                      const who = (<>
                       <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} /></span>
                       <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-[color:var(--b-title)] group-hover:underline underline-offset-2">{name}</span>
+                        <span className="block truncate text-[13px] font-semibold text-[color:var(--b-title)] group-hover:underline underline-offset-2 decoration-[color:var(--b-accent)]">{name}</span>
                         <span className="sm:hidden block truncate [font-family:var(--b-title-font)] text-[11px] font-bold text-[color:var(--b-accent)]">{def.name}</span>
                       </span>
-                    </Link>
+                      </>)
+                      // Every real member's name opens their profile (fake dev earners have none)
+                      return a.fake ? <span className="relative flex items-center gap-2.5 min-w-0">{who}</span>
+                        : <Link href={profilePath(a.member, a.profile?.username)} title={`View ${name}'s profile`} className="relative z-[1] flex items-center gap-2.5 min-w-0 group rounded-md">{who}</Link>
+                    })()}
                     <span className="relative flex items-center gap-2 min-w-0">
                       <span className={cn('relative shrink-0 w-8 h-9 flex items-center justify-center', how === 'arrive' && 'board-pin-pop')}>
                         <BadgePin art={def.art} imageUrl={def.imageUrl} size={30} />

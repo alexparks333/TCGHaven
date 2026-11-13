@@ -17,3 +17,13 @@ export function sendDevEarner(e: DevEarner = fakeEarner()) {
   window.dispatchEvent(new CustomEvent<DevEarner>(DEV_EARNER_EVENT, { detail: e }))
 }
 export function clearDevEarners() { window.dispatchEvent(new Event(DEV_EARNER_CLEAR_EVENT)) }
+
+// Fake members for the Members column, the same way (Dev panel → Community → Members)
+export const DEV_MEMBER_EVENT = 'tcghaven-dev-member'
+export const DEV_MEMBER_CLEAR_EVENT = 'tcghaven-dev-member-clear'
+export interface DevMember { key: string; name: string; at: number; badges: number /* 0–1: share of the book's badges */; cards: number }
+export function sendDevMember(name?: string) {
+  const e: DevMember = { ...fakeEarner(name), badges: Math.random(), cards: Math.floor(Math.random() * 40) }
+  window.dispatchEvent(new CustomEvent<DevMember>(DEV_MEMBER_EVENT, { detail: e }))
+}
+export function clearDevMembers() { window.dispatchEvent(new Event(DEV_MEMBER_CLEAR_EVENT)) }

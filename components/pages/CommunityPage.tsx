@@ -18,6 +18,8 @@ import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestMembers
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
+import { blockLook } from '@/lib/blockStyle'
+import { DEV_MEMBER_EVENT, DEV_MEMBER_CLEAR_EVENT, type DevMember } from '@/lib/devBoard'
 import { Divider } from '@/components/creator/Ornaments'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
 import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
@@ -228,12 +230,13 @@ function BlockBuilder({ blocks, ctx, builder }: { blocks: Block[]; ctx: BlockCon
       <Insert at={0} />
       {blocks.map((b, i) => {
         const on = builder.selected === b.id
+        const radius = { borderRadius: blockLook(b.type, b.style).radius } // the outline follows the block's roundness
         return (
           <div key={b.id}>
-            <div className={cn('group/blk relative rounded-[18px] transition-shadow', on ? 'shadow-[0_0_0_3px_#7a5230]' : 'hover:shadow-[0_0_0_2px_rgba(122,82,48,0.55)]')}>
+            <div style={radius} className={cn('group/blk relative transition-shadow', on ? 'shadow-[0_0_0_3px_#7a5230]' : 'hover:shadow-[0_0_0_2px_rgba(122,82,48,0.55)]')}>
               <BlockView block={b} ctx={ctx} />
               {/* clicks select the block (the block's own links and buttons are for fans) */}
-              <button type="button" onClick={() => builder.onSelect(b.id)} className="absolute inset-0 z-10 rounded-[18px] cursor-pointer" aria-label={`Edit ${blockName(b.type)}`} />
+              <button type="button" onClick={() => builder.onSelect(b.id)} style={radius} className="absolute inset-0 z-10 cursor-pointer" aria-label={`Edit ${blockName(b.type)}`} />
               <div className={cn('absolute -top-3.5 left-4 right-4 z-20 flex items-center gap-1 transition-opacity', on ? 'opacity-100' : 'opacity-0 group-hover/blk:opacity-100')}>
                 <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[11px] font-bold shadow">{blockName(b.type)}</span>
                 <span className="flex-1" />
@@ -282,7 +285,7 @@ function ShowcaseBook({ book, onOpen }: { book: CreatorBook; onOpen: () => void 
   )
 }
 
-interface RankedMember { uid: string; profile: Profile | null; badges: number; cards: number; hidden: boolean; joinedAt: number }
+interface RankedMember { uid: string; profile: Profile | null; badges: number; cards: number; hidden: boolean; joinedAt: number; fake?: boolean /* a Dev panel member */ }
 
 /** The community's members, top collectors first: most of this book's badges earned, then the most
  *  cards collected toward them (from each member's shared badges; members who keep theirs private
@@ -313,41 +316,62 @@ export function MembersColumn({ community, book, members, sample }: { community:
       .catch(() => { if (live) setList([]) })
     return () => { live = false }
   }, [community, ids, members, sample])
-  const shown = list ? (all ? list : list.slice(0, 12)) : []
+  // Dev panel → Community → Members: fake members on this device (dev server only)
+  const [fakes, setFakes] = useState<RankedMember[]>([])
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+    const total = ids ? ids.split(',').length : 0
+    const add = (e: Event) => {
+      const d = (e as CustomEvent<DevMember>).detail
+      const profile = { uid: d.key, username: '', displayName: d.name, photoURL: '', bio: '', privacy: { cardex: false, badges: false }, pinDisplay: [] }
+      setFakes((f) => [...f, { uid: d.key, profile, hidden: false, joinedAt: d.at, badges: Math.round(d.badges * total), cards: d.cards, fake: true }])
+    }
+    const clear = () => setFakes([])
+    window.addEventListener(DEV_MEMBER_EVENT, add)
+    window.addEventListener(DEV_MEMBER_CLEAR_EVENT, clear)
+    return () => { window.removeEventListener(DEV_MEMBER_EVENT, add); window.removeEventListener(DEV_MEMBER_CLEAR_EVENT, clear) }
+  }, [ids])
+  const ranked = list === null ? null : [...list, ...fakes].sort((a, b) => Number(a.hidden) - Number(b.hidden) || b.badges - a.badges || b.cards - a.cards || a.joinedAt - b.joinedAt)
+  const shown = ranked ? (all ? ranked : ranked.slice(0, 12)) : []
   const medal = ['#d6b168', '#c7ccd3', '#c08552']
   return (
     <section className="haven-panel haven-grain relative w-full !p-5">
       <div className="flex items-baseline justify-between">
         <h2 className="pinbook-serif text-xl font-bold text-ink">Members</h2>
-        <span className="text-xs text-slate-500 tabular-nums">{members ?? list?.length ?? '–'}</span>
+        <span className="text-xs text-slate-500 tabular-nums">{members === null && !list ? '–' : (members ?? list?.length ?? 0) + fakes.length}</span>
       </div>
       <p className="text-[11px] text-slate-500">Top collectors first</p>
       <Divider className="mt-2.5 mb-3" />
       {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
-        : list.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
+        : ranked!.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
         : (
           <ol className="space-y-1">
             {shown.map((m, i) => (
               <li key={m.uid}>
-                <Link href={m.profile ? profilePath(m.uid, m.profile.username) : '#'} className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 hover:bg-[#f6eedb]">
+                {(() => {
+                  const row = (<>
                   <span className={cn('w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold tabular-nums', !m.hidden && i < 3 ? 'text-[#2b2014] shadow-[inset_0_-2px_3px_rgba(0,0,0,0.2)]' : 'text-slate-500')}
                     style={!m.hidden && i < 3 ? { background: `radial-gradient(circle at 35% 30%, #fff8e0, ${medal[i]} 60%)` } : undefined}>
                     {m.hidden ? '–' : i + 1}
                   </span>
                   <Avatar seed={m.uid} name={m.profile?.displayName ?? 'Collector'} photoURL={m.profile?.photoURL} size={30} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-ink truncate">{m.profile?.displayName ?? 'Collector'}</span>
+                    <span className="block text-sm font-semibold text-ink truncate group-hover:underline underline-offset-2">{m.profile?.displayName ?? 'Collector'}</span>
                     <span className="block text-[11px] text-slate-500 truncate">
                       {m.hidden ? 'Badges kept private' : `${m.badges} badge${m.badges === 1 ? '' : 's'} · ${m.cards} card${m.cards === 1 ? '' : 's'}`}
                     </span>
                   </span>
-                </Link>
+                  </>)
+                  // Every member's name opens their profile (fake dev members have none)
+                  return m.fake ? <div className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5">{row}</div>
+                    : <Link href={profilePath(m.uid, m.profile?.username)} title={`View ${m.profile?.displayName ?? 'this collector'}'s profile`} className="group flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 hover:bg-[#f6eedb]">{row}</Link>
+                })()}
               </li>
             ))}
           </ol>
         )}
-      {list && list.length > 12 && (
-        <button type="button" onClick={() => setAll((a) => !a)} className="mt-2 w-full text-xs font-semibold text-[#7a5230] hover:underline">{all ? 'Show fewer' : `Show all ${list.length}`}</button>
+      {ranked && ranked.length > 12 && (
+        <button type="button" onClick={() => setAll((a) => !a)} className="mt-2 w-full text-xs font-semibold text-[#7a5230] hover:underline">{all ? 'Show fewer' : `Show all ${ranked.length}`}</button>
       )}
     </section>
   )

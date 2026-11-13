@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award, Trophy, Sparkles, Trash2 } from 'lucide-react'
-import { fakeEarner, sendDevEarner, clearDevEarners } from '@/lib/devBoard'
+import { Wrench, Minus, Loader2, UserPlus, UserCheck, UserMinus, BookOpen, ExternalLink, BellRing, RefreshCw, Award, Trophy, Sparkles, Trash2, Users } from 'lucide-react'
+import { fakeEarner, sendDevEarner, clearDevEarners, sendDevMember, clearDevMembers } from '@/lib/devBoard'
 import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT, readDevBadgePct } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -60,6 +60,11 @@ function Panel({ uid }: { uid: string }) {
   function addEarner() {
     sendDevEarner(fakeEarner(earnerName)); setEarnerName('')
     setMessage('Sent — watch the Badge Achievements board.')
+  }
+  const [memberName, setMemberName] = useState('')
+  function addMember() {
+    sendDevMember(memberName); setMemberName('')
+    setMessage('Joined — watch the Members column.')
   }
   async function addBurst() {
     setBurst(true)
@@ -132,7 +137,7 @@ function Panel({ uid }: { uid: string }) {
 
   return (
     <div
-      className={cn('fixed z-[55] md:!bottom-4 w-[min(300px,calc(100vw-24px))] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden', position)}
+      className={cn('fixed z-[55] md:!bottom-4 w-[min(300px,calc(100vw-24px))] max-h-[calc(100dvh-110px)] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl', position)}
       style={bottom}
     >
       <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-950">
@@ -169,10 +174,25 @@ function Panel({ uid }: { uid: string }) {
           <button onClick={() => { clearDevEarners(); setMessage('Fake earners cleared.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
             <Trash2 size={15} />Clear fake earners
           </button>
-          <Link href={`/c/${uid}`} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+
+          <div className="flex items-center gap-2 text-xs font-bold text-ink px-1 mt-2 mb-1"><Users size={13} />Members</div>
+          <div className="flex gap-1.5">
+            <input value={memberName} onChange={(e) => setMemberName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addMember() }}
+              placeholder="Name (blank = random)" maxLength={40}
+              className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-2 text-[13px] text-ink placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-slate-600" />
+            <button onClick={addMember} className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-3 text-[13px] font-semibold">Join</button>
+          </div>
+          <button onClick={() => { for (let i = 0; i < 5; i++) sendDevMember(); setMessage('Five members joined.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+            <UserPlus size={15} />Five members join
+          </button>
+          <button onClick={() => { clearDevMembers(); setMessage('Fake members cleared.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
+            <Trash2 size={15} />Clear fake members
+          </button>
+
+          <Link href={`/c/${uid}`} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink mt-2')}>
             <ExternalLink size={15} />Open my community page
           </Link>
-          <span className="text-[10px] text-slate-500 px-1">Fake earners get a random badge from your book and show on every board on this page — this device only, nothing is saved, a reload clears them.</span>
+          <span className="text-[10px] text-slate-500 px-1">Fake earners get a random badge from your book; fake members a random number of your badges and cards. Only on this device — nothing is saved, a reload clears them.</span>
           {message && <div className="text-[11px] text-slate-400 px-1 pt-1">{message}</div>}
         </div>
       ) : (
