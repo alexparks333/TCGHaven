@@ -3,7 +3,8 @@
 // The Creator Wall's board (docs/creators.md "Creator Wall"): notes hang wherever the owner pinned them — moved,
 // turned and sized by hand, overlapping like a real corkboard — not in rows. The board is BOARD_W units wide and
 // drawn scaled to fit the page, so it looks the same on any computer. A note the owner hasn't placed yet is hung
-// on its own (a loose, tilted column layout below the placed ones). On a narrow screen the notes stack instead.
+// on its own (a loose, tilted column layout below the placed ones). A phone shows the very same board, scaled down to
+// fit — tap a note to read it full size.
 //
 // Arranging (the owner, on their own page): drag a note to move it, the round handle above it to turn it, its
 // corner to make it bigger or smaller. Each change is saved when you let go (post.place: NotePlace).
@@ -16,7 +17,6 @@ import { cn } from '@/lib/utils'
 
 export const BOARD_W = 900
 export const NOTE_W = 270
-const NARROW = 560 // below this width (px) the notes stack
 type Item = WallPost & { live?: boolean }
 type Drag = { id: string; kind: 'move' | 'turn' | 'size'; px: number; py: number; start: NotePlace; cx: number; cy: number; a0: number; d0: number }
 
@@ -46,7 +46,6 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
     return () => ro.disconnect()
   }, [])
   const k = cw / BOARD_W
-  const narrow = cw > 0 && cw < NARROW
 
   // each note's height (unscaled), so the board is tall enough and loose notes don't land on each other
   const ro = useRef<ResizeObserver | null>(null)
@@ -124,17 +123,6 @@ export function WallBoard({ posts, arranging, selected, onSelect, tiltK, columns
     moved.current = lifted.z !== pl.z
     if (moved.current) setDrafts((x) => ({ ...x, [p.id]: lifted }))
     drag.current = { id: p.id, kind, px: e.clientX, py: e.clientY, start: lifted, cx, cy, a0: angle(cx, cy, e.clientX, e.clientY), d0: Math.max(20, Math.hypot(e.clientX - cx, e.clientY - cy)) }
-  }
-
-  if (narrow) {
-    // a phone: the notes one under another, still a little turned
-    return (
-      <div ref={box} className="flex flex-col gap-8 pt-3">
-        {posts.map((p) => (
-          <div key={p.id} className="mx-auto w-full max-w-[340px]" style={{ rotate: `${clamp(places[p.id]?.r ?? 0, -4, 4)}deg` }} onClick={() => onOpen(p)}>{renderNote(p)}</div>
-        ))}
-      </div>
-    )
   }
 
   return (

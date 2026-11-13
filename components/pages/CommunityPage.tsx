@@ -113,7 +113,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
     setTimeout(() => { fromRect.current = showRef.current?.getBoundingClientRect() ?? null; setOpen(true) }, 200)
   }
   return (
-    <div className="flex flex-col pb-12">
+    <div className="relative flex flex-col pb-12">
       {/* The header — the creator's picture (or colour) */}
       <div className="relative">
         <CommunityHeader community={community} className="rounded-3xl shadow-[0_24px_50px_-28px_rgba(40,25,10,0.8)]" />
@@ -130,7 +130,8 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         {/* ── Who it is ── */}
         <div className="min-w-0 lg:col-start-1 lg:row-start-1 px-2 md:px-4">
           {/* beside the emblem (below it on a phone) */}
-          <div className="pt-16 sm:pt-4 sm:pl-[124px] md:pl-[164px]">
+          {/* clear of the book on the right (phones and tablets) */}
+          <div className={cn('pt-16 sm:pt-4 sm:pl-[124px] md:pl-[164px]', book && 'pr-[128px] sm:pr-[180px] lg:pr-0')}>
             <div className="min-w-0">
               <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">Community</p>
               <h1 className="pinbook-serif text-3xl md:text-[40px] font-bold text-ink leading-[1.05] mt-0.5">{community.name}</h1>
@@ -183,7 +184,9 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         </div>
 
         {/* ── The book: a big picture of it, slanted on the page, over the header's corner ── */}
-        <aside className="lg:col-start-2 lg:row-start-1 lg:-mt-48 relative z-10 flex flex-col items-center">
+        {/* On a phone or tablet it sits the same way as on a computer — top right, over the header's corner — just
+            smaller (the header is a quarter of the page's width tall, so mt-[25%] is its bottom edge) */}
+        <aside className="absolute right-1 sm:right-4 top-0 mt-[calc(25%-74px)] sm:mt-[calc(25%-108px)] lg:relative lg:right-auto lg:-mt-48 lg:col-start-2 lg:row-start-1 z-10 flex flex-col items-center">
           {book ? <ShowcaseBook book={book} coverRef={showRef} straight={straight} away={open} onOpen={openBook} />
             : <p className="pinbook-serif text-sm text-slate-500 text-center py-6">{community.name} hasn&rsquo;t made their book yet.</p>}
         </aside>
@@ -289,7 +292,7 @@ function ShowcaseBook({ book, onOpen, coverRef, straight, away }: {
         onPointerMove={(e) => { if (e.pointerType !== 'mouse') return; const r = e.currentTarget.getBoundingClientRect(); setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }) }}
         onPointerLeave={() => setTilt(null)}
         style={away ? { visibility: 'hidden' } : undefined}
-        className="relative w-[200px] md:w-[250px] lg:w-[280px] aspect-[0.71] outline-none [perspective:1100px] cursor-pointer">
+        className="relative w-[118px] sm:w-[170px] lg:w-[280px] aspect-[0.71] outline-none [perspective:1100px] cursor-pointer">
         {/* its shadow on the page, moving opposite the tilt */}
         <span aria-hidden className="absolute left-[8%] right-[2%] bottom-[-7%] h-[12%] rounded-[50%] bg-[#2b1a0c]/40 blur-xl transition-transform duration-200"
           style={{ transform: `translateX(${(-ry - 18) * 0.6}px) scaleX(${t ? 0.92 : 1})` }} />

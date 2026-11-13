@@ -116,7 +116,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   turn°, size, stacking). **Arrange the board** (owner, computer): drag to move, the round handle turns (snaps
   straight near 0°), the corner sizes (0.55–1.9×); a picked note comes to the front; each change saves on
   letting go. A new note goes up near the top middle and the board opens for arranging with it picked. Notes
-  never placed hang in loose tilted columns from the top. Phones (board under 560px) stack the notes. Saving a change: `editPost()` (`image: null` takes the picture off). The rules
+  never placed hang in loose tilted columns from the top. A phone shows the very same board scaled down to fit (tap a note to read it full size); arranging is a computer thing. Saving a change: `editPost()` (`image: null` takes the picture off). The rules
   allow `look` on create and `image` / `look` on update. **Reactions** (`lib/wallReactions.ts`): ♥ / 👍 / 🃏 under each post, for
   members and the creator (`ctx.canReact`); `wall_reactions/{community}_{post}_{member}_{reaction}`, one live
   query per wall, counts added up in the browser, toggles shown at once. Add a reaction by adding it to
