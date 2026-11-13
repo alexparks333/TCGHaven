@@ -658,7 +658,18 @@
 .pinbook-edged .pinbook-stitch, .pinbook-edged .pinbook-rim-stitch { border-color: color-mix(in srgb, var(--edge-stitch) 75%, transparent) !important; }
 .pinbook-no-stitch .pinbook-stitch, .pinbook-no-stitch .pinbook-rim-stitch { display: none; }
 /* …and with a page picture too: the hollow is felt, never the picture behind it */
-.pinbook-patterned .pinbook-hole-felt, .pinbook-imaged .pinbook-hole-felt { display: block; background: var(--page-solid); }
+/* The hole reads like a Haven book's: the felt's own colour and grain (not a flat dark fill), a little
+   see-through so the page's picture is faintly there in the dip — the pinhole filter's floor tint and inner
+   shadow on top make it a shadowed hole, not a black cut-out */
+.pinbook-patterned .pinbook-hole-felt, .pinbook-imaged .pinbook-hole-felt {
+  display: block;
+  opacity: 0.82;
+  background-color: color-mix(in srgb, var(--page, #2a221c) 88%, black);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.11 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* On a picture page the dip is the picture itself pressed in: just shaded (with the filter's floor and
+   inner shadow), so it reads as a shadowed hole in the picture rather than a dark patch over it */
+.pinbook-imaged .pinbook-hole-felt { opacity: 1; background: rgba(0, 0, 0, 0.2); }
 /* A creator's badge shadow (Inside look → Badge shadow, insideLook() --pin-shadow) */
 .pinbook-styled .pinbook-pin-shadow { filter: var(--pin-shadow); }
 .pinbook-styled .pinbook-frame {
