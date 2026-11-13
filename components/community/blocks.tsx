@@ -211,7 +211,7 @@ export function AchievementBoard({ community, book, title, sample }: { community
                     {i === 0 && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[color:var(--b-accent)]" />}
                     {(() => {
                       const who = (<>
-                      <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} /></span>
+                      <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} className="!rounded-md" /></span>
                       <span className="min-w-0">
                         <span className="block truncate text-[13px] font-semibold text-[color:var(--b-title)] group-hover:underline underline-offset-2 decoration-[color:var(--b-accent)]">{name}</span>
                         <span className="sm:hidden block truncate [font-family:var(--b-title-font)] text-[11px] font-bold text-[color:var(--b-accent)]">{def.name}</span>

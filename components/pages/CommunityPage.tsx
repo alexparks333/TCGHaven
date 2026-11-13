@@ -333,7 +333,7 @@ export function MembersColumn({ community, book, members, sample }: { community:
   }, [ids])
   const ranked = list === null ? null : [...list, ...fakes].sort((a, b) => Number(a.hidden) - Number(b.hidden) || b.badges - a.badges || b.cards - a.cards || a.joinedAt - b.joinedAt)
   const shown = ranked ? (all ? ranked : ranked.slice(0, 12)) : []
-  const medal = ['#d6b168', '#c7ccd3', '#c08552']
+  const medal = ['#a8771f', '#7d8590', '#9a5b2e'] // flat gold, silver, bronze
   return (
     <section className="haven-panel haven-grain relative w-full !p-5">
       <div className="flex items-baseline justify-between">
@@ -345,16 +345,17 @@ export function MembersColumn({ community, book, members, sample }: { community:
       {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
         : ranked!.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
         : (
-          <ol className="space-y-1">
+          <ol>
             {shown.map((m, i) => (
-              <li key={m.uid}>
+              <li key={m.uid} className="border-b border-[#d6c49f]/70 last:border-b-0">
                 {(() => {
                   const row = (<>
-                  <span className={cn('w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold tabular-nums', !m.hidden && i < 3 ? 'text-[#2b2014] shadow-[inset_0_-2px_3px_rgba(0,0,0,0.2)]' : 'text-slate-500')}
-                    style={!m.hidden && i < 3 ? { background: `radial-gradient(circle at 35% 30%, #fff8e0, ${medal[i]} 60%)` } : undefined}>
+                  {/* rank: a flat engraved numeral — gold, silver, bronze for the top three */}
+                  <span className="w-5 shrink-0 text-center pinbook-serif text-[15px] font-bold tabular-nums leading-none"
+                    style={{ color: !m.hidden && i < 3 ? medal[i] : '#a8957a' }}>
                     {m.hidden ? '–' : i + 1}
                   </span>
-                  <Avatar seed={m.uid} name={m.profile?.displayName ?? 'Collector'} photoURL={m.profile?.photoURL} size={30} />
+                  <Avatar seed={m.uid} name={m.profile?.displayName ?? 'Collector'} photoURL={m.profile?.photoURL} size={28} className="!rounded-md" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold text-ink truncate group-hover:underline underline-offset-2">{m.profile?.displayName ?? 'Collector'}</span>
                     <span className="block text-[11px] text-slate-500 truncate">
@@ -363,8 +364,8 @@ export function MembersColumn({ community, book, members, sample }: { community:
                   </span>
                   </>)
                   // Every member's name opens their profile (fake dev members have none)
-                  return m.fake ? <div className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5">{row}</div>
-                    : <Link href={profilePath(m.uid, m.profile?.username)} title={`View ${m.profile?.displayName ?? 'this collector'}'s profile`} className="group flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 hover:bg-[#f6eedb]">{row}</Link>
+                  return m.fake ? <div className="flex items-center gap-2.5 px-1.5 py-2">{row}</div>
+                    : <Link href={profilePath(m.uid, m.profile?.username)} title={`View ${m.profile?.displayName ?? 'this collector'}'s profile`} className="group flex items-center gap-2.5 px-1.5 py-2 hover:bg-[#e8dbbd]/60">{row}</Link>
                 })()}
               </li>
             ))}
