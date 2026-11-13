@@ -744,13 +744,106 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* A creator's chapter tabs (Page Design → Chapter tabs, lib/badges.ts tabLook) */
-.pinbook-tabs-square .pinbook-tab { border-radius: 0 3px 3px 0; }
-.pinbook-tabs-pointed .pinbook-tab { border-radius: 0; padding-right: 16px; border: none; clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 50%, calc(100% - 11px) 100%, 0 100%); }
-.pinbook-tabs-ribbon .pinbook-tab { border-radius: 0; padding-right: 16px; border: none; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 50%, 100% 100%, 0 100%); }
-.pinbook-tabs-flat .pinbook-tab { text-shadow: none; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.18); }
-.pinbook-tabs-flat .pinbook-tab-shut { background-image: none; background-color: var(--tab-shut-from, var(--leather-from, #6a6e75)); }
-.pinbook-tabs-flat .pinbook-tab-open { background-image: none; background-color: var(--tab-open-b, #d3a64c); }
+/* A creator's chapter tabs (Page Design → Chapter tabs, lib/badges.ts TAB_DESIGNS / tabLook). Each design sets
+   its own colours (--d-*); a creator's picks (--tab-shut-from, --tab-open-b, --tab-ink-*) win over them. */
+[class*="pinbook-tabdesign-"] .pinbook-tabs-col { filter: drop-shadow(2px 3px 2.5px rgba(0, 0, 0, 0.38)); }
+[class*="pinbook-tabdesign-"] .pinbook-tab { position: relative; border: none; box-shadow: none; text-shadow: none; }
+[class*="pinbook-tabdesign-"] .pinbook-tab-shut { background: var(--tab-shut-from, var(--d-shut)); color: var(--tab-ink-shut, var(--d-ink-shut, #f6ead0)); }
+[class*="pinbook-tabdesign-"] .pinbook-tab-open { background: var(--tab-open-b, var(--d-open)); color: var(--tab-ink-open, var(--d-ink-open, #2e1d06)); }
+
+/* Silk ribbon: a swallowtail end, a sheen and stitching along both edges */
+.pinbook-tabdesign-ribbon { --d-shut: #7a1f2b; --d-open: #d6b168; }
+.pinbook-tabdesign-ribbon .pinbook-tab { border-radius: 0; padding-right: 17px; clip-path: polygon(0 0, 100% 0, calc(100% - 11px) 50%, 100% 100%, 0 100%); }
+.pinbook-tabdesign-ribbon .pinbook-tab-shut, .pinbook-tabdesign-ribbon .pinbook-tab-open { background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 38%, transparent 62%, rgba(0, 0, 0, 0.2)); }
+.pinbook-tabdesign-ribbon .pinbook-tab::after { content: ''; position: absolute; inset: 3px 0 3px 0; border-top: 1px dashed currentColor; border-bottom: 1px dashed currentColor; opacity: 0.45; pointer-events: none; }
+
+/* Brass plate: brushed metal in the tab's colour, two rivets, engraved letters */
+.pinbook-tabdesign-brass { --d-shut: #8f7346; --d-open: #e3c36b; --d-ink-shut: #2b1d0c; --d-ink-open: #2b1d0c; }
+.pinbook-tabdesign-brass .pinbook-tab { border-radius: 0 4px 4px 0; padding-right: 15px; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45); }
+.pinbook-tabdesign-brass .pinbook-tab-shut, .pinbook-tabdesign-brass .pinbook-tab-open {
+  background-image: radial-gradient(circle at calc(100% - 7px) 7px, rgba(0, 0, 0, 0.5) 0 1.6px, rgba(255, 255, 255, 0.5) 1.7px 2.4px, transparent 2.6px),
+    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), rgba(0, 0, 0, 0.5) 0 1.6px, rgba(255, 255, 255, 0.5) 1.7px 2.4px, transparent 2.6px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), transparent 45%, rgba(0, 0, 0, 0.25));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+/* Torn paper: a ragged edge, paper grain, ink lettering */
+.pinbook-tabdesign-parchment { --d-shut: #e3d3ad; --d-open: #f7eed6; --d-ink-shut: #3a2a16; --d-ink-open: #7a2418; }
+.pinbook-tabdesign-parchment .pinbook-tab { border-radius: 0; padding-right: 14px; font-style: italic;
+  clip-path: polygon(0 0, 91% 0, 97% 9%, 93% 20%, 100% 31%, 95% 44%, 99% 56%, 93% 68%, 98% 80%, 94% 91%, 100% 100%, 0 100%); }
+.pinbook-tabdesign-parchment .pinbook-tab-shut, .pinbook-tabdesign-parchment .pinbook-tab-open {
+  background-image: radial-gradient(circle at 30% 40%, rgba(120, 90, 50, 0.16) 0 0.8px, transparent 1.2px), radial-gradient(circle at 70% 70%, rgba(120, 90, 50, 0.12) 0 0.7px, transparent 1px);
+  background-size: 6px 6px, 9px 8px;
+}
+
+/* Wax seal: a thin ribbon ending in a round seal pressed with the chapter's numeral */
+.pinbook-tabdesign-seal { --d-shut: #8e2b22; --d-open: #c9a227; --d-ink-shut: #f3dcc8; --d-ink-open: #3b2405; }
+.pinbook-tabdesign-seal .pinbook-tab { border-radius: 0; justify-content: flex-end; padding: 0 3px 0 0; min-height: 40px; }
+.pinbook-tabdesign-seal .pinbook-tab-shut, .pinbook-tabdesign-seal .pinbook-tab-open { width: 58px; background: transparent; }
+.pinbook-tabdesign-seal .pinbook-tab-open { width: 66px; }
+.pinbook-tabdesign-seal .pinbook-tab::before { content: ''; position: absolute; left: 0; right: 20px; top: 50%; height: 9px; transform: translateY(-50%);
+  background: color-mix(in srgb, var(--tab-shut-from, var(--d-shut)) 70%, black); }
+.pinbook-tabdesign-seal .pinbook-tab::after { content: ''; position: absolute; right: 2px; top: 50%; width: 36px; height: 36px; transform: translateY(-50%); z-index: 0;
+  border-radius: 47% 53% 51% 49% / 52% 46% 54% 48%; background: inherit; background-color: var(--seal);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--seal) 78%, black), inset 0 0 0 5px color-mix(in srgb, var(--seal) 85%, white); }
+.pinbook-tabdesign-seal .pinbook-tab-shut { --seal: var(--tab-shut-from, var(--d-shut)); }
+.pinbook-tabdesign-seal .pinbook-tab-open { --seal: var(--tab-open-b, var(--d-open)); }
+.pinbook-tabdesign-seal .pinbook-tab-num { position: relative; z-index: 1; width: 36px; margin-right: 2px; font-size: 12px; opacity: 0.9; }
+.pinbook-tabdesign-seal .pinbook-tab-label { display: none !important; }
+
+/* File folder: a manila index tab with slanted ends and ruled lines */
+.pinbook-tabdesign-folder { --d-shut: #cfb47c; --d-open: #f1dca6; --d-ink-shut: #3a2a16; --d-ink-open: #3a2a16; }
+.pinbook-tabdesign-folder .pinbook-tab { border-radius: 0; padding-right: 14px; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%); }
+.pinbook-tabdesign-folder .pinbook-tab-shut, .pinbook-tabdesign-folder .pinbook-tab-open { background-image: repeating-linear-gradient(180deg, transparent 0 7px, rgba(90, 60, 30, 0.13) 7px 8px); }
+
+/* Cut jewel: a faceted point that catches the light */
+.pinbook-tabdesign-gem { --d-shut: #2c4f7a; --d-open: #1f7a55; --d-ink-shut: #eef3fa; --d-ink-open: #effaf4; }
+.pinbook-tabdesign-gem .pinbook-tab { border-radius: 0; padding-right: 18px; clip-path: polygon(0 0, calc(100% - 15px) 0, 100% 50%, calc(100% - 15px) 100%, 0 100%); }
+.pinbook-tabdesign-gem .pinbook-tab-shut, .pinbook-tabdesign-gem .pinbook-tab-open {
+  background-image: linear-gradient(160deg, rgba(255, 255, 255, 0.4), transparent 35%), linear-gradient(20deg, rgba(0, 0, 0, 0.35), transparent 45%),
+    linear-gradient(115deg, transparent 60%, rgba(255, 255, 255, 0.18) 60% 70%, transparent 70%);
+}
+
+/* Luggage tag: kraft card with clipped corners and a punched hole */
+.pinbook-tabdesign-tag { --d-shut: #b38a5a; --d-open: #efe2c4; --d-ink-shut: #2e1d0c; --d-ink-open: #2e1d0c; }
+.pinbook-tabdesign-tag .pinbook-tab { border-radius: 0; padding-right: 20px;
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% calc(100% - 11px), calc(100% - 11px) 100%, 0 100%);
+  -webkit-mask: radial-gradient(circle at calc(100% - 9px) 50%, transparent 3.4px, #000 4px); mask: radial-gradient(circle at calc(100% - 9px) 50%, transparent 3.4px, #000 4px); }
+.pinbook-tabdesign-tag .pinbook-tab-shut, .pinbook-tabdesign-tag .pinbook-tab-open { background-image: radial-gradient(circle at calc(100% - 9px) 50%, transparent 4px, rgba(0, 0, 0, 0.25) 4.5px 5.5px, transparent 6px); }
+
+/* Stitched felt: soft felt with a dashed stitch inside its edge */
+.pinbook-tabdesign-felt { --d-shut: #3d5a40; --d-open: #c9a227; --d-ink-shut: #f3ead2; --d-ink-open: #2b2208; }
+.pinbook-tabdesign-felt .pinbook-tab { border-radius: 0 12px 12px 0; padding-right: 12px; }
+.pinbook-tabdesign-felt .pinbook-tab::after { content: ''; position: absolute; inset: 4px 5px 4px -4px; border: 1.5px dashed currentColor; border-left: none; border-radius: 0 8px 8px 0; opacity: 0.5; pointer-events: none; }
+.pinbook-tabdesign-felt .pinbook-tab-shut, .pinbook-tabdesign-felt .pinbook-tab-open {
+  background-image: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.07) 0 0.6px, transparent 0.9px); background-size: 3px 3px; }
+
+/* Art deco: stepped corners, gold rules, spaced capitals */
+.pinbook-tabdesign-deco { --d-shut: #1d1c22; --d-open: #d6b168; --d-ink-shut: #d6b168; --d-ink-open: #1d1c22; }
+.pinbook-tabdesign-deco .pinbook-tab { border-radius: 0; padding-right: 14px; letter-spacing: 0.08em;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, calc(100% - 7px) 5px, 100% 5px, 100% calc(100% - 5px), calc(100% - 7px) calc(100% - 5px), calc(100% - 7px) 100%, 0 100%); }
+.pinbook-tabdesign-deco .pinbook-tab::after { content: ''; position: absolute; inset: 3px 10px 3px 0; border: 1px solid currentColor; border-left: none; opacity: 0.6; pointer-events: none;
+  box-shadow: inset -2px 0 0 -1px currentColor; }
+
+/* Medallion: a rounded tab with the numeral in a struck coin */
+.pinbook-tabdesign-medallion { --d-shut: #4a2f1d; --d-open: #d6b168; --d-ink-shut: #f1dfb8; --d-ink-open: #2e1d06; }
+.pinbook-tabdesign-medallion .pinbook-tab { border-radius: 0 999px 999px 0; padding-right: 10px; gap: 5px; }
+.pinbook-tabdesign-medallion .pinbook-tab-num { order: 2; width: 22px; height: 22px; min-width: 22px; margin-left: auto; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; opacity: 1; border: 1.5px solid currentColor; box-shadow: inset 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent); }
+/* Flat (Page Design → Chapter tabs → Finish), for every design: solid colour, no shading, sheen or grain, a crisp
+   flat shadow — the shape and the design's details (seal rings, stitching, deco rules, the tag's hole) stay */
+.pinbook-tabs-flat .pinbook-tab { text-shadow: none !important; box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.2); }
+.pinbook-tabs-flat .pinbook-tab-shut, .pinbook-tabs-flat .pinbook-tab-open { background-image: none !important; }
+.pinbook-tabs-flat:not([class*="pinbook-tabdesign-"]) .pinbook-tab-shut { background-color: var(--tab-shut-from, var(--leather-from, #6a6e75)); }
+.pinbook-tabs-flat:not([class*="pinbook-tabdesign-"]) .pinbook-tab-open { background-color: var(--tab-open-b, #d3a64c); }
+.pinbook-tabs-flat[class*="pinbook-tabdesign-"] .pinbook-tab { box-shadow: none; }
+.pinbook-tabs-flat[class*="pinbook-tabdesign-"] .pinbook-tabs-col { filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.22)); }
+.pinbook-tabs-flat.pinbook-tabdesign-brass .pinbook-tab-shut, .pinbook-tabs-flat.pinbook-tabdesign-brass .pinbook-tab-open {
+  background-image: radial-gradient(circle at calc(100% - 7px) 7px, rgba(0, 0, 0, 0.45) 0 2px, transparent 2.3px),
+    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), rgba(0, 0, 0, 0.45) 0 2px, transparent 2.3px) !important;
+}
+.pinbook-tabs-flat.pinbook-tabdesign-seal .pinbook-tab::after { box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--seal) 78%, black); }
 .pinbook-tabs-numbers .pinbook-tab-label { display: none !important; }
 .pinbook-tabs-numbers .pinbook-tab-shut { width: 40px; }
 .pinbook-tabs-numbers .pinbook-tab-open { width: 50px; }

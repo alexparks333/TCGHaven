@@ -193,11 +193,14 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
        (`bindingParams[binding]`), Surprise and Reset. **Shown to fans only** (the pin book and Preview as a
        fan) and on the Studio's pages; the panel has a live mini preview. Unset `binding` =
        TCG Haven's original silver rings, drawn exactly as before. (The phone book keeps its own rings.)
-     - **Chapter tabs** (`InsideStyle.tabs`, `lib/badges.ts` `tabLook()` → `.pinbook-tabs-*` classes and
-       `--tab-*` variables, folded into `insideLook()`): shape (Rounded / Square / Pointed / Ribbon), finish
-       (Leather / Flat), what they show (number and name / number / name), the closed tabs' colour and the open
-       chapter's. Lettering picks cream or dark by the colour. Unset = the classic leather tabs in the cover's
-       colours with a gilded open one. The Studio's page preview shows the tabs (BadgeBook `ChapterTabs`).
+     - **Chapter tabs** (`InsideStyle.tabs`, `lib/badges.ts` `TAB_DESIGNS` / `tabLook()` → `.pinbook-tabdesign-*`
+       classes and `--tab-*` variables, folded into `insideLook()`): 11 designs — Classic leather, Silk ribbon,
+       Brass plate, Torn paper, Wax seal, File folder, Cut jewel, Luggage tag, Stitched felt, Art deco, Medallion —
+       each with its own colours (`--d-*` in its CSS); the creator can recolour the closed tabs and the open
+       chapter's (lettering picks cream or dark by the colour) and pick what they show (number and name /
+       number / name; Wax seal shows the numeral only) and the finish — Leather (shaded) or Flat (`.pinbook-tabs-flat`: no shading, sheen or grain on any design; shapes and details stay). Picking a design starts from its own colours. Clipped
+       shapes get their shadow from `.pinbook-tabs-col` (a drop-shadow on the column — clip-path would cut a
+       box-shadow). Unset = the classic tabs. The Studio's page preview shows the tabs (BadgeBook `ChapterTabs`).
      **Saving the look of the pages:** Inside look edits are a draft (CreatorPage `insideDraft`) until **Save
      page changes** (the bar under the panel; Undo all). Chapters and badges still save themselves. Changing
      tab with unsaved cover or page changes opens `LeaveDialog` (Save & continue / Discard / Keep editing);

@@ -87,18 +87,31 @@ export interface InsideStyle extends PatternLook, FrameLook, EdgeLook {
   pageImageFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (CoverDesigner PicturePlacer); unset = fills the page
   tabs?: ChapterTabStyle    // the chapter tabs on the book's right edge (Page Design → Chapter tabs); unset = the classic tabs
 }
-/** The chapter tabs' look (BadgeBook ChapterTabs; globals.css `.pinbook-tabs-*`). Unset parts keep the classic tabs:
- *  rounded leather in the cover's colours, the open chapter's gilded, numeral and name. */
+/** The chapter tabs' look (BadgeBook ChapterTabs; globals.css `.pinbook-tabdesign-*`). Unset parts keep the classic
+ *  tabs: rounded leather in the cover's colours, the open chapter's gilded, numeral and name. */
 export interface ChapterTabStyle {
-  shape?: 'rounded' | 'square' | 'pointed' | 'ribbon'
-  finish?: 'leather' | 'flat'
-  color?: string      // the closed tabs (default: the cover's leather)
-  openColor?: string  // the open chapter's tab (default: gold)
+  design?: TabDesignId // unset / 'classic' = the classic leather tabs
+  finish?: 'leather' | 'flat' // flat: any design without its shading, sheen or grain (its shape and details stay)
+  color?: string       // the closed tabs (default: the design's own — the cover's leather for classic)
+  openColor?: string   // the open chapter's tab (default: the design's own)
   labels?: 'both' | 'numbers' | 'names'
 }
-export const TAB_SHAPES = [
-  { id: 'rounded', name: 'Rounded' }, { id: 'square', name: 'Square' }, { id: 'pointed', name: 'Pointed' }, { id: 'ribbon', name: 'Ribbon' },
+export type TabDesignId = typeof TAB_DESIGNS[number]['id']
+/** The tab designs, each with its own colours (shut, open) — the Studio's picker and its colour defaults */
+export const TAB_DESIGNS = [
+  { id: 'classic', name: 'Classic leather', shut: '#6a3f22', open: '#d3a64c' },
+  { id: 'ribbon', name: 'Silk ribbon', shut: '#7a1f2b', open: '#d6b168' },
+  { id: 'brass', name: 'Brass plate', shut: '#8f7346', open: '#e3c36b' },
+  { id: 'parchment', name: 'Torn paper', shut: '#e3d3ad', open: '#f7eed6' },
+  { id: 'seal', name: 'Wax seal', shut: '#8e2b22', open: '#c9a227' },
+  { id: 'folder', name: 'File folder', shut: '#cfb47c', open: '#f1dca6' },
+  { id: 'gem', name: 'Cut jewel', shut: '#2c4f7a', open: '#1f7a55' },
+  { id: 'tag', name: 'Luggage tag', shut: '#b38a5a', open: '#efe2c4' },
+  { id: 'felt', name: 'Stitched felt', shut: '#3d5a40', open: '#c9a227' },
+  { id: 'deco', name: 'Art deco', shut: '#1d1c22', open: '#d6b168' },
+  { id: 'medallion', name: 'Medallion', shut: '#4a2f1d', open: '#d6b168' },
 ] as const
+export const tabDesignOf = (id?: string) => TAB_DESIGNS.find((d) => d.id === id) ?? TAB_DESIGNS[0]
 /** Cream or dark lettering, whichever reads on a tab of colour `hex` */
 function tabInk(hex: string) {
   const h = hex.replace('#', '').padEnd(6, '0')
@@ -109,7 +122,7 @@ function tabInk(hex: string) {
 export function tabLook(t: ChapterTabStyle | undefined): { className: string; style: Record<string, string> } {
   if (!t) return { className: '', style: {} }
   return {
-    className: [t.shape && t.shape !== 'rounded' && `pinbook-tabs-${t.shape}`, t.finish === 'flat' && 'pinbook-tabs-flat',
+    className: [t.design && t.design !== 'classic' && `pinbook-tabdesign-${t.design}`, t.finish === 'flat' && 'pinbook-tabs-flat',
       t.labels && t.labels !== 'both' && `pinbook-tabs-${t.labels}`].filter(Boolean).join(' '),
     style: {
       ...(t.color && { '--tab-shut-from': t.color, '--tab-shut-to': `color-mix(in srgb, ${t.color} 58%, black)`, '--tab-ink-shut': tabInk(t.color) }),

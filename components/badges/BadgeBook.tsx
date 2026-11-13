@@ -323,7 +323,7 @@ function ArrowButton({ side, disabled, onClick }: { side: 'left' | 'right'; disa
 // chapter's tab is gilded and stands out further; click one to turn straight to that chapter.
 export function ChapterTabs({ chapters, open, onPick }: { chapters: string[]; open: number; onPick: (i: number) => void }) {
   return (
-    <div className="absolute top-[5%] bottom-[5%] left-full z-10 flex flex-col gap-[0.8%] pointer-events-none" aria-label="Chapters">
+    <div className="pinbook-tabs-col absolute top-[5%] bottom-[5%] left-full z-10 flex flex-col gap-[0.8%] pointer-events-none" aria-label="Chapters">
       {chapters.map((name, i) => (
         <button
           key={name + i}

@@ -19,7 +19,7 @@ import { SaveBar } from '@/components/creator/SaveBar'
 import { Portal } from '@/components/creator/Portal'
 import { BINDINGS, BookBinding, bindingOf, bindingParams, type BindingDef } from '@/components/badges/BookBinding'
 import { ChevronLeft, ChevronRight, Plus, Pencil, ArrowUp, ArrowDown, Trash2, BookOpen, Palette, RotateCcw, Eye, Dices, ImagePlus, Loader2, Sparkles, Frame, Link2, Check, Sun } from 'lucide-react'
-import { INSIDE_DEFAULTS, PIN_SHADOW, TAB_SHAPES, insideLook, isLive, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type ChapterTabStyle, type InsideStyle } from '@/lib/badges'
+import { INSIDE_DEFAULTS, PIN_SHADOW, TAB_DESIGNS, tabDesignOf, tabLook, insideLook, isLive, pinShadowCss, pagePin, pinDrawSize, type BadgeDef, type BadgeSet, type ChapterTabStyle, type InsideStyle } from '@/lib/badges'
 import { BadgePin } from '@/components/badges/BadgePin'
 import { ChapterTabs } from '@/components/badges/BadgeBook'
 import { Corners } from '@/components/creator/Ornaments'
@@ -319,36 +319,62 @@ function InsidePanel({ uid, part, style, onChange, onRevert, coverImage }: { uid
 }
 
 function tabSummary(t: ChapterTabStyle | undefined) {
-  if (!t) return 'Classic leather and gold'
-  return [TAB_SHAPES.find((x) => x.id === (t.shape ?? 'rounded'))!.name, t.finish === 'flat' ? 'flat' : 'leather',
-    t.labels === 'numbers' ? 'numbers only' : t.labels === 'names' ? 'names only' : ''].filter(Boolean).join(' · ')
+  if (!t) return 'Classic leather'
+  return [tabDesignOf(t.design).name, t.finish === 'flat' ? 'flat' : '', t.labels === 'numbers' ? 'numbers only' : t.labels === 'names' ? 'names only' : ''].filter(Boolean).join(' · ')
 }
 
-/** The chapter tabs on the book's edge: their shape, finish, colours and what they show — the book beside it shows them live */
+/** The chapter tabs on the book's edge: a design, its colours and what they show — the book beside it shows them live */
 function TabsPicker({ s, set }: { s: InsideStyle; set: (p: Partial<InsideStyle>) => void }) {
   const t = s.tabs ?? {}
+  const d = tabDesignOf(t.design)
   const put = (p: Partial<ChapterTabStyle>) => set({ tabs: { ...t, ...p } })
-  const seg = <T extends string>(label: string, value: T, options: ReadonlyArray<{ id: T; name: string }>, on: (v: T) => void) => (
-    <div className="mb-3">
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{label}</p>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((o) => (
-          <button key={o.id} type="button" onClick={() => on(o.id)} aria-pressed={value === o.id}
-            className={cn('haven-chip px-2.5 py-1 text-xs font-semibold', value === o.id && 'haven-chip-on')}>{o.name}</button>
-        ))}
-      </div>
-    </div>
-  )
+  const labels = t.labels ?? 'both'
   return (
     <div>
       <p className="text-xs text-slate-500 mb-3">The tabs that stick out of your book’s edge, one per chapter. The open chapter’s tab stands out.</p>
-      {seg('Shape', t.shape ?? 'rounded', TAB_SHAPES, (v) => put({ shape: v }))}
-      {seg('Finish', t.finish ?? 'leather', [{ id: 'leather', name: 'Leather' }, { id: 'flat', name: 'Flat' }] as const, (v) => put({ finish: v }))}
-      {seg('Shows', t.labels ?? 'both', [{ id: 'both', name: 'Number and name' }, { id: 'numbers', name: 'Number only' }, { id: 'names', name: 'Name only' }] as const, (v) => put({ labels: v }))}
-      <ColorPick label="Tabs" value={t.color ?? '#6a3f22'} palette={[...EDGE_COLORS, ...ACCENT_COLORS]} onChange={(c) => put({ color: c })} />
-      <ColorPick label="Open chapter’s tab" value={t.openColor ?? '#d3a64c'} palette={[...ACCENT_COLORS, ...EDGE_COLORS]} onChange={(c) => put({ openColor: c })} />
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Design</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {TAB_DESIGNS.map((x) => {
+          const on = d.id === x.id
+          // a mini of the design: the open tab over a closed one, in this book's colours when they're picked
+          const look = tabLook({ design: x.id, finish: t.finish, color: on ? t.color : undefined, openColor: on ? t.openColor : undefined })
+          return (
+            // picking a design starts from its own colours
+            <button key={x.id} type="button" onClick={() => put({ design: x.id === 'classic' ? undefined : x.id, color: undefined, openColor: undefined })} aria-pressed={on}
+              className={cn('rounded-lg border p-1.5 text-left', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230] bg-[#f6eedb]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
+              <span className={cn('block h-[74px] rounded-[5px] bg-[#2a221c] overflow-hidden relative pointer-events-none', look.className)}
+                style={{ ...look.style, ['--leather-from' as string]: x.shut, ['--leather-to' as string]: '#2a1a10' }}>
+                <span className="absolute left-0 top-0 bottom-0 w-[18px] bg-[#5a3a22]" />
+                <span className="pinbook-tabs-col absolute left-[18px] top-[7px] flex flex-col gap-1">
+                  <span className="pinbook-tab pinbook-serif pinbook-tab-open relative flex items-center gap-1 rounded-r-xl font-bold !w-[96px]"><span className="pinbook-tab-num">I</span><span className="pinbook-tab-label">Chapter</span></span>
+                  <span className="pinbook-tab pinbook-serif pinbook-tab-shut relative flex items-center gap-1 rounded-r-xl font-bold !w-[84px]"><span className="pinbook-tab-num">II</span><span className="pinbook-tab-label">Chapter</span></span>
+                </span>
+              </span>
+              <span className={cn('block mt-1 text-[11px] font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{x.name}</span>
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-1.5">Finish</p>
+      <div className="flex flex-wrap gap-1.5">
+        {([['leather', 'Leather'], ['flat', 'Flat']] as const).map(([id, name]) => (
+          <button key={id} type="button" onClick={() => put({ finish: id === 'leather' ? undefined : id })} aria-pressed={(t.finish ?? 'leather') === id}
+            className={cn('haven-chip px-2.5 py-1 text-xs font-semibold', (t.finish ?? 'leather') === id && 'haven-chip-on')}>{name}</button>
+        ))}
+      </div>
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-1.5">Shows</p>
+      <div className="flex flex-wrap gap-1.5">
+        {([['both', 'Number and name'], ['numbers', 'Number only'], ['names', 'Name only']] as const).map(([id, name]) => (
+          <button key={id} type="button" onClick={() => put({ labels: id === 'both' ? undefined : id })} aria-pressed={labels === id}
+            className={cn('haven-chip px-2.5 py-1 text-xs font-semibold', labels === id && 'haven-chip-on')}>{name}</button>
+        ))}
+      </div>
+      <div className="mt-2">
+        <ColorPick label="Tabs" value={t.color ?? d.shut} palette={[...EDGE_COLORS, ...ACCENT_COLORS]} onChange={(c) => put({ color: c })} />
+        <ColorPick label="Open chapter’s tab" value={t.openColor ?? d.open} palette={[...ACCENT_COLORS, ...EDGE_COLORS]} onChange={(c) => put({ openColor: c })} />
+      </div>
       {s.tabs && (
-        <button type="button" onClick={() => set({ tabs: undefined })} className="mt-2 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Classic tabs</button>
+        <button type="button" onClick={() => set({ tabs: undefined })} className="mt-3 text-xs font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={12} />Classic tabs</button>
       )}
     </div>
   )
