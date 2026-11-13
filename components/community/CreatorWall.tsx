@@ -80,8 +80,9 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
     </div>
   )
 
+  // isolate: the buttons' "always above the notes" stays inside the wall — never over a popup (the note editor, an opened note)
   return (
-    <section className="relative px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6" style={board}>
+    <section className="relative isolate px-4 pt-4 pb-5 sm:px-6 sm:pt-5 sm:pb-6" style={board}>
       <header className="mb-4 flex items-start gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <h2 className="font-bold flex items-center gap-2.5 leading-tight [&>svg]:shrink-0"
