@@ -276,6 +276,9 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     camFrom = p % 2 === 1 ? -W : 0
     camTo = anim?.kind === 'pan' ? (anim.to % 2 === 1 ? -W : 0) : camFrom
   }
+  // The cover, in every state of the open book (never unmounted and redrawn): drawn under everything,
+  // so closing the book doesn't draw it mid-swing. give() keeps a role it already has.
+  if (p >= 0) give(-1, 'hidden')
   const cam = go ? camTo : camFrom
   const moving = go && (anim?.kind === 'turn' || anim?.kind === 'pan' || anim?.kind === 'shut')
   const ease = anim?.kind === 'pan' ? EASE_PAN : EASE_TURN
@@ -298,9 +301,11 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   // How a page looks in its role; `go` = the motion is running
   const half = ms / 2
   // Every page is its own layer at all times (will-change), drawn once while the book is still and
-  // then only moved. A page out of sight waits edge-on at the spine (where it's a line under the
-  // spine) rather than see-through: iPhone Safari doesn't draw a see-through layer ahead, so the
-  // landing page — pins, pinhole filters and all — was drawn mid-turn, and the turn stalled.
+  // then only moved. iPhone Safari draws only what can be seen right now: a page waiting see-through
+  // OR edge-on (a line at the spine) was never drawn ahead, so the landing page — pins, pinhole
+  // filters and all — was drawn mid-turn: black for most of the turn, then popping in nearly flat
+  // (seen in a screen recording, 2026-11-14). So a page out of sight waits flat, under the pages on
+  // its side (they're opaque), fully drawn — and only jumps edge-on as its turn starts.
   const pageStyle = (i: number, role: Role): React.CSSProperties => {
     const area: Side = i === -1 || i % 2 === 1 ? 'right' : 'left'
     const lift = area === 'right' ? -90 : 90 // edge-on, its outer edge lifted toward you
@@ -312,10 +317,10 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     switch (role) {
       case 'flat': return { ...base, zIndex: 3, transform: 'rotateY(0deg)' }
       case 'under': return { ...base, zIndex: 2, transform: 'rotateY(0deg)' }
-      case 'hidden': return { ...base, zIndex: 0, transform: 'rotateY(0deg)', opacity: 0 }
+      case 'hidden': return { ...base, zIndex: 0, transform: 'rotateY(0deg)' } // under everything, drawn
       // In the page and drawn (pictures loaded), but not a layer yet and never seen
       case 'parked': return { ...base, zIndex: 0, transform: 'rotateY(0deg)', visibility: 'hidden', willChange: 'auto' }
-      case 'ready': return { ...base, zIndex: 1, transform: `rotateY(${lift}deg)` }
+      case 'ready': return { ...base, zIndex: 1, transform: 'rotateY(0deg)' } // flat under its side's pages, drawn
       case 'front': return {
         ...base, zIndex: 15,
         transform: go ? `rotateY(${lift}deg)` : 'rotateY(0deg)',
@@ -417,7 +422,9 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           // A slight camera pull-back while the page moves — it dips away a touch and settles back.
           // Kept (invisible) during the flights too, so the first pages are drawn before the cover opens.
           <div
-            style={flying ? { opacity: 0, pointerEvents: 'none' } : undefined}
+            // 0.01, not 0: iPhone doesn't draw a fully see-through layer, so the cover and first pages
+            // were drawn only as the cover started to open (the page under it black, the rings late)
+            style={flying ? { opacity: 0.01, pointerEvents: 'none' } : undefined}
             className={cn('absolute inset-0 will-change-transform', go && anim?.kind === 'pan' && 'phonebook-pull-pan', go && anim?.kind === 'turn' && p >= 0 && 'phonebook-pull-turn', go && anim?.kind === 'shut' && 'phonebook-pull-shut')}
           >
           <div
@@ -463,14 +470,14 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
                   className="absolute top-0 pointer-events-none z-[5]"
                   style={{
                     left: anim.dir === 1 ? W : 0, width: W, height: H,
-                    background: `linear-gradient(to ${anim.dir === 1 ? 'right' : 'left'}, rgba(0,0,0,0.9), rgba(0,0,0,0.62))`,
+                    background: `linear-gradient(to ${anim.dir === 1 ? 'right' : 'left'}, rgba(0,0,0,0.72), rgba(0,0,0,0.38))`,
                   }}
                 />
                 <div
                   className="absolute top-0 pointer-events-none z-[5]"
                   style={{
                     left: anim.dir === 1 ? 0 : W, width: W, height: H,
-                    background: `linear-gradient(to ${anim.dir === 1 ? 'left' : 'right'}, rgba(0,0,0,0.92), rgba(0,0,0,0.7))`,
+                    background: `linear-gradient(to ${anim.dir === 1 ? 'left' : 'right'}, rgba(0,0,0,0.7), rgba(0,0,0,0.4))`,
                     opacity: go ? 1 : 0,
                     transition: `opacity ${half}ms ease-out`,
                   }}
@@ -482,7 +489,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
             {(p >= 0 || anim?.kind === 'turn' || anim?.kind === 'shut') && (
               <div
                 style={
-                  p === -1 ? { opacity: go ? 1 : 0, transition: `opacity ${ms}ms ease` }
+                  p === -1 ? { opacity: go ? 1 : 0.01, transition: `opacity ${ms}ms ease` } // 0.01: drawn ahead (see the scene's note)
                   : anim?.kind === 'shut' ? { opacity: go ? 0 : 1, transition: `opacity ${ms}ms ease` }
                   : undefined
                 }
