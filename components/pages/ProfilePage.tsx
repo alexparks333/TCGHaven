@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   BookOpen, Lock, Award, TrendingUp, Pencil, Check, Loader2, UserPlus, Clock, Eye, EyeOff, ChevronRight, Users,
@@ -10,6 +10,7 @@ import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import CardexPage, { CardZoomOverlay, RARITY_COLORS, bestSlab, SlabTileOverlay, type ZoomCardData, type SlabInfo } from './CardexPage'
 import { AuthGuard } from '@/components/auth/AuthGuard'
+import { fetchCardPrice } from '@/components/PriceAutoUpdater'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
@@ -346,7 +347,7 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
   }
 
   const rows: { key: keyof ProfilePrivacy; icon: typeof Award; label: string; hint: string }[] = [
-    { key: 'cardex', icon: BookOpen, label: 'Cardex', hint: 'Which cards you own — never prices or what you paid' },
+    { key: 'cardex', icon: BookOpen, label: 'Cardex', hint: 'Which cards you own and what they’re worth — never what you paid' },
     { key: 'badges', icon: Award, label: 'Badges', hint: 'Your Haven Badges pin book' },
   ]
 
@@ -504,8 +505,8 @@ function printingOf(c: Card): string {
 
 // A self-contained mini Cardex: everything happens on this page — no links into the app's own
 // Cardex, which a visitor has no access to. Filter by game and set, page through in place, and
-// click a card for the same spin-around zoom the Cardex has (without prices — profiles never show
-// any).
+// click a card for the same spin-around zoom the Cardex has, with the card's market price (the
+// shared catalog's — never what its owner paid; the grid itself shows no prices).
 function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: boolean; isFriend: boolean; view: CardexView }) {
   const ownCards = useStore((s) => s.cards)
   const [friendCards, setFriendCards] = useState<Card[] | 'private' | undefined>(undefined)
@@ -514,6 +515,9 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   const [limit, setLimit] = useState(FIRST_PAGE)
   const [zoom, setZoom] = useState<ZoomCardData | null>(null)
   useScrollLock(zoom !== null)
+  // A friend's shared Cardex has no prices: the zoom asks the price routes for the one card opened
+  const prices = useRef(new Map<string, number>())
+  const opened = useRef('')
   const canView = isMe || profile.privacy.cardex
 
   useEffect(() => {
@@ -589,7 +593,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       number: c.number,
       rarityLabel: label.replace('_', ' '),
       rarityColor: RARITY_COLORS[c.rarity ?? ''] ?? '#7a6a55',
-      marketPrice: 0,
+      marketPrice: isMe ? c.currentPrice ?? 0 : prices.current.get(c.id) ?? 0,
       owned: true,
       quantity: c.copies,
       isFoil: c.isFoil,
@@ -599,6 +603,14 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       ebayCard: { name: c.name, number: c.number, set: c.set, game: c.game, gradingCompany: c.slab?.company, grade: c.slab?.grade, language: c.language },
       originRect: el.getBoundingClientRect(),
     })
+    opened.current = c.id
+    if (!isMe && !prices.current.has(c.id)) {
+      fetchCardPrice(c).then((p) => {
+        prices.current.set(c.id, p)
+        // still the card on screen: show its price as soon as it arrives
+        if (p > 0 && opened.current === c.id) setZoom((z) => (z ? { ...z, marketPrice: p } : z))
+      })
+    }
   }
 
   const stats = [

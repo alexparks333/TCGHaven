@@ -61,6 +61,21 @@ function savePrices(uid: string, data: { prices: Record<string, number>; baselin
   try { localStorage.setItem(savedKey(uid), JSON.stringify({ ...data, at: Date.now() })) } catch { /* full or blocked: fine */ }
 }
 
+/** Today's market price of one card (the shared catalog's, through the same price routes) — for a
+ *  friend's card in the profile's zoom view, whose shared copy carries no prices. 0 when unknown. */
+export async function fetchCardPrice(card: Card): Promise<number> {
+  if (!card.apiId) return 0
+  const { url, payload } = PRICE_ROUTES[card.game]
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cards: [payload(card)] }) })
+    if (!res.ok) return 0
+    const prices = (await res.json()) as Record<string, number>
+    return prices[card.id] ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
   const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines, setPriceLoad } = useStore()

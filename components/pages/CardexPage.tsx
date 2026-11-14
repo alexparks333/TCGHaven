@@ -1002,9 +1002,10 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     () => catalogCards.map((cc) => {
       // Picker: everything shown in full (it's for choosing, not tracking)
       const owned = picker ? { owned: true, quantity: 0, ownedFoil: false } : getOwnedInfo(cc, gameCards, baseGame)
-      return { ...cc, ...owned, marketPrice: readOnly ? 0 : catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
+      // A friend's Cardex too: a card's market price is the shared catalog's, never what they paid
+      return { ...cc, ...owned, marketPrice: catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
     }),
-    [catalogCards, gameCards, baseGame, readOnly, picker],
+    [catalogCards, gameCards, baseGame, picker],
   )
 
   // Progress is always against the full set, not the filtered search view.

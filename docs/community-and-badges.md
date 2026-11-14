@@ -426,7 +426,9 @@ see" switches on its right), then the **showcase**, framed in the parchment pale
 The Cardex tab is a self-contained mini Cardex: card / set / game counts, game chips, a set picker,
 cards best-first (yours by today's price; a friend's shared copy is stored most-valuable-first,
 without prices) paged in place with "Show more", and a click opens the Cardex's own spin-around
-`CardZoomOverlay` (exported from `CardexPage.tsx`) — with no price, since profiles never show any.
+`CardZoomOverlay` (exported from `CardexPage.tsx`) — with the card's market price (since 2026-11-14:
+the shared catalog's price, looked up on open by `fetchCardPrice()` in `PriceAutoUpdater.tsx`, since
+a friend's shared copy carries none; never what its owner paid). The grid itself shows no prices.
 Badges is a "coming soon" preview.
 A **Top cards | Full Cardex** switch sits at the top of the Cardex tab: Full Cardex renders the
 real `CardexPage` inside the profile with a `viewer` prop — the profile owner's cards drive

@@ -485,18 +485,21 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
               </>
             )}
 
-            {/* Spine + rings: fade in as the cover opens, out as it shuts (a shut book shows none) */}
-            {(p >= 0 || anim?.kind === 'turn' || anim?.kind === 'shut') && (
-              <div
-                style={
-                  p === -1 ? { opacity: go ? 1 : 0.01, transition: `opacity ${ms}ms ease` } // 0.01: drawn ahead (see the scene's note)
-                  : anim?.kind === 'shut' ? { opacity: go ? 0 : 1, transition: `opacity ${ms}ms ease` }
-                  : undefined
-                }
-              >
-                <Spine x={W} H={H} />
-              </div>
-            )}
+            {/* Spine + rings: fade in as the cover opens, out as it shuts (a shut book shows none).
+                The wrapper is always there and always over the pages (z-20 of its own): while it
+                faded, its opacity made it a layer of its own at the pages' level, so the rings went
+                UNDER the pages for the whole opening and jumped on top as it ended. Never fully
+                see-through either (0.01), so iPhone has them drawn before the cover opens. */}
+            <div
+              className="absolute top-0 left-0 z-20 pointer-events-none"
+              style={{
+                width: W * 2, height: H,
+                opacity: p === -1 ? (anim?.kind === 'turn' && go ? 1 : 0.01) : anim?.kind === 'shut' && go ? 0.01 : 1,
+                transition: (p === -1 && anim?.kind === 'turn') || anim?.kind === 'shut' ? `opacity ${ms}ms ease` : 'none',
+              }}
+            >
+              <Spine x={W} H={H} />
+            </div>
           </div>
           </div>
         )}
