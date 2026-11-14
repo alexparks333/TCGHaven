@@ -1945,8 +1945,14 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
     return () => clearTimeout(t)
   }, [visible, setInspectReady])
 
+  // The fly-in plays once per opening. A change to the open card's details (a friend's card's
+  // price arriving a moment after the tap — ProfilePage) keeps the same originRect and must not
+  // replay it: it flipped open twice.
+  const playedFor = useRef<DOMRect | null>(null)
   useLayoutEffect(() => {
-    if (!data || !moverRef.current) return
+    if (!data) { playedFor.current = null; return }
+    if (!moverRef.current || data.originRect === playedFor.current) return
+    playedFor.current = data.originRect
     openedAt.current = performance.now()
     const el = moverRef.current
     setVisible(false)
