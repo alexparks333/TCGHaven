@@ -23,6 +23,7 @@ export interface Scored {
   score: number   // text score, 0–100
   exact?: boolean // false = found only by a name several printings share
   trusted?: boolean // read off a grading label: the picture can't overrule it
+  holoTwin?: boolean // also printed in its set as a holo / non-holo with the same art (server.ts)
 }
 
 export type ScanStatus = 'matched' | 'pick' | 'none'
@@ -103,13 +104,20 @@ export function decide<T extends Scored>(candidates: T[], distances?: Array<numb
   const textDecisive = !!first && first.exact !== false && first.score >= 90 && (!second || first.score - second.score >= 15)
   if (aiMode && first) {
     const s1 = first.similarity
-    const othersBest = Math.max(-1, ...ranked.slice(1).map((c) => c.similarity ?? -1))
+    // The lead over the cards the text still allows: a look-alike with another name that only the
+    // picture brought in (text 0) isn't in the running once a name was read (a real Hitmonlee at 0.72
+    // was asked about because an unrelated old card scored 0.64). It can still veto, below.
+    const othersBest = Math.max(-1, ...ranked.slice(1).filter((c) => c.score > 0).map((c) => c.similarity ?? -1))
     const aiLead = s1 === null ? -1 : s1 - othersBest
     // Another card looks clearly more like the scan than the text's answer → ask
     const vetoed = !first.trusted && s1 !== null && sBest !== null && sBest >= AI_VETO_FROM && sBest - s1 >= AI_VETO
     const pictureOk = s1 === null || s1 >= AI_CONFIRMS || textDecisive || !!first.trusted
     // Found by name only, but the picture clearly picks one of the name's cards
-    const pictureNamesIt = first.exact === false && first.score > 0 && s1 !== null && s1 >= AI_NAMES_IT && aiLead >= AI_NAMES_LEAD
+    // Never for a holo twin: Jungle / Fossil / Team Rocket print each holo again as a non-holo with
+    // the same art (marked by server.ts from the rarities), and the AI can't tell them apart (a real holo Hitmonlee 7/62 scored
+    // 0.72 for the non-holo #22, 0.45 for itself) — only the printed number can
+    const twin = !!first.holoTwin
+    const pictureNamesIt = first.exact === false && first.score > 0 && s1 !== null && s1 >= AI_NAMES_IT && aiLead >= AI_NAMES_LEAD && !twin
       && (!second || first.final - second.final >= MIN_LEAD + 5)
     // The text alone puts it ahead, or the picture does — clearly
     const ahead = !second || first.score - second.score >= MIN_LEAD || aiLead >= AI_DECISIVE
@@ -121,7 +129,7 @@ export function decide<T extends Scored>(candidates: T[], distances?: Array<numb
     || (textDecisive && (first?.distance ?? Infinity) < LOOKS_LIKE_NOTHING + 0.1) || !!first?.trusted
   // Found by name only, but the picture is a near-exact match and clearly the closest: the name
   // and the picture together name the card (a real Squirtle scored 0.084)
-  const pictureNamesIt = !!first && first.exact === false && (first.distance ?? Infinity) <= 0.2
+  const pictureNamesIt = !!first && first.exact === false && (first.distance ?? Infinity) <= 0.2 && !first.holoTwin
     && (!second || first.final - second.final >= MIN_LEAD + 5)
   if (first && (first.exact !== false || pictureNamesIt) && pictureOk && first.final >= AUTO_ACCEPT && (!second || first.final - second.final >= MIN_LEAD)) status = 'matched'
   else if (first && first.final >= 30) status = 'pick'
@@ -139,6 +147,8 @@ export interface Offered extends Scored {
 // How many look-alikes the phone compares by picture — small thumbnails (~10 KB each); the
 // comparison itself works on a 40 × 56 grid, so a thumbnail is plenty
 export const MAX_COMPARE = 40
+// A name read this clearly is asked about even with no number (trayVerdict)
+export const NAME_READ = 70
 // A picture-only find shown in the tray (asked about, never added): this alike or more
 export const PICTURE_SHOWS = 0.55
 
@@ -157,6 +167,9 @@ export function shortlist<T extends Offered>(candidates: T[]): { close: T[]; res
  *  to be a card name) — unless the picture clearly says which card it is */
 export function trayVerdict(status: ScanStatus, top: { exact: boolean; score: number } | undefined, topDistance: number | null, topPicture: number | null): ScanStatus | 'reject' {
   const pictured = (topDistance !== null && topDistance <= 0.3) || (topPicture !== null && topPicture >= PICTURE_SHOWS)
-  const loose = !top || status === 'none' || (status === 'pick' && (!top.exact || top.score < 55) && !pictured)
+  // A name read clearly off a card (a Japanese name translated, a full name with its HP line —
+  // NAME_READ and up) is asked about, never dropped: old Japanese cards have no number, so a holo
+  // Muk was dropped five times running with the right card first in its list (2026-11-13)
+  const loose = !top || status === 'none' || (status === 'pick' && (!top.exact || top.score < 55) && !pictured && top.score < NAME_READ)
   return loose ? 'reject' : status
 }

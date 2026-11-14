@@ -3,7 +3,7 @@
 // where it prints it. lib/scan/scanMatch.ts reads them, lib/scan/decide.ts makes the final call.
 import assert from 'node:assert/strict'
 import { readClues, matchScan, numKey, nameScore, fold, onePiecePrintedCode, printedName, readSlabLabel, sanitizeCert, ygoKey, type OcrLine, type ScanCatalog } from './scanMatch.ts'
-import { decide } from './decide.ts'
+import { decide, trayVerdict } from './decide.ts'
 
 const L = (text: string, y: number, h = 0.03): OcrLine => ({ text, x: 0.05, y, w: 0.6, h })
 
@@ -518,6 +518,35 @@ assert.deepEqual(top([L('the', 0.5)]), [])
   assert.ok(top(neoUnown)[0].score - top(neoUnown)[1].score >= 15, 'the letter and the set size settle it')
   assert.equal(ids(neoUnown.filter((l) => !l.text.includes('[C]')))[0], 'neo4-57') // the size alone still puts it first
   assert.equal(ids([L('Unown', 0.03), L('as Unown [G] is your Active Pokémon', 0.4), L('57/106', 0.95)])[0], 'dp4-57')
+}
+
+// From a 109-card scanning session (2026-11-13)
+{
+  // Name read, the picture clearly picks one of that name's printings (0.72 vs 0.45): added — an
+  // unrelated old card the picture brought in (text 0, 0.64) is no longer counted against the lead
+  const hit = decide([
+    { key: 'lee-22', score: 65, exact: false }, { key: 'lee-7', score: 65, exact: false }, { key: 'lookalike', score: 0, exact: false },
+  ], undefined, [0.72, 0.45, 0.64])
+  assert.equal(hit.ranked[0].key, 'lee-22')
+  assert.equal(hit.status, 'matched')
+  // …but never between a holo and a non-holo of one card in one set (same art): a real Fossil holo
+  // Hitmonlee 7/62 scored 0.72 for the non-holo #22 — asked, not added as the wrong card
+  assert.equal(decide([
+    { key: 'base3-22', score: 65, exact: false, holoTwin: true },
+    { key: 'base3-7', score: 65, exact: false, holoTwin: true },
+    { key: 'lc-13', score: 65, exact: false },
+  ], undefined, [0.72, 0.45, 0.42]).status, 'pick')
+  // …and a look-alike clearly more like the scan still stops it
+  assert.notEqual(decide([
+    { key: 'lee-22', score: 65, exact: false }, { key: 'lee-7', score: 65, exact: false }, { key: 'lookalike', score: 0, exact: false },
+  ], undefined, [0.62, 0.40, 0.85]).status, 'matched')
+  // A clearly read name with no number (old Japanese holo Muk, text 75, AI 0.51) is asked about,
+  // not dropped; a loose word (65, nothing else) still is
+  assert.equal(trayVerdict('pick', { exact: false, score: 75 }, null, 0.51), 'pick')
+  assert.equal(trayVerdict('pick', { exact: false, score: 65 }, null, 0.40), 'reject')
+  // わるい = Dark: Rocket Gang's わるいマタドガス is Dark Weezing, not Weezing
+  assert.deepEqual(readClues([L('わるいマタドガス', 0.05, 0.05), L('LV.24', 0.05, 0.03), L('HP60', 0.05, 0.03)]).jaNames, ['dark weezing'])
+  assert.deepEqual(readClues([L('カスミのコダック', 0.05, 0.05)]).jaNames, ["misty's psyduck"].map(fold))
 }
 
 console.log('scan matching: all tests passed')

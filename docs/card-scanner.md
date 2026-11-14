@@ -166,6 +166,26 @@ About 70 scans of mostly vintage Pokémon, plus Unowns and some trainers.
   the name gets its own letter's bonus, never the one the text gave another letter (a real scan put
   Unown [Z] first that way).
 
+## Lessons from a 109-card session (2026-11-13)
+
+69 added, 28 asked, 11 dropped. Replayed through the server (`decide` as the phone runs it), fixed:
+- **The picture's lead counts only cards the text allows.** A name read, and the AI clearly picking
+  one of its printings (Hitmonlee-style 0.72 vs 0.45), was asked about because an unrelated
+  old card the picture brought in (text 0) scored 0.64. Such look-alikes still veto.
+- **Holo twins are never named by the picture.** Jungle / Fossil / Team Rocket print a holo and a
+  non-holo with the same art; a real Fossil holo Hitmonlee 7/62 scored 0.72 for the non-holo #22.
+  `server.ts` marks `holoTwin` (same name and set, one "Holo" rarity and one not); `decide` then
+  never adds on the picture alone — only the printed number can. Same-name cards with different
+  art (FireRed & LeafGreen's two Squirtles) aren't twins.
+- **A clearly read name is asked about, never dropped** (`trayVerdict`, `NAME_READ` 70): old
+  Japanese cards have no number; a holo Muk was dropped five times with the right card first.
+- **Japanese prefixes:** わるい = Dark, ひかる = Shining, the Gym leaders' "…の", Team Aqua / Magma.
+- **A fresh server's picture index** loads alongside the catalogs and a scan waits up to 3 s more
+  (`PICTURE_WAIT_MS`): runs of scans had gone without the AI after each new server.
+
+Not fixed (asked, the right card in the list): holo / non-holo twins whose number isn't read, Deck
+Exclusives / World Championship reprints with the same number, Riftbound prerelease promos.
+
 ## When a server isn't ready: "busy", never a guess (2026-11-13)
 
 A server keeps each game's catalog in memory. On 2026-11-13, right after two deploys, some fresh
@@ -183,12 +203,12 @@ answered. Three guards now:
 ## The real-scan check (every deploy)
 
 `.github/workflows/checks.yml` starts the production build and runs **64 real iPhone scans**
-through it (`npm run test:realscans -- <url>`, `scripts/scanner-realscans.mts`) — 66 since the
-same day's Unown [C] and misread Zangoose. Each scan is judged
+through it (`npm run test:realscans -- <url>`, `scripts/scanner-realscans.mts`) — 71 since the
+same day's Unown [C], misread Zangoose and a 109-card session's hard cases. Each scan is judged
 exactly as the phone would (`decide.ts` `shortlist` → `decide` → `trayVerdict`, shared with
 `scanner.ts`), searching all 12 games. The deploy is blocked when:
 - any scan would be **added as the wrong card**;
-- fewer than 39 are added right, or fewer than 49 have the right card first (2026-11-13: 41 and 51).
+- fewer than 43 are added right, or fewer than 52 have the right card first (2026-11-13: 45 and 54).
 
 Text only (37 / 48 measured; limits 35 / 46) when the test file's fingerprints come from a different
 model than the published one, e.g. right after a retrain. The test file

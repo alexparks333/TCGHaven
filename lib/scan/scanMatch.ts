@@ -340,7 +340,13 @@ export function readClues(lines: OcrLine[], barcodes?: string[]): ScanClues {
 
 const JA_NAMES = Object.keys(POKEMON_JA_NAMES).sort((a, b) => b.length - a.length)
 // Printed before the Pokémon's name: regional forms, Mega, Team Rocket's…
-const JA_PREFIX: Array<[string, string]> = [['ロケット団の', "Team Rocket's"], ['アローラ', 'Alolan'], ['ガラル', 'Galarian'], ['ヒスイ', 'Hisuian'], ['パルデア', 'Paldean'], ['メガ', 'Mega']]
+// わるい = Dark (Rocket Gang's "Dark Weezing" was read as plain Weezing, 2026-11-13), ひかる = Shining,
+// and the Gym sets' and ADV sets' owners
+const JA_PREFIX: Array<[string, string]> = [['ロケット団の', "Team Rocket's"], ['アクア団の', "Team Aqua's"], ['マグマ団の', "Team Magma's"],
+  ['わるい', 'Dark'], ['ひかる', 'Shining'],
+  ['タケシの', "Brock's"], ['カスミの', "Misty's"], ['マチスの', "Lt. Surge's"], ['エリカの', "Erika's"], ['ナツメの', "Sabrina's"],
+  ['キョウの', "Koga's"], ['カツラの', "Blaine's"], ['サカキの', "Giovanni's"],
+  ['アローラ', 'Alolan'], ['ガラル', 'Galarian'], ['ヒスイ', 'Hisuian'], ['パルデア', 'Paldean'], ['メガ', 'Mega']]
 // After it: the card's mechanic, in Latin letters
 const JA_SUFFIX = /^\s*(ex|EX|GX|V|VMAX|VSTAR|V-UNION|BREAK|LV\.?X|δ|☆|◇|プリズムスター)(?![A-Za-z])/
 

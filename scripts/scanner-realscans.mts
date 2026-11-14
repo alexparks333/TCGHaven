@@ -18,11 +18,11 @@
 import fs from 'node:fs'
 import { shortlist, decide, trayVerdict, type Offered } from '../lib/scan/decide.ts'
 
-// Measured 2026-11-13 on the 66 scans: with the picture AI 41 added right, 0 wrong, 51 right card
-// first; text only 37 / 0 / 48 (64 scans). The limits leave 2 scans of room (a catalog sync can
-// shift a close call). Raise them as the scanner gets better; lowering one means accepting a worse scanner.
+// Measured 2026-11-13 on the 71 scans: with the picture AI 45 added right, 0 wrong, 54 right card
+// first; text only 37 / 0 / 48 (on the first 64). The limits leave 2 scans of room (a catalog sync
+// can shift a close call). Raise them as the scanner gets better; lowering one means accepting a worse scanner.
 const LIMITS = {
-  picture: { maxWrongAdds: 0, minAddedRight: 39, minRightFirst: 49 },
+  picture: { maxWrongAdds: 0, minAddedRight: 43, minRightFirst: 52 },
   textOnly: { maxWrongAdds: 0, minAddedRight: 35, minRightFirst: 46 },
 }
 

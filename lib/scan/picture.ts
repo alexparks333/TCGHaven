@@ -62,9 +62,10 @@ export async function pictureModel(platform: 'ios' | 'android' = 'ios'): Promise
 const indexes = new Map<string, CatalogIndex>()
 const loading = new Map<string, Promise<CatalogIndex | null>>()
 
-// A scan never waits for an index to download (~10 MB per catalog; a fresh server took 12–15 s for
-// every game and the phone gave up — 2026-11-10): a scan uses what's loaded and starts the rest
-// loading for the next one. The scanner's warm-up call (warmPictures) is the one that waits.
+// A scan doesn't wait long for an index to download (~10 MB per catalog; a fresh server took 12–15 s
+// for every game and the phone gave up — 2026-11-10): matchScannedCard loads them alongside the
+// catalogs and waits at most 3 s more (server.ts PICTURE_WAIT_MS); what isn't loaded by then keeps
+// loading for the next scan. The scanner's warm-up call (warmPictures) waits in full.
 function loadedIndex(catalog: ScanCatalogKey): CatalogIndex | null {
   const have = indexes.get(catalog) ?? null
   const entry = manifestCache?.manifest?.catalogs?.[catalog]

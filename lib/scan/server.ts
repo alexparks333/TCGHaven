@@ -31,6 +31,9 @@ export interface ScanMatch {
   // Every printing the card comes in, with its price — the card sheet's Finish row. Pokémon:
   // "edition:finish" keys ("unlimited:reverse"); other games "normal" / "foil".
   printings: Array<{ key: string; label: string; price: number }>
+  // The same card is also printed in the same set as a holo / non-holo with the same art: the
+  // picture can't choose between them (decide.ts)
+  holoTwin?: boolean
 }
 
 const EDITION_LABEL: Record<string, string> = { unlimited: '', shadowless: 'Shadowless', '1st': '1st Edition', limited: 'Limited Edition' }
@@ -143,6 +146,7 @@ const baseName = (name: string) => fold(printedName(name))
 // Cards the picture search brings in that the text didn't find: how many, and how alike they must
 // be to be worth offering (a right card scores ~0.5–0.9 on a real scan; docs/scanner-ai.md)
 const PICTURE_HITS = 8
+const PICTURE_WAIT_MS = 3000
 const PICTURE_HIT_MIN = 0.42
 
 /** A graded slab's label, when the scan was of one — the review screen fills in the grade */
@@ -155,7 +159,12 @@ export function cleanBarcodes(raw: unknown): string[] {
 
 export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerprints: Float32Array[] = [], barcodes: string[] = []): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   const keys = catalogsFor(games)
+  // A fresh server has no picture indexes yet: they load alongside the catalogs (which the scan
+  // waits for anyway), plus a little longer — runs of scans used to go without the AI after every
+  // new server (2026-11-13). Never more than PICTURE_WAIT_MS past the catalogs.
+  const pictures = fingerprints.length ? warmPictures(keys) : null
   const catalogs = await loadCatalogsChecked(keys)
+  if (pictures) await Promise.race([pictures, new Promise((r) => setTimeout(r, PICTURE_WAIT_MS))])
   let hits: ReturnType<typeof pictureSearch> = []
   try { hits = pictureSearch(fingerprints, keys, PICTURE_HITS) } catch { /* no picture search this time */ }
   const clues = readClues(lines, barcodes)
@@ -185,6 +194,21 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerpr
       : { catalog: h.catalog, id: h.id, name: card.name, score: 0, why: 'picture', exact: false })
     have.add(`${h.catalog}:${h.id}`)
   }
+  // Holo twins: one card printed as a holo and again as a non-holo with the same art in one set
+  // (Jungle, Fossil, Team Rocket…) — the picture can't tell them apart, only the number can
+  // (decide.ts). Marked when both are candidates: same name, same set, one "Holo" rarity, one not.
+  const holoTwin = new Set<string>()
+  {
+    const groups = new Map<string, Array<{ key: string; holo: boolean }>>()
+    for (const c of found) {
+      const cat = catalogs.find((x) => x.key === c.catalog)
+      const card = cat && (catalogIndex(cat).byId.get(c.id) as (RawCard & { rarity?: string }) | undefined)
+      if (!card?.set) continue
+      const g = `${c.catalog}|${card.set}|${baseName(c.name)}`
+      groups.set(g, [...(groups.get(g) ?? []), { key: `${c.catalog}:${c.id}`, holo: /holo/i.test(String(card.rarity ?? '')) }])
+    }
+    for (const g of Array.from(groups.values())) if (g.some((x) => x.holo) && g.some((x) => !x.holo)) for (const x of g) holoTwin.add(x.key)
+  }
   let sims: Array<number | null> = found.map(() => null)
   try { sims = pictureSimilarity(fingerprints, found.map((c) => ({ catalog: c.catalog, id: c.id }))) } catch { /* text only */ }
   return { slab, candidates: found.flatMap((c, i) => {
@@ -207,6 +231,7 @@ export async function matchScannedCard(lines: OcrLine[], games: Game[], fingerpr
       exact: c.exact,
       picture: sims[i] === null ? null : Math.round(sims[i]! * 1000) / 1000,
       printings: printingsOf(card, c.catalog === 'pokemon-jp' ? 'pokemon' : c.catalog),
+      ...(holoTwin.has(`${c.catalog}:${c.id}`) && { holoTwin: true }),
     }]
   }) }
 }
