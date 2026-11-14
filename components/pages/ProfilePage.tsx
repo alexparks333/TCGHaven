@@ -27,6 +27,7 @@ import {
   BIO_MAX, type Profile, type ProfilePrivacy, type Friendship,
 } from '@/lib/firebase/friends'
 import { cardImage } from '@/lib/cardImage'
+import { EDITION_LABELS, FINISH_LABELS } from '@/scripts/lib/pokemon-variants.mjs'
 import { CardName } from '@/components/CardName'
 
 // /profile — your profile, the page your friends see. You curate it: a short bio and what friends
@@ -490,7 +491,16 @@ function Locked({ children }: { children: React.ReactNode }) {
 const FIRST_PAGE = 18
 const PAGE = 24
 
-type ShowcaseCard = Card & { copies: number; slab?: SlabInfo }
+type ShowcaseCard = Card & { copies: number; slab?: SlabInfo; printing: string }
+
+// A special printing's short label on its tile ("Reverse Holo", "1st Edition", "Foil"); '' for the plain one
+function printingOf(c: Card): string {
+  const parts: string[] = []
+  if (c.edition && c.edition !== 'unlimited') parts.push((EDITION_LABELS as Record<string, string>)[c.edition] ?? c.edition)
+  if (c.finish && c.finish !== 'normal') parts.push((FINISH_LABELS as Record<string, string>)[c.finish] ?? c.finish)
+  else if (!c.finish && c.isFoil) parts.push('Foil')
+  return parts.join(' ')
+}
 
 // A self-contained mini Cardex: everything happens on this page — no links into the app's own
 // Cardex, which a visitor has no access to. Filter by game and set, page through in place, and
@@ -515,15 +525,17 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
 
   useEffect(() => { setLimit(FIRST_PAGE) }, [game, set])
 
-  // One tile per distinct card, best first: your own by today's price; a friend's copy is
-  // already stored most-valuable-first (without the prices).
+  // One tile per distinct card *and printing*, best first by what one copy is worth: your own by
+  // today's price; a friend's copy is already stored most-valuable-first (without the prices). A
+  // card's printings are separate tiles — seven Slowpokes, one of them a $142 Reverse Holo, were one
+  // "×7" tile ranked at the Reverse Holo's price (2026-11-13).
   const unique = useMemo(() => {
     const src = isMe
       ? [...ownCards].sort((a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0))
       : Array.isArray(friendCards) ? friendCards : []
     const groups = new Map<string, Card[]>()
     for (const c of src) {
-      const key = c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`
+      const key = `${c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`}|${printingOf(c)}`
       const list = groups.get(key)
       if (list) list.push(c)
       else groups.set(key, [c])
@@ -532,6 +544,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       ...copies[0],
       copies: copies.reduce((n, c) => n + (c.quantity || 1), 0),
       slab: bestSlab(copies),
+      printing: printingOf(copies[0]),
     }))
   }, [isMe, ownCards, friendCards])
 
@@ -564,6 +577,8 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   ).sort((a, b) => b[1] - a[1])
   const shown = set ? inGame.filter((c) => c.set === set) : inGame
   const setCount = new Set(unique.map((c) => `${c.game}|${c.set}`)).size
+  // distinct cards, whatever their printing (a card in two printings is two tiles, one card)
+  const cardCount = new Set(unique.map((c) => c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`)).size
 
   function open(el: HTMLElement, c: ShowcaseCard) {
     const color = GAME_COLORS[c.game]
@@ -587,7 +602,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   }
 
   const stats = [
-    { icon: LayoutGrid, value: unique.length.toLocaleString(), label: 'cards' },
+    { icon: LayoutGrid, value: cardCount.toLocaleString(), label: 'cards' },
     { icon: Layers, value: setCount.toLocaleString(), label: setCount === 1 ? 'set' : 'sets' },
     { icon: BookOpen, value: games.length.toString(), label: games.length === 1 ? 'game' : 'games' },
   ]
@@ -648,7 +663,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 md:gap-4">
         {shown.slice(0, limit).map((c) => (
           <button
-            key={c.apiId || c.id}
+            key={c.id}
             onClick={(e) => open(e.currentTarget, c)}
             title={c.name}
             className="showcase-card relative block rounded-lg overflow-hidden bg-slate-800 cursor-pointer"
@@ -663,6 +678,9 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
             {c.slab && <SlabTileOverlay slab={c.slab} />}
             {c.copies > 1 && (
               <span className="absolute top-1 right-1 text-[10px] font-bold text-white bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-full leading-none">×{c.copies}</span>
+            )}
+            {c.printing && !c.slab && (
+              <span className="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)] truncate text-[9px] font-bold text-white bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-full leading-none">{c.printing}</span>
             )}
           </button>
         ))}

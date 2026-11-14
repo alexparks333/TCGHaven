@@ -8,14 +8,16 @@ import { cn } from '@/lib/utils'
 import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
-import { BadgeSpot, FrameOrnament, PinholeFilter } from './BadgeBook'
+import { BadgeSpot, PinholeFilter } from './BadgeBook'
 import { BadgePin } from './BadgePin'
 
 
-// A profile's pin display: a velvet pad (the pin book's own velvet, gold-foil frame and brass
-// nameplates, in a leather border) with a few spots the owner fills with the earned pins they want
-// to show off — click an empty spot and pick a pin; click a pin to swap it, take it off, or see it
-// in 3D. Visitors see the chosen pins (and can open them in 3D). Saved as `profiles/{uid}.pinDisplay`.
+// A profile's pin display: a collector's display case — a walnut frame, the pin book's velvet sunk
+// into it under a sheet of glass, an engraved brass plaque with the owner's name, each pin in its own
+// pool of light. The owner fills its places with the earned pins they want to show off (click an
+// empty place and pick a pin; click a pin to swap it, take it off, or see it in 3D); visitors see
+// only the chosen pins, centred, and can open them in 3D. Saved as `profiles/{uid}.pinDisplay`.
+// Real-object depth on purpose (like the Badges bookshelf); nothing glows or moves.
 
 const MAX_PIN = 140
 const COLS = 3
@@ -45,7 +47,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  const pin = Math.max(56, Math.min(MAX_PIN, Math.max(0, width - 48) / COLS / 1.3))
+  const pin = Math.max(56, Math.min(MAX_PIN, Math.max(0, width - 64) / COLS / 1.38))
 
   function place(spot: number, id: string) {
     const next = ids.map((x) => (x === id ? '' : x)) // a pin can only be in one spot: moving it
@@ -63,38 +65,68 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
   const first = ownerName.split(' ')[0]
   const nothing = shown.every((d) => !d)
 
+  // Visitors see the pins only, centred — never the empty places
+  const places = shown.map((def, i) => ({ def, i })).filter((p) => isMe || p.def)
+  const owner = first ? `${first}’s Pin Collection` : 'Pin Collection'
+
   return (
     <div>
       <PinholeFilter />
-      {/* The display pad: leather border, velvet, gold-foil frame */}
-      <div className="pinbook-cover rounded-[18px] p-[9px]" style={{ ['--leather-from' as string]: '#5a4632', ['--leather-to' as string]: '#2a1f16', ['--accent' as string]: '#d9b25e' }}>
-        <div ref={padRef} className="pinbook-page relative rounded-[12px]" style={{ boxShadow: 'inset 0 0 40px rgba(0,0,0,0.75), inset 0 0 0 1px rgba(255,255,255,0.04)' }}>
-          <div className="pinbook-frame absolute inset-[12px] pointer-events-none">
-            {(['tl', 'tr', 'bl', 'br'] as const).map((c) => <FrameOrnament key={c} at={c} />)}
+      {/* The case: walnut frame → the velvet well under glass */}
+      <div className="case-wood relative rounded-[16px] px-[clamp(12px,2.2vw,22px)] pt-[clamp(26px,3.6vw,38px)] pb-[clamp(22px,3vw,32px)]">
+        {/* brass corner caps */}
+        {(['top-[6px] left-[6px]', 'top-[6px] right-[6px] rotate-90', 'bottom-[6px] right-[6px] rotate-180', 'bottom-[6px] left-[6px] -rotate-90'] as const).map((at) => (
+          <span key={at} aria-hidden className={cn('case-brass case-corner pointer-events-none', at)} />
+        ))}
+        {/* Brass plaque on the top rail */}
+        <div className="absolute left-1/2 -translate-x-1/2 top-[clamp(5px,0.9vw,9px)] z-10 max-w-[80%]">
+          <div className="case-brass relative flex items-center gap-3 rounded-[3px] pl-6 pr-6 py-[5px]">
+            <span className="case-screw absolute left-[7px] top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full" />
+            <span className="pinbook-serif truncate text-[clamp(10px,1.3vw,14px)] font-bold uppercase tracking-[0.22em]">{owner}</span>
+            <span className="case-screw absolute right-[7px] top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full" />
           </div>
-          <div className="relative flex items-center justify-center gap-3 pt-7 pb-1 px-8 pointer-events-none">
-            <span className="pinbook-rule flex-1 max-w-[120px]" />
-            <span className="pinbook-title pinbook-serif text-[clamp(12px,1.6vw,18px)] font-bold uppercase tracking-[0.32em] whitespace-nowrap">Pin Display</span>
-            <span className="pinbook-rule pinbook-rule-r flex-1 max-w-[120px]" />
-          </div>
+        </div>
+
+        <div className="case-bead rounded-[10px] p-[2px]">
+        <div ref={padRef} className="pinbook-page case-well relative rounded-[8px] overflow-hidden">
+          <div className="case-light absolute inset-0 pointer-events-none" />
           {nothing && !isMe && (
-            <div className="relative text-center pinbook-serif text-[11px] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/60">
+            <div className="relative text-center pinbook-serif text-[11px] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/60 pt-12 pb-12">
               {first} hasn’t put any pins on display yet
             </div>
           )}
-
-          <div className="relative grid justify-items-center gap-y-2 px-6 pt-3 pb-9" style={{ gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))` }}>
-            {width > 0 && shown.map((def, i) => def ? (
-              <BadgeSpot
-                key={`${i}-${def.id}`}
-                def={def} badges={badges} pin={pin} isMe={isMe} interactive below={i < COLS}
-                onInspect={isMe ? () => setPicking(i) : setInspect}
-              />
-            ) : (
-              <EmptyDisplaySpot key={`${i}-empty`} size={pin} canAdd={isMe} onClick={() => setPicking(i)} />
-            ))}
-          </div>
+          {places.length > 0 && (
+            <div className="relative flex flex-wrap justify-center gap-x-[clamp(4px,3vw,40px)] gap-y-3 px-4 pt-[clamp(22px,3.4vw,40px)] pb-[clamp(20px,3vw,36px)]">
+              {width > 0 && places.map(({ def, i }) => (
+                <div key={`${i}-${def?.id ?? 'empty'}`} className="relative flex justify-center" style={{ width: pin * 1.25 }}>
+                  {def ? (
+                    <>
+                      {/* its pool of light, and its shadow pressed into the velvet */}
+                      <span aria-hidden className="case-spot absolute pointer-events-none" style={{ width: pin * 1.9, height: pin * 1.9, left: '50%', top: pin * 0.56, transform: 'translate(-50%, -50%)' }} />
+                      <span aria-hidden className="case-contact absolute pointer-events-none" style={{ width: pin * 0.9, height: pin * 0.22, left: '50%', top: pin * 1.06, transform: 'translate(-50%, -50%)' }} />
+                      <BadgeSpot
+                        def={def} badges={badges} pin={pin} isMe={isMe} interactive below={i < COLS}
+                        onInspect={isMe ? () => setPicking(i) : setInspect}
+                      />
+                    </>
+                  ) : (
+                    <EmptyDisplaySpot size={pin} canAdd={isMe} onClick={() => setPicking(i)} />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {/* The glass over it all */}
+          <div className="case-glass absolute inset-0 pointer-events-none rounded-[8px]" />
         </div>
+        </div>
+
+        {/* A small brass tag on the bottom rail: how many pins earned */}
+        {earned.length > 0 && (
+          <div className="absolute right-[clamp(40px,5vw,56px)] bottom-[clamp(4px,0.7vw,7px)] case-brass rounded-[2px] px-2 py-[2px] pinbook-serif text-[9px] font-bold uppercase tracking-[0.18em]">
+            {earned.length} {earned.length === 1 ? 'pin' : 'pins'} earned
+          </div>
+        )}
       </div>
 
       {picking !== null && (
@@ -121,26 +153,20 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
   )
 }
 
-// A spot with no pin: a round hole pressed into the velvet — the same inset shading as the book's
-// pinholes (#pinhole-inset, PinholeFilter). The owner's have a faint + to fill them.
-const CIRCLE = `url("data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='49'/></svg>")}")`
+// An empty place (the owner's view only): a fine engraved ring in the velvet with a faint + to fill it
 
 function EmptyDisplaySpot({ size, canAdd, onClick }: { size: number; canAdd: boolean; onClick: () => void }) {
-  const d = size * 0.9
-  const hole = (
-    <span className="relative flex items-center justify-center transition-transform duration-200 group-hover:scale-[1.03]" style={{ width: d, height: d }}>
-      <span
-        className="absolute inset-0"
-        style={{ backgroundImage: CIRCLE, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', filter: 'url(#pinhole-inset)' }}
-      />
-      {canAdd && <Plus size={Math.max(18, size * 0.18)} strokeWidth={1.5} className="relative text-[#d9b25e]/35 transition-colors group-hover:text-[#f1d58f]/80" />}
+  const d = size * 0.86
+  const ring = (
+    <span className="case-empty relative flex items-center justify-center rounded-full transition-colors duration-200 group-hover:border-[rgba(241,213,143,0.6)]" style={{ width: d, height: d }}>
+      {canAdd && <Plus size={Math.max(18, size * 0.18)} strokeWidth={1.5} className="relative text-[#d9b25e]/40 transition-colors group-hover:text-[#f1d58f]/85" />}
     </span>
   )
   const box = { width: size * 1.25, height: size * 1.16 + size * 0.2 }
-  if (!canAdd) return <div className="flex items-center justify-center" style={box} aria-hidden>{hole}</div>
+  if (!canAdd) return <div className="flex items-center justify-center" style={box} aria-hidden>{ring}</div>
   return (
     <button type="button" onClick={onClick} aria-label="Put a pin here" className="group flex flex-col items-center justify-center gap-2 outline-none" style={box}>
-      {hole}
+      {ring}
       <span className="pinbook-serif text-[10px] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/45 transition-colors group-hover:text-[#f1d58f]">Add a pin</span>
     </button>
   )

@@ -571,6 +571,71 @@
   background: radial-gradient(circle at 35% 30%, #fff4cf, var(--accent, #d9b25e) 45%, #6e4b16 100%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 -1px 1px rgba(0, 0, 0, 0.3);
 }
+/* ── The profile's pin display case (components/badges/BadgeShowcase.tsx) — a real object, so it
+   has real depth (like the Badges bookshelf): a walnut frame, velvet sunk into it, a sheet of glass
+   with a still reflection, an engraved brass plaque. Its labels stay flat. ── */
+.case-wood {
+  background-color: #4a321f;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.09' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.12 0 0 0 0 0.07 0 0 0 0 0.03 0 0 0 0.75 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #7a5435 0%, #5b3d26 38%, #4a311e 70%, #3a2616 100%);
+  background-size: 600px 240px, 100% 100%;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 226, 180, 0.22), inset 0 -2px 0 rgba(0, 0, 0, 0.35),
+    inset 2px 0 0 rgba(255, 226, 180, 0.08), inset -2px 0 0 rgba(0, 0, 0, 0.25),
+    0 28px 50px -22px rgba(40, 22, 8, 0.75), 0 8px 16px -6px rgba(40, 22, 8, 0.35);
+}
+/* The rebate the glass sits in: a dark bevel between the frame and the velvet */
+.case-well {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55), 0 1px 0 1px rgba(255, 226, 180, 0.12),
+    inset 0 14px 22px -8px rgba(0, 0, 0, 0.85), inset 0 -6px 14px -6px rgba(0, 0, 0, 0.6),
+    inset 10px 0 18px -10px rgba(0, 0, 0, 0.7), inset -10px 0 18px -10px rgba(0, 0, 0, 0.7);
+}
+/* The brass bead between the frame and the velvet */
+.case-bead {
+  background: linear-gradient(180deg, #f1d895, #b8893c 45%, #8a6223 60%, #d6b06a);
+  box-shadow: 0 1px 0 rgba(255, 226, 180, 0.15), 0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+/* Overhead light falling into the case */
+.case-light { background: radial-gradient(80% 60% at 50% 0%, rgba(255, 214, 150, 0.09), transparent 70%); }
+/* The glass: a soft diagonal reflection and a bright top edge — still, never moving */
+.case-glass {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.025) 22%, transparent 34%),
+    linear-gradient(135deg, transparent 52%, rgba(255, 255, 255, 0.03) 56%, rgba(255, 255, 255, 0.012) 62%, transparent 66%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 6%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+/* A pin's own little pool of light on the velvet, and its shadow where it's pressed in */
+.case-spot {
+  background: radial-gradient(closest-side, rgba(255, 220, 160, 0.26), rgba(255, 220, 160, 0.09) 50%, transparent);
+}
+.case-contact {
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), transparent);
+}
+/* An empty place, owner's view: a fine engraved ring in the velvet */
+.case-empty {
+  border: 1.5px dashed rgba(217, 178, 94, 0.28);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.55), 0 1px 0 rgba(255, 226, 180, 0.05);
+}
+/* Engraved brass: the plaque and the count tag */
+.case-brass {
+  background: linear-gradient(180deg, #f6e1a4 0%, #d9b064 30%, #b88a3e 52%, #a47630 58%, #dcb86e 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(70, 44, 12, 0.6), inset 0 1px 0 rgba(255, 248, 220, 0.75), inset 0 -1px 0 rgba(90, 58, 18, 0.5);
+  color: #4a3010;
+  text-shadow: 0 1px 0 rgba(255, 238, 190, 0.55);
+}
+.case-screw {
+  background: radial-gradient(circle at 35% 30%, #fff0c4, #b8893c 55%, #5e3f12 100%);
+  box-shadow: 0 0 0 0.5px rgba(60, 38, 10, 0.8), inset 0 0 0 0.5px rgba(255, 240, 200, 0.4);
+}
+.case-corner {
+  position: absolute; width: 26px; height: 26px; border-radius: 3px;
+  clip-path: polygon(0 0, 100% 0, 100% 34%, 34% 34%, 34% 100%, 0 100%);
+}
+.case-screw::after { content: ''; position: absolute; inset: 45% 15%; background: rgba(60, 38, 10, 0.75); border-radius: 1px; transform: rotate(35deg); }
+
 /* Velvet: warm near-black, a fine pile texture, lighter toward the middle like light falling on it */
 .pinbook-page {
   container-type: inline-size; /* the page title sizes to the page (BadgeBook PageTitle) */

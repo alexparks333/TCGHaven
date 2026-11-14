@@ -28,7 +28,10 @@ export function LogoLoader({
       aria-live="polite"
       className={
         fullScreen
-          ? 'flex flex-col items-center justify-center min-h-screen gap-4'
+          // Pinned to the visible screen, not laid out in the page: inside the app shell it would sit
+          // below the phone header, and min-h-screen (100vh) is taller than an iPhone's visible
+          // area — the logo ended up near the bottom. pointer-events-none keeps the header/nav usable.
+          ? 'fixed inset-0 flex flex-col items-center justify-center gap-4 px-4 pointer-events-none'
           : 'flex flex-col items-center justify-center py-24 gap-4'
       }
     >

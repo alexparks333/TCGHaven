@@ -94,6 +94,9 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const [flash, setFlash] = useState<{ chapter: number; n: number } | null>(null)
   const [menu, setMenu] = useState(false)
   const [inspect, setInspect] = useState<BadgeDef | null>(null)
+  // A turn or pan is past its middle (the turning page edge-on): only then do the page count and the
+  // chapter in the top bar change — changing them on the tap read as the pins changing before the page moved
+  const [halfway, setHalfway] = useState(false)
 
   // The page area: everything under the top bar
   const areaRef = useRef<HTMLDivElement>(null)
@@ -168,7 +171,8 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     const root = areaRef.current
     root?.addEventListener('transitionend', onEnd)
     const t = setTimeout(settle, ms)
-    return () => { clearTimeout(t); root?.removeEventListener('transitionend', onEnd) }
+    const h = IN_BOOK.has(a.kind) ? setTimeout(() => setHalfway(true), a.kind === 'jump' ? 0 : (ms - 250) / 2) : undefined
+    return () => { clearTimeout(t); clearTimeout(h); setHalfway(false); root?.removeEventListener('transitionend', onEnd) }
   }, [anim, box, onClose, PAGES, p, getShelfSpot])
 
   const busy = !!anim
@@ -231,7 +235,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const go = !!anim?.go
 
   // Every page in play and its role (see the top of the file). First role given to a page wins.
-  type Role = 'flat' | 'under' | 'front' | 'back' | 'ready' | 'hidden'
+  type Role = 'flat' | 'under' | 'front' | 'back' | 'ready' | 'hidden' | 'parked'
   const roles = new Map<number, Role>()
   const give = (i: number, r: Role) => { if (i >= -1 && i < N && !roles.has(i)) roles.set(i, r) }
   let camFrom: number, camTo: number
@@ -239,9 +243,15 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     // Turning the right-hand page (or the cover) over to the left: under it, the next spread's
     // right page; the camera glides left to follow the page's back as it lands.
     give(p, 'front'); give(anim.to, 'back'); give(p - 1, 'flat'); give(anim.to + 1, 'under')
+    // the pages that were ready the other way stay as they were (a layer dropped and rebuilt
+    // mid-turn costs a frame), and the next spread stays drawn
+    give(p - 2, 'ready'); give(p - 3, 'under')
+    for (const i of [p + 3, p + 4]) give(i, 'parked')
     camFrom = -W; camTo = 0
   } else if (anim?.kind === 'turn') {
     give(p, 'front'); give(anim.to, 'back'); give(p + 1, 'flat'); give(anim.to - 1, 'under')
+    give(p + 2, 'ready'); give(p + 3, 'under')
+    for (const i of [p - 3, p - 4]) give(i, 'parked')
     camFrom = 0; camTo = -W
   } else if (anim?.kind === 'shut') {
     // Closing: the left page (the inside of the cover) swings over onto the right page, landing as
@@ -260,6 +270,9 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     // ready for the next turn either way
     if (left + 2 < N) { give(left + 2, 'ready'); give(left + 3, 'under') }
     if (left - 1 >= 0) { give(left - 1, 'ready'); give(left - 2, 'under') }
+    // and one spread further, already drawn but not yet layers ('parked'), so when a turn settles no
+    // page is drawn for the first time (that was the blink at the end of a turn)
+    for (const i of [left + 4, left + 5, left - 3, left - 4]) give(i, 'parked')
     camFrom = p % 2 === 1 ? -W : 0
     camTo = anim?.kind === 'pan' ? (anim.to % 2 === 1 ? -W : 0) : camFrom
   }
@@ -272,7 +285,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   const opened = !leaving && (p >= 0 || (anim?.kind === 'turn' && go))
   const closing = anim?.kind === 'close'
   const jumpDir = anim?.kind === 'jump' ? (anim.to > p ? 1 : -1) : 1
-  const shownPage = anim && (anim.kind === 'pan' || anim.kind === 'turn' || anim.kind === 'jump') && go ? anim.to : Math.max(0, p)
+  const shownPage = anim && (anim.kind === 'pan' || anim.kind === 'turn' || anim.kind === 'jump') && go && halfway ? anim.to : Math.max(0, p)
   // The flight: the shelf spot, and the book at its own shape in the middle of the page area
   const spot = anim?.kind === 'fly' || anim?.kind === 'grow' ? from : anim?.kind === 'shrink' || anim?.kind === 'flyBack' ? anim.to : null
   const mid = (() => {
@@ -300,6 +313,8 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
       case 'flat': return { ...base, zIndex: 3, transform: 'rotateY(0deg)' }
       case 'under': return { ...base, zIndex: 2, transform: 'rotateY(0deg)' }
       case 'hidden': return { ...base, zIndex: 0, transform: 'rotateY(0deg)', opacity: 0 }
+      // In the page and drawn (pictures loaded), but not a layer yet and never seen
+      case 'parked': return { ...base, zIndex: 0, transform: 'rotateY(0deg)', visibility: 'hidden', willChange: 'auto' }
       case 'ready': return { ...base, zIndex: 1, transform: `rotateY(${lift}deg)` }
       case 'front': return {
         ...base, zIndex: 15,
@@ -419,7 +434,9 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
             }}
           >
             {/* Every page in play, one element each (keyed by page number) — see the top of the file */}
-            {Array.from(roles.entries()).map(([i, role]) => (
+            {/* In page order, always: a page's element never moves in the page when roles change (moving
+                it made iPhone rebuild its layer — pages and rings blinking as a turn ended) */}
+            {Array.from(roles.entries()).sort((a, b) => a[0] - b[0]).map(([i, role]) => (
               // phonebook-live: the one page whose mastered pins' platinum highlight runs (globals.css)
               <div key={`page${i}`} className={cn('phonebook-page absolute top-0', !anim && i === p && 'phonebook-live')} style={pageStyle(i, role)} data-end={role === 'back' ? '' : undefined}>
                 {i === -1 ? <BookCover set={set} badges={badges} /> : (
@@ -436,17 +453,29 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
                 style={{ left: W, width: W, height: H, background: 'linear-gradient(to right, rgba(0,0,0,0.75), rgba(0,0,0,0.3))', opacity: go ? 1 : 0, transition: `opacity ${SHUT_MS}ms ease-in` }}
               />
             )}
-            {/* Under the turning page: the page it uncovers starts in its shadow */}
+            {/* A turn shows one page at a time on a phone, so the eye should stay on the turning page.
+                The page it uncovers stays in its shadow (it's never the page you land on — it leaves
+                the screen as the camera follows), and the page it lands on darkens as it comes down
+                over it. Both lit, a different set of pins showed up before the new page arrived. */}
             {anim?.kind === 'turn' && (
-              <div
-                className="absolute top-0 pointer-events-none z-[5]"
-                style={{
-                  left: anim.dir === 1 ? W : 0, width: W, height: H,
-                  background: `linear-gradient(to ${anim.dir === 1 ? 'right' : 'left'}, rgba(0,0,0,0.75), rgba(0,0,0,0.25))`,
-                  opacity: go ? 0 : 1,
-                  transition: `opacity ${ms}ms ease-out`,
-                }}
-              />
+              <>
+                <div
+                  className="absolute top-0 pointer-events-none z-[5]"
+                  style={{
+                    left: anim.dir === 1 ? W : 0, width: W, height: H,
+                    background: `linear-gradient(to ${anim.dir === 1 ? 'right' : 'left'}, rgba(0,0,0,0.9), rgba(0,0,0,0.62))`,
+                  }}
+                />
+                <div
+                  className="absolute top-0 pointer-events-none z-[5]"
+                  style={{
+                    left: anim.dir === 1 ? 0 : W, width: W, height: H,
+                    background: `linear-gradient(to ${anim.dir === 1 ? 'left' : 'right'}, rgba(0,0,0,0.92), rgba(0,0,0,0.7))`,
+                    opacity: go ? 1 : 0,
+                    transition: `opacity ${half}ms ease-out`,
+                  }}
+                />
+              </>
             )}
 
             {/* Spine + rings: fade in as the cover opens, out as it shuts (a shut book shows none) */}
@@ -577,7 +606,9 @@ function Face({ content, side, set, badges, pageProps }: {
 // The spine and the binder rings, half on each page
 function Spine({ x, H }: { x: number; H: number }) {
   return (
-    <div className="absolute top-0 z-20 pointer-events-none" style={{ left: x - 9, width: 18, height: H }}>
+    // Its own layer for good (translateZ): on iPhone, a plain element over the moving pages was moved
+    // in and out of a layer as each motion started and ended — the rings snapped
+    <div className="absolute top-0 z-20 pointer-events-none" style={{ left: x - 9, width: 18, height: H, transform: 'translateZ(0)', willChange: 'transform' }}>
       <div className="pinbook-spine absolute inset-0" />
       <div className="pinbook-plate absolute left-1/2 -translate-x-1/2 top-[5%] bottom-[5%] w-[12px] rounded-[3px]" />
       {[10, 24, 38, 62, 76, 90].map((top) => (
