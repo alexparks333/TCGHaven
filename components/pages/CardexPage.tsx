@@ -2007,7 +2007,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
     >
       <button
         onClick={handleClose}
-        className="absolute top-4 right-4 sm:top-6 sm:right-6 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-ink hover:bg-slate-800 z-10"
+        className="absolute top-[calc(env(safe-area-inset-top,0px)+12px)] right-4 sm:top-6 sm:right-6 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-ink hover:bg-slate-800 z-10"
       >
         <X size={18} />
       </button>

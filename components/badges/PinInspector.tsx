@@ -142,7 +142,8 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
       {/* Hidden 2D art → the stand-in's face texture */}
       <div ref={artRef} className="absolute -left-[9999px] top-0" aria-hidden><BadgePin art={def.art} size={100} /></div>
 
-      <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center">
+      {/* Below the iPhone's status bar (the page runs under it — viewportFit cover), else it sat on the battery */}
+      <button onClick={onClose} aria-label="Close" className="absolute top-[calc(env(safe-area-inset-top,0px)+12px)] right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center">
         <X size={20} />
       </button>
 
