@@ -981,33 +981,6 @@
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 10px rgba(0, 0, 0, 0.65));
 }
 .cover-subtitle { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95); }
-/* Mastered (a growing badge you hold every card of right now — BadgeBook BadgeSpot): a polished
-   platinum rim around the pin's silhouette (the silhouette, slightly larger, behind the pin), a fine
-   dark line between rim and pin, and a highlight that slowly travels around the rim. The nameplate
-   gets a matching platinum edge. No glow. */
-@property --plat-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-.pinbook-mastered { isolation: isolate; }
-.pinbook-platinum {
-  z-index: -1;
-  background: conic-gradient(from var(--plat-a),
-    #8d949c 0deg, #c9cfd5 30deg, #ffffff 48deg, #dfe4e9 62deg, #9aa1a9 100deg,
-    #b9c0c7 150deg, #eef1f4 178deg, #a4abb3 210deg,
-    #858c94 250deg, #cfd5db 290deg, #f7f9fb 310deg, #a8afb6 335deg, #8d949c 360deg);
-  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.7));
-  animation: pinbook-platinum 8s linear infinite;
-}
-.pinbook-platinum-gap { z-index: -1; background: #1b1714; }
-@keyframes pinbook-platinum { to { --plat-a: 360deg; } }
-.pinbook-plate-mastered {
-  box-shadow: 0 0 0 1px #d9dee3, 0 0 0 2px rgba(20, 16, 12, 0.85), 0 1px 3px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.55);
-}
-@media (prefers-reduced-motion: reduce) { .pinbook-platinum { animation: none; } }
-/* The highlight repaints its pin every frame. Over a moving page that's too much for iPhone Safari:
-   it couldn't redraw the page in time, so the pins blinked and swapped mid-turn. It pauses while a
-   page turns (desktop), and in the phone book runs only on the page on screen with the book still. */
-.pinbook-turning .pinbook-platinum,
-.phonebook-page .pinbook-platinum { animation-play-state: paused; }
-.phonebook-page.phonebook-live .pinbook-platinum { animation-play-state: running; }
 /* Picking the chapter that's already open: its title glints */
 @keyframes pinbook-title-flash { 0% { filter: brightness(1); } 30% { filter: brightness(1.8) drop-shadow(0 0 10px rgba(246, 220, 152, 0.8)); } 100% { filter: brightness(1); } }
 .pinbook-title-flash { animation: pinbook-title-flash 0.9s ease-out; }

@@ -444,8 +444,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
             {/* In page order, always: a page's element never moves in the page when roles change (moving
                 it made iPhone rebuild its layer — pages and rings blinking as a turn ended) */}
             {Array.from(roles.entries()).sort((a, b) => a[0] - b[0]).map(([i, role]) => (
-              // phonebook-live: the one page whose mastered pins' platinum highlight runs (globals.css)
-              <div key={`page${i}`} className={cn('phonebook-page absolute top-0', !anim && i === p && 'phonebook-live')} style={pageStyle(i, role)} data-end={role === 'back' ? '' : undefined}>
+              <div key={`page${i}`} className="phonebook-page absolute top-0" style={pageStyle(i, role)} data-end={role === 'back' ? '' : undefined}>
                 {i === -1 ? <BookCover set={set} badges={badges} /> : (
                   <Half content={page(i)} side={i % 2 === 1 ? 'right' : 'left'} placed W={W} H={H} coverVars={coverVars} set={set} badges={badges} pageProps={pageProps} />
                 )}

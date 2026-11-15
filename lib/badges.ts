@@ -232,10 +232,9 @@ export interface BadgeDef {
   description: string  // how to earn it, shown on hover
   game: Game
   slotNoun: string     // "Legends" → "7 / 12 Legends"
-  // Growing badge: staff add slots as new sets come out (e.g. Overnumbered Legends Mastery). Earning
-  // it is still for good; holding every card it asks for *now* makes it Mastered — the pin glows.
-  // Fixed badges (unset) never change, so once earned they're simply done (no glow).
-  growing?: boolean
+  // (Badges saved before 2026-11-15 may still hold `growing: true` — the old "Growing badge" switch,
+  // which made a badge "Mastered" while a collector held every card. Removed: it's unread. Any badge
+  // can still have cards added; a pin just shows Grayscale or Full by its tiers.)
   slots: BadgeSlot[]
   art: string          // built-in pin art to draw when there's no imageUrl (components/badges/BadgePin.tsx)
   imageUrl?: string    // uploaded pin art (PNG with transparency) — shown in the book, and the 3D face
@@ -258,8 +257,8 @@ export interface BadgeDef {
   tiers?: [number, number] | [number, number, number]
   // Tiers as an amount instead (the staff portal's Percentage / Amount toggle): [Grayscale, Full],
   // how many of the badge's slots unlock each look. Set = these win over `tiers` (kept, so switching
-  // back to Percentage restores it). Capped at the badge's slots, so a growing badge's amount stays
-  // reachable while it has fewer slots than the number.
+  // back to Percentage restores it). Capped at the badge's slots, so it stays reachable if the
+  // badge loses cards.
   tierCounts?: [number, number]
   displayScale?: number // how big its pin is drawn wherever pins show flat (book pages, shelf, lists), 1 = as is (0.1–5) — evens out art framed bigger or smaller than the rest; unset = 1
   tiersOff?: (1 | 2 | 3)[] // [1] = Grayscale switched off (the pin stays a hole until Full). Anything else is from the old three looks and ignored — read through looksOn(); unset = both on
@@ -307,8 +306,6 @@ export const DEFAULT_BADGES: BadgeDef[] = [
   },
 ]
 
-/** A growing badge whose every current slot the collector fills right now (`have` from their
- *  progress, checked against the badge's slots today — a badge that grew since is not mastered). */
 // The two looks a pin can have, unlocked by progress (each badge's tiers, set in the staff
 // portal): 1 Grayscale — no colour, a little shine (polished grey), no finishes; 3 Full — the pin
 // as designed. 0 = not unlocked yet (a hole in the book). (There's no 2: it was a middle Painted
@@ -386,9 +383,6 @@ export function tierFill(def: BadgeDef, progress: [number, number] | undefined):
   return to > from ? Math.max(0, Math.min(1, (have - from) / (to - from))) : 0
 }
 
-export function isMastered(def: BadgeDef, progress: [number, number] | undefined, earned: boolean): boolean {
-  return !!def.growing && earned && def.slots.length > 0 && (progress?.[0] ?? 0) >= def.slots.length && (progress?.[1] ?? 0) === def.slots.length
-}
 
 export interface BadgeProgress {
   have: number

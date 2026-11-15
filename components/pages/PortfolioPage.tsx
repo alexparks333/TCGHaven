@@ -359,9 +359,10 @@ export default function PortfolioPage() {
           ))}
         </div>
 
-        {/* Circle chart (wide screens only — too tall for phones) beside Top Performers */}
+        {/* Circle chart: the collection's value by game (it replaced the By Game cards, 2026-11-15) —
+            beside Top Performers on wide screens, above it on phones */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(240px,1fr)_2fr] gap-4 mb-8">
-        <div className="hidden lg:block card-glass p-6">
+        <div className="card-glass p-6">
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Value by Game</h3>
           {byGame.some((g) => g.value > 0)
             ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} />
@@ -438,33 +439,6 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        </div>
-
-        {/* Per-game value cards */}
-        <div className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">By Game</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {byGame.map(({ game, name, count, value, color }) => (
-              <div key={game} className="card-glass p-5 flex items-center justify-between">
-                <div>
-                  <div
-                    className="text-xs font-bold px-2 py-0.5 rounded-full inline-block mb-2"
-                    style={{ backgroundColor: color + '22', color }}
-                  >
-                    {name}
-                  </div>
-                  <div className="text-xl font-bold text-ink">{formatCurrency(value)}</div>
-                  <div className="text-xs text-slate-500">{count} cards</div>
-                </div>
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-black"
-                  style={{ backgroundColor: color + '22', color }}
-                >
-                  {count}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* All Cards table */}

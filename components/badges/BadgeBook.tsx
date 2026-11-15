@@ -4,7 +4,7 @@ import { BookBinding } from '@/components/badges/BookBinding'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, insideLook, pagePin, pinDrawSize, badgeTier, chaptersOf, isMastered, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, insideLook, pagePin, pinDrawSize, badgeTier, chaptersOf, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -402,14 +402,11 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   const tier = badgeTier(def, badges?.progress[def.id])
   const earnedAt = tier > 0 ? badges?.earned[def.id] ?? 1 : undefined
   const [have, total] = badges?.progress[def.id] ?? [0, def.slots.length]
-  const mastered = isMastered(def, badges?.progress[def.id], !!badges?.earned[def.id]) && tier === 3
   const toNext = toNextTier(def, badges?.progress[def.id])
   const next = nextTier(def, badges?.progress[def.id])
   // Tiered: how far from this look to the next (not the whole badge) — the ghost fill and the bar
   const fill = tierFill(def, badges?.progress[def.id])
   const needNext = next ? tierNeed(def, next, total) : total
-  // An earned growing badge that has new cards since: how many to master it again
-  const toMaster = def.growing && earnedAt && tier === 3 && !mastered ? Math.max(0, def.slots.length - have) : 0
 
   return (
     <button
@@ -422,7 +419,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
       }}
-      aria-label={`${def.name} — ${mastered ? 'mastered' : tier ? TIER_NAMES[tier] : 'not earned yet'} — view in 3D`}
+      aria-label={`${def.name} — ${tier ? TIER_NAMES[tier] : 'not earned yet'} — view in 3D`}
       className="relative flex flex-col items-center justify-center outline-none cursor-pointer"
       style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}
     >
@@ -435,21 +432,13 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           // of the pin — blurry on hover
           <span className="pinbook-pin-shadow block">
           <span
-            className={cn('pinbook-pin block relative', mastered && 'pinbook-mastered')}
+            className="pinbook-pin block relative"
             style={{
               transform: tilt
                 ? `perspective(700px) rotateY(${(tilt.x - 0.5) * 16}deg) rotateX(${(0.5 - tilt.y) * 16}deg) translateY(-3px)`
                 : undefined,
             }}
           >
-            {/* Mastered: a polished platinum rim around the pin's own silhouette, with a highlight
-                slowly travelling around it (the silhouette drawn a little larger behind the pin) */}
-            {mastered && (
-              <>
-                <span className="pinbook-platinum absolute inset-[-3.6%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(art?.src), mask: pinMask(art?.src) }} />
-                <span className="pinbook-platinum-gap absolute inset-[-0.8%] pointer-events-none" aria-hidden style={{ WebkitMask: pinMask(art?.src), mask: pinMask(art?.src) }} />
-              </>
-            )}
             {/* The pin in its look; the next look rising over it in the same box, so the two line up
                 exactly and tilt together (flex: no gap under the image; no shrinking a pin drawn
                 bigger than its slot) */}
@@ -475,7 +464,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
         )}
       </span>
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
-      <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} mastered={mastered} gap={-pin * 0.02} />
+      <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} gap={-pin * 0.02} />
 
       {open && interactive && (
         <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
@@ -483,10 +472,8 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
           <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
             {tier ? <><Check size={10} />{TIER_NAMES[tier]}{toNext ? ` · ${toNext} more ${def.slotNoun} for ${TIER_NAMES[nextTier(def, badges?.progress[def.id])]}` : ''}</> : <><Lock size={10} />Not earned yet{toNext ? ` · ${toNext} more ${def.slotNoun} to unlock` : ''}</>}
           </span>
-          {mastered && <span className="block mt-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">✦ Mastered — every {def.slotNoun.replace(/s$/, '')} so far</span>}
-          {toMaster > 0 && <span className="block mt-1 text-[10px] font-semibold text-slate-500">{toMaster} more {def.slotNoun} to master it{have > 0 ? ' again' : ''}</span>}
           <span className="block text-[11px] text-slate-400 mt-2 leading-snug">{def.description}</span>
-          {(tier < 3 || toMaster > 0) && (
+          {tier < 3 && (
             <span className="block mt-2">
               <span className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1">
                 <span>{next ? `To ${TIER_NAMES[next]}` : isMe ? 'Your progress' : 'Progress'}</span>
@@ -632,22 +619,13 @@ function EmptySpot({ size }: { size: number }) {
 }
 
 // A small engraved brass plate under each spot: the badge's name once earned
-// A CSS mask in the pin's shape: its uploaded art, or the built-in pins' silhouette
-// (src: the pin art as drawn — useTrimmedArt's, already a loadable URL)
-function pinMask(src0?: string) {
-  const src = src0
-    ? `url("${src0}")`
-    : `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='${PIN_VIEWBOX}'><path d='${PIN_SILHOUETTE}'/></svg>`)}")`
-  return `${src} center / contain no-repeat`
-}
-
-function Nameplate({ size, text, lit, gap, mastered }: { size: number; text: string; lit: boolean; gap: number; mastered?: boolean }) {
+function Nameplate({ size, text, lit, gap }: { size: number; text: string; lit: boolean; gap: number }) {
   return (
     <span
-      className={cn('pinbook-plate-name pinbook-serif relative block max-w-full truncate rounded-[2px] text-center font-bold uppercase', lit ? 'pinbook-plate-lit' : 'pinbook-plate-dim', mastered && 'pinbook-plate-mastered')}
+      className={cn('pinbook-plate-name pinbook-serif relative block max-w-full truncate rounded-[2px] text-center font-bold uppercase', lit ? 'pinbook-plate-lit' : 'pinbook-plate-dim')}
       style={{ marginTop: gap, fontSize: Math.max(7, size * 0.068), padding: `${size * 0.018}px ${size * 0.07}px`, letterSpacing: '0.14em' }}
     >
-      {mastered && '✦ '}{text}
+      {text}
     </span>
   )
 }

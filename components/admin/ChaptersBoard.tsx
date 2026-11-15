@@ -266,7 +266,6 @@ function TileFace({ b, lifted }: { b: BadgeDef; lifted?: boolean }) {
       <span className="flex items-center justify-center" style={{ width: 46, height: 46 * 1.12 }}><BadgePin art={b.art} imageUrl={b.imageUrl} size={pinSize(b, 46)} /></span>
       <span className="max-w-[112px] truncate text-[11px] font-semibold text-ink">{b.name}</span>
       {!b.slots.length && <span className="absolute left-1.5 bottom-1.5 w-2 h-2 rounded-full bg-amber-500" title="No requirements yet" />}
-      {b.growing && <span className="absolute right-1.5 bottom-1.5 text-[9px] font-bold text-amber-700" title="Growing badge — can be Mastered">✦</span>}
     </div>
   )
 }

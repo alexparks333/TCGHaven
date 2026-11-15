@@ -121,7 +121,7 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   **Percentage or Amount** (staff portal toggle, 2026-11-14): Amount stores `tierCounts`
   ([Grayscale, Full] as a number of slots), which wins over `tiers` (kept, so switching back to
   Percentage restores it). Every count goes through `tierNeed()`, which caps an amount at the
-  badge's current slots — a growing badge's amount stays put as it grows. Creators get the same
+  badge's current slots — an amount stays put when cards are added. Creators get the same
   choice (BadgeMaker UnlockEditor: "% / Cards" — Cards stores `tierCounts`).
   **Progress fill is tiered** (`tierFill()`): it measures from the current look to the next, not
   the whole badge. A hole ghosts in toward Grayscale (Grayscale at 50% of 10 cards: 3 cards = 60%
@@ -203,7 +203,8 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   the page); in-book motions start in the same frame (styles flushed, no two-frame wait); pages are
   memoized (`Half`, stable `pageProps`) so starting a turn redraws no pins. The page area has
   `touch-action: none` so iOS can't take a swipe as a scroll or back gesture.
-  **Never run an endless paint animation over a moving page.** The mastered pins' platinum
+  **Never run an endless paint animation over a moving page.** (The platinum highlight below is gone
+  since 2026-11-15, along with `phonebook-live`; the lesson stands.) The (old) mastered pins' platinum
   highlight (`--plat-a` in a conic gradient) repaints its pin every frame; over a turning page iPhone
   Safari couldn't redraw in time and the pins blinked and swapped mid-turn. It now runs only on the
   phone book page on screen with the book still (`phonebook-page` / `phonebook-live`), pauses during
@@ -267,14 +268,12 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   highlights otherwise reflects as white), pale bands at the outline count as gold (AI art paints
   the coin's side in perspective), light clear coat only. Limits: depth is guessed from colour, so
   faces/figures aren't truly sculpted — a depth map or a .glb gets past that.
-- **Earned vs Mastered (2026-10-29):** earned is for good (never taken away — not when cards are
-  sold, not when a badge grows). A badge with `growing` (staff portal switch "Growing badge" — e.g.
-  Overnumbered Legends Mastery, which gains a slot per new set) is **Mastered** while the collector
-  holds every card it asks for today (`isMastered()`): its pin gets a polished platinum rim around its silhouette with a
-  highlight slowly travelling round it (`.pinbook-platinum`, a conic gradient on the pin mask drawn
-  slightly larger behind the pin; the owner rejected glows, rays and flames as too much), a "✦" gold nameplate, and "✦ Mastered" in the hover
-  and 3D view; earned-but-behind shows "N more to master it". Fixed badges never glow. The Dev
-  panel's "Show all badges as earned" also fills progress, so growing badges show Mastered.
+- **Earned is for good:** never taken away — not when cards are sold, not when a badge gains cards.
+  **A pin only ever looks Grayscale or Full**, by its tiers. There's no "growing" or "Mastered"
+  any more (removed 2026-11-15 at the owner's request: the staff portal's "Growing badge" switch,
+  `isMastered()`, the "✦ Mastered" / "N more to master it" lines, and before that the platinum
+  rim and nameplate; glows, rays and flames were rejected earlier too — don't bring any of it back).
+  Old badge docs may still hold `growing: true`; it's unread. Any badge can still have cards added.
 - **Cover pictures:** a book can have `coverImage` (staff portal → edit book → "Cover image"): a
   picture of the cover on a plain light background, cut out in the browser (`lib/coverCutout.ts`:
   light colourless pixels connected to the border — backdrop and shadow — go transparent, then

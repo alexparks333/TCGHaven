@@ -450,13 +450,6 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             <textarea className="input-field resize-none" rows={2} value={b.description} onChange={(e) => patch({ description: e.target.value })}
               placeholder="Collect the Overnumbered or Signature printing of every Legend in Riftbound: Origins." />
           </Field>
-          <label className="flex items-start gap-2.5 rounded-xl border border-slate-800 p-3 cursor-pointer">
-            <input type="checkbox" className="mt-0.5" checked={!!b.growing} onChange={(e) => patch({ growing: e.target.checked || undefined })} />
-            <span>
-              <span className="block text-sm font-semibold text-ink">Growing badge</span>
-              <span className="block text-[11px] text-slate-500 leading-snug">You&rsquo;ll add cards to it as new sets come out. Collectors keep it once earned; holding every card it asks for right now makes it <b>Mastered</b> (the pin glows). Leave off for badges that never change.</span>
-            </span>
-          </label>
           <Field label="What each slot is called" hint={`Progress reads like "3 / ${b.slots.length || 12} ${b.slotNoun || 'cards'}".`}>
             <input className="input-field" value={b.slotNoun} onChange={(e) => patch({ slotNoun: e.target.value })} placeholder="Legends" />
           </Field>
@@ -497,7 +490,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                       {TIER_NAMES[t]}
                     </label>
                     <div className={cn('flex items-center gap-1', !on && 'opacity-40')}>
-                      <TierPercent value={tiers[i]} disabled={!on} max={counts ? 9999 : 100}
+                      <TierPercent value={counts ? Math.min(tiers[i], Math.max(1, b.slots.length)) : tiers[i]} disabled={!on} max={counts ? Math.max(1, b.slots.length) : 100}
                         onCommit={(v) => {
                           const next = [...tiers] as [number, number]
                           next[i] = v
@@ -515,7 +508,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             </div>
             <span className="block text-[11px] text-slate-500 mt-1">
               {b.tierCounts
-                ? `How many of the badge's ${b.slots.length} ${b.slotNoun || 'cards'} a collector needs for each look of the pin — it follows their current progress. The number stays put as the badge grows (capped at the badge's size while it's smaller). Untick Grayscale to skip it: the pin stays a hole until Full.`
+                ? `How many of the badge's ${b.slots.length} ${b.slotNoun || 'cards'} a collector needs for each look of the pin — it follows their current progress. It can't be more than the badge's ${b.slots.length}, and it stays put when you add cards later. Untick Grayscale to skip it: the pin stays a hole until Full.`
                 : 'How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick Grayscale to skip it: the pin stays a hole until Full.'}
             </span>
           </div>

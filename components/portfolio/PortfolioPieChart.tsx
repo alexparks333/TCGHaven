@@ -4,11 +4,12 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { formatCurrency } from '@/lib/utils'
 
 interface Props {
-  data: { name: string; value: number; color: string }[]
+  data: { name: string; value: number; color: string; count?: number }[]
 }
 
-/** Portfolio's circle chart: collection value split by game, with each game's value listed
- *  beneath. Shown beside Top Performers on wide screens only (too tall for phones). */
+/** Portfolio's circle chart: collection value split by game, with each game's value and share
+ *  listed beneath. Hover (tap on phones) a slice for its value and card count. The Portfolio's only
+ *  by-game view since 2026-11-15 (it replaced the By Game cards) — on phones too. */
 export function PortfolioPieChart({ data }: Props) {
   const total = data.reduce((s, d) => s + d.value, 0)
   return (
@@ -23,7 +24,10 @@ export function PortfolioPieChart({ data }: Props) {
             </Pie>
             <Tooltip
               contentStyle={{ background: '#ede1c6', border: '1px solid #d6c49f', color: '#2b2014', borderRadius: '0.75rem', fontSize: 12 }}
-              formatter={(val: number) => formatCurrency(val)}
+              formatter={(val: number, _name, item) => {
+                const count = (item?.payload as { count?: number } | undefined)?.count
+                return count !== undefined ? `${formatCurrency(val)} · ${count} card${count === 1 ? '' : 's'}` : formatCurrency(val)
+              }}
             />
           </PieChart>
         </ResponsiveContainer>
