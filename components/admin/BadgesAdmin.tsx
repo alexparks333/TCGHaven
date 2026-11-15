@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import {
-  Plus, Pencil, Trash2, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon, Sparkles, CheckCircle2,
+  Plus, Pencil, Trash2, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon, Sparkles, CheckCircle2, Cpu, Cloud,
 } from 'lucide-react'
+import { adminFetch } from '@/lib/firebase/authFetch'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
@@ -15,7 +16,7 @@ import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierPercents, PIN_BACKS, pinSize, t
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
-import { analyzeArt, loadKit, reliefServerUp, reliefSettings, saveKit } from '@/lib/reliefStudio'
+import { analyzeArt, connectRelief, loadKit, reliefSettings, saveKit, RELIEF_GPU_LABEL, type ReliefGpu } from '@/lib/reliefStudio'
 import ChaptersBoard from './ChaptersBoard'
 import CardexCardPicker from './CardexCardPicker'
 
@@ -270,11 +271,17 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
   const patch = (p: Partial<BadgeDef>) => setB((x) => ({ ...x, ...p }))
   const badgeNow = b
   const [studio, setStudio] = useState(false)
-  // New pin art is analyzed for the Relief Studio straight away, so the Studio opens ready
-  const [reliefJob, setReliefJob] = useState<{ state: 'running' | 'done' | 'offline' | 'error'; msg?: string } | null>(null)
-  async function autoAnalyze(artUrl: string, useAlpha = reliefSettings(b.relief).artHoles) {
-    if (!(await reliefServerUp())) return setReliefJob({ state: 'offline' })
-    setReliefJob({ state: 'running' })
+  // The pin art's analysis for the Relief Studio (its 3D maps) runs when staff pick where: their own
+  // GPU (HavenRelief on this computer) or the cloud GPU Creators use. Never by itself on upload
+  // (owner's ask, 2026-11-14) — that always went to this computer's server.
+  const [reliefJob, setReliefJob] = useState<{ state: 'running' | 'done' | 'offline' | 'error'; msg?: string; gpu: ReliefGpu } | null>(null)
+  const [gpu, setGpu] = useState<ReliefGpu | null>(null) // the last one picked — the Studio opens on it
+  const ticket = () => adminFetch('/api/relief/ticket', { method: 'POST' })
+  async function autoAnalyze(artUrl: string, where: ReliefGpu, useAlpha = reliefSettings(b.relief).artHoles) {
+    setGpu(where)
+    setReliefJob({ state: 'running', gpu: where })
+    const problem = await connectRelief(where, ticket)
+    if (problem) return setReliefJob(problem === 'offline-local' ? { state: 'offline', gpu: where } : { state: 'error', msg: problem, gpu: where })
     try {
       const r = await fetch(badgeAsset(artUrl)!)
       if (!r.ok) throw new Error('couldn’t read the art back')
@@ -282,9 +289,9 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
       const reliefKit = await saveKit(staffStorage, `badges/${id || 'new'}`, kit)
       // piece edits belong to one analysis — keep the rest of the settings
       setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, levelRule: 'borders', pieces: {}, soft: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
-      setReliefJob({ state: 'done' })
+      setReliefJob({ state: 'done', gpu: where })
     } catch (e) {
-      setReliefJob({ state: 'error', msg: e instanceof Error ? e.message : String(e) })
+      setReliefJob({ state: 'error', msg: e instanceof Error ? e.message : String(e), gpu: where })
     }
   }
 
@@ -408,7 +415,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
               onChange={(e) => { const v = Number(e.target.value); patch({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
             <span className="block text-[11px] text-slate-500 leading-snug">How big the pin shows in the book, on the shelf and in lists — evens out art that&rsquo;s framed bigger or smaller than the rest.</span>
           </label>
-          <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { patch({ imageUrl }); if (imageUrl) autoAnalyze(imageUrl) }}
+          <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { setB((x) => ({ ...x, imageUrl, reliefKit: undefined })); setReliefJob(null) /* the old kit was made from the old art */ }}
             note={reliefJob?.state === 'running'
               ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300"><Loader2 size={12} className="animate-spin" />Analyzing…</span>
               : b.reliefKit && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"><CheckCircle2 size={12} />Relief ready</span>} />
@@ -417,10 +424,24 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
               onChange={(e) => {
                 const artHoles = e.target.checked
                 setB((x) => ({ ...x, relief: { ...reliefSettings(x.relief), artHoles } }))
-                if (b.imageUrl) autoAnalyze(b.imageUrl, artHoles)
               }} />
-            <span>Use transparency channel<span className="block text-[11px] text-slate-500">Transparent areas inside the art become holes. Off: only the outside is cut out.</span></span>
+            <span>Use transparency channel<span className="block text-[11px] text-slate-500">Transparent areas inside the art become holes. Off: only the outside is cut out. Generate again after changing it.</span></span>
           </label>
+          {b.imageUrl && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-slate-600">{b.reliefKit ? 'Make the 3D maps again' : 'Make the pin’s 3D maps'}</span>
+              <div className="grid grid-cols-2 gap-2">
+                {(['local', 'cloud'] as const).map((where) => (
+                  <button key={where} type="button" onClick={() => autoAnalyze(b.imageUrl!, where)} disabled={reliefJob?.state === 'running'}
+                    className={cn('btn-secondary justify-center text-xs !px-2 disabled:opacity-60', gpu === where && 'ring-1 ring-amber-500/60')}>
+                    {reliefJob?.state === 'running' && reliefJob.gpu === where ? <Loader2 size={14} className="animate-spin" /> : where === 'local' ? <Cpu size={14} /> : <Cloud size={14} />}
+                    {RELIEF_GPU_LABEL[where]}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[11px] text-slate-500 leading-snug">Local: this computer&rsquo;s GPU, through HavenRelief running here (free). Cloud: the GPU Creators use (Modal, billed per pin).</span>
+            </div>
+          )}
           {!b.imageUrl && (
             <Field label="Built-in art">
               <select className="input-field" value={b.art} onChange={(e) => patch({ art: e.target.value })}>
@@ -438,17 +459,18 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             </Field>
           )}
           <button type="button" onClick={() => setStudio(true)} disabled={reliefJob?.state === 'running'} className="btn-secondary justify-center text-xs disabled:opacity-60">
-            {reliefJob?.state === 'running' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{reliefJob?.state === 'running' ? 'Analyzing for the Relief Studio…' : 'Relief Studio'}
+            {reliefJob?.state === 'running' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{reliefJob?.state === 'running' ? `Analyzing ${reliefJob.gpu === 'cloud' ? 'on the cloud GPU' : 'on this computer'}…` : 'Relief Studio'}
           </button>
           {reliefJob && reliefJob.state !== 'running' && (
             <span className={cn('text-[11px] leading-snug -mt-1', reliefJob.state === 'done' ? 'text-emerald-600' : 'text-amber-600')}>
               {reliefJob.state === 'done' ? 'Relief kit ready — the Studio opens straight onto the controls.'
-                : reliefJob.state === 'offline' ? 'Relief server not running — start it and open the Studio to analyze.'
+                : reliefJob.state === 'offline' ? <>HavenRelief isn&rsquo;t running on this computer. On the GPU PC: <code>cd tools\havenrelief</code> then <code>.venv\Scripts\python server.py</code> (on the live site, with <code>HAVENRELIEF_ORIGINS=https://www.tcghaven.org</code>) — or use the cloud.</>
                 : `Analysis failed: ${reliefJob.msg}`}
             </span>
           )}
-          {reliefJob?.state === 'running' && <span className="text-[11px] text-slate-500 -mt-1">About a minute — keep this editor open.</span>}
+          {reliefJob?.state === 'running' && <span className="text-[11px] text-slate-500 -mt-1">About a minute{reliefJob.gpu === 'cloud' ? ' (a little longer if the cloud GPU is waking up)' : ''} — keep this editor open.</span>}
           {studio && <ReliefStudio badge={{ ...b, id: id || 'new' }} onClose={() => setStudio(false)}
+            gpu={gpu} connect={(where) => { setGpu(where); return connectRelief(where, ticket) }}
             // the Studio's result is saved with the badge straight away — a separate "Save badge" was easy to miss
             onApply={async (p) => { const next = { ...b, ...p }; setB(next); await save(next) }} />}
           {/* the pin's normal and depth maps come from the Relief Studio ("Save relief to badge") */}

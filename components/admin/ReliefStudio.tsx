@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage'
-import { Check, ChevronLeft, ChevronRight, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Cloud, Cpu, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
 import { ReliefAnalyzing, type AnalyzingKind } from './ReliefAnalyzing'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -16,7 +16,7 @@ import {
   BASE_FINISH_IDS, DETAILS, FINISHES, FINISH_HOLE, LENTICULAR_MAX_PER_SET, LENTICULAR_MAX_SETS, LENTICULAR_MAX_TOTAL, reliefServerUrl, lenticularPictures,
   DEFAULT_METAL, layerLook, withFinishLayers, type FinishLayer,
   type DetailKind, type LenticularSet, analyzeArt, recalculateNormals, compose, detailMap, finishMap, finishPng, heightPng, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
-  type Composed, type ReliefKit, type ReliefSettings,
+  type Composed, type ReliefKit, type ReliefSettings, type ReliefGpu, RELIEF_GPU_LABEL,
 } from '@/lib/reliefStudio'
 import { HOLE_SMOOTH, bakeReliefBuild, cleanRelief, disposeRelief, type LiveRelief } from '@/components/badges/pinRelief'
 import { reliefBuildKey } from '@/lib/reliefBuild'
@@ -36,7 +36,7 @@ type View = 'art' | 'pieces' | 'levels' | 'normals'
 // Level colours, lowest → highest (the Levels view and the levels list)
 const LEVEL_COLORS = ['#3b4cc0', '#2f8fd8', '#25b8a6', '#7cc54a', '#e3c735', '#f08a2c', '#e0453a', '#c2307f']
 
-export default function ReliefStudio({ badge, onApply, onClose, storage = staffStorage, folder }: {
+export default function ReliefStudio({ badge, onApply, onClose, storage = staffStorage, folder, gpu: gpuAtOpen = null, connect }: {
   badge: BadgeDef
   onApply: (patch: Partial<BadgeDef>) => void | Promise<void>
   onClose: () => void
@@ -44,6 +44,12 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
    *  passes the collector app's Storage and creators/{uid}/badges/{id} (docs/creators.md) */
   storage?: FirebaseStorage
   folder?: string
+  /** Staff (the admin badge editor) choose where the AI runs — their own GPU or the cloud one
+   *  (lib/reliefStudio.ts connectRelief; resolves to null when ready, else what's wrong). Unset (the
+   *  Creator Studio): the endpoint is already the cloud GPU, and a badge without a kit is analyzed
+   *  as the Studio opens. `gpu`: the one picked in the editor, connected to as the Studio opens. */
+  gpu?: ReliefGpu | null
+  connect?: (where: ReliefGpu) => Promise<string | null>
 }) {
   const fileFolder = folder ?? `badges/${badge.id || 'new'}`
   const mountRef = useRef<HTMLDivElement>(null)
@@ -102,6 +108,16 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   const [aiRun, setAiRun] = useState<{ kind: AnalyzingKind; startedAt: number } | null>(null) // the AI at work: the friendly loading screen
   const [error, setError] = useState('')
   const [server, setServer] = useState<boolean | null>(null)
+  const [gpu, setGpu] = useState<ReliefGpu | null>(gpuAtOpen)
+  const [gpuProblem, setGpuProblem] = useState('') // the cloud GPU's trouble (a local one shows how to start it)
+  async function pickGpu(where: ReliefGpu, thenAnalyze = false) {
+    if (!connect) return
+    setGpu(where); setServer(null); setGpuProblem('')
+    const problem = await connect(where)
+    setServer(!problem)
+    if (problem && problem !== 'offline-local') setGpuProblem(problem)
+    if (!problem && thenAnalyze) analyze()
+  }
   const [quality, setQuality] = useState<'fast' | 'normal' | 'high'>('high')
   const fileInput = useRef<HTMLInputElement>(null)
   const set = (p: Partial<ReliefSettings>) => setSettings((s) => ({ ...s, ...p }))
@@ -159,7 +175,9 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   // Open the badge's kit (usually instant — kits are cached); a badge without one is analyzed now
   useEffect(() => {
     let gone = false
-    reliefServerUp().then((up) => {
+    // Staff: nothing runs until they pick a GPU (one already picked in the editor is connected to)
+    if (connect) { if (gpuAtOpen) pickGpu(gpuAtOpen) }
+    else reliefServerUp().then((up) => {
       if (gone) return
       setServer(up)
       if (!kitUrls && up && badge.imageUrl) analyze()
@@ -537,7 +555,16 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
         )}
         {!kit && !status && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-sm text-slate-500 max-w-xs text-center">{server === false ? 'The analysis server isn’t running — start it to analyze this art.' : 'Waiting for the pin art’s analysis…'}</p>
+            {connect ? (
+              <div className="flex flex-col items-center gap-3 pointer-events-auto max-w-sm text-center">
+                <p className="text-sm text-slate-400">Where should the AI make this pin&rsquo;s 3D maps?</p>
+                <GpuButtons gpu={gpu} busy={server === null && !!gpu} onPick={(w) => pickGpu(w, true)} />
+                {gpu === 'local' && server === false && <LocalHelp />}
+                {gpuProblem && <p className="text-[11px] text-amber-500">{gpuProblem}</p>}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 max-w-xs text-center">{server === false ? 'The analysis server isn’t running — start it to analyze this art.' : 'Waiting for the pin art’s analysis…'}</p>
+            )}
           </div>
         )}
         {kit && <p className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-slate-500 pointer-events-none">Drag to turn · scroll to zoom · click a piece to select it · hold Tab to paint a selection</p>}
@@ -651,12 +678,14 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
               <details className="rounded-xl border border-slate-800 p-3 text-xs">
                 <summary className="cursor-pointer font-semibold text-slate-300">Re-analyze the art</summary>
                 <div className="flex flex-col gap-2 mt-2">
+                  {connect && <GpuButtons gpu={gpu} busy={server === null && !!gpu} onPick={(w) => pickGpu(w)} />}
                   <div className="flex items-center gap-2">
                     <span className={cn('w-2 h-2 rounded-full', server === null ? 'bg-slate-600' : server ? 'bg-emerald-500' : 'bg-red-500')} />
-                    {server === null ? 'Checking the analysis server…' : server ? `Server ready (${new URL(reliefServerUrl()).host})` : 'Analysis server not running'}
-                    {server === false && <button onClick={() => reliefServerUp().then(setServer)} className="ml-auto underline text-slate-400">Retry</button>}
+                    {connect && !gpu ? 'Pick where the AI runs' : server === null ? 'Checking the analysis server…' : server ? `${gpu === 'cloud' ? 'Cloud GPU' : 'Server'} ready (${new URL(reliefServerUrl()).host})` : gpu === 'cloud' ? 'The cloud GPU isn’t answering' : 'Analysis server not running'}
+                    {server === false && <button onClick={() => (connect && gpu ? pickGpu(gpu) : reliefServerUp().then(setServer))} className="ml-auto underline text-slate-400">Retry</button>}
                   </div>
-                  {server === false && <p className="text-[11px] leading-snug text-slate-500">On the GPU PC: <code className="text-slate-300">cd tools\havenrelief</code> then <code className="text-slate-300">.venv\Scripts\python server.py</code></p>}
+                  {gpuProblem && <p className="text-[11px] leading-snug text-amber-500">{gpuProblem}</p>}
+                  {server === false && gpu !== 'cloud' && <LocalHelp />}
                   <input ref={fileInput} type="file" accept="image/png,image/webp,image/jpeg" className="file:mr-2 file:rounded-lg file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-300" />
                   <div className="flex gap-2">
                     <select value={quality} onChange={(e) => setQuality(e.target.value as typeof quality)} className="input-field !py-1.5 text-xs flex-1">
@@ -1377,4 +1406,29 @@ function activeMaterials(s: ReliefSettings): Record<string, number> {
   const out: Record<string, number> = {}
   for (const [id, f] of Object.entries(s.materials)) if (!s.finishOff.includes(Number(id))) out[id] = f
   return out
+}
+
+// Staff's two places to run the AI (lib/reliefStudio.ts connectRelief)
+function GpuButtons({ gpu, busy, onPick }: { gpu: ReliefGpu | null; busy: boolean; onPick: (where: ReliefGpu) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 w-full">
+      {(['local', 'cloud'] as const).map((where) => (
+        <button key={where} type="button" onClick={() => onPick(where)} disabled={busy}
+          className={cn('btn-secondary justify-center text-xs !px-2 disabled:opacity-60', gpu === where && 'ring-1 ring-amber-500/60')}>
+          {busy && gpu === where ? <Loader2 size={14} className="animate-spin" /> : where === 'local' ? <Cpu size={14} /> : <Cloud size={14} />}
+          {RELIEF_GPU_LABEL[where]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function LocalHelp() {
+  return (
+    <p className="text-[11px] leading-snug text-slate-500">
+      HavenRelief isn&rsquo;t running on this computer. On the GPU PC: <code className="text-slate-300">cd tools\havenrelief</code> then{' '}
+      <code className="text-slate-300">.venv\Scripts\python server.py</code> — from the live site, start it with{' '}
+      <code className="text-slate-300">HAVENRELIEF_ORIGINS=https://www.tcghaven.org</code>.
+    </p>
+  )
 }

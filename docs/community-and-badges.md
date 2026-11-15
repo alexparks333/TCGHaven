@@ -320,9 +320,17 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   depth layers, integrated detail, Marigold normals, and Segment Anything **pieces** (16-bit
   values split across two 8-bit channels; see havenrelief.py). The server caches every analysis
   on disk by the image's bytes (`cache/`, git-ignored) and frees GPU memory between models (with
-  all three resident the card spilled into system RAM: 150s → 58s). Uploading pin art in the
-  badge editor auto-analyzes and saves the kit with the badge (`reliefKit`); the Studio then opens
-  straight onto live controls — everything below runs in the browser, no AI re-run:
+  all three resident the card spilled into system RAM: 150s → 58s). **Staff pick the GPU**
+  (2026-11-14): uploading pin art no longer analyzes by itself (it clears the old art's kit).
+  Under the pin art, **Start Relief Studio On Local** (this computer's GPU, `server.py` on
+  `127.0.0.1:7861` — from the live site, start it with `HAVENRELIEF_ORIGINS=https://www.tcghaven.org`)
+  or **Generate Relief Studio On Cloud** (the Modal GPU Creators use — docs/creators.md "The 3D
+  maker's GPU"; billed per pin) analyzes and saves the kit with the badge (`reliefKit`). Both go
+  through `connectRelief()` (lib/reliefStudio.ts), which gets a ticket from `/api/relief/ticket`
+  (staff pass `verifyCreatorRequest`) — the local server checks it only if it has the secret set.
+  The Studio opened from the editor has the same two buttons (its empty state and "Re-analyze the
+  art"). Creators never choose: always the cloud. The Studio then opens straight onto live
+  controls — everything below runs in the browser, no AI re-run:
   - **Relief tab:** stepped/smooth, levels (default 8, each can be switched off), Flatten all
     pieces (default 0%, so the sculpted detail shows on the steps — at 100% it wiped the detail
     out), soften, depth, detail (default 100%), gold walls; per piece raise/lower, flatten, smooth

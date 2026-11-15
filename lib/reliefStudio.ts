@@ -735,6 +735,35 @@ export function setReliefEndpoint(url: string, ticket = '') { endpoint = { url: 
 export const reliefServerUrl = () => endpoint.url
 const ticketHeaders = (): Record<string, string> => (endpoint.ticket ? { 'X-Relief-Ticket': endpoint.ticket } : {})
 
+/** Where the AI runs. Staff choose (the admin badge editor and its Relief Studio): their own GPU —
+ *  HavenRelief's server.py on this computer — or the cloud GPU Creators always use (Modal). */
+export type ReliefGpu = 'local' | 'cloud'
+export const RELIEF_GPU_LABEL: Record<ReliefGpu, string> = { local: 'Start Relief Studio On Local', cloud: 'Generate Relief Studio On Cloud' }
+
+/** Points the analyses at the chosen GPU and checks it answers. `ticketFrom` asks the site's
+ *  /api/relief/ticket as this person ({ url, ticket } — url null when no cloud GPU is set up). The
+ *  local server gets the ticket too: it checks one only when it has HAVENRELIEF_SECRET set.
+ *  Resolves to null when ready, or what's wrong ('offline-local' = server.py isn't running here). */
+export async function connectRelief(where: ReliefGpu, ticketFrom: () => Promise<Response>): Promise<string | null> {
+  let cloudUrl: string | null = null, ticket = ''
+  try {
+    const res = await ticketFrom()
+    if (res.ok) {
+      const body = (await res.json()) as { url?: string | null; ticket?: string }
+      cloudUrl = body.url ?? null
+      ticket = body.ticket ?? ''
+    } else if (where === 'cloud') return `the site refused a cloud ticket (${res.status})`
+  } catch (e) {
+    if (where === 'cloud') return 'couldn’t ask the site for a cloud ticket — ' + (e instanceof Error ? e.message : String(e))
+  }
+  if (where === 'cloud') {
+    if (!cloudUrl) return 'the cloud GPU isn’t set up on this site (HAVENRELIEF_URL / HAVENRELIEF_SECRET in Vercel)'
+    setReliefEndpoint(cloudUrl, ticket)
+  } else setReliefEndpoint(RELIEF_SERVER, ticket)
+  if (await reliefServerUp()) return null
+  return where === 'local' ? 'offline-local' : 'the cloud GPU didn’t answer — try again in a moment'
+}
+
 export async function reliefServerUp(): Promise<boolean> {
   try {
     const r = await fetch(`${endpoint.url}/health`, { signal: AbortSignal.timeout(endpoint.ticket ? 15000 : 4000), headers: ticketHeaders() })
