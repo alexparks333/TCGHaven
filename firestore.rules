@@ -160,8 +160,11 @@ service cloud.firestore {
     }
 
     // ── Usage statistics (lib/usage.ts, lib/stats/aggregate.ts) ──────────────────────────────
-    // The sync bot account that runs the server jobs, including the nightly Statistics totals.
-    function isBot() { return signedIn() && request.auth.uid == 'yahGroB7ebaSebrsnAIRhooKVdk1'; }
+    // The sync bot account that runs the server jobs, including the nightly Statistics totals: the
+    // account ADMIN_EMAIL signs in as (lib/firebase/adminAuth.ts) — kOVse…, the first of isAdmin()'s
+    // two. It named the other one until 2026-11-14, so the totals job was refused every run since
+    // it was added (2026-11-09; the sync-prices workflow's "Call stats endpoint" step failed).
+    function isBot() { return signedIn() && request.auth.uid == 'kOVse5dvMDOSkxlitTAh1Q99sJD3'; }
 
     // One doc per account per day, written by that account's own app (increments only). NOBODY
     // reads them but the totals job — not staff, not the Owner: staff see daily totals only.
