@@ -121,8 +121,8 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   **Percentage or Amount** (staff portal toggle, 2026-11-14): Amount stores `tierCounts`
   ([Grayscale, Full] as a number of slots), which wins over `tiers` (kept, so switching back to
   Percentage restores it). Every count goes through `tierNeed()`, which caps an amount at the
-  badge's current slots — a growing badge's amount stays put as it grows. Creator badges still use
-  percentages only.
+  badge's current slots — a growing badge's amount stays put as it grows. Creators get the same
+  choice (BadgeMaker UnlockEditor: "% / Cards" — Cards stores `tierCounts`).
   **Progress fill is tiered** (`tierFill()`): it measures from the current look to the next, not
   the whole badge. A hole ghosts in toward Grayscale (Grayscale at 50% of 10 cards: 3 cards = 60%
   filled); an earned Grayscale pin has the Full pin rising over it from the bottom (`TierRise` in

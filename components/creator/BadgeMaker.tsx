@@ -559,23 +559,33 @@ export function CardPicker({ slots, onChange, title = 'What do fans collect?', h
 
 // When fans' pins change look (BadgeDef.tiers / tiersOff — the same rule as TCG Haven's own badges,
 // lib/badges.ts badgeTier): Grayscale (can be switched off: the pin stays a hole until Full) and
-// Full colour. Set as a % or as a number of cards; stored as a % either way, so it keeps working
-// when cards are added later.
+// Full colour. By % (`tiers`: a share of the badge, so it scales as cards are added) or by Cards
+// (`tierCounts`: a fixed number of cards, capped at the badge's size — the same choice as the staff
+// portal's Percentage / Amount). Switching to Cards starts from what the % gives now; switching
+// back drops the amounts (the % was kept all along).
 function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<BadgeDef>) => void }) {
-  const [byCards, setByCards] = useState(false)
+  const byCards = !!def.tierCounts
   const total = def.slots.length
-  const [grayPct, fullPct] = tierPercents(def)
   const grayOn = looksOn(def).includes(1)
   const grayN = tierNeed(def, 1, total), fullN = tierNeed(def, 3, total)
+  const [grayPct, fullPct] = byCards ? [total ? (grayN * 100) / total : 0, total ? (fullN * 100) / total : 0] : tierPercents(def)
   const noun = def.slotNoun || 'cards'
   const put = (i: 0 | 1, pct: number) => {
-    const next = [grayPct, fullPct] as [number, number]
+    const next = [...tierPercents(def)] as [number, number]
     next[i] = Math.min(100, Math.max(1, pct))
     if (i === 0) next[1] = Math.max(next[1], next[0]); else next[0] = Math.min(next[0], next[1]) // Grayscale ≤ Full
     onChange({ tiers: next.join() === DEFAULT_TIERS.join() ? undefined : next })
   }
-  // n cards → the exact % (not rounded: rounding could land a card off, lib/badges.ts tierNeed)
-  const putCards = (i: 0 | 1, n: number) => put(i, (Math.min(total, Math.max(1, n)) * 100) / total)
+  const putCards = (i: 0 | 1, n: number) => {
+    const next = [...(def.tierCounts ?? [grayN || 1, fullN || 1])] as [number, number]
+    next[i] = Math.max(1, Math.round(n))
+    if (i === 0) next[1] = Math.max(next[1], next[0]); else next[0] = Math.min(next[0], next[1]) // Grayscale ≤ Full
+    onChange({ tierCounts: next })
+  }
+  const setByCards = (cards: boolean) => {
+    if (cards === byCards) return
+    onChange({ tierCounts: cards ? [Math.max(1, grayN), Math.max(1, fullN)] : undefined })
+  }
 
   // a plain function, not a component: a component defined in here would remount on every change
   // and drop the slider mid-drag
@@ -611,7 +621,10 @@ function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<
           ))}
         </div>
       </div>
-      <p className="text-xs text-slate-500 mt-1">The pin changes as fans collect — first a grey version, then full colour.</p>
+      <p className="text-xs text-slate-500 mt-1">
+        The pin changes as fans collect — first a grey version, then full colour.{' '}
+        {byCards ? 'Cards: a set number of cards — it stays the same when you add more cards later.' : '%: a share of the badge — it grows with the badge when you add more cards later.'}
+      </p>
       {/* The two marks on one bar */}
       <div className="relative mt-3 h-2 rounded-full bg-slate-800">
         {grayOn && <span className="absolute inset-y-0 left-0 rounded-l-full bg-slate-500/70" style={{ width: `${(fullN / total) * 100}%` }} />}
