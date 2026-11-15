@@ -9,7 +9,7 @@ import { pieceHeights } from './reliefLevels'
 
 export interface ReliefSettings {
   mode: 'smooth' | 'stepped'
-  levels: number        // stepped: how many flat, evenly spaced heights (2–8)
+  levels: number        // stepped: how many flat, evenly spaced heights (2–24)
   levelRule: 'borders' | 'depth' // stepped: how pieces are ranked into levels — by the change across their own
                         // borders (lib/reliefLevels.ts), or by their median depth over the whole pin (reliefs
                         // saved before 2026-11-08, so their per-piece level moves still land where they were)
@@ -17,6 +17,11 @@ export interface ReliefSettings {
   soften: number        // 0–1: how soft every step edge is
   detail: number        // 0–1: how much fine sculpted detail rides on top
   depth: number         // relief height as a fraction of the pin's width (die-struck ≈ 0.02–0.03)
+  depthScale?: number   // set on save: Composed.scale — the saved height map spans more than the usual
+                        // range (a piece moved past the top or bottom level), so the depth is scaled to match
+  maps?: 2              // set on save (since 2026-11-14): the depth map is 16-bit (R high byte, G low) and the
+                        // normal map is the sculpted shape's own (shapeNormals) with the AI's fine detail, its
+                        // strength baked in. Unset (older saves) = an 8-bit depth map and the AI's normal map as is.
   wall: number          // 0–1: how steep a slope must be to be drawn as plain gold wall
   normalStrength: number // how strongly the normal map's fine detail tilts the light (1 = as analyzed; 0–4)
   artHoles: boolean     // "Use transparency channel": the art's transparency inside the pin is cut out as holes
@@ -44,6 +49,9 @@ export interface ReliefSettings {
   // Global: the metal of the pin's sides, back and gold walls (hex colour, roughness 0–1)
   metalColor: string
   metalRough: number
+  // Global: the body's thickness behind the face (fraction of the pin's width) — only the back
+  // moves; nothing to do with the relief's own depth. Unset in older saves = DEFAULT_BACKING.
+  backing: number
   finishOff: number[]               // layers whose finish is hidden (the eye) — left out when saving too
   names: Record<string, string>     // layer names given in the Studio (unset = "Object 12" / "Area 180")
   // The Lenticular finish's picture sets; each Lenticular layer picks one (finishOpts[id].set)
@@ -62,6 +70,8 @@ export interface FinishLayer {
 }
 /** The pin's metal as made before it could be changed (pinRelief.ts draws it from these). */
 export const DEFAULT_METAL = { color: '#d2a44a', rough: 0.3 }
+/** The body's thickness every pin had before it could be changed (BACKING in pinRelief.ts). */
+export const DEFAULT_BACKING = 0.059
 export type LayerDetails = Partial<Record<DetailKind, Record<string, number>>>
 
 export interface LenticularSet {
@@ -131,7 +141,7 @@ export const FINISHES: { id: number; name: string; hint: string; params: FinishP
 export const FINISH_HOLE = 6
 
 export const DEFAULT_RELIEF: ReliefSettings = {
-  mode: 'stepped', levels: 8, levelRule: 'borders', off: [], soften: 0.06, detail: 1, depth: 0.026, wall: 0.35, normalStrength: 1, artHoles: true, holeSmooth: 0.3, pieces: {}, soft: {}, flat: {}, flatDefault: 0, materials: {}, finishOpts: {}, details: {}, finishLayers: [], metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough, finishOff: [], names: {}, lenticularSets: [{ name: 'Set 1', frames: [], useArt: true }],
+  mode: 'smooth', levels: 16, levelRule: 'borders', off: [], soften: 0.15, detail: 1, depth: 0.04, wall: 0, normalStrength: 1, artHoles: true, holeSmooth: 0.3, pieces: {}, soft: {}, flat: {}, flatDefault: 1, materials: {}, finishOpts: {}, details: {}, finishLayers: [], metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough, backing: DEFAULT_BACKING, finishOff: [], names: {}, lenticularSets: [{ name: 'Set 1', frames: [], useArt: true }],
 }
 
 /** Saved settings from an older Studio filled out with today's defaults (one picture list became
@@ -145,6 +155,10 @@ export const reliefSettings = (s?: Partial<ReliefSettings> & { lenticularFrames?
   if (s && rest.artHoles === undefined) out.artHoles = false
   // nor were its levels ranked by borders: keep the old rule, so its per-piece level moves still fit
   if (s && rest.levelRule === undefined) out.levelRule = 'depth'
+  // new reliefs start Smooth (since 2026-11-14); a saved one without a mode was made Stepped
+  if (s && rest.mode === undefined) out.mode = 'stepped'
+  // and with 8 levels (the default before 16, 2026-11-14)
+  if (s && rest.levels === undefined) out.levels = 8
   if (!rest.lenticularSets?.length && (lenticularFrames?.length || lenticularArt === false)) {
     out.lenticularSets = [{ name: 'Set 1', frames: lenticularFrames ?? [], useArt: lenticularArt ?? true }]
   }
@@ -221,6 +235,8 @@ export interface KitArrays {
   pieceCount: number
   objects: number       // ids 1..objects are the analysis's pieces; the rest are gaps split here (older kits only)
   heights?: Float64Array // per piece id: its height for stepping by borders (pieceHeights), worked out once at full size
+  fine?: Float32Array   // the AI normal map's fine detail only (its x, y tilt minus a blurred copy; 2 per pixel) — laid over
+                        // the sculpted shape's own normals (shapeNormals)
 }
 
 export interface ReliefKit {
@@ -235,19 +251,35 @@ export const KIT_FILES = ['art.webp', 'layers.png', 'detail.png', 'normal.png', 
 
 // ── Loading a kit ───────────────────────────────────────────────────────────────────────────
 
-async function pixels(blob: Blob): Promise<{ data: Uint8ClampedArray; size: number }> {
+async function pixels(blob: Blob, at?: number): Promise<{ data: Uint8ClampedArray; size: number }> {
   // No colour management or premultiplying: the kit's PNGs carry numbers, not colours
   const bmp = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
-  const c = new OffscreenCanvas(bmp.width, bmp.height)
+  const size = at ?? bmp.width
+  const c = new OffscreenCanvas(size, size)
   const ctx = c.getContext('2d', { willReadFrequently: true })!
-  ctx.drawImage(bmp, 0, 0)
-  return { data: ctx.getImageData(0, 0, bmp.width, bmp.height).data, size: bmp.width }
+  ctx.drawImage(bmp, 0, 0, size, size)
+  return { data: ctx.getImageData(0, 0, size, size).data, size }
+}
+
+// The AI normal map's fine detail: its tilt (x, y) less a blurred copy of it. The broad shape it
+// also describes is the original picture's, not the sculpted one — shapeNormals uses the sculpted
+// shape for that and lays only this on top. 0 outside the pin.
+function fineDetail(normal: Uint8ClampedArray, alpha: Float32Array, size: number): Float32Array {
+  const n = size * size
+  const nx = new Float32Array(n), ny = new Float32Array(n)
+  for (let i = 0; i < n; i++) { nx[i] = normal[i * 4] / 127.5 - 1; ny[i] = normal[i * 4 + 1] / 127.5 - 1 }
+  const r = 8 * (size / 2048)
+  const lx = blur(nx, size, r), ly = blur(ny, size, r)
+  const fine = new Float32Array(n * 2)
+  for (let i = 0; i < n; i++) if (alpha[i] >= 0.5) { fine[i * 2] = nx[i] - lx[i]; fine[i * 2 + 1] = ny[i] - ly[i] }
+  return fine
 }
 
 /** A kit from its files (as the HavenRelief server returns them, or re-downloaded from Storage). */
 export async function loadKit(files: Record<string, Blob>): Promise<ReliefKit> {
-  const [art, layers, detail, pieces] = await Promise.all([files['art.webp'], files['layers.png'], files['detail.png'], files['pieces.png']].map(pixels))
+  const [art, layers, detail, pieces] = await Promise.all([files['art.webp'], files['layers.png'], files['detail.png'], files['pieces.png']].map((b) => pixels(b)))
   const size = layers.size, n = size * size
+  const normal = await pixels(files['normal.png'], size)
   const full: KitArrays = { size, alpha: new Float32Array(n), layers: new Float32Array(n), detail: new Float32Array(n), pieces: new Int32Array(n), pieceCount: 0, objects: 0 }
   for (let i = 0; i < n; i++) {
     const o = i * 4
@@ -259,6 +291,7 @@ export async function loadKit(files: Record<string, Blob>): Promise<ReliefKit> {
     if (p > full.pieceCount) full.pieceCount = p
   }
   full.objects = full.pieceCount
+  full.fine = fineDetail(normal.data, full.alpha, size)
   splitGaps(full)
   // once, at full size, and shared with the preview: the levels you tweak are the levels saved
   full.heights = pieceHeights(full)
@@ -320,6 +353,14 @@ function half(k: KitArrays): KitArrays {
     out.detail[i] = (k.detail[a] + k.detail[a + 1] + k.detail[b] + k.detail[b + 1]) / 4
     out.pieces[i] = out.alpha[i] >= 0.5 ? (k.pieces[a] || k.pieces[a + 1] || k.pieces[b] || k.pieces[b + 1]) : 0
   }
+  if (k.fine) {
+    const f = k.fine, fine = new Float32Array(n * 2)
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+      const a = 2 * y * k.size + 2 * x, b = a + k.size, i = y * s + x
+      for (let c = 0; c < 2; c++) fine[i * 2 + c] = (f[a * 2 + c] + f[(a + 1) * 2 + c] + f[b * 2 + c] + f[(b + 1) * 2 + c]) / 4
+    }
+    out.fine = fine
+  }
   return out
 }
 
@@ -367,15 +408,40 @@ export interface Composed {
   rank: Int32Array         // stepped: each piece's level before any are switched off or moved
   natural: Int32Array      // stepped: each piece's level among the levels still on, before it's moved
   rankArea: Float64Array   // stepped: how much of the pin each original level covers (0..1)
+  scale: number            // what the depth is multiplied by (ReliefSettings.depthScale): over 1 when a piece is moved past the top or bottom level
 }
 
 /** The pin for these settings. */
 export function compose(k: KitArrays, s: ReliefSettings): Composed {
+  const r = composeRaw(k, s)
+  const { alpha } = k, h = r.h
+  // 0..1 over the pin
+  const { lo, hi } = r
+  let scale = 1
+  // A stepped piece moved past the highest level (or below the lowest) stretches the pin's height
+  // range. The map is still 0..1, so the depth is scaled by how much taller the range now is than
+  // the same pin with every piece kept within the levels — every other piece stays as tall as it
+  // was. Within the levels (every relief saved before this) nothing changes: scale 1.
+  if (r.outside) {
+    const top = r.levelCount - 1
+    const pieces: Record<string, number> = {}
+    r.natural.forEach((nat, p) => { if (nat >= 0) pieces[p] = Math.min(top, Math.max(0, r.level[p])) - nat })
+    const ref = composeRaw(k, { ...s, pieces })
+    scale = Math.max(1, (hi - lo) / Math.max(ref.hi - ref.lo, 1e-6))
+  }
+  const span = Math.max(hi - lo, 1e-6)
+  for (let i = 0; i < h.length; i++) h[i] = alpha[i] >= 0.5 ? clamp((h[i] - lo) / span, 0, 1) : 0
+  return { h, level: r.level, levelCount: r.levelCount, live: r.live, rank: r.rank, natural: r.natural, rankArea: r.rankArea, scale }
+}
+
+// compose() before the height is scaled to 0..1: the height, its lowest and highest point on the
+// pin, and whether any stepped piece was moved outside the levels
+function composeRaw(k: KitArrays, s: ReliefSettings) {
   const { size, alpha, layers, detail, pieces } = k
   const n = size * size, sc = size / 2048
   const P = k.pieceCount + 1
   const level = new Int32Array(P).fill(-1), rank = new Int32Array(P).fill(-1), natural = new Int32Array(P).fill(-1)
-  let rankArea = new Float64Array(0), levelCount = 0, liveLevels: number[] = []
+  let rankArea = new Float64Array(0), levelCount = 0, liveLevels: number[] = [], outside = false
   let h: Float32Array = new Float32Array(n)
   if (s.mode === 'stepped' && s.levels >= 2) {
     const L = Math.round(s.levels)
@@ -407,13 +473,16 @@ export function compose(k: KitArrays, s: ReliefSettings): Composed {
     for (const p of ids) {
       rank[p] = order[nearest(med[p])]
       natural[p] = toLive(rank[p])
-      level[p] = clamp(natural[p] + Math.round(s.pieces[p] ?? 0), 0, levelCount - 1)
+      // a piece can be raised above the highest level or sunk below the lowest, up to LEVEL_REACH
+      level[p] = clamp(natural[p] + Math.round(s.pieces[p] ?? 0), -LEVEL_REACH, levelCount - 1 + LEVEL_REACH)
       rankArea[rank[p]] += area[p]
       total += area[p]
     }
     for (let r = 0; r < L; r++) rankArea[r] /= total || 1
     const span = Math.max(1, levelCount - 1)
-    for (let i = 0; i < n; i++) if (pieces[i] && level[pieces[i]] >= 0) h[i] = level[pieces[i]] / span
+    // (natural, not level: a level can be below 0 now — a piece sunk under the lowest)
+    for (let i = 0; i < n; i++) if (pieces[i] && natural[pieces[i]] >= 0) h[i] = level[pieces[i]] / span
+    for (const p of ids) if (level[p] < 0 || level[p] > levelCount - 1) outside = true
     const sd = s.detail * 0.3
     for (let i = 0; i < n; i++) h[i] = (1 - sd) * h[i] + sd * detail[i]
   } else {
@@ -434,13 +503,13 @@ export function compose(k: KitArrays, s: ReliefSettings): Composed {
   steps = blur(steps, size, Math.max(0.5, s.soften * 16 * sc))
   steps = softenPieces(steps, k, s)
   for (let i = 0; i < n; i++) h[i] = steps[i] + within[i]
-  // 0..1 over the pin
   let lo = Infinity, hi = -Infinity
   for (let i = 0; i < n; i++) if (alpha[i] >= 0.5) { if (h[i] < lo) lo = h[i]; if (h[i] > hi) hi = h[i] }
-  const span = Math.max(hi - lo, 1e-6)
-  for (let i = 0; i < n; i++) h[i] = alpha[i] >= 0.5 ? clamp((h[i] - lo) / span, 0, 1) : 0
-  return { h, level, levelCount, live: liveLevels, rank, natural, rankArea }
+  return { h, lo, hi, outside, level, levelCount, live: liveLevels, rank, natural, rankArea }
 }
+
+/** How many levels past the highest (and below the lowest) a stepped piece can be moved. */
+export const LEVEL_REACH = 4
 
 // A piece's "Smooth edges": its edges eased into whatever is around them — the height blurred
 // (wider for more smoothing) and blended in over the piece and a band around it
@@ -709,17 +778,62 @@ export async function finishPng(f: Uint8Array, size: number): Promise<Blob> {
 
 // ── Saving ──────────────────────────────────────────────────────────────────────────────────
 
-/** A height map as the 8-bit grey PNG the badge's "Depth map" holds (white = high). */
+/** A height map as the PNG the badge's "Depth map" holds: 16 bits, R the high byte and G the low
+ *  (B = R, so it still looks like a grey height map). Saved with `maps: 2`. 8 bits (every save
+ *  before 2026-11-14) was only 256 heights: gentle slopes rose in visible stair-steps. Anything
+ *  reading only R still gets the 8-bit map. */
 export async function heightPng(h: Float32Array, size: number): Promise<Blob> {
   const c = new OffscreenCanvas(size, size)
   const ctx = c.getContext('2d')!
   const img = ctx.createImageData(size, size)
   for (let i = 0; i < size * size; i++) {
-    const v = Math.round(h[i] * 255)
-    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v
+    const v = Math.round(clamp(h[i], 0, 1) * 65535)
+    img.data[i * 4] = img.data[i * 4 + 2] = v >> 8
+    img.data[i * 4 + 1] = v & 255
     img.data[i * 4 + 3] = 255
   }
   ctx.putImageData(img, 0, 0)
+  return c.convertToBlob({ type: 'image/png' })
+}
+
+/** The pin's normals (object space, RGBA size², as a normal map stores them: x right, y up, z out
+ *  of the pin, each (n + 1) / 2): the sculpted shape's own — from the height map `h` (0..1) at
+ *  `depth` (the pin's width = 1) — with the AI normal map's fine detail (KitArrays.fine) laid on
+ *  top at `strength`. The AI's map alone described the original picture: the steps, raises and
+ *  softening made in the Studio changed the pin's outline side-on but never how it caught the light. */
+export function shapeNormals(k: KitArrays, h: Float32Array, depth: number, strength: number): Uint8ClampedArray<ArrayBuffer> {
+  const { size, alpha, fine } = k
+  const out = new Uint8ClampedArray(size * size * 4)
+  const s = depth * size // a height step of 1 over one pixel, in the pin's units
+  const inside = (i: number) => alpha[i] >= 0.5
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const i = y * size + x, o = i * 4
+    let nx = 0, ny = 0, nz = 1
+    if (inside(i)) {
+      // slopes from the neighbours inside the pin (one-sided at its edge — the 0 outside isn't a slope)
+      const l = x > 0 && inside(i - 1), r = x < size - 1 && inside(i + 1)
+      const u = y > 0 && inside(i - size), d = y < size - 1 && inside(i + size)
+      const dx = l && r ? (h[i + 1] - h[i - 1]) / 2 : r ? h[i + 1] - h[i] : l ? h[i] - h[i - 1] : 0
+      const dRow = u && d ? (h[i + size] - h[i - size]) / 2 : d ? h[i + size] - h[i] : u ? h[i] - h[i - size] : 0
+      // image rows run down, the pin's y up
+      nx = -dx * s; ny = dRow * s
+      if (fine) { nx += fine[i * 2] * strength; ny += fine[i * 2 + 1] * strength }
+      const len = Math.hypot(nx, ny, 1)
+      nx /= len; ny /= len; nz = 1 / len
+    }
+    out[o] = Math.round((nx + 1) * 127.5)
+    out[o + 1] = Math.round((ny + 1) * 127.5)
+    out[o + 2] = Math.round((nz + 1) * 127.5)
+    out[o + 3] = 255
+  }
+  return out
+}
+
+/** A normal map (shapeNormals) as a PNG. */
+export async function normalPng(rgba: Uint8ClampedArray<ArrayBuffer>, size: number): Promise<Blob> {
+  const c = new OffscreenCanvas(size, size)
+  const ctx = c.getContext('2d')!
+  ctx.putImageData(new ImageData(rgba, size, size), 0, 0)
   return c.convertToBlob({ type: 'image/png' })
 }
 

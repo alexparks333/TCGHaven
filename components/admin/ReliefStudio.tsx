@@ -6,7 +6,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage'
-import { Check, ChevronLeft, ChevronRight, Cloud, Cpu, Eye, EyeOff, Loader2, Plus, RotateCcw, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Cloud, Cpu, Eye, EyeOff, Loader2, Minus, Plus, Redo2, RotateCcw, Sparkles, Trash2, Undo2, X } from 'lucide-react'
 import { ReliefAnalyzing, type AnalyzingKind } from './ReliefAnalyzing'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -14,8 +14,8 @@ import { staffStorage } from '@/lib/firebase/staff'
 import type { BadgeDef } from '@/lib/badges'
 import {
   BASE_FINISH_IDS, DETAILS, FINISHES, FINISH_HOLE, LENTICULAR_MAX_PER_SET, LENTICULAR_MAX_SETS, LENTICULAR_MAX_TOTAL, reliefServerUrl, lenticularPictures,
-  DEFAULT_METAL, layerLook, withFinishLayers, type FinishLayer,
-  type DetailKind, type LenticularSet, analyzeArt, recalculateNormals, compose, detailMap, finishMap, finishPng, heightPng, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
+  DEFAULT_METAL, DEFAULT_BACKING, LEVEL_REACH, layerLook, withFinishLayers, type FinishLayer,
+  type DetailKind, type LenticularSet, analyzeArt, recalculateNormals, compose, detailMap, finishMap, finishPng, heightPng, normalPng, shapeNormals, loadKit, openKit, reliefServerUp, reliefSettings, saveKit,
   type Composed, type ReliefKit, type ReliefSettings, type ReliefGpu, RELIEF_GPU_LABEL,
 } from '@/lib/reliefStudio'
 import { HOLE_SMOOTH, bakeReliefBuild, cleanRelief, disposeRelief, type LiveRelief } from '@/components/badges/pinRelief'
@@ -25,16 +25,35 @@ import { reliefBuildKey } from '@/lib/reliefBuild'
 // it to the HavenRelief analysis server (tools/havenrelief/server.py — the GPU PC for now, a cloud
 // GPU later) and saved the kit of raw AI results with the badge, so this opens straight onto the
 // controls; everything here is live in the browser: smooth or stepped, levels (each can be
-// switched off), softness, depth, detail, gold walls, and per piece (click one on the pin) raise /
+// switched off), softness, depth, detail, metal walls, and per piece (click one on the pin) raise /
 // lower / flatten / smooth edges; and on the Material tab, each piece's finish (gold, gemstone,
 // holo, lenticular… or a hole right through the pin). "Use this relief" bakes the height and finish
 // maps and hands the badge editor its new imageUrl / depthMapUrl / normalMapUrl / finishMapUrl / detailMapUrl /
 // reliefKit / relief — saved with the badge.
 
-const PREVIEW_GRID = 512
+// The pin's mesh: as fine as the collector's 3D view on a computer (pinRelief.ts FINE_GRID) — at
+// 512 the Studio showed a coarser pin than the one saved
+const PREVIEW_GRID = 1100
+// depthScale and maps are outputs — set when the relief is saved — never part of the settings being
+// edited, the draft or the unsaved-changes check (they made a freshly saved badge look unsaved, and
+// "restored" a draft that wasn't)
+function withoutDepthScale(s: ReliefSettings): ReliefSettings {
+  const { depthScale: _, maps: _m, ...rest } = s
+  return rest
+}
 type View = 'art' | 'pieces' | 'levels' | 'normals'
 // Level colours, lowest → highest (the Levels view and the levels list)
 const LEVEL_COLORS = ['#3b4cc0', '#2f8fd8', '#25b8a6', '#7cc54a', '#e3c735', '#f08a2c', '#e0453a', '#c2307f']
+// Level r of `total`: spread evenly along those colours (lowest blue, highest magenta), blended
+// between them past 8 levels (up to 24) so no two levels share a colour
+function levelRgb(r: number, total: number): [number, number, number] {
+  const t = total > 1 ? (Math.min(r, total - 1) / (total - 1)) * (LEVEL_COLORS.length - 1) : 0
+  const a = Math.floor(t), b = Math.min(LEVEL_COLORS.length - 1, a + 1), f = t - a
+  const rgb = (h: string) => [1, 3, 5].map((o) => parseInt(h.slice(o, o + 2), 16))
+  const ca = rgb(LEVEL_COLORS[a]), cb = rgb(LEVEL_COLORS[b])
+  return [0, 1, 2].map((j) => Math.round(ca[j] + (cb[j] - ca[j]) * f)) as [number, number, number]
+}
+const levelColor = (r: number, total: number) => `rgb(${levelRgb(r, total).join(',')})`
 
 export default function ReliefStudio({ badge, onApply, onClose, storage = staffStorage, folder, gpu: gpuAtOpen = null, connect }: {
   badge: BadgeDef
@@ -58,10 +77,10 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   // work on this same art: a new picture (or another new badge) starts fresh
   const [base] = useState(() => draftBase(badge))
   const [draft] = useState(() => readDraft(badge.id, base, badge.reliefKit?.['art.webp']))
-  const restored = !!draft && (draft.kit['art.webp'] !== badge.reliefKit?.['art.webp'] || JSON.stringify(draft.settings) !== JSON.stringify(reliefSettings(badge.relief)))
+  const restored = !!draft && (draft.kit['art.webp'] !== badge.reliefKit?.['art.webp'] || JSON.stringify(withoutDepthScale(reliefSettings(draft.settings))) !== JSON.stringify(withoutDepthScale(reliefSettings(badge.relief))))
   const [kitUrls, setKitUrls] = useState<Record<string, string> | null>(restored ? draft!.kit : badge.reliefKit ?? null)
   const [kit, setKit] = useState<ReliefKit | null>(null)
-  const [settings, setSettings] = useState<ReliefSettings>(reliefSettings(restored ? draft!.settings : badge.relief))
+  const [settings, setSettings] = useState<ReliefSettings>(() => withoutDepthScale(reliefSettings(restored ? draft!.settings : badge.relief)))
   const [showRestored, setShowRestored] = useState(restored)
   const [composed, setComposed] = useState<Composed | null>(null)
   const [selected, setSelected] = useState(0) // the layer last clicked — the one the panels show
@@ -105,6 +124,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   const [activeLayer, setActiveLayer] = useState<string | null>(null)
   const cur = settings.finishLayers.find((l) => l.id === activeLayer) ?? null
   const [status, setStatus] = useState<string | null>(null) // what it's busy doing
+  const busyRef = useRef(false)
+  busyRef.current = !!status
   const [aiRun, setAiRun] = useState<{ kind: AnalyzingKind; startedAt: number } | null>(null) // the AI at work: the friendly loading screen
   const [error, setError] = useState('')
   const [server, setServer] = useState<boolean | null>(null)
@@ -159,14 +180,27 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
       const typing = e.target instanceof HTMLInputElement && e.target.type !== 'range' && e.target.type !== 'checkbox'
+      const field = typing || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement
+      // Esc steps back one thing at a time — out of a text box, then the selection, then the Studio
+      // (it used to close the Studio at once, mid-rename or with pieces picked)
+      if (e.key === 'Escape') {
+        if (busyRef.current) return // never mid-save or mid-analysis
+        if (field) (e.target as HTMLElement).blur()
+        else if (selectedRef.current) pickRef.current(0)
+        else onClose()
+        return
+      }
+      // 1–4: the camera views
+      if (!field && !e.ctrlKey && !e.metaKey && !e.altKey && ['1', '2', '3', '4'].includes(e.key)) {
+        stage.current?.look((['front', 'angle', 'side', 'back'] as const)[Number(e.key) - 1])
+      }
       if ((e.ctrlKey || e.metaKey) && !typing) {
         const k = e.key.toLowerCase()
         if (k === 'z' && !e.shiftKey) { e.preventDefault(); undoRedo.current(false) }
         else if (k === 'y' || k === 'x' || (k === 'z' && e.shiftKey)) { e.preventDefault(); undoRedo.current(true) }
       }
-      if ((e.key === 'h' || e.key === 'H') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement)) setShowSelection((v) => !v)
+      if ((e.key === 'h' || e.key === 'H') && !field) setShowSelection((v) => !v)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -200,7 +234,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   function discardDraft() {
     clearDraft(badge.id)
     setShowRestored(false)
-    setSettings(reliefSettings(badge.relief))
+    setSettings(withoutDepthScale(reliefSettings(badge.relief)))
     if (badge.reliefKit && badge.reliefKit['art.webp'] !== kitUrls?.['art.webp']) {
       setKitUrls(badge.reliefKit)
       openKit(badge.reliefKit, (u) => badgeAsset(u)!).then(setKit).catch((e) => setError(String(e.message ?? e)))
@@ -258,9 +292,10 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', blur) }
   }, [])
 
-  // The 3D stage lives as long as the Studio
+  // The 3D stage lives as long as the Studio; the pin on it is hidden while it's being built
+  const [pinShown, setPinShown] = useState(false)
   useEffect(() => {
-    const s = createStage(mountRef.current!, (id, e) => pickRef.current(id, e))
+    const s = createStage(mountRef.current!, (id, e) => pickRef.current(id, e), setPinShown)
     stage.current = s
     return () => { s.dispose(); stage.current = null }
   }, [])
@@ -272,12 +307,14 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
     let gone = false
     setReady(false)
     const url = URL.createObjectURL(kit.art)
-    stage.current.load(kit, url).then(() => { if (!gone) setReady(true) })
+    stage.current.load(kit, url)
+      .then(() => { if (!gone) setReady(true) })
+      .catch((e) => { if (!gone) setError('Couldn’t show the relief — ' + (e instanceof Error ? e.message : String(e))) })
     return () => { gone = true; URL.revokeObjectURL(url) }
   }, [kit])
 
   // Shape settings re-run compose; depth/wall only re-mesh
-  const shapeKey = JSON.stringify([settings.mode, settings.levels, settings.off, settings.soften, settings.detail, settings.pieces, settings.soft, settings.flat])
+  const shapeKey = JSON.stringify([settings.mode, settings.levels, settings.levelRule, settings.off, settings.soften, settings.detail, settings.pieces, settings.soft, settings.flat, settings.flatDefault])
   useEffect(() => {
     if (!kit || !ready) return
     const t = setTimeout(() => setComposed(stage.current?.update(kit, settings) ?? null), 30)
@@ -287,7 +324,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   useEffect(() => {
     if (kit && ready) stage.current?.relook(settings)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kit, ready, settings.depth, settings.wall])
+  }, [kit, ready, settings.depth, settings.wall, settings.backing])
   useEffect(() => { if (kit && ready) stage.current?.normalStrength(settings.normalStrength) }, [kit, ready, settings.normalStrength])
   useEffect(() => {
     if (kit && ready) stage.current?.highlight(kit, hoverPieces.length ? hoverPieces : showSelection ? selection : [])
@@ -429,7 +466,10 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
     try {
       setStatus('Baking the full-size relief…')
       await new Promise((r) => setTimeout(r, 30)) // let the status paint before the heavy work
-      const height = await heightPng(compose(kit.full, settings).h, kit.full.size)
+      const full = compose(kit.full, settings)
+      const height = await heightPng(full.h, kit.full.size)
+      // (with the badge: how much the depth is scaled for pieces moved past the top or bottom level)
+      const depthScale = full.scale > 1 ? full.scale : undefined
       setStatus('Uploading…')
       const reliefKit = kitUrls ?? await saveKit(storage, fileFolder, kit)
       const stamp = Date.now()
@@ -442,6 +482,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
       const detailed = detailMap(kit.full, settings)
       const imageUrl = reliefKit['art.webp']
       const depthMapUrl = await put('depth', height)
+      // The normal map from the sculpted shape (at the depth it's saved with), the AI's fine detail on top
+      const normalMapUrl = await put('normal', await normalPng(shapeNormals(kit.full, full.h, settings.depth * full.scale, settings.normalStrength), kit.full.size))
       const finishMapUrl = finish ? await put('finish', await finishPng(finish.map, kit.full.size)) : undefined
       const detailMapUrl = detailed ? await put('detail', await finishPng(detailed.map, kit.full.size)) : undefined
       // The pin's shape, worked out once here so the 3D view doesn't have to (pinRelief.ts
@@ -453,8 +495,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
       await uploadBytes(buildRef, build, { contentType: 'application/octet-stream' })
       setStatus('Saving the badge…')
       await onApply({
-        imageUrl, normalMapUrl: reliefKit['normal.png'], depthMapUrl, finishMapUrl, detailMapUrl,
-        reliefKit, relief: settings,
+        imageUrl, normalMapUrl, depthMapUrl, finishMapUrl, detailMapUrl,
+        reliefKit, relief: { ...settings, ...(depthScale && { depthScale }), maps: 2 },
         reliefBuildUrl: await getDownloadURL(buildRef), reliefBuildKey: buildKey,
       })
       onClose()
@@ -464,6 +506,9 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
     } finally { setStatus(null) }
   }
 
+  // Anything not yet saved with the badge (the settings, or a new analysis)
+  const unsaved = useMemo(() => kitUrls?.['art.webp'] !== badge.reliefKit?.['art.webp']
+    || JSON.stringify(settings) !== JSON.stringify(withoutDepthScale(reliefSettings(badge.relief))), [settings, kitUrls, badge])
   const stepped = settings.mode === 'stepped'
   const offset = settings.pieces[selected] ?? 0
   const soft = settings.soft[selected] ?? 0
@@ -515,12 +560,29 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
   const moved = Object.keys(settings.pieces).length + Object.keys(settings.soft).length + Object.keys(settings.flat).length
   const toggleLevel = (r: number) => set({ off: settings.off.includes(r) ? settings.off.filter((x) => x !== r) : [...settings.off, r] })
   const pieceLevel = composed && selected ? composed.level[selected] : -1
-  // The raise/lower range is exactly what this piece can reach: stepped, from the lowest level on
-  // to the highest (the old buttons kept counting past the top and bottom with nothing changing)
+  // The raise/lower range is what this piece can reach: stepped, from LEVEL_REACH levels below the
+  // lowest to LEVEL_REACH above the highest (capped at the top level, a piece already there
+  // couldn't go any higher)
   const natural = composed && selected && composed.natural[selected] >= 0 ? composed.natural[selected] : 0
+  const levelCount = composed?.levelCount ?? settings.levels
   const range = stepped
-    ? { min: -natural, max: Math.max(0, (composed?.levelCount ?? settings.levels) - 1 - natural) }
+    ? { min: -natural - LEVEL_REACH, max: Math.max(0, levelCount - 1 - natural) + LEVEL_REACH }
     : { min: -10, max: 10 }
+  const levelName = (l: number) => (l >= levelCount ? `${l - levelCount + 1} above the highest level` : l < 0 ? `${-l} below the lowest level` : `Level ${l + 1} of ${levelCount}`)
+  // Raise / lower. Stepped, with several pieces selected, they all go to the same level — the one
+  // the slider shows — and move up and down together (each keeping its own place in the order,
+  // they were moved as a stack)
+  const setRaise = (value: number) => {
+    if (!stepped || !composed || selection.length < 2) return setPiece('pieces', value)
+    const target = natural + value
+    const next: Record<string, number> = { ...settings.pieces }
+    for (const id of selection) {
+      const own = composed.natural[id]
+      if (own < 0) continue
+      if (target - own) next[id] = target - own; else delete next[id]
+    }
+    set({ pieces: next })
+  }
   const clampOffset = (v: number) => Math.min(range.max, Math.max(range.min, stepped ? Math.round(v) : Math.round(v * 10) / 10))
 
   return createPortal(
@@ -553,6 +615,19 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
             </button>
           </div>
         )}
+        {kit && (
+          <div className="absolute bottom-9 left-1/2 -translate-x-1/2 flex gap-1 p-1 rounded-xl bg-black/50 backdrop-blur" aria-label="Camera">
+            {([['front', 'Front', '1'], ['angle', 'Angle', '2'], ['side', 'Side', '3'], ['back', 'Back', '4']] as const).map(([v, label, key]) => (
+              <button key={v} onClick={() => stage.current?.look(v)} title={`Look from the ${label.toLowerCase()} (${key})`}
+                className="px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white hover:bg-white/10">{label}</button>
+            ))}
+          </div>
+        )}
+        {kit && ready && !pinShown && !status && !aiRun && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" />Building the 3D pin…</div>
+          </div>
+        )}
         {!kit && !status && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             {connect ? (
@@ -567,7 +642,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
             )}
           </div>
         )}
-        {kit && <p className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-slate-500 pointer-events-none">Drag to turn · scroll to zoom · click a piece to select it · hold Tab to paint a selection</p>}
+        {kit && <p className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-slate-500 pointer-events-none">Drag to turn · scroll to zoom · click a piece to select it (Ctrl/Shift for more) · hold Tab to paint a selection · Esc deselects · Ctrl+Z undo</p>}
         {aiRun && <ReliefAnalyzing kind={aiRun.kind} startedAt={aiRun.startedAt} artUrl={badgeAsset(badge.imageUrl)} saving={status === 'Saving the kit…'} />}
         {status && !aiRun && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -580,7 +655,9 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
         <div className="flex items-center px-4 py-3 border-b border-slate-800">
           <h2 className="font-bold text-ink">Relief Studio</h2>
           <span className="ml-2 text-xs text-slate-500 truncate">{badge.name}</span>
-          <button onClick={onClose} aria-label="Close" className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800"><X size={18} /></button>
+          <button onClick={() => undoRedo.current(false)} disabled={!kit} title="Undo (Ctrl+Z)" aria-label="Undo" className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800 disabled:opacity-30"><Undo2 size={16} /></button>
+          <button onClick={() => undoRedo.current(true)} disabled={!kit} title="Redo (Ctrl+Y)" aria-label="Redo" className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800 disabled:opacity-30"><Redo2 size={16} /></button>
+          <button onClick={onClose} disabled={!!status} aria-label="Close" className="disabled:opacity-30 w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800"><X size={18} /></button>
         </div>
         <div className="grid grid-cols-4 gap-1 m-3 mb-0 p-1 rounded-xl bg-slate-800">
           {(['global', 'relief', 'material', 'normals'] as const).map((t) => (
@@ -588,7 +665,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
           ))}
         </div>
 
-        <div className="flex-1 min-h-0 p-4 flex flex-col gap-5 overflow-y-auto">
+        <div className={cn('flex-1 min-h-0 p-4 flex flex-col gap-5 overflow-y-auto', status && 'pointer-events-none opacity-60')} aria-busy={!!status}>
           {showRestored && (
             <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-3 text-xs text-amber-200 flex items-center gap-2">
               Restored your unsaved changes.
@@ -604,7 +681,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
               </div>
               {stepped && (
                 <>
-                  <Slider label="Levels" value={settings.levels} min={2} max={8} step={1} fmt={(v) => String(v)} onChange={(levels) => set({ levels, off: settings.off.filter((r) => r < levels) })}
+                  <Slider label="Levels" value={settings.levels} min={2} max={24} step={1} fmt={(v) => String(v)} onChange={(levels) => set({ levels, off: settings.off.filter((r) => r < levels) })}
                     hint="Flat, evenly spaced heights — like a die-struck pin" />
                   {settings.levelRule === 'depth' && (
                     <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-3 text-xs text-amber-200 flex flex-col gap-2">
@@ -617,13 +694,19 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                     <div className="flex flex-col gap-1">
                       {Array.from(composed.rankArea, (_, r) => r).reverse().map((r) => {
                         const off = settings.off.includes(r)
+                        // every piece the analysis put on this level, to move or finish together
+                        const onLevel = () => Array.from(composed.rank, (x, p) => (x === r ? p : 0)).filter((p) => p > 0)
                         return (
-                          <button key={r} onClick={() => toggleLevel(r)} className={cn('flex items-center gap-2 px-2 py-1 rounded-lg text-xs hover:bg-slate-800', off && 'opacity-45')}>
-                            <span className="w-3 h-3 rounded-sm" style={{ background: LEVEL_COLORS[r % LEVEL_COLORS.length] }} />
+                          <div key={r} className={cn('flex items-center gap-2 px-2 py-1 rounded-lg text-xs hover:bg-slate-800', off && 'opacity-45')}>
+                            <span className="w-3 h-3 rounded-sm" style={{ background: levelColor(r, composed.rankArea.length) }} />
                             <span className={cn(off && 'line-through')}>Level {r + 1}{r === 0 ? ' · lowest' : r === composed.rankArea.length - 1 ? ' · highest' : ''}</span>
                             <span className="ml-auto tabular-nums text-slate-500">{Math.round(composed.rankArea[r] * 100)}%</span>
-                            {off ? <EyeOff size={13} /> : <Eye size={13} className="text-slate-400" />}
-                          </button>
+                            <button type="button" onClick={() => { const ps = onLevel(); if (ps.length) { setSelected(ps[0]); setOthers(ps.slice(1)); anchor.current = ps[0] } }}
+                              title="Select every piece on this level" className="px-1.5 rounded text-[11px] text-slate-400 hover:text-ink hover:bg-slate-700">Select</button>
+                            <button type="button" onClick={() => toggleLevel(r)} title={off ? 'Switch this level on' : 'Switch this level off'} aria-label={off ? 'Switch on' : 'Switch off'} className="text-slate-400 hover:text-ink">
+                              {off ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </button>
+                          </div>
                         )
                       })}
                       <span className="text-[11px] text-slate-500">Switch a level off and its pieces join the nearest level still on. The Levels view shows which is which.</span>
@@ -631,37 +714,40 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                   )}
                 </>
               )}
-              <Slider label="Flatten all pieces" value={settings.flatDefault} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(flatDefault) => set({ flatDefault })}
-                hint="100% = every piece one even height (its average). A piece's own Flatten overrides this." />
               <Slider label="Soften steps" value={settings.soften} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(soften) => set({ soften })}
                 hint="Rounds every step edge — less contour-map, more cast" />
               <Slider label="Depth" value={settings.depth} min={0.008} max={0.06} step={0.001} fmt={(v) => `${(v * 100).toFixed(1)}%`} onChange={(depth) => set({ depth })}
                 hint="Of the pin's width. Real pins: about 2–3%" />
               <Slider label="Detail" value={settings.detail} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(detail) => set({ detail })}
                 hint={stepped ? 'Sculpted detail on top of the flat levels' : 'Sculpted detail on top of the depth'} />
-              <Slider label="Gold walls" value={settings.wall} min={0.1} max={0.7} step={0.01} fmt={(v) => `${Math.round(v * 100)}`} onChange={(wall) => set({ wall })}
-                hint="Higher = more of each slope drawn as plain struck gold" />
+              <Slider label="Metal walls" value={settings.wall} min={0} max={0.7} step={0.01} fmt={(v) => (v > 0 ? `${Math.round(v * 100)}` : "Off")} onChange={(wall) => set({ wall })}
+                hint="Higher = more of each slope drawn as plain metal, in the pin’s metal colour (Global)" />
               {settings.artHoles && <Slider label="Smooth transparent edges" value={settings.holeSmooth} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(holeSmooth) => set({ holeSmooth })}
                 hint="Rounds off the edges of holes that come from transparency in the art" />}
 
               <div className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
                 <span className="text-xs font-semibold text-slate-300">
                   {selection.length > 1 ? `${selection.length} pieces — changes apply to all` : selected ? `Piece #${selected}` : 'No piece selected'}
-                  {selected > 0 && kit && <span className="font-normal text-slate-500"> · {selected <= kit.preview.objects ? 'object' : 'area between objects'}{stepped && pieceLevel >= 0 ? ` · level ${pieceLevel + 1}` : ''}</span>}
+                  {selected > 0 && kit && <span className="font-normal text-slate-500"> · {selected <= kit.preview.objects ? 'object' : 'area between objects'}{stepped && composed && selected && composed.natural[selected] >= 0 ? ` · ${levelName(pieceLevel).toLowerCase()}` : ''}</span>}
                 </span>
                 {selected ? (
                   <>
                     <div>
                       <span className="flex items-center text-xs font-semibold text-slate-300">
                         Raise / lower
+                        <button type="button" onClick={() => setRaise(clampOffset(offset - (stepped ? 1 : 0.1)))} disabled={offset <= range.min} title="Lower" aria-label="Lower"
+                          className="ml-auto mr-1 w-6 h-6 flex items-center justify-center rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-30"><Minus size={12} /></button>
+                        <button type="button" onClick={() => setRaise(clampOffset(offset + (stepped ? 1 : 0.1)))} disabled={offset >= range.max} title="Raise" aria-label="Raise"
+                          className="mr-1 w-6 h-6 flex items-center justify-center rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-30"><Plus size={12} /></button>
                         <input type="number" value={offset} step={stepped ? 1 : 0.1} min={range.min} max={range.max}
-                          onChange={(e) => setPiece('pieces', clampOffset(Number(e.target.value) || 0))}
-                          className="ml-auto w-16 rounded-md bg-slate-800 px-2 py-0.5 text-right tabular-nums text-slate-200" aria-label="Raise or lower, 0 = as analyzed" />
+                          onChange={(e) => setRaise(clampOffset(Number(e.target.value) || 0))}
+                          className="w-16 rounded-md bg-slate-800 px-2 py-0.5 text-right tabular-nums text-slate-200" aria-label="Raise or lower, 0 = as analyzed" />
                       </span>
                       <input type="range" min={range.min} max={range.max} step={stepped ? 1 : 0.1} value={offset}
-                        onChange={(e) => setPiece('pieces', Number(e.target.value))} className="w-full accent-amber-500" />
+                        onChange={(e) => setRaise(Number(e.target.value))} className="w-full accent-amber-500" />
                       <span className="block text-[11px] text-slate-500">
-                        {stepped ? `Level ${pieceLevel + 1} of ${composed?.levelCount ?? settings.levels}` : 'In tenths of the full height'} · type 0 for as analyzed
+                        {stepped ? (composed && composed.natural[selected] >= 0 ? levelName(pieceLevel) : 'Not on a level') : 'In tenths of the full height'} · type 0 for as analyzed
+                        {stepped && selection.length > 1 && ' · moves every selected piece to this level, together'}
                       </span>
                     </div>
                     <Slider label="Flatten" value={flat} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => setPiece('flat', v)}
@@ -709,11 +795,11 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
           {tab === 'normals' && (
             <fieldset disabled={!kit} className={cn('flex flex-col gap-4', !kit && 'opacity-40')}>
               <p className="text-[11px] leading-snug text-slate-500">
-                The normal map is the fine surface detail read from the art: which way every spot faces, so it catches the light.
-                The pin shows it as colours while this tab is open — blue faces you, red leans right, green leans up.
+                The normal map is which way every spot of the pin faces, so it catches the light: your sculpted shape (steps, raises, softening),
+                with the fine surface detail the AI read from the art on top. The pin shows it as colours while this tab is open — blue faces you, red leans right, green leans up.
               </p>
               <Slider label="Normal strength" value={settings.normalStrength} min={0} max={4} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(normalStrength) => set({ normalStrength })}
-                hint="0% = the sculpted shape alone · 100% = the normal map as made · more = its detail exaggerated" />
+                hint="How much of the AI's fine detail: 0% = the sculpted shape alone · 100% = as analyzed · more = exaggerated" />
               <div className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
                 <span className="text-xs font-semibold text-slate-300">Recalculate Normals</span>
                 <span className="text-[11px] leading-snug text-slate-500">Reads the normals from this pin’s picture again — for a kit whose normals came out weak or wrong. The shape, pieces and finishes stay as they are. About a minute on the GPU.</span>
@@ -730,7 +816,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
               <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
                 <div className="flex items-baseline gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Metal</span>
-                  <span className="text-[11px] text-slate-500">the pin’s sides, back and gold walls</span>
+                  <span className="text-[11px] text-slate-500">the pin’s sides, back and metal walls</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Metal">
                   {METALS.map((m) => {
@@ -754,6 +840,17 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                   hint="Mirror-polished ← → brushed and satin" />
                 {(settings.metalColor.toLowerCase() !== DEFAULT_METAL.color || settings.metalRough !== DEFAULT_METAL.rough) && (
                   <button onClick={() => set({ metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough })} className="self-start text-[11px] text-slate-400 underline">Back to the original gold</button>
+                )}
+              </div>
+              <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Backing</span>
+                  <span className="text-[11px] text-slate-500">the pin’s body behind the art</span>
+                </div>
+                <Slider label="Depth" value={settings.backing} min={0.02} max={0.15} step={0.001} fmt={(v) => `${Math.round((v / DEFAULT_BACKING) * 100)}%`} onChange={(backing) => set({ backing })}
+                  hint="Thinner ← → thicker. Only the back moves — the relief’s own depth is on the Relief tab." />
+                {settings.backing !== DEFAULT_BACKING && (
+                  <button onClick={() => set({ backing: DEFAULT_BACKING })} className="self-start text-[11px] text-slate-400 underline">Back to the original thickness</button>
                 )}
               </div>
             </fieldset>
@@ -823,6 +920,10 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                   <div className="flex items-center gap-2">
                     <input value={cur.name} placeholder={layerLook(cur)} onChange={(e) => renameLayer(cur.id, e.target.value)} aria-label="Layer name"
                       className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-ink placeholder:text-slate-400 outline-none border-b border-slate-700 focus:border-slate-500" />
+                    {cur.pieces.length > 0 && (
+                      <button onClick={() => { setSelected(cur.pieces[0]); setOthers(cur.pieces.slice(1)); anchor.current = cur.pieces[0] }}
+                        title="Select this layer's pieces on the pin — e.g. to raise them together on the Relief tab" className="text-[11px] text-slate-400 underline shrink-0">Select pieces</button>
+                    )}
                     <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-slate-800 text-xs" role="group" aria-label="Compare">
                       {([false, true] as const).map((o) => (
                         <button key={String(o)} onClick={() => setOriginal(o)}
@@ -981,7 +1082,10 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
           {error && <span className="text-xs text-red-500">{error}</span>}
           {badge.model && <span className="text-[11px] text-amber-500">This badge has a 3D model, which the viewer shows instead of a relief. Remove it in the editor.</span>}
           <button onClick={apply} disabled={!kit || !!status} className="btn-primary justify-center disabled:opacity-50"><Check size={15} />Save relief to badge</button>
-          <span className="text-[11px] text-slate-500 text-center">Saves the badge too — live for everyone straight away.</span>
+          <span className="text-[11px] text-slate-500 text-center">
+            {kit && unsaved ? <><span className="text-amber-400">● Unsaved changes</span> — kept on this computer until you save. </> : null}
+            Saves the badge too — live for everyone straight away.
+          </span>
         </div>
       </aside>
     </div>,
@@ -1038,10 +1142,12 @@ interface Stage {
   /** Every piece under a circle of `radiusPx` screen pixels around (clientX, clientY). */
   brushPick(kit: ReliefKit, clientX: number, clientY: number, radiusPx: number): number[]
   setTurning(on: boolean): void
+  /** Turns the camera to look from the front, at an angle, from the side or from behind (framing the pin again). */
+  look(from: 'front' | 'angle' | 'side' | 'back'): void
   dispose(): void
 }
 
-function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEvent) => void): Stage {
+function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEvent) => void, onShown: (shown: boolean) => void): Stage {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   renderer.setSize(mount.clientWidth, mount.clientHeight)
@@ -1095,8 +1201,12 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
   let faceMesh: THREE.Mesh | null = null
   let kitRef: ReliefKit | null = null
   let art: HTMLImageElement | null = null
-  let normalTex: THREE.Texture | null = null
-  let lastH: { h: Float32Array; size: number } | null = null
+  // The pin's normal map, made here from the shape on screen (lib/reliefStudio.ts shapeNormals —
+  // what saving bakes at full size), redrawn whenever the shape, depth or normal strength changes
+  const shapeCanvas = document.createElement('canvas')
+  const shapeCtx = shapeCanvas.getContext('2d')!
+  let normalTex: THREE.CanvasTexture | null = null
+  let lastH: { h: Float32Array; size: number; scale: number } | null = null
   let lastLook: ReliefSettings | null = null
   let lastHighlight: Uint8Array | null = null
   let lastOverlay: HTMLCanvasElement | null = null
@@ -1107,16 +1217,32 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
   let holeKey = ''
   let holeSmooth = HOLE_SMOOTH
   let artHoles = false
+  // As the Studio opens, the pin is built flat and without its holes, then shaped (update), then
+  // rebuilt with its holes (finishes) — all of it on screen, it looked broken. It stays hidden until
+  // both have happened once.
+  let needHeight = false, needFinish = false
+  let loads = 0 // load()'s latest ticket
+  const reveal = () => { if (relief && !needHeight && !needFinish && !relief.group.visible) { relief.group.visible = true; onShown(true) } }
 
-  // The Normals view: the analysis's normal map itself, as colours (red = tilted right, green = up)
+  // The Normals view: the pin's normal map itself, as colours (red = tilted right, green = up)
   function normalsPicture(): HTMLCanvasElement | null {
-    const img = normalTex?.image as CanvasImageSource | undefined
-    if (!img) return null
+    if (!normalTex) return null
     const c = document.createElement('canvas')
     c.width = c.height = 1024
-    c.getContext('2d')!.drawImage(img, 0, 0, 1024, 1024)
+    c.getContext('2d')!.drawImage(shapeCanvas, 0, 0, 1024, 1024)
     return c
   }
+  // The look handed to the pin: its normal map's strength is baked in (shapeNormals), like a saved one's
+  const looked = (s: ReliefSettings, scale: number) => ({ ...s, depthScale: scale, maps: 2 as const })
+  function reshade() {
+    if (!normalTex || !lastH || !lastLook || !kitRef) return
+    const k = kitRef.preview
+    if (lastH.size !== k.size) return
+    shapeCtx.putImageData(new ImageData(shapeNormals(k, lastH.h, lastLook.depth * lastH.scale, lastLook.normalStrength), k.size, k.size), 0, 0)
+    normalTex.needsUpdate = true
+    if (shownView === 'normals') { lastOverlay = normalsPicture(); relief?.setOverlay(lastOverlay) }
+  }
+  let shownView: View = 'art'
 
   function build(kit: ReliefKit, holes?: Uint8Array) {
     if (relief) { scene.remove(relief.group); dispose(relief.group, normalTex) }
@@ -1127,8 +1253,9 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
     relief.faceMaterial.needsUpdate = true
     faceMesh = null
     relief.group.traverse((o) => { if ((o as THREE.Mesh).isMesh && (o as THREE.Mesh).material === relief!.faceMaterial) faceMesh = o as THREE.Mesh })
+    relief.group.visible = !needHeight && !needFinish
     scene.add(relief.group)
-    if (lastH) relief.setHeight(lastH.h, lastH.size, lastLook ?? undefined)
+    if (lastH && lastLook) relief.setHeight(lastH.h, lastH.size, looked(lastLook, lastH.scale))
     relief.setHighlight(lastHighlight, k.size)
     relief.setOverlay(lastOverlay)
     relief.setFinish(lastFinish, k.size)
@@ -1193,26 +1320,42 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
 
   return {
     async load(kit, artUrl) {
-      art = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = artUrl })
-      const normalUrl = URL.createObjectURL(kit.normal)
+      // Only the latest load counts: a new kit arriving (Recalculate Normals, a re-analysis) while an
+      // older one is still loading used to leave the older one on the stage, and every change
+      // after it was ignored as being for the wrong kit
+      const ticket = ++loads
+      const img = await new Promise<HTMLImageElement>((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = artUrl })
+      if (ticket !== loads) return
+      art = img
       normalTex?.dispose()
-      normalTex = await new THREE.TextureLoader().loadAsync(normalUrl)
-      URL.revokeObjectURL(normalUrl)
+      shapeCanvas.width = shapeCanvas.height = kit.preview.size
+      // flat (facing out) until the first shape arrives — the pin is hidden till then anyway
+      shapeCtx.fillStyle = 'rgb(128,128,255)'
+      shapeCtx.fillRect(0, 0, kit.preview.size, kit.preview.size)
+      normalTex = new THREE.CanvasTexture(shapeCanvas)
       lastH = null; lastHighlight = null; lastOverlay = null; lastFinish = null; holeKey = ''
+      needHeight = needFinish = true
+      onShown(false)
       kitRef = kit
       build(kit)
     },
     update(kit, s) {
       if (!relief || kitRef !== kit) return null
       const c = compose(kit.preview, s)
-      lastH = { h: c.h, size: kit.preview.size }
+      lastH = { h: c.h, size: kit.preview.size, scale: c.scale }
       lastLook = s
-      relief.setHeight(c.h, kit.preview.size, s)
+      relief.setHeight(c.h, kit.preview.size, looked(s, c.scale))
+      reshade()
+      needHeight = false
+      reveal()
       return c
     },
     relook(s) {
+      // (a new depth tilts every slope more or less: the normals are redrawn too)
+      const depthChanged = lastLook?.depth !== s.depth
       lastLook = s
-      if (relief && lastH) relief.setHeight(lastH.h, lastH.size, s)
+      if (relief && lastH) relief.setHeight(lastH.h, lastH.size, looked(s, lastH.scale))
+      if (depthChanged) reshade()
     },
     highlight(kit, pieces) {
       if (!relief || kitRef !== kit) return
@@ -1221,10 +1364,15 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
       lastHighlight = pieces.length ? Uint8Array.from(k.pieces, (p) => (on.has(p) ? 1 : 0)) : null
       relief.setHighlight(lastHighlight, k.size)
     },
-    normalStrength(s) { relief?.setNormalStrength(s) },
+    normalStrength(s) {
+      if (!lastLook || lastLook.normalStrength === s) return
+      lastLook = { ...lastLook, normalStrength: s }
+      reshade()
+    },
     metal(color, rough) { lastMetal = [color, rough]; relief?.setMetal(color, rough) },
     paint(kit, view, c, stepped) {
       if (!relief || kitRef !== kit) return
+      shownView = view
       lastOverlay = view === 'art' || (view === 'levels' && !stepped) ? null
         : view === 'pieces' ? piecesPicture(kit) : view === 'normals' ? normalsPicture() : levelsPicture(kit, c)
       relief.setOverlay(lastOverlay)
@@ -1246,6 +1394,8 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
         relief.setFinish(lastFinish, k.size)
         relief.setDetails(details?.map ?? null, k.size, details?.slots ?? [])
       }
+      needFinish = false
+      reveal()
     },
     lenticular(sets) {
       if (JSON.stringify(sets) === JSON.stringify(lastFrames)) return
@@ -1254,6 +1404,12 @@ function createStage(mount: HTMLDivElement, onPick: (piece: number, e: PointerEv
     },
     brushPick,
     setTurning(on) { controls.enabled = on },
+    look(from) {
+      const dir = { front: [0, 0, 1], angle: [0.35, 0.15, 1], side: [1, 0.08, 0.02], back: [0, 0, -1] }[from]
+      controls.target.set(0, 0, 0)
+      camera.position.set(dir[0], dir[1], dir[2]).normalize()
+      fit()
+    },
     dispose() {
       cancelAnimationFrame(raf)
       ro.disconnect()
@@ -1289,11 +1445,13 @@ function piecesPicture(kit: ReliefKit): HTMLCanvasElement {
 // colour from the list (a switched-off level's pieces show their new level's colour)
 function levelsPicture(kit: ReliefKit, c: Composed): HTMLCanvasElement {
   const k = kit.preview
-  const cols = LEVEL_COLORS.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)] as [number, number, number])
   return picture(k, (i) => {
-    const lv = c.level[k.pieces[i]]
-    if (lv < 0) return [40, 36, 32]
-    return cols[(c.live[lv] ?? lv) % cols.length]
+    const p = k.pieces[i], lv = c.level[p]
+    if (c.natural[p] < 0) return [40, 36, 32] // not on any level
+    // moved past the highest level: white; below the lowest: near-black blue
+    if (lv > c.levelCount - 1) return [250, 250, 250]
+    if (lv < 0) return [18, 22, 58]
+    return levelRgb(c.live[lv] ?? lv, c.rankArea.length)
   })
 }
 

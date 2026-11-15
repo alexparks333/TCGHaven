@@ -256,6 +256,11 @@ export interface BadgeDef {
   // there was a middle look (Painted, removed 2026-11-03) hold [Grayscale, Painted, Full]: read
   // through tierPercents(), which skips the middle.
   tiers?: [number, number] | [number, number, number]
+  // Tiers as an amount instead (the staff portal's Percentage / Amount toggle): [Grayscale, Full],
+  // how many of the badge's slots unlock each look. Set = these win over `tiers` (kept, so switching
+  // back to Percentage restores it). Capped at the badge's slots, so a growing badge's amount stays
+  // reachable while it has fewer slots than the number.
+  tierCounts?: [number, number]
   displayScale?: number // how big its pin is drawn wherever pins show flat (book pages, shelf, lists), 1 = as is (0.1–5) — evens out art framed bigger or smaller than the rest; unset = 1
   tiersOff?: (1 | 2 | 3)[] // [1] = Grayscale switched off (the pin stays a hole until Full). Anything else is from the old three looks and ignored — read through looksOn(); unset = both on
   finishMapUrl?: string // the Relief Studio's per-pixel finishes (R = FINISHES id in lib/reliefStudio.ts); unset = all Auto
@@ -334,10 +339,12 @@ export const isLive = (def: Pick<BadgeDef, 'published'>) => def.published === tr
  *  leaving room for each spot's nameplate */
 export const pagePin = (w: number, h: number) => Math.max(44, Math.min(200, w * 0.33, h * 0.215))
 /** How big a pin may be drawn: creators' badges may grow past their spot (up to 150%, "Size on the
- *  page"); TCG Haven's stay within it (Display size over 100% once made them huge) */
+ *  page"); TCG Haven's up to 150% (the staff portal's Display size, 2026-11-14 — it was 100%: an
+ *  uncapped Display size once made them huge) */
 export const CREATOR_MAX_SCALE = 1.5
+export const HAVEN_MAX_SCALE = 1.5
 export const pinDrawSize = (def: Pick<BadgeDef, 'displayScale' | 'set'>, pin: number) =>
-  Math.min(pinSize(def, pin), pin * (def.set?.startsWith('creator-') ? CREATOR_MAX_SCALE : 1))
+  Math.min(pinSize(def, pin), pin * (def.set?.startsWith('creator-') ? CREATOR_MAX_SCALE : HAVEN_MAX_SCALE))
 export const TIER_NAMES: Record<BadgeTier, string> = { 0: 'Locked', 1: 'Grayscale', 3: 'Full' }
 export function badgeTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {
   const [have, total] = progress ?? [0, def.slots.length]
@@ -348,8 +355,10 @@ export function badgeTier(def: BadgeDef, progress: [number, number] | undefined)
 /** How many of `total` slots unlock look `k` (0 for none). The one rule every count, bar and fill
  *  uses: worked in whole cards, so a percentage that doesn't divide evenly (29% of 100 is
  *  28.999… in floating point) can't unlock a look at a different count than the one shown. */
-export function tierNeed(def: Pick<BadgeDef, 'tiers'>, k: BadgeTier, total: number): number {
-  return k ? Math.ceil((tierPercents(def)[k === 1 ? 0 : 1] * total) / 100 - 1e-9) : 0
+export function tierNeed(def: Pick<BadgeDef, 'tiers' | 'tierCounts'>, k: BadgeTier, total: number): number {
+  if (!k) return 0
+  if (def.tierCounts) return Math.min(total, Math.max(1, Math.round(def.tierCounts[k === 1 ? 0 : 1])))
+  return Math.ceil((tierPercents(def)[k === 1 ? 0 : 1] * total) / 100 - 1e-9)
 }
 /** The next look up that's switched on, or 0 at the top. */
 export function nextTier(def: BadgeDef, progress: [number, number] | undefined): BadgeTier {

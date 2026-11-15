@@ -12,7 +12,7 @@ import { badgeAsset } from '@/lib/badgeAssets'
 import { staffDb, staffStorage } from '@/lib/firebase/staff'
 import { useBadgeCatalog, saveBadgeCatalog } from '@/lib/badgeCatalog'
 import { sameValue, mergeEdit } from '@/lib/rebase'
-import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierPercents, PIN_BACKS, pinSize, type PinBackId, badgeSlug, badgesInSet, badgeCollections, bookCollection, HAVEN_COLLECTION, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
+import { DEFAULT_TIERS, TIER_NAMES, looksOn, tierNeed, tierPercents, PIN_BACKS, pagePin, pinDrawSize, HAVEN_MAX_SCALE, type PinBackId, badgeSlug, badgesInSet, badgeCollections, bookCollection, HAVEN_COLLECTION, chaptersOf, type BadgeCatalog, type BadgeDef, type BadgeSet, type BadgeSlot, type SlotCard } from '@/lib/badges'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { BadgePin, BUILT_IN_PIN_ART } from '@/components/badges/BadgePin'
 import { BookCover } from '@/components/badges/BadgeLibrary'
@@ -196,7 +196,8 @@ export function BadgesAdmin() {
 
 // ── Modal shell ─────────────────────────────────────────────────────────────────────────────
 
-function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: React.ReactNode; footer: React.ReactNode }) {
+// `side`: shown beside the modal on its right on a wide screen (the modal itself stays centred)
+function Modal({ title, onClose, children, footer, side }: { title: string; onClose: () => void; children: React.ReactNode; footer: React.ReactNode; side?: React.ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -205,36 +206,121 @@ function Modal({ title, onClose, children, footer }: { title: string; onClose: (
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-3xl max-h-[92dvh] card-glass bg-slate-900 rounded-2xl flex flex-col overflow-hidden">
-        <div className="flex items-center px-5 py-4 border-b border-slate-800">
-          <h2 className="text-lg font-bold text-ink">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800"><X size={18} /></button>
+      <div className="relative w-full max-w-3xl">
+        <div className="max-h-[92dvh] card-glass bg-slate-900 rounded-2xl flex flex-col overflow-hidden">
+          <div className="flex items-center px-5 py-4 border-b border-slate-800">
+            <h2 className="text-lg font-bold text-ink">{title}</h2>
+            <button onClick={onClose} aria-label="Close" className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800"><X size={18} /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5">{children}</div>
+          <div className="px-5 py-3 border-t border-slate-800 flex items-center gap-2 justify-end">{footer}</div>
         </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
-        <div className="px-5 py-3 border-t border-slate-800 flex items-center gap-2 justify-end">{footer}</div>
+        {/* only where the space right of the centred modal is wide enough (≥ ~300px) */}
+        {side && (
+          <div className="hidden min-[1400px]:block absolute left-full top-1/2 -translate-y-1/2 ml-5" style={{ width: 'min(440px, calc((100vw - 48rem) / 2 - 2.5rem))' }}>
+            {side}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-// The editor preview's pin size at 100%: fixed for good, so one badge's Display size can be measured
-// against another's on the same grid (a pin bigger than the grid is cropped there, not shrunk)
-const PREVIEW_PIN = 80
+// The badge editor's preview: the book page this badge is on, as the pin book draws it — a page the
+// book's shape (the book is 1.42 wide per spread, so a page is 0.71), its 2 × 3 spots in the same
+// place (BadgeBook PinPage), each pin sized by the book's own rule (pagePin) and drawn at its Display
+// size the way the book draws it (pinDrawSize: TCG Haven's stop at 100% there). The page holds this
+// badge with the other badges of its chapter, in book order — so its size reads against theirs.
+const PAGE_ASPECT = 0.71
+
+// The editor's rule-of-thirds square: one spot of the book, close up. A 100% pin fills it as it fills
+// its spot in the book (the spot is 1.25 × the pin wide — BadgeSpot), drawn by the book's own rule
+// (pinDrawSize, up to 150%), so its size reads the same here as on the page — and against other
+// badges' on the same grid. (It was a fixed 80px pin in a 240px square: a third of it, while the
+// same pin filled its spot in the book.) A pin bigger than the square is cropped.
+function SpotSquare({ badge }: { badge: BadgeDef }) {
+  const [box, setBox] = useState<HTMLDivElement | null>(null)
+  const [w, setW] = useState(240)
+  useEffect(() => {
+    if (!box) return
+    const fit = () => setW(box.clientWidth)
+    const ro = new ResizeObserver(fit)
+    ro.observe(box)
+    fit()
+    return () => ro.disconnect()
+  }, [box])
+  const spotPin = w / 1.25
+  return (
+    <div ref={setBox} className="relative w-full max-w-[240px] mx-auto aspect-square rounded-2xl bg-[#181513] overflow-hidden flex items-center justify-center">
+      <span className="absolute inset-y-0 left-1/3 w-px bg-white/15 pointer-events-none" aria-hidden />
+      <span className="absolute inset-y-0 left-2/3 w-px bg-white/15 pointer-events-none" aria-hidden />
+      <span className="absolute inset-x-0 top-1/3 h-px bg-white/15 pointer-events-none" aria-hidden />
+      <span className="absolute inset-x-0 top-2/3 h-px bg-white/15 pointer-events-none" aria-hidden />
+      <span className="relative shrink-0 [&>img]:max-w-none"><BadgePin art={badge.art} imageUrl={badge.imageUrl} size={pinDrawSize(badge, spotPin)} /></span>
+    </div>
+  )
+}
+function BookPagePreview({ catalog, badge, large }: { catalog: BadgeCatalog; badge: BadgeDef; large?: boolean }) {
+  const [box, setBox] = useState<HTMLDivElement | null>(null)
+  const [w, setW] = useState(220)
+  useEffect(() => {
+    if (!box) return
+    const fit = () => setW(box.clientWidth)
+    const ro = new ResizeObserver(fit)
+    ro.observe(box)
+    fit()
+    return () => ro.disconnect()
+  }, [box])
+  const pin = pagePin(w, w / PAGE_ASPECT)
+  // its chapter's badges, this one in its place (or last, when new or just moved here)
+  const chapter = catalog.badges.filter((x) => x.set === badge.set && x.page === badge.page && x.id !== badge.id)
+  const at = catalog.badges.filter((x) => x.set === badge.set && x.page === badge.page).findIndex((x) => x.id === badge.id)
+  const all = [...chapter]
+  all.splice(at >= 0 ? at : all.length, 0, badge)
+  const me = all.indexOf(badge)
+  const spots = all.slice(me - (me % 6), me - (me % 6) + 6)
+  return (
+    <div ref={setBox} className={cn('relative mx-auto rounded-xl overflow-hidden shadow-inner', !large && 'w-full max-w-[260px]')}
+      // large: as wide as it's given, unless the screen's height is the tighter (it stays a page shape)
+      style={{ aspectRatio: String(PAGE_ASPECT), background: 'radial-gradient(ellipse at center, #2a221c 0%, #1a1511 100%)', ...(large && { width: `min(100%, calc((92dvh - 7rem) * ${PAGE_ASPECT}))` }) }}>
+      <div className="absolute inset-[3%] rounded-lg border border-[#c9a45c]/40 pointer-events-none" />
+      <p className="absolute inset-x-0 top-[5%] text-center pinbook-serif font-bold uppercase tracking-[0.2em] text-[#d8b46a] truncate px-[10%]" style={{ fontSize: Math.max(10, pin * 0.13) }}>{badge.page || 'Chapter'}</p>
+      <div className="absolute inset-x-[7%] top-[13%] bottom-[5%] grid grid-cols-2 grid-rows-3 place-items-center">
+        {Array.from({ length: 6 }, (_, i) => {
+          const d = spots[i]
+          if (!d) return <span key={i} className="rounded-full border border-dashed border-white/10" style={{ width: pin * 0.7, height: pin * 0.7 }} />
+          const mine = d === badge
+          const size = pinDrawSize(d, pin)
+          return (
+            <span key={d.id + i} className="relative flex flex-col items-center" style={{ width: pin * 1.25 }}>
+              <span className={cn('relative flex items-center justify-center rounded-lg', mine && 'ring-1 ring-amber-400/70 ring-offset-2 ring-offset-transparent')} style={{ width: pin, height: pin * 1.12 }}>
+                <span className={cn('flex shrink-0 items-center justify-center [&>img]:max-w-none', !mine && 'opacity-60')} style={{ width: size, height: size * 1.12 }}>
+                  <BadgePin art={d.art} imageUrl={d.imageUrl} size={size} />
+                </span>
+              </span>
+              <span className={cn('mt-0.5 max-w-full truncate rounded px-1 font-bold uppercase tracking-wider', mine ? 'bg-[#d8b46a] text-[#1c1206]' : 'bg-[#d8b46a]/50 text-[#1c1206]/80')} style={{ fontSize: Math.max(7, pin * 0.08) }}>{d.name || 'New badge'}</span>
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 // A tier percentage: typed freely and only applied (clamped to 1–100, the others kept in order)
 // on Enter or leaving the box — applied per keystroke, clearing the box on the way to "100" made
 // it 1 for a moment and dragged the tiers below it down to 1
-function TierPercent({ value, disabled, onCommit }: { value: number; disabled?: boolean; onCommit: (v: number) => void }) {
+function TierPercent({ value, disabled, max = 100, onCommit }: { value: number; disabled?: boolean; max?: number; onCommit: (v: number) => void }) {
   const [text, setText] = useState(String(value))
   useEffect(() => setText(String(value)), [value])
   const commit = () => {
-    const v = Math.min(100, Math.max(1, Math.round(Number(text))))
+    const v = Math.min(max, Math.max(1, Math.round(Number(text))))
     if (!Number.isFinite(v) || text.trim() === '') return setText(String(value))
     setText(String(v))
     if (v !== value) onCommit(v)
   }
   return (
-    <input type="number" min={1} max={100} value={text} disabled={disabled} className="input-field !py-1.5 text-sm"
+    <input type="number" min={1} max={max} value={text} disabled={disabled} className="input-field !py-1.5 text-sm"
       onChange={(e) => setText(e.target.value)} onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }} />
   )
@@ -288,34 +374,45 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
       const kit = await loadKit(await analyzeArt(await r.blob(), 'high', useAlpha))
       const reliefKit = await saveKit(staffStorage, `badges/${id || 'new'}`, kit)
       // piece edits belong to one analysis — keep the rest of the settings
-      setB((x) => ({ ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, levelRule: 'borders', pieces: {}, soft: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
+      // (only if the art is still the one analyzed — new art uploaded meanwhile mustn't get the old art's kit)
+      setB((x) => (x.imageUrl !== artUrl ? x : { ...x, reliefKit, relief: { ...reliefSettings(x.relief), artHoles: useAlpha, levelRule: 'borders', pieces: {}, soft: {}, flat: {}, names: {}, off: [], materials: {}, finishOpts: {}, details: {}, finishOff: [], finishLayers: [] } }))
       setReliefJob({ state: 'done', gpu: where })
     } catch (e) {
       setReliefJob({ state: 'error', msg: e instanceof Error ? e.message : String(e), gpu: where })
     }
   }
 
-  async function save(override?: BadgeDef) {
+  /** Saves the badge; what went wrong, or '' when it saved. */
+  async function save(override?: BadgeDef): Promise<string> {
     const b = override ?? badgeNow
     setError('')
-    if (!b.name.trim()) return setError('Give the badge a name.')
-    if (!b.set) return setError('Pick a book.')
-    if (!b.page.trim()) return setError('Pick a chapter (or start a new one).')
-    if (isNew && catalog.badges.some((x) => x.id === id)) return setError(`A badge with the id "${id}" already exists — change the name.`)
+    const fail = (msg: string) => { setError(msg); return msg }
+    if (!b.name.trim()) return fail('Give the badge a name.')
+    if (!b.set) return fail('Pick a book.')
+    if (!b.page.trim()) return fail('Pick a chapter (or start a new one).')
+    if (isNew && catalog.badges.some((x) => x.id === id)) return fail(`A badge with the id "${id}" already exists — change the name.`)
     setSaving(true)
     try {
       await onSave({ ...b, id, game: book?.game ?? b.game, name: b.name.trim(), page: b.page.trim() }, initial.id, initial)
     } catch {
-      setError('Couldn’t save.')
+      return fail('Couldn’t save.')
     } finally {
       setSaving(false)
     }
+    return ''
   }
 
   return (
     <Modal
       title={isNew ? 'New badge' : `Edit · ${initial.name}`}
       onClose={onClose}
+      side={
+        <div className="card-glass bg-slate-900 rounded-2xl p-4 flex flex-col gap-2">
+          <p className="text-xs font-semibold text-slate-600">In the book</p>
+          <BookPagePreview catalog={catalog} badge={{ ...b, id: id || '__new' }} large />
+          <p className="text-[11px] text-slate-500 leading-snug">Its page, drawn to the book&rsquo;s own sizes, with the chapter&rsquo;s other badges.</p>
+        </div>
+      }
       footer={<>
         <button onClick={() => onPreview({ ...b, id: id || 'preview' })} className="btn-secondary mr-auto"><Cuboid size={15} />Preview in 3D</button>
         {error && <span className="text-xs text-red-600 mr-2">{error}</span>}
@@ -364,10 +461,32 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             <input className="input-field" value={b.slotNoun} onChange={(e) => patch({ slotNoun: e.target.value })} placeholder="Legends" />
           </Field>
 
-          <Field label="Tier percentages" hint="How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick Grayscale to skip it: the pin stays a hole until Full.">
+          {/* Not a Field: that's a <label>, and a click anywhere in it would press the first button */}
+          <div className="block">
+            <span className="field-label">Tiers</span>
+            {/* Percentage ↔ Amount: switching to Amount starts from what the percentages give today;
+                switching back drops the amounts (the percentages were kept all along) */}
+            <div className="flex gap-1 mb-2">
+              {(['Percentage', 'Amount'] as const).map((m) => {
+                const active = (m === 'Amount') === !!b.tierCounts
+                return (
+                  <button key={m} type="button" onClick={(e) => {
+                    e.preventDefault()
+                    if (active) return
+                    if (m === 'Percentage') return patch({ tierCounts: undefined })
+                    const n = Math.max(1, b.slots.length)
+                    patch({ tierCounts: [tierNeed(b, 1, n) || 1, tierNeed(b, 3, n) || 1] })
+                  }}
+                    className={cn('px-2.5 py-1 rounded-lg text-[11px] font-semibold border', active ? 'bg-amber-500/20 border-amber-500/60 text-ink' : 'border-slate-800 text-slate-500')}>
+                    {m}
+                  </button>
+                )
+              })}
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {([1, 3] as const).map((t, i) => {
-                const tiers = tierPercents(b)
+                const counts = b.tierCounts
+                const tiers = counts ?? tierPercents(b)
                 const on = looksOn(b).includes(t)
                 return (
                   <div key={t} className="block">
@@ -378,44 +497,53 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                       {TIER_NAMES[t]}
                     </label>
                     <div className={cn('flex items-center gap-1', !on && 'opacity-40')}>
-                      <TierPercent value={tiers[i]} disabled={!on}
+                      <TierPercent value={tiers[i]} disabled={!on} max={counts ? 9999 : 100}
                         onCommit={(v) => {
                           const next = [...tiers] as [number, number]
                           next[i] = v
                           // keep them in order: Grayscale ≤ Full
                           if (i === 0) next[1] = Math.max(next[1], v)
                           else next[0] = Math.min(next[0], v)
-                          patch({ tiers: next.join() === DEFAULT_TIERS.join() ? undefined : next })
+                          if (counts) patch({ tierCounts: next })
+                          else patch({ tiers: next.join() === DEFAULT_TIERS.join() ? undefined : next })
                         }} />
-                      <span className="text-xs text-slate-500">%</span>
+                      <span className="text-xs text-slate-500 whitespace-nowrap">{counts ? `/ ${b.slots.length}` : '%'}</span>
                     </div>
                   </div>
                 )
               })}
             </div>
-          </Field>
+            <span className="block text-[11px] text-slate-500 mt-1">
+              {b.tierCounts
+                ? `How many of the badge's ${b.slots.length} ${b.slotNoun || 'cards'} a collector needs for each look of the pin — it follows their current progress. The number stays put as the badge grows (capped at the badge's size while it's smaller). Untick Grayscale to skip it: the pin stays a hole until Full.`
+                : 'How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick Grayscale to skip it: the pin stays a hole until Full.'}
+            </span>
+          </div>
 
           <SlotsEditor game={book?.game ?? b.game} slots={b.slots} onChange={(slots) => patch({ slots })} />
         </div>
 
         {/* Look */}
         <div className="flex flex-col gap-3">
-          {/* A fixed square with a rule-of-thirds grid: the pin grows and shrinks on it with Display
-              size, so its size can be measured against other badges' */}
-          <div className="relative w-full max-w-[240px] mx-auto aspect-square rounded-2xl bg-[#181513] overflow-hidden flex items-center justify-center">
-            <span className="absolute inset-y-0 left-1/3 w-px bg-white/15 pointer-events-none" aria-hidden />
-            <span className="absolute inset-y-0 left-2/3 w-px bg-white/15 pointer-events-none" aria-hidden />
-            <span className="absolute inset-x-0 top-1/3 h-px bg-white/15 pointer-events-none" aria-hidden />
-            <span className="absolute inset-x-0 top-2/3 h-px bg-white/15 pointer-events-none" aria-hidden />
-            <span className="relative"><BadgePin art={b.art} imageUrl={b.imageUrl} size={pinSize(b, PREVIEW_PIN)} /></span>
+          <SpotSquare badge={b} />
+          {/* The page of the book this badge lands on, drawn to the book's own rules — big, beside the
+              editor on a wide screen (Modal's `side`); here, small, when there's no room beside it */}
+          <div className="min-[1400px]:hidden flex flex-col gap-1">
+            <BookPagePreview catalog={catalog} badge={{ ...b, id: id || '__new' }} />
+            <p className="text-[11px] text-slate-500 leading-snug text-center">How it sits on its page in the book.</p>
           </div>
           <label className="block">
-            <span className="flex items-center text-xs font-semibold text-slate-600">Display size<span className="ml-auto tabular-nums text-slate-500">{Math.round((b.displayScale ?? 1) * 100)}%</span></span>
-            <input type="range" min={0.1} max={5} step={0.01} value={b.displayScale ?? 1} className="w-full accent-amber-600"
+            <span className="flex items-center text-xs font-semibold text-slate-600">
+              Display size
+              {(b.displayScale ?? 1) !== 1 && <button type="button" onClick={() => patch({ displayScale: undefined })} className="ml-2 text-[11px] font-semibold text-slate-500 underline">Back to 100%</button>}
+              <span className="ml-auto tabular-nums text-slate-500">{Math.round((b.displayScale ?? 1) * 100)}%</span>
+            </span>
+            {/* 100% = the pin fills its spot in the book; up to 150% there (HAVEN_MAX_SCALE) */}
+            <input type="range" min={0.3} max={HAVEN_MAX_SCALE} step={0.01} value={Math.min(HAVEN_MAX_SCALE, b.displayScale ?? 1)} className="w-full accent-amber-600"
               onChange={(e) => { const v = Number(e.target.value); patch({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
-            <span className="block text-[11px] text-slate-500 leading-snug">How big the pin shows in the book, on the shelf and in lists — evens out art that&rsquo;s framed bigger or smaller than the rest.</span>
+            <span className="block text-[11px] text-slate-500 leading-snug">How big the pin shows in the book, on the shelf and in lists — 100% fills its spot in the book. Evens out art that&rsquo;s framed bigger or smaller than the rest.</span>
           </label>
-          <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { setB((x) => ({ ...x, imageUrl, reliefKit: undefined })); setReliefJob(null) /* the old kit was made from the old art */ }}
+          <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { setB((x) => ({ ...x, imageUrl, reliefKit: undefined, depthMapUrl: undefined, normalMapUrl: undefined, finishMapUrl: undefined, detailMapUrl: undefined, reliefBuildUrl: undefined, reliefBuildKey: undefined })); setReliefJob(null) /* the old kit and 3D maps were made from the old art */ }}
             note={reliefJob?.state === 'running'
               ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300"><Loader2 size={12} className="animate-spin" />Analyzing…</span>
               : b.reliefKit && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"><CheckCircle2 size={12} />Relief ready</span>} />
@@ -472,7 +600,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
           {studio && <ReliefStudio badge={{ ...b, id: id || 'new' }} onClose={() => setStudio(false)}
             gpu={gpu} connect={(where) => { setGpu(where); return connectRelief(where, ticket) }}
             // the Studio's result is saved with the badge straight away — a separate "Save badge" was easy to miss
-            onApply={async (p) => { const next = { ...b, ...p }; setB(next); await save(next) }} />}
+            onApply={async (p) => { const next = { ...b, ...p }; setB(next); const problem = await save(next); if (problem) throw new Error(problem + ' (the relief is kept in the editor — fix that and save the badge)') }} />}
           {/* the pin's normal and depth maps come from the Relief Studio ("Save relief to badge") */}
           <p className="text-[11px] text-slate-500 leading-snug">
             With a 3D model, that&rsquo;s what the 3D view shows. Without one, the pin is built from the art — shape it in the Relief Studio.

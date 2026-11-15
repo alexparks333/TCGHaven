@@ -393,8 +393,8 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
   const [open, setOpen] = useState(false)
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
-  // Display size, but never bigger than the slot for TCG Haven's badges (the book always capped it
-  // there); a creator's may grow to 150% (lib/badges.ts pinDrawSize)
+  // Display size, but at most 150% of the slot for TCG Haven's badges (100% until 2026-11-14);
+  // a creator's may grow to 150% (lib/badges.ts pinDrawSize)
   const size = pinDrawSize(def, pin)
   const art = useTrimmedArt(def.imageUrl) // the art cropped to the pin, as BadgePin draws it — the masks follow it
   useEffect(() => { preloadPinInspector() }, []) // the 3D view's code, so a click opens it at once
@@ -453,7 +453,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
             {/* The pin in its look; the next look rising over it in the same box, so the two line up
                 exactly and tilt together (flex: no gap under the image; no shrinking a pin drawn
                 bigger than its slot) */}
-            <span className={cn('flex [&>*]:shrink-0', tier === 1 && 'pinbook-look-1')}><BadgePin art={def.art} imageUrl={def.imageUrl} size={size} /></span>
+            <span className={cn('flex [&>*]:shrink-0 [&>img]:max-w-none', tier === 1 && 'pinbook-look-1')}><BadgePin art={def.art} imageUrl={def.imageUrl} size={size} /></span>
             {next > 0 && fill > 0 && (
               <span className="absolute inset-0 pointer-events-none" aria-hidden>
                 <TierRise size={size} imageUrl={def.imageUrl} art={def.art} progress={fill} />
@@ -549,7 +549,7 @@ function PinHole({ size, hovered, imageUrl, art, tier, progress }: { size: numbe
   const p = Math.max(0, Math.min(1, progress))
   const fill = riseHeight(trimmed, p)
   return (
-    <span className="relative block transition-transform duration-200" style={{ width: size, height: size * 1.12, transform: hovered ? 'scale(1.03)' : undefined }}>
+    <span className="relative block shrink-0 transition-transform duration-200" style={{ width: size, height: size * 1.12, transform: hovered ? 'scale(1.03)' : undefined }}>
       {/* With a page pattern: plain felt in exactly the pin's shape, so the pattern stops at the silhouette */}
       <span className="pinbook-hole-felt absolute inset-0" aria-hidden style={{ WebkitMask: `${src} center / contain no-repeat`, mask: `${src} center / contain no-repeat` }} />
       <span

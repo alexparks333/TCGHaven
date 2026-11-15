@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react'
 import { badgeArt, badgeAsset } from '@/lib/badgeAssets'
 
-// Pin art cropped to the pin itself. Uploaded art is usually a big square with the pin somewhere
-// inside a transparent margin — some wide, some narrow — and drawn whole into a slot, every pin
-// came out a different size (the margin, not the pin, filled the slot). Cropped to its visible
-// pixels, every pin fills its slot at 100% Display size. Made once per picture in the browser
+// Pin art made square for its slot. Square art is drawn exactly as uploaded — the pin where the
+// artist put it in the square, margin and all (Display size evens out sizes). Anything else is
+// centred in a square. (Until 2026-11-14 it was cropped to its visible pixels, which re-centred
+// every pin and threw the artist's framing away.) Made once per picture in the browser
 // (cached for the session), as a smaller image: pins on a page are a few hundred pixels at most.
 // The cropped image is also kept on the device (Cache Storage), so later visits skip the download
 // and the crop; and a book's art is made ahead of time (preloadTrimmedArt) — from the shelf, its
@@ -17,7 +17,7 @@ export interface TrimmedArt { src: string; aspect: number } // aspect = height /
 const MAX = 1024 // the cropped image's longer side
 const made = new Map<string, TrimmedArt>()
 const making = new Map<string, Promise<TrimmedArt>>()
-const CACHE = 'tcghaven-pin-art-v1' // bump to drop every device's copies
+const CACHE = 'tcghaven-pin-art-v2' // bump to drop every device's copies (v2, 2026-11-14: square art kept as uploaded, not cropped)
 
 async function fromCache(src: string): Promise<TrimmedArt | null> {
   try {
@@ -57,30 +57,18 @@ function crop(src: string, fallback?: string): Promise<TrimmedArt> {
     }
     img.onload = () => {
       const W = img.naturalWidth, H = img.naturalHeight
-      // find the visible pixels on a small copy (fast), then crop the full picture
-      const k = Math.min(1, 512 / Math.max(W, H))
-      const sw = Math.max(1, Math.round(W * k)), sh = Math.max(1, Math.round(H * k))
-      const probe = document.createElement('canvas')
-      probe.width = sw; probe.height = sh
-      const pctx = probe.getContext('2d', { willReadFrequently: true })!
-      pctx.drawImage(img, 0, 0, sw, sh)
-      const a = pctx.getImageData(0, 0, sw, sh).data
-      let x0 = sw, y0 = sh, x1 = -1, y1 = -1
-      for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) {
-        if (a[(y * sw + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
-      }
-      if (x1 < 0 || (x0 <= 1 && y0 <= 1 && x1 >= sw - 2 && y1 >= sh - 2)) return resolve({ src, aspect: H / W }) // nothing to crop
-      // back to the full picture's pixels, a pixel of slack all round
-      const cx = Math.max(0, Math.floor((x0 - 1) / k)), cy = Math.max(0, Math.floor((y0 - 1) / k))
-      const cw = Math.min(W, Math.ceil((x1 + 2) / k)) - cx, ch = Math.min(H, Math.ceil((y1 + 2) / k)) - cy
-      const s = Math.min(1, MAX / Math.max(cw, ch))
+      // Square art (within 1%) is drawn exactly as uploaded — where the pin sits in the square is the
+      // artist's framing, kept (it used to be cropped to its visible pixels, which re-centred it)
+      if (Math.abs(W - H) <= Math.max(W, H) * 0.01) return resolve({ src, aspect: 1 })
+      // Anything else is centred in a square (the whole picture, its longer side across it)
+      const side = Math.max(W, H), s = Math.min(1, MAX / side)
       const out = document.createElement('canvas')
-      out.width = Math.round(cw * s); out.height = Math.round(ch * s)
-      out.getContext('2d')!.drawImage(img, cx, cy, cw, ch, 0, 0, out.width, out.height)
+      out.width = out.height = Math.round(side * s)
+      out.getContext('2d')!.drawImage(img, Math.round(((side - W) / 2) * s), Math.round(((side - H) / 2) * s), Math.round(W * s), Math.round(H * s))
       out.toBlob((b) => {
         if (!b) return resolve({ src, aspect: H / W })
-        toCache(src, b, ch / cw)
-        resolve({ src: URL.createObjectURL(b), aspect: ch / cw })
+        toCache(src, b, 1)
+        resolve({ src: URL.createObjectURL(b), aspect: 1 })
       }, 'image/png')
     }
     img.src = src

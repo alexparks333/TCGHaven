@@ -78,6 +78,9 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   its `s-maxage` lets Vercel's CDN serve repeats without the function or a Storage download. Pin
   art in books and shelves (`trimmedArt.ts`) goes through `badgeArt()` — Next's image optimizer,
   ~8× smaller (1.9MB PNG → 240KB WebP) — falling back to the full file; the 3D view keeps the full one.
+  Square art is drawn **exactly as uploaded** (the pin where the artist framed it); other shapes
+  are centred in a square. Until 2026-11-14 it was cropped to its visible pixels, which re-centred
+  every pin — don't bring that back (the device cache was bumped to `tcghaven-pin-art-v2`).
   A badge with no slots can't be earned (0/0 isn't "complete").
 - **Definitions** (`lib/badges.ts`): each badge is "collect one of each" — `slots`, each
   filled by owning ANY of its catalog ids (matched on inventory `apiId`). First badge: **Origins
@@ -115,6 +118,11 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   tier numbers are 1 and 3: a middle Painted look (2) was removed 2026-11-03, and badges saved
   before still hold three percentages / old `tiersOff` values — always read them through
   `tierPercents()` / `looksOn()`, which skip the old middle look.
+  **Percentage or Amount** (staff portal toggle, 2026-11-14): Amount stores `tierCounts`
+  ([Grayscale, Full] as a number of slots), which wins over `tiers` (kept, so switching back to
+  Percentage restores it). Every count goes through `tierNeed()`, which caps an amount at the
+  badge's current slots — a growing badge's amount stays put as it grows. Creator badges still use
+  percentages only.
   **Progress fill is tiered** (`tierFill()`): it measures from the current look to the next, not
   the whole badge. A hole ghosts in toward Grayscale (Grayscale at 50% of 10 cards: 3 cards = 60%
   filled); an earned Grayscale pin has the Full pin rising over it from the bottom (`TierRise` in
@@ -148,6 +156,13 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   swings shut while the book glides back to the middle, then flies home; the shelf stays mounted
   and doesn't replay its fade-in (`Shelf intro`). In a profile the
   book is capped by window height so it always fits on screen.
+- **Display size (staff badge editor, 2026-11-14):** 30–150%, 100% = the pin fills its spot in the
+  book (`pinDrawSize`, `HAVEN_MAX_SCALE` 1.5 — it was capped at 100%). The editor previews the
+  badge's actual book page (`BookPagePreview` in `BadgesAdmin.tsx`: the page's 0.71 shape, the same
+  2 × 3 spots and `pagePin` rule, the chapter's other badges around it) — big beside the centred
+  editor on screens ≥ 1400px wide (Modal `side`), small inside it on narrower ones. The editor keeps
+  its rule-of-thirds square too (`SpotSquare`: one book spot close up — a 100% pin fills it as in
+  the book, `pinDrawSize` of the square ÷ 1.25; it was a fixed 80px pin, a third of the square).
 - **Collections (2026-11-09):** each book has an optional `collection` (a name; unset = "Haven
   Badges", `HAVEN_COLLECTION` — TCG Haven's own books). The shelf shows one collection at a time,
   picked from a dropdown above it (`CollectionPicker` in BadgeLibrary — a native `<select>` laid
@@ -289,10 +304,40 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   in solid gold areas (`solidifyGold`), no invented detail. `normal.png` is Marigold's raw normals,
   applied as an **object-space** map that replaces the displaced mesh's normals — a tangent-space
   map of the same relief on top of the displaced mesh counted every slope twice (pillowy, molten).
+  **Since 2026-11-14 the Studio saves its own maps instead (`relief.maps: 2`):** the normal map is
+  the *sculpted* shape's (`shapeNormals()` in `lib/reliefStudio.ts`: slopes of the final height map
+  at the saved depth, one-sided at the pin's edge) with only the AI normals' fine detail on top
+  (`KitArrays.fine`: Marigold's x/y tilt minus an 8 px blur; Normal strength scales it, baked in —
+  the viewer then applies strength 1). Marigold's map alone described the original picture, so
+  steps, raises and softening changed the outline side-on but never the lighting. The depth map is
+  16-bit (R high byte, G low, B = R; read exactly via `createImageBitmap` with no colour conversion
+  — 8 bits was 256 heights, stair-stepped on gentle slopes). Badges saved before keep their 8-bit
+  map and Marigold's normals until they're re-saved. The Studio previews the same normals live
+  (rebuilt on every shape, depth or strength change) on a 1100² mesh — the collector's computer
+  grid (it was 512, coarser than what got saved).
   `RELIEF_DEPTH` is 0.026 (the default; the Studio sets it per badge — 0.055 stood taller than the
   body). Steep walls (`setWalls()`) are plain gold lit by the mesh's real normal, since the head-on
   art and normals only smear down them; the relief's cut edge is snapped onto the smooth outline
-  with a gold skirt down into the body (no see-through gap, no stair-steps). Body gold stays
+  with a gold skirt down into the body (no see-through gap, no stair-steps). Since 2026-11-14 a
+  real relief's body has no bevel (`addFlushBody()`): the skirt *is* the side, one straight wall
+  from the face's edge to the back plate with smooth level normals — the bevel bulged past the
+  face as a lip and its join with the skirt showed as a seam. The body's thickness is the Studio's
+  Global → Backing → Depth (`ReliefSettings.backing`, moved by `setBacking()`: only the back
+  moves); its default `DEFAULT_BACKING` 0.059 is the old bevelled body's, so saved badges keep
+  their size. The wall's top edge is clean because the face's edge vertices read their height
+  1.5–3.5 px in from the cut (on it, the height map is half art, half the empty 0 — the edge
+  zigzagged pixel by pixel), and the art texture is opaque 3 px past its edge (the mesh does the
+  cutting; the alpha test was nibbling the rim). (Rounding the edge over was tried 2026-11-14 and
+  looked worse — don't.) Holes (the Hole finish, the art's own transparency) are built exactly
+  like the outside (`cutHoles()`, on load — not in the saved build, so no re-save is needed): the
+  face's mesh is cut at them, its edge pulled onto each hole's lightly smoothed loop, and the same
+  skirt runs round them. The cap and back plate are shaped from the wall's own footprint
+  (`rimLoops()`: the rim chained into loops, holes included), not the traced outline — that stuck
+  out past the wall at corners and tips, a lip round the back; the hole map still cuts them per
+  pixel too (`holeDiscard`) as a safety. The Studio keeps the pin hidden as it opens until it has
+  its heights and holes (it used to show it flat, then hole-less, then right).
+  Holes used to be cut from the face per pixel with a separate wall standing in each — wavy and
+  jagged next to the smooth outside. The stand-in (no relief) keeps its bevelled body. Body gold stays
   shiny (roughness 0.3 + mirror clear coat); the studio environment is rendered at 1024px
   (`ENV_SIZE`, 512 on phones) because three.js's default 256 showed as staircase blocks in it.
   Run on a Windows PC: `.venv` built with Python 3.13 + cu124 torch + torchvision works.
@@ -331,10 +376,23 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   The Studio opened from the editor has the same two buttons (its empty state and "Re-analyze the
   art"). Creators never choose: always the cloud. The Studio then opens straight onto live
   controls — everything below runs in the browser, no AI re-run:
-  - **Relief tab:** stepped/smooth, levels (default 8, each can be switched off), Flatten all
-    pieces (default 0%, so the sculpted detail shows on the steps — at 100% it wiped the detail
-    out), soften, depth, detail (default 100%), gold walls; per piece raise/lower, flatten, smooth
-    edges. Kits from before 2026-11-08 have gaps between Segment Anything objects; those are split
+  - **Relief tab:** smooth (the default since 2026-11-14) / stepped, levels (2–24, default 16, each can be switched off; colours spread along one ramp), soften steps
+    (default 15% since 2026-11-14), depth (default 4%), detail (default 100%), metal walls (was "Gold walls" — renamed 2026-11-14, they take the Global metal colour; default 0 = off: the art runs down every slope); per piece
+    raise/lower, flatten, smooth edges. The "Flatten all pieces" slider was removed 2026-11-14:
+    new reliefs get `flatDefault` 1 (every piece flat — the stepped look); saved ones keep theirs.
+    Raise/lower reaches `LEVEL_REACH` (4) levels past the highest and below the lowest; the pin's
+    height map stays 0..1, so `compose()` reports `scale` and the depth is multiplied by it
+    (saved with the badge as `depthScale`, only when over 1). With several pieces selected,
+    stepped raise/lower puts them all on the same level and moves them together. `scale` compares
+    the pin's height range with the same pin with every piece clamped into the levels (a second
+    `composeRaw` pass, only when a piece is outside), so other pieces keep their height. The Levels
+    view paints pieces above the highest level white, below the lowest navy.
+  - **Studio conveniences (2026-11-14):** camera buttons Front / Angle / Side / Back (keys 1–4);
+    Undo / Redo buttons in the header; Esc steps back (leave a text box → clear the selection →
+    close) and is ignored while saving or analysing, when the side panel is locked too; −/+ nudges
+    on Raise / lower; "Select" on each level row and "Select pieces" on an open layer; an
+    "Unsaved changes" line by Save; "Building the 3D pin…" while the pin is hidden as it opens.
+    `depthScale` is never in the Studio's settings, draft or unsaved check — only added on save. Kits from before 2026-11-08 have gaps between Segment Anything objects; those are split
     into pieces here (`splitGaps`), so every area is selectable.
   - **Material tab:** Photoshop-style Layers (one per piece; thumbnail, rename, eye = hide its
     finish) + Material properties: a finish per layer — Auto, Regular, Gold, Gemstone (real light

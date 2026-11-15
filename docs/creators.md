@@ -260,7 +260,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
      maker, so they all match. The badge maker's velvet side shows the pin in its spot zoomed to fill the side: a
      faint dashed outline of the spot (100%) with the pin at its Size on the page inside it (the same comparison). **Size on the page** (Pin art step) sets
      `BadgeDef.displayScale`, 30–150%: creators' badges (`set` starts `creator-`) may grow past their spot
-     (`CREATOR_MAX_SCALE`); TCG Haven's stay capped at their spot as before.
+     (`CREATOR_MAX_SCALE`); TCG Haven's may grow to 150% too (`HAVEN_MAX_SCALE`, since 2026-11-14 — capped at their spot before).
      **Pop-ups** (BadgeMaker, Preview as a fan, the Studio's prompts) render into `<body>` through
      `components/creator/Portal.tsx`, so no transformed or sticky parent can push them off screen; the
      entrance's `.studio-reveal` uses `backwards` fill so it leaves no transform behind. Center rings are drawn
