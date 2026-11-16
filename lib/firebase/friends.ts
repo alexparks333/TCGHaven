@@ -24,12 +24,12 @@ import type { Card, Game } from '../types'
 // The invite code itself lives in users/{uid}/private/invite, readable only by its owner.
 
 export interface ProfilePrivacy {
-  cardex: boolean  // friends can browse your Cardex
-  badges: boolean  // friends can see your badges (badges are coming soon)
+  cardex: boolean  // true = Everyone can browse your Cardex; false = only your accepted friends (firestore.rules)
+  badges: boolean  // true = Everyone can see your badges; false = only your accepted friends
 }
 
-// Public by default: anyone signed in can see your Cardex and Badges until you make them private
-// on your profile.
+// Public by default: anyone signed in can see your Cardex and Badges until you set them to Friends on your
+// profile — then only the friends you've added and accepted can.
 export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: true, badges: true }
 export const BIO_MAX = 160
 // The pin display pad on a profile's Badges tab: this many spots, each holding a badge id the owner
@@ -47,6 +47,7 @@ export interface Profile {
   privacy: ProfilePrivacy
   pinDisplay: string[]  // PIN_DISPLAY_SPOTS long, '' for an empty spot
   bannerPins?: string[] // BANNER_PIN_SPOTS long, '' for an empty spot (absent before the first save)
+  friendCount?: number  // how many accepted friends — kept by the owner's own app (FriendsProvider), so visitors see the number, never the list
 }
 
 function toSpots(v: unknown, n: number): string[] {
@@ -92,6 +93,7 @@ export function toProfile(uid: string, d: Record<string, unknown> | undefined): 
     privacy: { ...DEFAULT_PRIVACY, ...(d.privacy as Partial<ProfilePrivacy> | undefined) },
     pinDisplay: toPinDisplay(d.pinDisplay),
     bannerPins: toBannerPins(d.bannerPins),
+    ...(typeof d.friendCount === 'number' && { friendCount: d.friendCount }),
   }
 }
 
@@ -215,6 +217,11 @@ export async function searchProfiles(term: string, me: string): Promise<Profile[
   return Array.from(out.values()).slice(0, 10)
 }
 
+/** Your number of accepted friends, on your profile for visitors to see (FriendsProvider keeps it current) */
+export async function updateFriendCount(uid: string, friendCount: number): Promise<void> {
+  await updateDoc(doc(db, 'profiles', uid), { friendCount, updatedAt: serverTimestamp() })
+}
+
 /** Saves what the user curates on their profile: bio, what friends can see, and the pins on display. */
 export async function updateProfileDetails(uid: string, patch: { bio?: string; privacy?: ProfilePrivacy; pinDisplay?: string[]; bannerPins?: string[] }): Promise<void> {
   const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
@@ -223,7 +230,6 @@ export async function updateProfileDetails(uid: string, patch: { bio?: string; p
   if (patch.bio !== undefined) data.bio = patch.bio.trim().slice(0, BIO_MAX)
   if (patch.privacy) data.privacy = { cardex: !!patch.privacy.cardex, badges: !!patch.privacy.badges }
   await updateDoc(doc(db, 'profiles', uid), data)
-  if (patch.privacy && !patch.privacy.cardex) await deleteDoc(doc(db, 'shared_cardex', uid)).catch(() => {})
 }
 
 // ── Shared Cardex ───────────────────────────────────────────────────────────────────────────

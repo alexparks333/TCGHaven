@@ -83,6 +83,12 @@ function shortAgo(ms: number) {
   return d < 30 ? d + 'd' : Math.round(d / 7) + 'w'
 }
 
+/** Anything else drawn in a block look (the Members panel beside the page): its look for Section and the CSS variables */
+export function LookScope({ type, style, children }: { type: Parameters<typeof blockLook>[0]; style?: BlockStyle; children: React.ReactNode }) {
+  const look = blockLook(type, style)
+  return <LookCtx.Provider value={look}><div style={lookVars(look)}>{children}</div></LookCtx.Provider>
+}
+
 /** One block, as fans see it */
 export function BlockView({ block, ctx }: { block: Block; ctx: BlockContext }) {
   const look = blockLook(block.type, block.style)
@@ -125,6 +131,7 @@ function BlockBody({ block, ctx }: { block: Block; ctx: BlockContext }) {
       )
       return l.frame ? <Section className="!p-3 md:!p-4">{pic}</Section> : pic
     }
+    case 'frame': return <DigitalFrame block={block} />
     case 'board':
       return (
         <Section title={block.title || 'Community Board'} icon={<MessagesSquare size={19} />}>
@@ -132,6 +139,64 @@ function BlockBody({ block, ctx }: { block: Block; ctx: BlockContext }) {
         </Section>
       )
   }
+}
+
+/** Digital Frame: the creator's pictures, one at a time, changing every `seconds` (a fade or a slide). Pauses
+ *  while the pointer is over it, and holds still for people who ask for less motion (they use the dots). */
+function DigitalFrame({ block }: { block: Extract<Block, { type: 'frame' }> }) {
+  const l = useLook()
+  const o = { height: 420, fit: 'cover', dots: true, slide: 'fade', ...(block.style?.frameView ?? {}) }
+  const imgs = block.images
+  const [at, setAt] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [still, setStill] = useState(false)
+  useEffect(() => {
+    const m = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setStill(m.matches)
+    const on = () => setStill(m.matches)
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [])
+  const n = imgs.length
+  const cur = n ? at % n : 0
+  useEffect(() => {
+    if (n < 2 || paused || still) return
+    const t = setTimeout(() => setAt((a) => (a + 1) % n), Math.max(2, block.seconds ?? 5) * 1000)
+    return () => clearTimeout(t)
+  }, [cur, n, paused, still, block.seconds])
+  const inner = Math.max(0, l.radius - 6)
+  return (
+    <Section title={block.title || undefined} className="!p-3 md:!p-4">
+      {n === 0 ? (
+        <div className="w-full border-2 border-dashed border-[color:var(--b-line)] flex items-center justify-center text-sm text-[color:var(--b-muted)]" style={{ borderRadius: inner, height: Math.min(o.height, 300) }}>Pictures go here</div>
+      ) : (
+        <div className="relative w-full overflow-hidden" style={{ height: o.height, borderRadius: inner, background: o.fit === 'contain' ? 'color-mix(in srgb, var(--b-text) 8%, var(--b-bg))' : undefined }}
+          onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          {o.slide === 'slide' ? (
+            <div className="absolute inset-0 flex transition-transform duration-700 ease-in-out" style={{ transform: `translateX(-${cur * 100}%)` }}>
+              {imgs.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={src + i} src={badgeArt(src, 1600)} alt="" className="w-full h-full shrink-0" style={{ objectFit: o.fit as 'cover' | 'contain' }} loading={i === 0 ? 'eager' : 'lazy'} />
+              ))}
+            </div>
+          ) : imgs.map((src, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={src + i} src={badgeArt(src, 1600)} alt="" aria-hidden={i !== cur}
+              className="absolute inset-0 w-full h-full transition-opacity duration-1000 ease-in-out"
+              style={{ objectFit: o.fit as 'cover' | 'contain', opacity: i === cur ? 1 : 0 }} loading={i === 0 ? 'eager' : 'lazy'} />
+          ))}
+        </div>
+      )}
+      {o.dots && n > 1 && (
+        <div className="mt-2.5 flex justify-center gap-1.5">
+          {imgs.map((_, i) => (
+            <button key={i} type="button" onClick={() => setAt(i)} aria-label={`Picture ${i + 1}`}
+              className="h-2 rounded-full transition-all" style={{ width: i === cur ? 18 : 8, background: i === cur ? 'var(--b-accent)' : 'var(--b-line)' }} />
+          ))}
+        </div>
+      )}
+    </Section>
+  )
 }
 
 interface BoardRow { key: string; member: string; badge: string; earnedAt: number; profile: Profile | null; fake?: boolean }
@@ -201,6 +266,9 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
   }, [shownKeys]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const lo = { headers: true, highlight: true, pin: 30, ...(styleOf?.leader ?? {}) } // Style → Leaderboard
+  // The newest row's highlight: its own colour (Style → Colours → Highlight), or the accent when unset
+  const hl = lo.highlightColor || 'var(--b-accent)'
+  const hlRow = { backgroundColor: `color-mix(in srgb, ${hl} ${Math.round((lo.highlightStrength ?? 0.14) * 100)}%, var(--b-bg))` }
   const cols = 'grid grid-cols-[minmax(0,1fr)_auto_auto] sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] items-center gap-3'
   return (
     <Section title={title || 'Badge Achievements'} icon={<Trophy size={19} />} sub="The newest badges earned from this book.">
@@ -220,10 +288,10 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
                 return (
                   <li key={a.key}
                     className={cn(cols, 'relative h-12 sm:h-11 px-3 border-b border-[color:var(--b-hair)] last:border-b-0 transition-colors duration-700',
-                      i === 0 && lo.highlight ? 'bg-[color:var(--b-tint)]' : 'hover:bg-[color:var(--b-hover)]', out ? 'board-row-leave pointer-events-none' : how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
-                    style={how === 'in' && !out ? { animationDelay: `${i * 70}ms` } : undefined}>
+                      !(i === 0 && lo.highlight) && 'hover:bg-[color:var(--b-hover)]', out ? 'board-row-leave pointer-events-none' : how === 'arrive' ? 'board-row-arrive' : 'board-row-in')}
+                    style={{ ...(i === 0 && lo.highlight ? hlRow : {}), ...(how === 'in' && !out ? { animationDelay: `${i * 70}ms` } : {}) }}>
                     {how === 'arrive' && <span className="board-row-flash absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--b-accent) 40%, transparent), color-mix(in srgb, var(--b-accent) 15%, transparent) 50%, transparent)' }} />}
-                    {i === 0 && lo.highlight && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[color:var(--b-accent)]" />}
+                    {i === 0 && lo.highlight && <span className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: hl }} />}
                     {(() => {
                       const who = (<>
                       <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} className="!rounded-md" /></span>
@@ -242,7 +310,8 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
                       </span>
                       <span className="hidden sm:block truncate [font-family:var(--b-title-font)] text-[13px] font-bold text-[color:var(--b-accent)]">{def.name}</span>
                     </span>
-                    <span className={cn('relative text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 && lo.highlight ? 'text-[color:var(--b-accent)] font-semibold' : 'text-[color:var(--b-muted)]')}>
+                    <span className={cn('relative text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 && lo.highlight ? 'font-semibold' : 'text-[color:var(--b-muted)]')}
+                      style={i === 0 && lo.highlight ? { color: hl } : undefined}>
                       <span className="hidden sm:inline">{timeAgo(a.earnedAt)}</span><span className="sm:hidden">{shortAgo(a.earnedAt)}</span>
                     </span>
                   </li>

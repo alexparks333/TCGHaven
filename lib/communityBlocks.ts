@@ -7,7 +7,7 @@ import type { BadgeSlot } from './badges'
 import type { BlockStyle } from './blockStyle'
 import type { Community, CommunityTab } from './creatorBooks'
 
-export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' | 'text' | 'picture' | 'board'
+export type BlockType = 'about' | 'badges' | 'wall' | 'announcements' | 'cards' | 'text' | 'picture' | 'frame' | 'board'
 
 export interface WallPost { id: string; text: string; image?: string; at: number; note?: string /* NOTE_COLOURS id */; look?: NoteLook; place?: NotePlace }
 /** Where the owner pinned a note on the board (components/community/WallBoard.tsx): its centre in board units
@@ -70,24 +70,28 @@ export type Block = { style?: BlockStyle } & (
   | { id: string; type: 'cards'; title?: string; note?: string; cards: BadgeSlot[] } // Highlighted Cards
   | { id: string; type: 'text'; title: string; body: string }
   | { id: string; type: 'picture'; image?: string; caption?: string }
+  | { id: string; type: 'frame'; title?: string; images: string[]; seconds?: number } // Digital Frame: up to MAX_FRAME_IMAGES pictures that cycle on their own
   | { id: string; type: 'board'; title?: string }                     // Community Board (coming)
 )
 
-/** The blocks a creator can add, in the "+" menu's order */
-export const BLOCK_TYPES: Array<{ type: BlockType; name: string; hint: string; ready: boolean }> = [
-  { type: 'about', name: 'About', hint: 'Your community’s description', ready: true },
+/** Every block type, in the "+" menu's order. `retired` ones (About, Announcements, Picture — 2026-11-16) are
+ *  no longer offered, but blocks already on a page still show and can be edited or deleted. */
+export const BLOCK_TYPES: Array<{ type: BlockType; name: string; hint: string; ready: boolean; retired?: boolean }> = [
+  { type: 'text', name: 'Text Block', hint: 'An area to write anything', ready: true },
   { type: 'badges', name: 'Badge Achievements', hint: 'The newest members to earn your badges', ready: true },
   { type: 'wall', name: 'Creator Wall', hint: 'Your posts — text and pictures, newest first', ready: true },
-  { type: 'announcements', name: 'Announcements', hint: 'News for members, the important one pinned', ready: true },
   { type: 'cards', name: 'Highlighted Cards', hint: 'Cards you want to show off', ready: true },
-  { type: 'text', name: 'Text', hint: 'A heading and some words', ready: true },
-  { type: 'picture', name: 'Picture', hint: 'A big picture with a caption', ready: true },
+  { type: 'frame', name: 'Digital Frame', hint: 'Up to 10 pictures that cycle on their own', ready: true },
   { type: 'board', name: 'Community Board', hint: 'Members post and upvote, like a forum', ready: false },
+  { type: 'about', name: 'About', hint: 'Your community’s description', ready: true, retired: true },
+  { type: 'announcements', name: 'Announcements', hint: 'News for members, the important one pinned', ready: true, retired: true },
+  { type: 'picture', name: 'Picture', hint: 'A big picture with a caption', ready: true, retired: true },
 ]
 export const blockName = (t: BlockType) => BLOCK_TYPES.find((b) => b.type === t)?.name ?? t
 
 export const MAX_BLOCKS = 20
 export const MAX_POSTS = 100
+export const MAX_FRAME_IMAGES = 10
 const id = () => 'b' + Math.random().toString(36).slice(2, 9)
 export const newId = id
 
@@ -98,8 +102,9 @@ export function newBlock(type: BlockType): Block {
     case 'wall': return { id: id(), type, posts: [] }
     case 'announcements': return { id: id(), type, items: [] }
     case 'cards': return { id: id(), type, cards: [] }
-    case 'text': return { id: id(), type, title: 'A heading', body: '' }
+    case 'text': return { id: id(), type, title: '', body: '' }
     case 'picture': return { id: id(), type }
+    case 'frame': return { id: id(), type, images: [], seconds: 5 }
     case 'board': return { id: id(), type }
   }
 }

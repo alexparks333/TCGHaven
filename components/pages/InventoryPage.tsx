@@ -749,9 +749,9 @@ export default function InventoryPage() {
                         </div>
                         {/* Phone: "Set ✨ · $X ea", matching Portfolio's rows; desktop: number + foil + "$X ea" (set/qty have columns) */}
                         <div className="md:hidden text-xs text-slate-500">
-                          {rep.set} {rep.isFoil && '✨'}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}
+                          {rep.set}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}
                         </div>
-                        <div className="hidden md:block text-xs text-slate-500">#{rep.number} {rep.isFoil && '✨ Foil'}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
+                        <div className="hidden md:block text-xs text-slate-500">#{rep.number}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
                         {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
@@ -937,9 +937,9 @@ export default function InventoryPage() {
                         <PrintingTags card={card} />
                       </div>
                       <div className="md:hidden text-xs text-slate-500">
-                        {card.set} {card.isFoil && '✨'}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}
+                        {card.set}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}
                       </div>
-                      <div className="hidden md:block text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
+                      <div className="hidden md:block text-xs text-slate-500">#{card.number}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
                       {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
@@ -1034,7 +1034,7 @@ export default function InventoryPage() {
                     <div className="font-semibold text-ink text-sm truncate"><CardName name={sellCard.name} /></div>
                     <div className="text-xs text-slate-400 mt-0.5">{sellCard.set} · #{sellCard.number}</div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      {sellCard.isFoil ? '✨ Foil · ' : ''}{conditionLabel(sellCard)}
+                      {conditionLabel(sellCard)}
                     </div>
                   </div>
                 </div>

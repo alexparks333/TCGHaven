@@ -16,10 +16,11 @@ export interface BlockStyle {
   frame?: boolean      // a Picture: sit it on a panel (mat) of the background colour
   // Each block type's own options (the first part of its Style panel)
   wall?: WallStyle
-  leader?: { headers?: boolean; highlight?: boolean; pin?: number }           // Badge Achievements
+  leader?: { headers?: boolean; highlight?: boolean; pin?: number; highlightColor?: string; highlightStrength?: number } // Badge Achievements (highlight colour unset = the accent; strength 0.05–0.6, default 0.14)
   cards?: { columns?: number; names?: boolean; round?: number }              // Highlighted Cards
   layout?: { align?: 'left' | 'center'; size?: number; items?: 'filled' | 'outlined' | 'plain' } // About, Text, Announcements
   picture?: { height?: number }
+  frameView?: { height?: number; fit?: 'cover' | 'contain'; dots?: boolean; slide?: 'fade' | 'slide' } // Digital Frame
 }
 
 // ── The Creator Wall's board ──
@@ -114,9 +115,9 @@ export interface BlockLook {
   muted: string; line: string; tint: string; dark: boolean
 }
 
-export const defaultTheme = (t: BlockType) => (t === 'badges' ? BLOCK_THEMES[1] : BLOCK_THEMES[0])
+export const defaultTheme = (t: BlockType | 'members') => (t === 'badges' ? BLOCK_THEMES[1] : BLOCK_THEMES[0])
 
-export function blockLook(type: BlockType, s: BlockStyle = {}): BlockLook {
+export function blockLook(type: BlockType | 'members', s: BlockStyle = {}): BlockLook {
   const th = defaultTheme(type)
   const bg = s.bg ?? th.bg, text = s.text ?? th.text, accent = s.accent ?? th.accent
   return {

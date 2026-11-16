@@ -206,9 +206,9 @@ export default function SoldPage() {
                     <div className="min-w-0">
                       <div className="font-semibold text-ink text-[15px] md:text-sm truncate"><CardName name={card.name} /></div>
                       <div className="md:hidden text-xs text-slate-500 truncate">
-                        {card.set} {card.isFoil && '✨'} · {conditionLabel(card)}
+                        {card.set} · {conditionLabel(card)}
                       </div>
-                      <div className="hidden md:block text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
+                      <div className="hidden md:block text-xs text-slate-500">#{card.number}</div>
                       <div className="text-[10px] text-slate-600 mt-0.5">
                         Sold {card.soldDate}<span className="md:hidden"> · paid {formatCurrency(card.purchasePrice * card.quantity)}</span>
                       </div>

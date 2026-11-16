@@ -172,6 +172,9 @@ function EmptyDisplaySpot({ size, canAdd, onClick }: { size: number; canAdd: boo
   )
 }
 
+/** How big each earned pin shows in the picker (px) — doubled from 68 on 2026-11-16 so the art reads */
+const PICKER_PIN = 136
+
 // Choose which earned pin goes in a spot (a pin already on display moves here). Also used by the
 // profile banner's pins (BannerPins.tsx).
 export function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove, onView, onClose }: {
@@ -197,7 +200,7 @@ export function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove
       <div
         role="dialog"
         aria-label="Choose a pin"
-        className="picker-sheet picker-in relative w-full max-w-xl max-h-[86vh] flex flex-col rounded-2xl overflow-hidden"
+        className="picker-sheet picker-in relative w-full max-w-2xl max-h-[86vh] flex flex-col rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="haven-banner relative shrink-0 px-5 pt-4 pb-7">
@@ -259,7 +262,7 @@ export function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove
             <div className="text-center text-sm text-slate-500 py-14 px-6">No pins you’ve earned match “{query.trim()}”.</div>
           )}
           {matches.length > 0 && (
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-2 gap-y-3 p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-4 p-5">
               {matches.map((d) => {
                 const here = current?.id === d.id
                 const elsewhere = !here && displayed.has(d.id)
@@ -270,16 +273,16 @@ export function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove
                     title={here ? 'Already in this spot' : elsewhere ? `${d.name} — move it here` : d.name}
                     className={cn('picker-pin group relative flex flex-col items-center gap-2 rounded-xl pt-3 pb-2 px-1 text-center outline-none', here && 'picker-pin-here')}
                   >
-                    <span className="picker-pin-art relative flex items-center justify-center" style={{ width: 68, height: 68 * 1.12 }}>
+                    <span className="picker-pin-art relative flex items-center justify-center" style={{ width: PICKER_PIN, height: PICKER_PIN * 1.12 }}>
                       {/* the same silhouette shadow the banner pins cast */}
                       <span aria-hidden className="banner-pin-backing absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <BadgePin art={d.art} imageUrl={d.imageUrl} size={Math.min(68, pinSize(d, 68))} />
+                        <BadgePin art={d.art} imageUrl={d.imageUrl} size={Math.min(PICKER_PIN, pinSize(d, PICKER_PIN))} />
                       </span>
                       <span className={cn('relative flex items-center justify-center', tierOf(d) === 1 && 'grayscale')}>
-                        <BadgePin art={d.art} imageUrl={d.imageUrl} size={Math.min(68, pinSize(d, 68))} />
+                        <BadgePin art={d.art} imageUrl={d.imageUrl} size={Math.min(PICKER_PIN, pinSize(d, PICKER_PIN))} />
                       </span>
                     </span>
-                    <span className="text-[11px] font-semibold text-ink leading-tight line-clamp-2">{d.name}</span>
+                    <span className="text-[13px] font-semibold text-ink leading-tight line-clamp-2">{d.name}</span>
                     {(here || elsewhere) && (
                       <span className="absolute top-1 right-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#8a5d36] text-[#f6ead0]">
                         {here ? 'Here' : 'Shown'}

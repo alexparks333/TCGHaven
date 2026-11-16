@@ -90,7 +90,7 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   and saves `shared_badges/{uid}` = `{ earned: { id: earnedAtMs }, progress: { id: [have, total] } }`.
   Earned badges are kept for good (a trophy — selling the cards doesn't take it back). Computed on
   the owner's device, like the shared Cardex. Rules: owner reads/writes; any signed-in user reads
-  while `privacy.badges` is on (the default).
+  while `privacy.badges` is on (Everyone, the default); accepted friends always can (Friends).
 - **Badges page** `/badges` (`BadgesPage.tsx`, sidebar + phone bar under Cardex): your own book,
   `full` size — the page drops the usual `max-w-7xl` content cap (`ClientWrapper.tsx`) and on desktop
   the book stretches to fill the window below the title (phones keep a book's proportions); pins
@@ -487,9 +487,10 @@ plus two holds that never delete anything: a Creator can be **suspended**, and a
 
 `/profile` (`components/pages/ProfilePage.tsx`) is your profile — exactly what friends see — opened
 from the sidebar's profile button (its own box; Sign out sits separately below it). You curate it:
-a bio (≤160 chars) and `privacy` on `profiles/{uid}` — `cardex` and `badges`. Both are **public by
-default** (2026-10-28): any signed-in collector can see them on your Haven, friend or not, until you
-switch them off ("Public on your Haven" on your profile). **The Portfolio is never shared** — there is
+a bio (≤160 chars) and `privacy` on `profiles/{uid}` — `cardex` and `badges`, each **Everyone** (`true`,
+the default since 2026-10-28: any signed-in collector, friend or not) or **Friends** (`false`: only the
+friends you've added and accepted — "Who can see it" on your profile). Until 2026-11-16 `false` meant
+*no one*, not even friends. **The Portfolio is never shared** ("Only you") — there is
 no shared copy of values, prices or purchase info anywhere. `/u/{username}` (`profilePath()`; the
 profile's "Share profile" button copies it) — or `/profile/{uid}` as a fallback — shows someone else's
 profile with only what they share (non-friends see name/bio and an Add button).
@@ -511,11 +512,12 @@ ownership (owned in color, missing grey, per-set progress), and it's read-only: 
 no Personalized Collections, no Shift+Click/double-tap add or eBay ⌘-click, prices zeroed (so no
 tooltip/zoom prices), view-only zoom, and it never touches the URL (no ?game=&set= deep links).
 
-- **Shared Cardex:** while `privacy.cardex` is on, `FriendsProvider` keeps `shared_cardex/{uid}` =
+- **Shared Cardex:** `FriendsProvider` always keeps `shared_cardex/{uid}` =
   `{ cards: JSON }` in step with the inventory (debounced, skips unchanged writes) — only the fields
   ownership needs (`toSharedCards()`: apiId, set, number, quantity, foil, grade… no prices, dates or
-  groups). Turning sharing off deletes it. Rules: readable by the owner, or by any signed-in
-  user while the profile's `privacy.cardex` is true (the default). One doc (~150 bytes/card, so the
+  groups). Rules (`shared_cardex`, `shared_badges`): readable by the owner, by any signed-in user while
+  the profile's setting is true (Everyone), and always by accepted friends (`isFriendOf`). Before
+  2026-11-16 switching Cardex off deleted the copy and stopped updating it. One doc (~150 bytes/card, so the
   1MiB limit is ~6k distinct inventory rows — chunk it if someone gets close).
 - The Filters summary bar (Floor / Games / Hidden · Edit) shows only on Portfolio pages
   (`FilterPanel.tsx`) — the filters don't affect anything else.

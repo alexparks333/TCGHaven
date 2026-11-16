@@ -737,9 +737,6 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             </div>
           </div>
 
-          {/* Foil toggle — not shown for One Piece: a "Parallel" print is its own catalog entry
-              (selected from the search dropdown, e.g. "Shanks (Parallel)"), not a foil toggle of
-              the same card the way Lorcana foil/Riftbound foil are. */}
           {/* Pokémon cards picked from the catalog choose an exact printing instead: Edition (only
               for cards TCGplayer prices in more than one — WotC-era sets, early Japanese sets) and
               Finish (Normal / Holo / Reverse Holo — only the ones that card actually comes in). */}

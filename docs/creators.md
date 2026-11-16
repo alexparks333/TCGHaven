@@ -51,7 +51,17 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   (newest earners), **Creator Wall** (the creator's own posts — text and a picture, newest first, up to
   `MAX_POSTS`), **Announcements** (one pinned on top), **Highlighted Cards** (picked with BadgeMaker's
   `CardPicker`, looked at big with a tap), **Text**, **Picture**, and **Community Board** (listed, Coming
-  soon). Home's are `page.home` (before blocks: About + the board, `homeBlocks()`); a tab's are
+  soon). **2026-11-16:** the "+" menu now offers Text Block (`text`, heading optional), Badge Achievements,
+  Creator Wall, Highlighted Cards, **Digital Frame** (`frame`: up to `MAX_FRAME_IMAGES` = 10 uploaded pictures
+  cycling every `seconds`, fade or slide, pauses on hover / reduced motion; look in `style.frameView`) and
+  Community Board. About, Announcements and Picture are `retired` in `BLOCK_TYPES` — not offered, but blocks
+  already on pages still show and edit. **Members panel** (2026-11-16): picked in the Studio like a block
+  (`MEMBERS_ID`, `MembersEditor`), saved as `page.members` (`MembersLook`: title, sub, order top/newest, how
+  many, detail line, medals, progress bars, count, round pictures, and a block `style` via `LookEditor`).
+  Medals (`components/community/Medals.tsx`): `medalStyle` ribbon (default) / laurel / crown / trophy / disc /
+  custom (`medalArt` = the owner's three uploads, '' = none), `shine` (first place glows), `podium` (top rows tinted).
+  **Wall reactions** are Discord-style: only used ones show, a smiley button opens the picker (17 reactions in
+  `REACTIONS`, emoji ones via `emoji`), with pop / float / squish animations (`.rx-*` in globals.css). Home's are `page.home` (before blocks: About + the board, `homeBlocks()`); a tab's are
   `page.tabs[i].blocks` (before blocks: its picture + text, `tabBlocks()`). In the Studio the page is built in
   place (`CommunityView builder={…}`): a "+" between blocks and **Add a block** at the end open the menu
   (`AddBlockMenu`; About and Badge Achievements once a page), hovering a block outlines it with its name and

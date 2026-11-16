@@ -24,7 +24,7 @@ const swatches = (k: 'bg' | 'title' | 'text' | 'accent') => uniq(BLOCK_THEMES.ma
 const sw = (...cs: string[]) => cs.map((color) => ({ name: color, color }))
 
 /** The name of a block type's own tab, or null when it has none */
-const OWN: Partial<Record<BlockType, string>> = { wall: 'Board', badges: 'Leaderboard', cards: 'Cards', about: 'Layout', text: 'Layout', announcements: 'Layout', picture: 'Picture' }
+const OWN: Partial<Record<BlockType, string>> = { wall: 'Board', badges: 'Leaderboard', cards: 'Cards', about: 'Layout', text: 'Layout', announcements: 'Layout', picture: 'Picture', frame: 'Frame' }
 
 function Heading({ children }: { children: React.ReactNode }) {
   return <p className="mt-5 first:mt-0 mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{children}</p>
@@ -46,22 +46,33 @@ function Seg<T extends string | number>({ label, value, options, onChange }: { l
 }
 
 export function BlockStyleEditor({ block, onChange }: { block: Block; onChange: (b: Block) => void }) {
-  const own = OWN[block.type] ?? null
+  const ownName = OWN[block.type]
+  return (
+    <LookEditor type={block.type} style={block.style} what="block"
+      onStyle={(style) => { const next = { ...block }; if (style) next.style = style; else delete next.style; onChange(next) }}
+      own={ownName ? { name: ownName, render: (st, set) => <Own block={block} st={st} set={set} /> } : undefined} />
+  )
+}
+
+/** The Style panel for anything drawn with a block look — a block, or the Members panel beside the page:
+ *  its own options (when it has some), Colours, and Text & finish. `onStyle(undefined)` = back to the default. */
+export function LookEditor({ type, style, onStyle, own, what }: {
+  type: BlockType | 'members'; style?: BlockStyle; onStyle: (s: BlockStyle | undefined) => void; what: string
+  own?: { name: string; render: (st: BlockStyle, set: (p: Partial<BlockStyle>) => void) => React.ReactNode }
+}) {
   const [tab, setTab] = useState<'own' | 'colours' | 'text'>(own ? 'own' : 'colours')
-  const st = block.style ?? {}
-  const l = blockLook(block.type, st)
-  const set = (patch: Partial<BlockStyle>) => onChange({ ...block, style: { ...st, ...patch } })
-  const picture = block.type === 'picture'
+  const st = style ?? {}
+  const l = blockLook(type, st)
+  const set = (patch: Partial<BlockStyle>) => onStyle({ ...st, ...patch })
+  const picture = type === 'picture'
   const panel = !picture || l.frame // the colours and finish only show on a panel
 
   function reset() {
-    if (!block.style || !confirm('Put this block back to its default look?')) return
-    const rest = { ...block }
-    delete rest.style
-    onChange(rest)
+    if (!style || !confirm(`Put this ${what} back to its default look?`)) return
+    onStyle(undefined)
   }
 
-  const tabs: Array<['own' | 'colours' | 'text', string]> = [...(own ? [['own', own] as ['own', string]] : []), ['colours', 'Colours'], ['text', 'Text & finish']]
+  const tabs: Array<['own' | 'colours' | 'text', string]> = [...(own ? [['own', own.name] as ['own', string]] : []), ['colours', 'Colours'], ['text', 'Text & finish']]
   return (
     <div>
       <div className="flex border-b border-[#d6c49f] mb-4">
@@ -71,7 +82,7 @@ export function BlockStyleEditor({ block, onChange }: { block: Block; onChange: 
         ))}
       </div>
 
-      {tab === 'own' && <Own block={block} st={st} set={set} />}
+      {tab === 'own' && own?.render(st, set)}
 
       {tab === 'colours' && (panel ? <>
         <Heading>Theme</Heading>
@@ -96,6 +107,13 @@ export function BlockStyleEditor({ block, onChange }: { block: Block; onChange: 
         <ColorPick label="Titles" value={l.title} palette={swatches('title')} onChange={(title) => set({ title })} />
         <ColorPick label="Text" value={l.text} palette={swatches('text')} onChange={(text) => set({ text })} />
         <ColorPick label="Accent" value={l.accent} palette={swatches('accent')} onChange={(accent) => set({ accent })} />
+        {type === 'badges' && (st.leader?.highlight ?? true) && <>
+          <Heading>Newest row highlight</Heading>
+          <ColorPick label="Highlight" value={st.leader?.highlightColor || l.accent} palette={sw(...uniq([l.accent, '#e0b866', '#b8402f', '#3f6e8c', '#5d7a3a', '#7a4a8c']).slice(0, 6))}
+            onChange={(highlightColor) => set({ leader: { ...(st.leader ?? {}), highlightColor } })} />
+          <ValueSlider label="Strength" min={0.05} max={0.6} step={0.01} value={st.leader?.highlightStrength ?? 0.14}
+            onChange={(highlightStrength) => set({ leader: { ...(st.leader ?? {}), highlightStrength } })} />
+        </>}
       </> : <p className="text-xs text-slate-500">Turn on <b>Frame</b> (in Picture) to give this picture a panel with colours.</p>)}
 
       {tab === 'text' && <>
@@ -128,7 +146,7 @@ export function BlockStyleEditor({ block, onChange }: { block: Block; onChange: 
         <ValueSlider label="Roundness" min={0} max={28} step={1} value={l.radius} unit="px" onChange={(radius) => set({ radius })} />
       </>}
 
-      {block.style && (
+      {style && (
         <button type="button" onClick={reset} className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-ink">
           <RotateCcw size={13} />Back to the default look
         </button>
@@ -189,7 +207,7 @@ function Own({ block, st, set }: { block: Block; st: BlockStyle; set: (p: Partia
       const put = (p: Partial<typeof o>) => set({ leader: { ...(st.leader ?? {}), ...p } })
       return <div className="space-y-2.5">
         <Toggle on={o.headers} onChange={(headers) => put({ headers })} label="Column headings" hint="Collector · Badge · Earned" />
-        <Toggle on={o.highlight} onChange={(highlight) => put({ highlight })} label="Light up the newest" hint="The top row in the accent colour" />
+        <Toggle on={o.highlight} onChange={(highlight) => put({ highlight })} label="Light up the newest" hint="The top row — pick its colour in Colours" />
         <ValueSlider label="Pin size" min={22} max={40} step={1} value={o.pin} unit="px" onChange={(pin) => put({ pin })} />
       </div>
     }
@@ -217,6 +235,16 @@ function Own({ block, st, set }: { block: Block; st: BlockStyle; set: (p: Partia
       return <>
         <Toggle on={l.frame} onChange={(frame) => set({ frame })} label="Frame" hint="Sit the picture on a panel in your colours" />
         <ValueSlider label="Height" min={220} max={760} step={10} value={st.picture?.height ?? 520} unit="px" onChange={(height) => set({ picture: { height } })} />
+      </>
+    }
+    case 'frame': {
+      const o = { height: 420, fit: 'cover' as 'cover' | 'contain', dots: true, slide: 'fade' as 'fade' | 'slide', ...(st.frameView ?? {}) }
+      const put = (p: Partial<typeof o>) => set({ frameView: { ...(st.frameView ?? {}), ...p } })
+      return <>
+        <Seg label="Pictures" value={o.fit} options={[['cover', 'Fill the frame'], ['contain', 'Show whole']]} onChange={(fit) => put({ fit })} />
+        <Seg label="Change by" value={o.slide} options={[['fade', 'Fade'], ['slide', 'Slide']]} onChange={(slide) => put({ slide })} />
+        <ValueSlider label="Height" min={220} max={760} step={10} value={o.height} unit="px" onChange={(height) => put({ height })} />
+        <div className="mt-3"><Toggle on={o.dots} onChange={(dots) => put({ dots })} label="Dots under the pictures" hint="Show which one is up; tap to jump" /></div>
       </>
     }
     default: return null

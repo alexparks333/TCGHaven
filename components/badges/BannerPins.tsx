@@ -87,7 +87,8 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
   size: number
 }) {
   const { catalog } = useBadgeCatalog()
-  const { myBadges } = useFriends()
+  const { myBadges, isFriend } = useFriends()
+  const canSee = profile.privacy.badges || isFriend(profile.uid) // Everyone, or Friends and you're one
   const ids = useMemo(() => toBannerPins(profile.bannerPins), [profile.bannerPins])
   const anyChosen = ids.some(Boolean)
   const [theirs, setTheirs] = useState<SharedBadges | 'private' | undefined>(undefined)
@@ -96,11 +97,11 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    if (isMe || !anyChosen || !profile.privacy.badges) return
+    if (isMe || !anyChosen || !canSee) return
     let live = true
     loadBadges(profile.uid).then((b) => { if (live) setTheirs(b) }).catch(() => { if (live) setTheirs('private') })
     return () => { live = false }
-  }, [isMe, anyChosen, profile.privacy.badges, profile.uid])
+  }, [isMe, anyChosen, canSee, profile.uid])
 
   const badges = isMe ? myBadges : theirs && theirs !== 'private' ? theirs : null
   const byId = useMemo(() => new Map(catalog.badges.map((b) => [b.id, b])), [catalog.badges])
@@ -142,7 +143,7 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
   return (
     <>
       <div
-        title={isMe && !profile.privacy.badges ? 'Only you can see these pins while your Badges are private' : undefined}
+        title={isMe && !profile.privacy.badges ? 'Only your friends can see these pins while your Badges are set to Friends' : undefined}
         className="relative flex items-center" style={{ gap: size * 0.12 }}>
         {spots.map(({ def, i }) => def ? (
           <BannerPin

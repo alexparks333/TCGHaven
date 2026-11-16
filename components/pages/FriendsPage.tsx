@@ -8,6 +8,7 @@ import {
   Sparkles, MoreHorizontal, Inbox, Send, Eye,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { badgeArt } from '@/lib/badgeAssets'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends, type FriendEntry } from '@/components/friends/FriendsProvider'
@@ -490,6 +491,9 @@ function InviteLinkCard() {
 // ── Your communities ────────────────────────────────────────────────────────────────────────
 
 function CommunityBadge({ c, size = 44 }: { c: CommunityEntry; size?: number }) {
+  // the community's own picture when it has one (Studio → Page details), else its first letter on its colour
+  // eslint-disable-next-line @next/next/no-img-element
+  if (c.page?.emblem) return <img src={badgeArt(c.page.emblem, 160)} alt="" className="rounded-xl object-cover shrink-0 shadow-sm" style={{ width: size, height: size }} />
   return (
     <span className="rounded-xl flex items-center justify-center font-black text-white shrink-0 shadow-sm" style={{ width: size, height: size, fontSize: size * 0.42, background: `linear-gradient(135deg, ${c.color}, #0b0b12)` }}>
       {(c.name.trim()[0] || '★').toUpperCase()}

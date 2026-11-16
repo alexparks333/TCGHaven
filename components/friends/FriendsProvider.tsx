@@ -8,7 +8,7 @@ import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { useJoinedCreatorBooks, communityOfSet } from '@/lib/creatorShelf'
 import { recordAchievement } from '@/lib/communities'
 import {
-  ensureProfile, getProfile, watchFriendships, otherUid, DEFAULT_PRIVACY, toPinDisplay, readSharedCardexRaw, writeSharedCardex, toSharedCards,
+  ensureProfile, getProfile, watchFriendships, otherUid, updateFriendCount, DEFAULT_PRIVACY, toPinDisplay, readSharedCardexRaw, writeSharedCardex, toSharedCards,
   type Friendship, type Profile,
 } from '@/lib/firebase/friends'
 
@@ -27,6 +27,7 @@ interface FriendsContextValue {
   incoming: FriendEntry[]  // requests waiting on me, newest first
   outgoing: FriendEntry[]  // requests I sent, newest first
   byUid: Map<string, Friendship>
+  isFriend: (uid: string) => boolean // an accepted friend — they see what you've set to Friends
   ready: boolean
   myBadges: SharedBadges | null  // your Haven Badges, kept in step with your collection
   // The Friends popup (FriendsDialog) — the quick list; /friends is the full page
@@ -57,12 +58,24 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     if (!user) { setOpen(false); return }
     let cancelled = false
     ensureProfile(user).then((p) => { if (!cancelled) setMe(p) }).catch((e) => console.error('Profile setup failed:', e))
-    const stop = watchFriendships(user.uid, (l) => { if (!cancelled) { setList(l); setReady(true) } }, (e) => {
+    setListed(false)
+    const stop = watchFriendships(user.uid, (l) => { if (!cancelled) { setList(l); setReady(true); setListed(true) } }, (e) => {
       console.error('Friends listener failed:', e)
       if (!cancelled) setReady(true)
     })
     return () => { cancelled = true; stop() }
   }, [user])
+
+  // Your friend count on your profile (profiles/{uid}.friendCount), so people visiting it see how many friends
+  // you have — never who. Written only from a real friends list (not a failed read) and only when it changed.
+  const [listed, setListed] = useState(false)
+  const friendTotal = list.filter((f) => f.status === 'accepted').length
+  useEffect(() => {
+    if (!user || !me || !listed || me.friendCount === friendTotal) return
+    updateFriendCount(user.uid, friendTotal)
+      .then(() => setMe((m) => (m ? { ...m, friendCount: friendTotal } : m)))
+      .catch((e) => console.error('Saving your friend count failed:', e))
+  }, [user, me, listed, friendTotal])
 
   const cacheProfile = useCallback((p: Profile) => {
     requested.current.add(p.uid)
@@ -83,11 +96,11 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   }, [list, user])
 
   // Keeps the shared copy of this user's Cardex (shared_cardex/{uid}) in step with their
-  // inventory — only while they share it. Waits for the inventory to finish loading, skips writes
-  // when nothing changed, and debounces bursts of edits.
+  // inventory — always: set to Friends, their friends still read it (firestore.rules decides who). Waits for
+  // the inventory to finish loading, skips writes when nothing changed, and debounces bursts of edits.
   const { dataLoading } = useAuth()
   const cards = useStore((s) => s.cards)
-  const sharing = !!me?.privacy.cardex
+  const sharing = !!me
   const lastShared = useRef<string | null | undefined>(undefined)
   useEffect(() => { lastShared.current = undefined }, [user, sharing])
   useEffect(() => {
@@ -185,6 +198,7 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       incoming: list.filter((f) => f.status === 'pending' && f.addressee === uid).map(entry).sort(newest),
       outgoing: list.filter((f) => f.status === 'pending' && f.requester === uid).map(entry).sort(newest),
       byUid: new Map(list.map((f) => [otherUid(f, uid), f])),
+      isFriend: (other: string) => list.some((f) => f.status === 'accepted' && otherUid(f, uid) === other),
       ready,
       myBadges,
       open, tab, focusUid,

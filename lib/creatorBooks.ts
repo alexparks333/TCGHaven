@@ -13,6 +13,7 @@
 // Uploaded art and covers: Storage creators/{uid}/… (storage.rules).
 
 import type { Block } from './communityBlocks'
+import type { BlockStyle } from './blockStyle'
 import { useEffect, useState } from 'react'
 import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase/config'
@@ -50,9 +51,29 @@ export interface CommunityLook {
   header?: string                                         // the header picture (Storage URL)
   headerFit?: { x: number; y: number; scale: number; ar?: number } // where it's placed (PicturePlacer); unset = fills it
   headerShade?: number                                    // 0–1: darkens it toward the bottom so the text reads (default 0.35)
+  emblem?: string                                         // the community's picture (Storage URL), in the square emblem; unset = its first letter on its colour
   sections?: Partial<Record<CommunitySection, boolean>>   // sections switched on / off
   home?: Block[]                                          // Home's blocks (lib/communityBlocks.ts); unset = About + the badge board
   tabs?: CommunityTab[]                                   // the creator's own pages, as tabs after Home (in order)
+  members?: MembersLook                                   // the Members panel beside the page (click it in the Studio)
+}
+
+/** The Members panel beside a community page, as its owner set it up — every part optional (unset = default) */
+export interface MembersLook {
+  title?: string                         // default "Members"
+  sub?: string                           // the line under it; default "Top collectors first" / "Newest first"
+  order?: 'top' | 'newest'               // top collectors (default) or the newest to join
+  shown?: number                         // how many before "Show all" (3–25, default 12)
+  detail?: 'both' | 'badges' | 'cards' | 'none' // the line under each name (default both)
+  medals?: boolean                       // gold / silver / bronze for the top three (default on; top order only)
+  medalStyle?: 'disc' | 'ribbon' | 'laurel' | 'crown' | 'trophy' | 'custom' // components/community/Medals.tsx (default ribbon)
+  medalArt?: string[]                    // 'custom': the owner's pictures for 1st, 2nd, 3rd ('' = none — that place falls back to a disc)
+  shine?: boolean                        // first place's medal glows now and then (default on)
+  podium?: boolean                       // the top three rows tinted gold / silver / bronze (default on)
+  bars?: boolean                         // a progress bar: badges earned of the book's total (default on)
+  count?: boolean                        // the member count by the title (default on)
+  round?: boolean                        // round pictures instead of rounded squares
+  style?: BlockStyle                     // its colours, fonts and finish (the same Style panel as a block)
 }
 
 /** A tab on a community page after Home: a page the creator names and writes (e.g. "Rules", "Events") */

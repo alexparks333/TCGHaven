@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  BookOpen, Lock, Award, TrendingUp, Pencil, Check, Loader2, UserPlus, Clock, Eye, EyeOff, ChevronRight, Users,
+  BookOpen, Lock, Award, TrendingUp, Pencil, Check, Loader2, UserPlus, UserMinus, Clock, Eye, EyeOff, ChevronRight, Users, Globe,
   Layers, LayoutGrid, Sparkles, Settings, X,
 } from 'lucide-react'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
@@ -14,8 +14,8 @@ import { fetchCardPrice } from '@/components/PriceAutoUpdater'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
-import { useMyCommunities } from '@/lib/communities'
-import { useCommunity } from '@/lib/creatorBooks'
+import { getCommunity, useMyCommunities } from '@/lib/communities'
+import { useCommunity, type Community } from '@/lib/creatorBooks'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
@@ -112,6 +112,27 @@ function ProfileBody({ uid, viaUsername }: { uid?: string; viaUsername?: string 
 
 // The banner's gilt rule and flourish along its foot (globals.css .haven-banner) — banner pins
 // stay above it — and the even margin above and below the pins.
+/** The banner's artwork — today the engraved sparkles; one day the collector's own header art. Drawn in the
+ *  banner and again inside the photo's ring (lined up), so the ring always shows the same art. */
+function BannerArt() {
+  return <>
+    <Sparkles aria-hidden size={150} strokeWidth={1.25} className="absolute -left-6 -bottom-12 text-[#4a321f]/[0.07] rotate-12" />
+    <Sparkles aria-hidden size={64} strokeWidth={1.25} className="absolute left-[38%] top-3 text-[#4a321f]/[0.08] -rotate-6" />
+  </>
+}
+/** A count in the Friends page's stat-tile style; a link only when it goes somewhere (your own profile) */
+function StatTile({ href, n, label }: { href?: string; n: number | undefined; label: string }) {
+  const cls = 'block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5 text-center transition-colors'
+  const body = <>
+    <div className="text-xl font-bold leading-none text-ink">{n ?? '–'}</div>
+    <div className="text-[11px] font-semibold text-slate-500 mt-1">{label}</div>
+  </>
+  return href ? <Link href={href} className={cn(cls, 'hover:border-slate-700')}>{body}</Link> : <div className={cls}>{body}</div>
+}
+
+/** How far below the banner the ring can reach (the banner's look carries on that far, in its bottom tone) */
+const RING_REACH = 160
+
 const BANNER_RULE = 14
 const BANNER_MARGIN = 4
 
@@ -123,12 +144,24 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
 }) {
   const { user } = useAuth()
   const { friends } = useFriends()
-  const { communities } = useMyCommunities(isMe ? profile.uid : null)
-  const owned = useCommunity(isMe ? profile.uid : null).community // the community you run, if any
+  // Their friends (the count their own app keeps on their profile — never the list), the communities they're
+  // in, and the one they run, if any — yours, or anyone's you're looking at
+  const { communities } = useMyCommunities(profile.uid)
+  const mineRun = useCommunity(isMe ? profile.uid : null).community // the community you run (live, as you edit it)
+  const [theirsRun, setTheirsRun] = useState<Community | null>(null)  // someone else's — only while it's open (getCommunity)
+  useEffect(() => {
+    if (isMe) return
+    let live = true
+    setTheirsRun(null)
+    getCommunity(profile.uid).then((c) => { if (live) setTheirsRun(c) }).catch(() => {})
+    return () => { live = false }
+  }, [isMe, profile.uid])
+  const owned = isMe ? mineRun : theirsRun
+  const friendCount = isMe ? friends.length : profile.friendCount
   const [editing, setEditing] = useState(false)
   const [bio, setBio] = useState(profile.bio)
   const [saving, setSaving] = useState(false)
-  const [busy, setBusy] = useState<'accept' | 'deny' | 'cancel' | 'add' | null>(null)
+  const [busy, setBusy] = useState<'accept' | 'deny' | 'cancel' | 'add' | 'remove' | null>(null)
   const [error, setError] = useState('')
   // Settings opens from the ⚙️ here; the old /settings address redirects to /profile?settings=1.
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -180,16 +213,36 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     return () => ro.disconnect()
   }, [isMe])
 
+  // The ring round the photo shows the banner's own art, lined up with it: where the ring sits relative to
+  // the banner (and the banner's size), kept up to date as the page resizes
+  const ringRef = useRef<HTMLSpanElement>(null)
+  const [ringAt, setRingAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  useLayoutEffect(() => {
+    const banner = bannerRef.current, ring = ringRef.current
+    if (!banner || !ring) return
+    const place = () => {
+      const b = banner.getBoundingClientRect(), r = ring.getBoundingClientRect()
+      const next = { x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), w: Math.round(b.width), h: Math.round(b.height) }
+      setRingAt((p) => (p && p.x === next.x && p.y === next.y && p.w === next.w && p.h === next.h ? p : next))
+    }
+    place()
+    const ro = new ResizeObserver(place)
+    ro.observe(banner); ro.observe(ring)
+    return () => ro.disconnect()
+  }, [])
+
   const me = user?.uid ?? ''
   const first = profile.displayName.split(' ')[0]
 
   let action: React.ReactNode = null
   if (!isMe) {
     if (friendship?.status === 'accepted') {
+      // Already friends: take it back (asked first — they'd have to send a new request)
       action = (
-        <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/15 text-emerald-700 text-sm font-semibold">
-          <Check size={15} />Friends
-        </span>
+        <button onClick={() => { if (confirm(`Remove ${profile.displayName} from your friends? You’d need to send a new request to be friends again.`)) act('remove', () => removeFriendship(me, profile.uid)) }}
+          disabled={!!busy} className="btn-secondary !bg-slate-950 border border-slate-700 !text-ink hover:!text-red-600 hover:border-red-400 disabled:opacity-60">
+          {busy === 'remove' ? <Loader2 size={15} className="animate-spin" /> : <UserMinus size={15} />}Remove friend
+        </button>
       )
     } else if (friendship && friendship.addressee === me) {
       // They sent you a request: accept or deny it right here
@@ -214,10 +267,11 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     <section className="relative overflow-hidden card-glass">
       {/* Banner: darker, aged Haven parchment with a walnut-and-gilt rule along its foot; your
           pins in a stitched leather strap beside Settings (components/badges/BannerPins.tsx) */}
-      <div ref={bannerRef} className="haven-banner relative h-28 md:h-36 overflow-hidden">
+      {/* no walnut-and-gilt rule along its foot here — the photo's ring carries the banner's art on round it */}
+      <div ref={bannerRef} className="haven-banner relative h-28 md:h-36 overflow-hidden" style={{ boxShadow: 'none' }}>
+        {/* the fine gilt rules either side of a small diamond, near its foot */}
         <span aria-hidden className="haven-banner-flourish absolute inset-0 pointer-events-none" />
-        <Sparkles aria-hidden size={150} strokeWidth={1.25} className="absolute -left-6 -bottom-12 text-[#4a321f]/[0.07] rotate-12" />
-        <Sparkles aria-hidden size={64} strokeWidth={1.25} className="absolute left-[38%] top-3 text-[#4a321f]/[0.08] -rotate-6" />
+        <BannerArt />
         {bannerPin > 0 && (
           <div className="absolute top-0 flex items-center" style={{ bottom: BANNER_RULE, right: 12, paddingBlock: BANNER_MARGIN }}>
             <div className={isMe ? 'mr-[52px] sm:mr-[120px]' : undefined}>
@@ -245,13 +299,28 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         {/* Identity */}
         <div className="min-w-0 -mt-12">
           <div className="flex items-end justify-between gap-3">
-            {/* A gilt bezel around the photo */}
-            <span className="case-bead rounded-full p-[3px] shadow-lg shrink-0">
+            {/* A ring of the banner round the photo — a flex box, so it hugs the photo exactly (as an inline span it
+                kept a text line's descender gap under it, and the gold showed as a crescent below the photo) */}
+            <span ref={ringRef} className="relative isolate flex rounded-full p-[9px] shrink-0 overflow-hidden shadow-[0_10px_18px_-8px_rgba(40,22,8,0.5)]">
+              {/* the banner itself, lined up with the real one — so the ring is a window onto the header art */}
+              {ringAt && (
+                <span aria-hidden className="haven-banner absolute -z-10 pointer-events-none"
+                  style={{
+                    left: -ringAt.x, top: -ringAt.y, width: ringAt.w, height: ringAt.h + RING_REACH, boxShadow: 'none',
+                    // the banner's layers sized to the banner itself (not this taller box), then its bottom tone carried on below it
+                    backgroundSize: `${ringAt.w}px ${ringAt.h}px, ${ringAt.w}px ${ringAt.h}px, 420px 220px, ${ringAt.w}px ${ringAt.h}px`,
+                    backgroundRepeat: 'no-repeat, no-repeat, repeat, no-repeat', backgroundColor: '#a8885a',
+                  }}>
+                  {/* the art laid out on the banner's own box but not cut at its edge: what runs off the banner's foot (the big
+                      star) carries on into the ring — the art shows through the banner and the ring together, like one matte */}
+                  <span className="absolute left-0 top-0" style={{ width: ringAt.w, height: ringAt.h }}><BannerArt /></span>
+                </span>
+              )}
               <Avatar seed={profile.uid} name={profile.displayName} photoURL={profile.photoURL} size={96} className="ring-[3px] ring-[#ede1c6]" />
             </span>
             {action && <div className="mb-1 md:hidden">{action}</div>}
           </div>
-          <h1 className="text-xl md:text-2xl font-bold text-ink mt-3 leading-tight break-words">{profile.displayName}</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-ink mt-3 leading-tight [overflow-wrap:anywhere]">{profile.displayName}</h1>
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-sm text-slate-500 truncate">@{profile.username}</span>
             {(isMe || title.role !== 'regular') && (
@@ -263,66 +332,50 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
               </span>
             )}
           </div>
-          {/* On desktop this is the tile beside the privacy box */}
-          {isMe && (
-            <div className="md:hidden mt-1 flex gap-4 text-sm font-semibold text-slate-400">
-              <Link href="/friends" className="hover:text-ink">
-                <span className="text-ink font-bold">{friends.length}</span> {friends.length === 1 ? 'Friend' : 'Friends'}
-              </Link>
-              <Link href="/friends#communities" className="hover:text-ink">
-                <span className="text-ink font-bold">{communities.length}</span> {communities.length === 1 ? 'Community' : 'Communities'}
-              </Link>
-            </div>
-          )}
-          {isMe && owned && (
+          {/* Phone: the counts and the community as a line of text (on desktop they're the tiles on the right) */}
+          <div className="md:hidden mt-1 flex gap-4 text-sm font-semibold text-slate-400">
+            {([[isMe ? '/friends' : null, friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
+               [isMe ? '/friends#communities' : null, communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([href, n, label]) => {
+              const body = <><span className="text-ink font-bold">{n ?? '–'}</span> {label}</>
+              return href ? <Link key={label} href={href} className="hover:text-ink">{body}</Link> : <span key={label}>{body}</span>
+            })}
+          </div>
+          {owned && (
             <Link href={`/c/${profile.uid}`} className="md:hidden mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-[#7a5230]">
-              <Users size={14} />Your community: <span className="truncate">{owned.name || 'Open'}</span><ChevronRight size={14} />
+              <Users size={14} />{isMe ? 'Your community' : `${first}’s community`}: <span className="truncate">{owned.name || 'Open'}</span><ChevronRight size={14} />
             </Link>
           )}
         </div>
 
-        {/* Right side: your privacy switches, or the friend action */}
-        {isMe ? (
-          <div className="flex gap-3 items-start pl-3 md:pl-5 pt-3 md:pt-4 md:row-span-2">
-            {/* No fixed px width here: the tiles are in rem, and rem grows on wide screens
-                (globals.css html font-size), so a px column let them spill over the privacy box */}
-            <div className="hidden md:flex flex-col gap-2 shrink-0">
+        {/* Right side: the counts and the community they run, then your privacy switches — or, on someone
+            else's profile, the friend action */}
+        <div className={cn('flex gap-3 items-start md:row-span-2', isMe ? 'pl-3 md:pl-5 pt-3 md:pt-4' : 'hidden md:flex pl-5 pt-4')}>
+          {/* someone else's profile: Add / Requested / Remove friend first, to the left of their counts */}
+          {!isMe && action && <div className="shrink-0">{action}</div>}
+          {/* No fixed px width here: the tiles are in rem, and rem grows on wide screens
+              (globals.css html font-size), so a px column let them spill over the privacy box */}
+          <div className="hidden md:flex flex-col gap-2 shrink-0">
             <div className="flex gap-3">
-            {/* Friend count, in the Friends page's stat-tile style */}
-            <Link
-              href="/friends"
-              className="hidden md:block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 px-3 py-2.5 text-center transition-colors"
-            >
-              <div className="text-xl font-bold leading-none text-ink">{friends.length}</div>
-              <div className="text-[11px] font-semibold text-slate-500 mt-1">{friends.length === 1 ? 'Friend' : 'Friends'}</div>
-            </Link>
-            {/* Communities joined (lib/communities.ts) — the Friends page's "Your communities" */}
-            <Link
-              href="/friends#communities"
-              className="hidden md:block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-slate-700 px-3 py-2.5 text-center transition-colors"
-            >
-              <div className="text-xl font-bold leading-none text-ink">{communities.length}</div>
-              <div className="text-[11px] font-semibold text-slate-500 mt-1">{communities.length === 1 ? 'Community' : 'Communities'}</div>
-            </Link>
+              {/* Friend count, in the Friends page's stat-tile style (someone else's: the number their app keeps) */}
+              <StatTile href={isMe ? '/friends' : undefined} n={friendCount} label={friendCount === 1 ? 'Friend' : 'Friends'} />
+              {/* Communities they're in (lib/communities.ts) — yours open the Friends page's "Your communities" */}
+              <StatTile href={isMe ? '/friends#communities' : undefined} n={communities.length} label={communities.length === 1 ? 'Community' : 'Communities'} />
             </div>
-            {/* The community you run — straight to its page */}
+            {/* The community they run — straight to its page (where a visitor can join it) */}
             {owned && (
-              <Link href={`/c/${profile.uid}`} title={`Go to ${owned.name || 'your community'}`}
+              <Link href={`/c/${profile.uid}`} title={`Go to ${owned.name || 'the community'}`}
                 className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-[#7a5230] px-3 py-2 transition-colors">
                 <Users size={15} className="shrink-0 text-[#7a5230]" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">Your community</span>
-                  <span className="block text-sm font-bold text-ink truncate mt-0.5">{owned.name || 'Your community'}</span>
+                  <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{isMe ? 'Your community' : `${first}’s community`}</span>
+                  <span className="block text-sm font-bold text-ink truncate mt-0.5">{owned.name || 'Community'}</span>
                 </span>
                 <ChevronRight size={15} className="shrink-0 text-slate-500" />
               </Link>
             )}
-            </div>
-            <PrivacyBox profile={profile} onSaved={onSaved} />
           </div>
-        ) : action ? (
-          <div className="hidden md:flex items-start pl-5 pt-4 md:row-span-2">{action}</div>
-        ) : null}
+          {isMe && <PrivacyBox profile={profile} onSaved={onSaved} />}
+        </div>
 
         {/* Bio */}
         <div className="min-w-0 col-span-2 md:col-span-1 md:col-start-1">
@@ -345,7 +398,8 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
               </div>
             </div>
           ) : profile.bio ? (
-            <p className="text-sm text-slate-300 mt-3 whitespace-pre-line max-w-md">
+            // breaks anywhere it has to, so even one very long word stays in its column (never under the tiles beside it)
+            <p className="text-sm text-slate-300 mt-3 whitespace-pre-line max-w-md [overflow-wrap:anywhere]">
               {profile.bio}
               {isMe && (
                 <button onClick={() => setEditing(true)} className="inline-flex align-middle ml-1.5 text-slate-500 hover:text-ink" aria-label="Edit bio"><Pencil size={12} /></button>
@@ -371,12 +425,17 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
 
 // ── What others can see (compact, inside your header) ─────────────────────────────────────
 
+/** The width of the Everyone / Friends choice (and Portfolio's "Only you"): icons only on a phone, words from md */
+const SEG_W = 'w-[60px] md:w-[164px]'
+
 function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profile) => void }) {
   const [saving, setSaving] = useState<keyof ProfilePrivacy | null>(null)
   const [error, setError] = useState('')
 
-  async function toggle(key: keyof ProfilePrivacy) {
-    const privacy = { ...profile.privacy, [key]: !profile.privacy[key] }
+  // true = Everyone (any collector), false = Friends (only the friends you've added and accepted)
+  async function choose(key: keyof ProfilePrivacy, everyone: boolean) {
+    if (profile.privacy[key] === everyone) return
+    const privacy = { ...profile.privacy, [key]: everyone }
     setSaving(key); setError('')
     try {
       await updateProfileDetails(profile.uid, { privacy })
@@ -392,48 +451,43 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
   ]
 
   return (
-    <div className="w-[176px] md:w-[290px] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-2 md:p-3">
+    <div className="w-[176px] md:w-[320px] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-2 md:p-3">
       <div className="flex items-center gap-1.5 px-1 mb-1 md:mb-2">
         <Eye size={13} className="text-slate-500 shrink-0" />
-        <span className="text-[10px] md:text-[11px] font-bold uppercase md:tracking-wider leading-tight text-slate-500">Public on your Haven</span>
+        <span className="text-[10px] md:text-[11px] font-bold uppercase md:tracking-wider leading-tight text-slate-500">Who can see it</span>
       </div>
       <div className="flex flex-col md:gap-1">
         {rows.map(({ key, icon: Icon, label, hint }) => {
-          const on = profile.privacy[key]
-          return (
-            <button
-              key={key}
-              onClick={() => toggle(key)}
-              disabled={saving === key}
-              role="switch"
-              aria-checked={on}
-              title={hint}
-              className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5 hover:bg-slate-800/60 transition-colors text-left"
-            >
-              <Icon size={15} className={on ? 'text-violet-700' : 'text-slate-500'} />
-              <span className="text-sm font-semibold text-ink flex-1">{label}</span>
-              <Switch on={on} saving={saving === key} />
+          const everyone = profile.privacy[key]
+          // Everyone / Friends — on a phone just the icons (a globe, two people), the words from md up
+          const opt = (value: boolean, I: typeof Globe, name: string, tip: string) => (
+            <button type="button" role="radio" aria-checked={everyone === value} aria-label={`${label}: ${name}`} title={tip}
+              onClick={() => choose(key, value)} disabled={saving === key}
+              className={cn('flex items-center justify-center gap-1 px-1 md:px-2 py-1 text-[10px] md:text-[11px] font-bold leading-none whitespace-nowrap transition-colors',
+                everyone === value ? 'bg-[#7a5230] text-[#fbf6ea]' : 'text-slate-500 hover:text-ink')}>
+              {saving === key && everyone !== value ? <Loader2 size={11} className="animate-spin" /> : <I size={11} />}<span className="hidden md:inline">{name}</span>
             </button>
           )
+          return (
+            <div key={key} title={hint} className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5">
+              <Icon size={15} className={everyone ? 'text-violet-700' : 'text-slate-500'} />
+              <span className="text-sm font-semibold text-ink flex-1 min-w-0 truncate md:overflow-visible md:whitespace-nowrap">{label}</span>
+              {/* two equal halves, the same width as Portfolio's "Only you" box below so all three line up */}
+              <span role="radiogroup" aria-label={`Who can see your ${label}`} className={cn(SEG_W, 'shrink-0 grid grid-cols-2 rounded-lg border border-[#d6c49f] overflow-hidden bg-[#f6eedb] [&>button+button]:border-l [&>button+button]:border-[#d6c49f]')}>
+                {opt(true, Globe, 'Everyone', 'Everyone — any collector can see it')}
+                {opt(false, Users, 'Friends', 'Friends — only the friends you’ve added and accepted')}
+              </span>
+            </div>
+          )
         })}
-        <div className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5" title="Your values and P&L are only ever for you">
+        <div className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5" title="Your values and P&L are only ever for you — not even friends">
           <TrendingUp size={15} className="text-slate-500" />
-          <span className="text-sm font-semibold text-ink flex-1">Portfolio</span>
-          <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500" aria-label="Private"><Lock size={11} /><span className="hidden md:inline">Private</span></span>
+          <span className="text-sm font-semibold text-ink flex-1 min-w-0 truncate md:overflow-visible md:whitespace-nowrap">Portfolio</span>
+          <span className={cn(SEG_W, 'shrink-0 flex items-center justify-center gap-1 rounded-lg border border-dashed border-[#d6c49f] py-1 text-[10px] md:text-[11px] font-bold leading-none text-slate-500')} aria-label="Only you"><Lock size={11} /><span className="hidden md:inline">Only you</span></span>
         </div>
       </div>
       {error && <div className="text-[11px] text-red-600 mt-1.5 px-1">{error}</div>}
     </div>
-  )
-}
-
-function Switch({ on, saving }: { on: boolean; saving: boolean }) {
-  return (
-    <span className={cn('relative w-9 h-5 rounded-full shrink-0 transition-colors', on ? 'bg-violet-600' : 'bg-slate-700')}>
-      <span className={cn('absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all flex items-center justify-center', on ? 'left-[18px]' : 'left-0.5')}>
-        {saving && <Loader2 size={10} className="animate-spin text-slate-500" />}
-      </span>
-    </span>
   )
 }
 
@@ -449,8 +503,9 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
   const [view, setView] = useState<CardexView>('top')
   // Badges tab: the pins the owner put on display, or every book ("Full Badges")
   const [badgesView, setBadgesView] = useState<BadgesView>('display')
-  const cardexVisible = isMe || profile.privacy.cardex
-  const badgesVisible = isMe || profile.privacy.badges
+  // Everyone sees what's set to Everyone; what's set to Friends, only accepted friends (and you)
+  const cardexVisible = isMe || profile.privacy.cardex || isFriend
+  const badgesVisible = isMe || profile.privacy.badges || isFriend
   const shared = tab === 'cardex' ? profile.privacy.cardex : profile.privacy.badges
   const tabs: { id: ShowcaseTab; label: string; icon: typeof Award }[] = [
     { id: 'cardex', label: 'Cardex', icon: BookOpen },
@@ -480,7 +535,7 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
               'flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full',
               shared ? 'bg-emerald-600/15 text-emerald-700' : 'bg-slate-800 text-slate-500',
             )}>
-              {shared ? <Eye size={11} /> : <EyeOff size={11} />}{shared ? 'Public' : 'Only you'}
+              {shared ? <Eye size={11} /> : <EyeOff size={11} />}{shared ? 'Everyone' : 'Friends only'}
             </span>
           )}
           {tab === 'cardex' && cardexVisible && (
@@ -492,7 +547,7 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
         </div>
         {tab === 'cardex'
           ? <CardexTab profile={profile} isMe={isMe} isFriend={isFriend} view={view} />
-          : <BadgesTab profile={profile} isMe={isMe} view={badgesView} onSaved={onSaved} />}
+          : <BadgesTab profile={profile} isMe={isMe} isFriend={isFriend} view={badgesView} onSaved={onSaved} />}
       </div>
     </section>
   )
@@ -534,12 +589,11 @@ const PAGE = 24
 
 type ShowcaseCard = Card & { copies: number; slab?: SlabInfo; printing: string }
 
-// A special printing's short label on its tile ("Reverse Holo", "1st Edition", "Foil"); '' for the plain one
+// A special printing's short label on its tile ("Reverse Holo", "1st Edition"); '' for the plain one — never a bare "Foil"
 function printingOf(c: Card): string {
   const parts: string[] = []
   if (c.edition && c.edition !== 'unlimited') parts.push((EDITION_LABELS as Record<string, string>)[c.edition] ?? c.edition)
   if (c.finish && c.finish !== 'normal') parts.push((FINISH_LABELS as Record<string, string>)[c.finish] ?? c.finish)
-  else if (!c.finish && c.isFoil) parts.push('Foil')
   return parts.join(' ')
 }
 
@@ -558,7 +612,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   // A friend's shared Cardex has no prices: the zoom asks the price routes for the one card opened
   const prices = useRef(new Map<string, number>())
   const opened = useRef('')
-  const canView = isMe || profile.privacy.cardex
+  const canView = isMe || profile.privacy.cardex || isFriend
 
   useEffect(() => {
     if (isMe || !canView) return
@@ -601,7 +655,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   if (!canView || friendCards === 'private') {
     return (
       <Locked>
-        {`${first} keeps their Cardex private.`}
+        {`${first} shares their Cardex with friends only — add them as a friend to see it.`}
       </Locked>
     )
   }
@@ -752,11 +806,11 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
 
 // ── Badges: the Haven Badges pin book ──────────────────────────────────────────────────────
 
-function BadgesTab({ profile, isMe, view, onSaved }: { profile: Profile; isMe: boolean; view: BadgesView; onSaved: (p: Profile) => void }) {
+function BadgesTab({ profile, isMe, isFriend, view, onSaved }: { profile: Profile; isMe: boolean; isFriend: boolean; view: BadgesView; onSaved: (p: Profile) => void }) {
   const [saveError, setSaveError] = useState(false)
   const { myBadges } = useFriends()
   const [theirs, setTheirs] = useState<SharedBadges | 'private' | undefined>(undefined)
-  const canView = isMe || profile.privacy.badges
+  const canView = isMe || profile.privacy.badges || isFriend
 
   useEffect(() => {
     if (isMe || !canView) return
@@ -767,7 +821,7 @@ function BadgesTab({ profile, isMe, view, onSaved }: { profile: Profile; isMe: b
 
   const first = profile.displayName.split(' ')[0]
   if (!canView || theirs === 'private') {
-    return <Locked>{`${first} keeps their badges private.`}</Locked>
+    return <Locked>{`${first} shares their badges with friends only — add them as a friend to see them.`}</Locked>
   }
   const badges = isMe ? myBadges : theirs ?? null
   if (!badges) {

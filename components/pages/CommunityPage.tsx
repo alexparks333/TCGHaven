@@ -8,7 +8,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Users, Check, LogOut, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette } from 'lucide-react'
-import { BlockView, type BlockContext } from '@/components/community/blocks'
+import { BlockView, LookScope, Section, type BlockContext } from '@/components/community/blocks'
+import { Medal, METALS } from '@/components/community/Medals'
 import { blockName, homeBlocks, tabBlocks, type Block } from '@/lib/communityBlocks'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -18,11 +19,12 @@ import { getCommunity, joinCommunity, leaveCommunity, memberCount, newestMembers
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { loadBadges } from '@/lib/firebase/badges'
 import { cn } from '@/lib/utils'
+import { badgeArt } from '@/lib/badgeAssets'
 import { blockLook } from '@/lib/blockStyle'
 import { DEV_MEMBER_EVENT, DEV_MEMBER_CLEAR_EVENT, type DevMember } from '@/lib/devBoard'
 import { Divider } from '@/components/creator/Ornaments'
 import { CommunityHeader } from '@/components/creator/CommunityHeader'
-import { sectionOn, useCreatorBook, type CreatorBook } from '@/lib/creatorBooks'
+import { sectionOn, useCreatorBook, type CreatorBook, type MembersLook } from '@/lib/creatorBooks'
 import { useStudioDevice } from '@/lib/studioDevice'
 import { isLive } from '@/lib/badges'
 import { BookCover, BookThickness } from '@/components/badges/BadgeLibrary'
@@ -119,10 +121,16 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         <CommunityHeader community={community} className="rounded-3xl shadow-[0_24px_50px_-28px_rgba(40,25,10,0.8)]" />
         {/* The community's emblem, half over the header's bottom edge in a frosted frame */}
         <div className="absolute left-5 md:left-9 bottom-0 translate-y-1/2 z-[5] w-[104px] h-[104px] md:w-[136px] md:h-[136px] rounded-[32px] p-2 md:p-2.5 bg-[#3a2a1a]/25 backdrop-blur-md ring-1 ring-white/35 shadow-[0_16px_34px_-12px_rgba(30,18,8,0.65)]">
-          <div className="w-full h-full rounded-[24px] flex items-center justify-center pinbook-serif text-5xl md:text-6xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.25)]"
-            style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${community.color} 82%, white), ${community.color} 55%, color-mix(in srgb, ${community.color} 70%, black))` }}>
-            {(community.name.trim()[0] || '★').toUpperCase()}
-          </div>
+          {community.page?.emblem ? (
+            // the creator's own picture (Studio → Page details → Community picture)
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={badgeArt(community.page.emblem, 400)} alt="" className="w-full h-full rounded-[24px] object-cover shadow-[0_2px_6px_rgba(0,0,0,0.25)]" />
+          ) : (
+            <div className="w-full h-full rounded-[24px] flex items-center justify-center pinbook-serif text-5xl md:text-6xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.25)]"
+              style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${community.color} 82%, white), ${community.color} 55%, color-mix(in srgb, ${community.color} 70%, black))` }}>
+              {(community.name.trim()[0] || '★').toUpperCase()}
+            </div>
+          )}
         </div>
       </div>
 
@@ -139,19 +147,32 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             </div>
           </div>
 
-          {/* Members · the creator · games — then Join */}
-          <div className="mt-5 flex flex-wrap items-center gap-2">
-            <span className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-1.5"><Users size={15} /><b className="text-ink tabular-nums">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
+          {/* A byline (who runs it · how many members), then the games on their own row as coloured tags, then Join */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-slate-500">
             {creator && (
-              <Link href={profilePath(uid, creator.username)} className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-2 hover:text-ink">
-                <Avatar seed={uid} name={creator.displayName} photoURL={creator.photoURL} size={20} />by <b className="text-ink">{creator.displayName}</b>
+              <Link href={profilePath(uid, creator.username)} className="group inline-flex items-center gap-2 hover:text-ink">
+                <Avatar seed={uid} name={creator.displayName} photoURL={creator.photoURL} size={26} className="ring-2 ring-[#fbf6ea] shadow-sm" />
+                <span>Run by <b className="text-ink group-hover:underline underline-offset-2">{creator.displayName}</b></span>
               </Link>
             )}
-            {(community.games ?? []).map((g) => (
-              <span key={g} className="haven-chip px-3 py-1.5 text-sm inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}</span>
-            ))}
-            {/* the owner's Edit / a fan's Join: always on its own line under the members and games */}
-            <div className="basis-full mt-1">
+            {creator && <span aria-hidden className="w-1 h-1 rounded-full bg-[#b9a27c]" />}
+            <span className="inline-flex items-center gap-1.5"><Users size={15} className="text-[#8a6420]" /><b className="text-ink tabular-nums">{members ?? '–'}</b> {members === 1 ? 'member' : 'members'}</span>
+          </div>
+          {(community.games ?? []).length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a6420]">Collects</span>
+              {(community.games ?? []).map((g) => (
+                // a tag in the game's own colour: a solid edge on the left, its colour washed behind the name
+                <span key={g} className="inline-flex items-center rounded-[5px] pl-2 pr-2.5 py-[3px] text-[11px] font-bold uppercase tracking-[0.08em] border-l-[3px]"
+                  style={{ borderColor: GAME_COLORS[g], background: `color-mix(in srgb, ${GAME_COLORS[g]} 16%, #fbf6ea)`, color: `color-mix(in srgb, ${GAME_COLORS[g]} 65%, #2b2014)` }}>
+                  {GAME_LABELS[g]}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="mt-5 flex flex-wrap items-center gap-2">
+            {/* the owner's Edit / a fan's Join: always on its own line under the byline and games */}
+            <div className="basis-full">
               {mine ? (
                 // the Studio is computers-only — no link to it in the app or on a phone
                 studio === 'computer' ? <Link href="/creator" className="btn-secondary !inline-flex !w-auto !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
@@ -201,7 +222,19 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         {/* Members, top collectors first: beside the sections, level with the first one (after them on a phone) */}
         {sectionOn(community, 'members') && (
           <div className="min-w-0 lg:col-start-2 lg:row-start-2">
-            <MembersColumn community={uid} book={book} members={members} />
+            {builder ? (
+              // the Studio: click Members to set it up, the palette for its look — like a block
+              <div style={{ borderRadius: blockLook('members', community.page?.members?.style).radius }}
+                className={cn('group/blk relative transition-shadow', builder.selected === MEMBERS_ID ? 'shadow-[0_0_0_3px_#7a5230]' : 'hover:shadow-[0_0_0_2px_rgba(122,82,48,0.55)]')}>
+                <MembersColumn community={uid} book={book} members={members} look={community.page?.members} />
+                <button type="button" onClick={() => builder.onSelect(MEMBERS_ID)} className="absolute inset-0 z-10 cursor-pointer" style={{ borderRadius: 'inherit' }} aria-label="Edit Members" />
+                <div className={cn('absolute -top-3.5 left-4 right-4 z-20 flex items-center gap-1 transition-opacity', builder.selected === MEMBERS_ID ? 'opacity-100' : 'opacity-0 group-hover/blk:opacity-100')}>
+                  <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[11px] font-bold shadow">Members</span>
+                  <span className="flex-1" />
+                  <button type="button" onClick={() => builder.onStyle(MEMBERS_ID)} className="rounded-full bg-[#f6eedb] border border-[#c4ae83] shadow p-1.5 text-[#7a5230] hover:text-ink" aria-label="Style Members — colours and fonts" title="Style — colours and fonts"><Palette size={13} /></button>
+                </div>
+              </div>
+            ) : <MembersColumn community={uid} book={book} members={members} look={community.page?.members} />}
           </div>
         )}
       </div>
@@ -215,6 +248,9 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
     </div>
   )
 }
+
+/** The id the Studio's builder uses for the Members panel beside the page (it's not a block, but is picked like one) */
+export const MEMBERS_ID = '__members'
 
 /** What the Studio's builder does with the page's blocks */
 export interface PageBuilder {
@@ -314,7 +350,7 @@ interface RankedMember { uid: string; profile: Profile | null; badges: number; c
 /** The community's members, top collectors first: most of this book's badges earned, then the most
  *  cards collected toward them (from each member's shared badges; members who keep theirs private
  *  come last, marked hidden) */
-export function MembersColumn({ community, book, members, sample }: { community: string; book: CreatorBook | null; members: number | null; sample?: RankedMember[] /* dev checks */ }) {
+export function MembersColumn({ community, book, members, sample, look }: { community: string; book: CreatorBook | null; members: number | null; sample?: RankedMember[] /* dev checks */; look?: MembersLook /* the owner's setup (Studio → click Members) */ }) {
   const [list, setList] = useState<RankedMember[] | null>(sample ?? null)
   const [all, setAll] = useState(false)
   const ids = (book?.badges ?? []).map((b) => b.id).join(',')
@@ -355,50 +391,73 @@ export function MembersColumn({ community, book, members, sample }: { community:
     window.addEventListener(DEV_MEMBER_CLEAR_EVENT, clear)
     return () => { window.removeEventListener(DEV_MEMBER_EVENT, add); window.removeEventListener(DEV_MEMBER_CLEAR_EVENT, clear) }
   }, [ids])
-  const ranked = list === null ? null : [...list, ...fakes].sort((a, b) => Number(a.hidden) - Number(b.hidden) || b.badges - a.badges || b.cards - a.cards || a.joinedAt - b.joinedAt)
-  const shown = ranked ? (all ? ranked : ranked.slice(0, 12)) : []
-  const medal = ['#a8771f', '#7d8590', '#9a5b2e'] // flat gold, silver, bronze
+  const o = { order: 'top' as const, shown: 12, detail: 'both' as const, medals: true, bars: true, count: true, round: false, medalStyle: 'ribbon' as const, shine: true, podium: true, ...(look ?? {}) }
+  const top = o.order !== 'newest'
+  const ranked = list === null ? null : [...list, ...fakes].sort(top
+    ? (a, b) => Number(a.hidden) - Number(b.hidden) || b.badges - a.badges || b.cards - a.cards || a.joinedAt - b.joinedAt
+    : (a, b) => b.joinedAt - a.joinedAt)
+  const limit = Math.max(3, Math.min(25, o.shown))
+  const shown = ranked ? (all ? ranked : ranked.slice(0, limit)) : []
+  const total = book?.badges.length ?? 0
+  const count = members === null && !list ? '–' : (members ?? list?.length ?? 0) + fakes.length
+  const detail = (m: RankedMember) => m.hidden ? 'Badges kept private'
+    : o.detail === 'badges' ? `${m.badges} badge${m.badges === 1 ? '' : 's'}`
+    : o.detail === 'cards' ? `${m.cards} card${m.cards === 1 ? '' : 's'}`
+    : o.detail === 'none' ? null
+    : `${m.badges} badge${m.badges === 1 ? '' : 's'} · ${m.cards} card${m.cards === 1 ? '' : 's'}`
   return (
-    <section className="haven-panel haven-grain relative w-full !p-5">
-      <div className="flex items-baseline justify-between">
-        <h2 className="pinbook-serif text-xl font-bold text-ink">Members</h2>
-        <span className="text-xs text-slate-500 tabular-nums">{members === null && !list ? '–' : (members ?? list?.length ?? 0) + fakes.length}</span>
-      </div>
-      <p className="text-[11px] text-slate-500">Top collectors first</p>
-      <Divider className="mt-2.5 mb-3" />
-      {list === null ? <Loader2 size={18} className="animate-spin text-slate-500" />
-        : ranked!.length === 0 ? <p className="text-sm text-slate-500">No members yet — be the first to join.</p>
-        : (
-          <ol>
-            {shown.map((m, i) => (
-              <li key={m.uid} className="border-b border-[#d6c49f]/70 last:border-b-0">
-                {(() => {
-                  const row = (<>
-                  {/* rank: a flat engraved numeral — gold, silver, bronze for the top three */}
-                  <span className="w-5 shrink-0 text-center pinbook-serif text-[15px] font-bold tabular-nums leading-none"
-                    style={{ color: !m.hidden && i < 3 ? medal[i] : '#a8957a' }}>
-                    {m.hidden ? '–' : i + 1}
-                  </span>
-                  <Avatar seed={m.uid} name={m.profile?.displayName ?? 'Collector'} photoURL={m.profile?.photoURL} size={28} className="!rounded-md" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold text-ink truncate group-hover:underline underline-offset-2">{m.profile?.displayName ?? 'Collector'}</span>
-                    <span className="block text-[11px] text-slate-500 truncate">
-                      {m.hidden ? 'Badges kept private' : `${m.badges} badge${m.badges === 1 ? '' : 's'} · ${m.cards} card${m.cards === 1 ? '' : 's'}`}
-                    </span>
-                  </span>
-                  </>)
-                  // Every member's name opens their profile (fake dev members have none)
-                  return m.fake ? <div className="flex items-center gap-2.5 px-1.5 py-2">{row}</div>
-                    : <Link href={profilePath(m.uid, m.profile?.username)} title={`View ${m.profile?.displayName ?? 'this collector'}'s profile`} className="group flex items-center gap-2.5 px-1.5 py-2 hover:bg-[#e8dbbd]/60">{row}</Link>
-                })()}
-              </li>
-            ))}
-          </ol>
+    <LookScope type="members" style={o.style}>
+      <Section title={o.title || 'Members'} icon={<Users size={19} />} sub={o.sub ?? (top ? 'Top collectors first' : 'Newest first')} className="w-full !p-5">
+        {o.count && (
+          <span className="absolute top-5 right-5 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums border border-[color:var(--b-line)] text-[color:var(--b-accent)] bg-[color:var(--b-tint)]">{count}</span>
         )}
-      {ranked && ranked.length > 12 && (
-        <button type="button" onClick={() => setAll((a) => !a)} className="mt-2 w-full text-xs font-semibold text-[#7a5230] hover:underline">{all ? 'Show fewer' : `Show all ${ranked.length}`}</button>
-      )}
-    </section>
+        {list === null ? <Loader2 size={18} className="animate-spin text-[color:var(--b-muted)]" />
+          : ranked!.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No members yet — be the first to join.</p>
+          : (
+            <ol className="-mx-1.5 space-y-0.5">
+              {shown.map((m, i) => {
+                const place = top && o.medals && !m.hidden && i < 3 ? (i as 0 | 1 | 2) : null
+                const metal = place !== null ? METALS[place] : null
+                const name = m.profile?.displayName ?? 'Collector'
+                const line = detail(m)
+                const row = (<>
+                  {/* rank: a medal for the top three (the owner's style — Medals.tsx), then a quiet numeral (newest-first shows no rank) */}
+                  {top && (place !== null ? (
+                    <span className="w-8 shrink-0 flex justify-center"><Medal place={place} style={o.medalStyle} art={o.medalArt?.[place] || undefined} shine={o.shine} size={place === 0 ? 32 : 28} /></span>
+                  ) : (
+                    <span className="w-8 shrink-0 text-center pinbook-serif text-[14px] font-bold tabular-nums text-[color:var(--b-muted)]">{m.hidden ? '–' : i + 1}</span>
+                  ))}
+                  <span className="shrink-0 rounded-[9px] p-[2px]" style={{ background: metal ? `linear-gradient(150deg, ${metal.hi}, ${metal.mid} 55%, ${metal.lo})` : 'transparent', borderRadius: o.round ? 999 : 9 }}>
+                    <Avatar seed={m.uid} name={name} photoURL={m.profile?.photoURL} size={30} className={o.round ? '!rounded-full' : '!rounded-md'} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold truncate text-[color:var(--b-title)] group-hover:underline underline-offset-2 decoration-[color:var(--b-accent)]">{name}</span>
+                    {line && <span className="block text-[11px] truncate text-[color:var(--b-muted)]">{line}</span>}
+                    {o.bars && total > 0 && !m.hidden && (
+                      <span className="mt-1 block h-[3px] rounded-full overflow-hidden bg-[color:var(--b-hair)]">
+                        <span className="block h-full rounded-full bg-[color:var(--b-accent)]" style={{ width: `${Math.min(100, (m.badges / total) * 100)}%` }} />
+                      </span>
+                    )}
+                  </span>
+                </>)
+                const cls = 'group flex items-center gap-2.5 rounded-lg px-1.5 py-2 transition-colors hover:bg-[color:var(--b-hover)]'
+                // Podium: the top three rows washed in their metal from the left, fading out
+                const wash = metal && o.podium ? { background: `linear-gradient(90deg, color-mix(in srgb, ${metal.row} ${place === 0 ? 30 : 20}%, transparent), transparent 85%)` } : undefined
+                // Every member's name opens their profile (fake dev members have none)
+                return (
+                  <li key={m.uid}>
+                    {m.fake ? <div className={cls} style={wash}>{row}</div>
+                      : <Link href={profilePath(m.uid, m.profile?.username)} title={`View ${name}'s profile`} className={cls} style={wash}>{row}</Link>}
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        {ranked && ranked.length > limit && (
+          <button type="button" onClick={() => setAll((a) => !a)} className="mt-2.5 w-full rounded-md border border-dashed border-[color:var(--b-line)] py-1.5 text-xs font-bold text-[color:var(--b-accent)] hover:bg-[color:var(--b-hover)]">{all ? 'Show fewer' : `Show all ${ranked.length}`}</button>
+        )}
+      </Section>
+    </LookScope>
   )
 }
 

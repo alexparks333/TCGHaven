@@ -1,7 +1,8 @@
 // Reactions on a Creator Wall's posts (docs/creators.md "Creator Wall"): members (and the creator) tap a
 // reaction under a post; everyone sees the counts.
 //   wall_reactions/{community}_{post}_{member}_{reaction}  { community, post, member, reaction, at }
-// One doc per member per reaction per post (tap again to take it back). Read by anyone signed in, written
+// One doc per member per reaction per post (tap again to take it back). A member keeps one reaction per post:
+// the wall swaps their old one out when they pick another (CreatorWall.tsx ReactionRow — enforced in the app, not the rules). Read by anyone signed in, written
 // only by that member while they're in the community (firestore.rules). Counts are added up in the browser
 // from one live query per wall.
 //
@@ -12,11 +13,27 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { collection, deleteDoc, doc, limit, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 import { db } from './firebase/config'
 
-export interface ReactionDef { id: string; name: string; art?: string }
+// Shown like Discord's: under a post only the reactions someone has used (with their counts), plus a small
+// "add a reaction" button that opens the picker (components/community/CreatorWall.tsx ReactionPicker).
+export interface ReactionDef { id: string; name: string; art?: string; emoji?: string }
 export const REACTIONS: ReactionDef[] = [
   { id: 'heart', name: 'Love' },
   { id: 'thumbs', name: 'Thumbs up' },
   { id: 'card', name: 'Trading card' },
+  { id: 'party', name: 'Party', emoji: '🎉' },
+  { id: 'fire', name: 'Fire', emoji: '🔥' },
+  { id: 'happy', name: 'Happy', emoji: '😊' },
+  { id: 'laugh', name: 'Laughing', emoji: '😂' },
+  { id: 'starstruck', name: 'Star-struck', emoji: '🤩' },
+  { id: 'wow', name: 'Wow', emoji: '😮' },
+  { id: 'clap', name: 'Applause', emoji: '👏' },
+  { id: 'hundred', name: '100', emoji: '💯' },
+  { id: 'gem', name: 'Gem', emoji: '💎' },
+  { id: 'trophy', name: 'Trophy', emoji: '🏆' },
+  { id: 'eyes', name: 'Eyes', emoji: '👀' },
+  { id: 'sad', name: 'Sad', emoji: '😢' },
+  { id: 'mad', name: 'Mad', emoji: '😡' },
+  { id: 'thumbs-down', name: 'Thumbs down', emoji: '👎' },
 ]
 
 export const DEV_REACT_EVENT = 'tcghaven-dev-react' // Dev panel → Community: fake reactions on every wall post, this device only
@@ -50,7 +67,12 @@ export function useWallReactions(community: string, me: string | null, posts: st
       void e
       setDev((d) => {
         const n = { ...d }
-        postsRef.current.forEach((p) => { n[p] = { ...(n[p] ?? {}) }; REACTIONS.forEach((r) => { if (Math.random() < 0.7) n[p][r.id] = (n[p][r.id] ?? 0) + 1 + Math.floor(Math.random() * 6) }) })
+        // a few different reactions on each post (most posts get some, a post or two stays bare)
+        postsRef.current.forEach((p) => {
+          n[p] = { ...(n[p] ?? {}) }
+          const picks = [...REACTIONS].sort(() => Math.random() - 0.5).slice(0, Math.floor(Math.random() * 5))
+          picks.forEach((r) => { n[p][r.id] = (n[p][r.id] ?? 0) + 1 + Math.floor(Math.random() * 6) })
+        })
         return n
       })
     }

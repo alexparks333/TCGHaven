@@ -116,7 +116,7 @@ export default function CardDetailPage() {
               )}
               <PrintingTags card={card} className="w-fit" />
               <div className="text-sm text-slate-400">{card.set}</div>
-              <div className="text-xs text-slate-500">#{card.number} {card.isFoil && '✨ Foil'}</div>
+              <div className="text-xs text-slate-500">#{card.number}</div>
               <div className="text-xs text-slate-500">{conditionLabel(card)}</div>
               <div className="text-xs text-slate-500">Qty: {card.quantity}</div>
               <div className="text-xs text-slate-500">Bought: {formatDate(card.purchaseDate)}</div>

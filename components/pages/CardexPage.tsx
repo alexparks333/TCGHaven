@@ -74,6 +74,15 @@ interface SetGroup {
 // PersonalCollectionsView can type its own `onZoom` prop against it — zoomGlowColor() itself lives
 // in lib/utils.ts (shared, pure) rather than here, to avoid a circular import between the two
 // page-level files; this type-only export carries no such risk (erased at compile time).
+
+/** Whether to show a card's printing beside its rarity: only a real one ("Reverse Holo", "1st Edition"), and
+ *  not when the rarity already says it ("Holo" on a "Rare Holo") — never a bare "Foil" tag */
+function showPrinting(printing: string | undefined, rarity: string | undefined): printing is string {
+  if (!printing) return false
+  const r = (rarity ?? '').toLowerCase()
+  return !printing.toLowerCase().split(' ').every((w) => r.includes(w))
+}
+
 export interface ZoomCardData {
   imageUrl: string
   name: string
@@ -85,6 +94,7 @@ export interface ZoomCardData {
   owned: boolean
   quantity: number
   isFoil?: boolean
+  printing?: string // the owned copy's printing ("Reverse Holo", "1st Edition") — shown unless the rarity already says it
   // Landscape card (Riftbound Battlefields): the grid tile stays portrait like every other card,
   // but the zoom view shows it sideways, the way the real card is printed.
   landscape?: boolean
@@ -1617,6 +1627,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
           owned: true,
           quantity: card.quantity,
           isFoil: card.isFoil,
+          printing: printingText(card) || undefined,
           glowColor: zoomGlowColor(card.game, card.rarity ?? '', gameColor),
           slab: slab,
           setName: card.set,
@@ -1667,7 +1678,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
             <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
             {card.gradingCompany && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}</div>}
-            {card.isFoil && <div className="text-[10px] text-amber-600 mt-0.5">✨ Foil</div>}
+            {showPrinting(printingText(card), card.rarity) && <div className="text-[10px] text-amber-600 mt-0.5">{printingText(card)}</div>}
             <div className="text-[10px] text-emerald-600 mt-0.5">
               ✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}
             </div>
@@ -2130,7 +2141,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                   {d.rarityLabel}
                 </span>
               )}
-              {d.isFoil && <span className="text-[11px] font-medium text-amber-600">✨ Foil</span>}
+              {showPrinting(d.printing, d.rarityLabel) && (
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700">{d.printing}</span>
+              )}
               {d.slab && (
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 border border-amber-500/30">
                   {d.slab.company}{d.slab.grade ? ` ${d.slab.grade}` : ''}

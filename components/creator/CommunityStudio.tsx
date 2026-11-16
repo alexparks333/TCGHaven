@@ -10,8 +10,8 @@ import Link from 'next/link'
 import { ArrowDown, ArrowUp, Home, Plus, Trash2, Check, Copy, Eye, ExternalLink, Loader2, Pencil, BookOpen, ImagePlus, X } from 'lucide-react'
 import { useCommunity, saveCommunity, HEADER_ASPECT, MAX_TABS, newTabId, type Community, type CommunityLook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
 import { blockName, homeBlocks, newBlock, tabBlocks, type Block } from '@/lib/communityBlocks'
-import { AddBlockMenu, BlockEditor } from '@/components/creator/BlockEditor'
-import { CommunityView, type PageBuilder } from '@/components/pages/CommunityPage'
+import { AddBlockMenu, BlockEditor, MembersEditor } from '@/components/creator/BlockEditor'
+import { CommunityView, MEMBERS_ID, type PageBuilder } from '@/components/pages/CommunityPage'
 import { BLANK_HEADER } from '@/components/creator/CommunityHeader'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { isLive } from '@/lib/badges'
@@ -83,7 +83,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
   const sel = blocks.find((b) => b.id === selected) ?? null
   const remove = (id: string) => {
     const b = blocks.find((x) => x.id === id)
-    const full = b && ((b.type === 'wall' && b.posts.length) || (b.type === 'announcements' && b.items.length) || (b.type === 'text' && b.body.trim()) || (b.type === 'cards' && b.cards.length) || (b.type === 'picture' && b.image))
+    const full = b && ((b.type === 'wall' && b.posts.length) || (b.type === 'announcements' && b.items.length) || (b.type === 'text' && b.body.trim()) || (b.type === 'cards' && b.cards.length) || (b.type === 'picture' && b.image) || (b.type === 'frame' && b.images.length))
     if (full && !confirm(`Delete this ${blockName(b!.type)} block and everything in it?`)) return
     setBlocks(blocks.filter((x) => x.id !== id)); if (selected === id) setSelected(null)
   }
@@ -108,7 +108,11 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
 
       {/* ── Beside it: the selected block's editor, or the page's details ── */}
       <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto scroll-themed lg:pr-1">
-        {sel ? (
+        {selected === MEMBERS_ID ? (
+          <MembersEditor uid={uid} community={c} mode={mode} onMode={setMode} onDone={() => setSelected(null)}
+            onChange={(members) => set({ page: { ...(c.page ?? {}), members } })}
+            onHide={() => { set({ page: { ...(c.page ?? {}), sections: { ...(c.page?.sections ?? {}), members: false } } }); setSelected(null) }} />
+        ) : sel ? (
           <BlockEditor uid={uid} block={sel} community={c} mode={mode} onMode={setMode} onCommunity={set} onDone={() => setSelected(null)} onDelete={() => remove(sel.id)}
             onChange={(b) => setBlocks(blocks.map((x) => (x.id === b.id ? b : x)))} />
         ) : <>
@@ -136,6 +140,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
           <button type="button" onClick={() => setHeaderOpen(true)} className="mt-2.5 w-full haven-chip px-3 py-2 text-sm font-semibold inline-flex items-center justify-center gap-2">
             <ImagePlus size={15} />{c.page?.header ? 'Change header picture' : 'Add a header picture'}
           </button>
+          <EmblemField uid={uid} c={c} onChange={(emblem) => { const page = { ...(c.page ?? {}) }; if (emblem) page.emblem = emblem; else delete page.emblem; set({ page }) }} />
           <label className="mt-3 block text-[11px] font-semibold text-slate-500">Name
             <input value={c.name} maxLength={40} onChange={(e) => set({ name: e.target.value })} className="input-field mt-1 text-sm font-semibold" placeholder="Your community’s name" />
           </label>
@@ -156,7 +161,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
           </div>
           <button type="button" onClick={() => set({ page: { ...(c.page ?? {}), sections: { ...(c.page?.sections ?? {}), members: !(c.page?.sections?.members ?? true) } } })}
             className="mt-3 w-full flex items-center gap-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] px-3 py-2 text-left">
-            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">Members beside the page</span><span className="block text-[11px] text-slate-500">Top collectors first</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">Members beside the page</span><span className="block text-[11px] text-slate-500">Click it on the page to set it up</span></span>
             <span className={cn('w-9 h-5 shrink-0 rounded-full p-0.5 transition-colors', (c.page?.sections?.members ?? true) ? 'bg-violet-600' : 'bg-slate-700')}>
               <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', (c.page?.sections?.members ?? true) && 'translate-x-4')} />
             </span>
@@ -196,6 +201,53 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
           onPick={(t) => { const b = newBlock(t); setBlocks([...blocks.slice(0, adding), b, ...blocks.slice(adding)]); setAdding(null); setSelected(b.id); setMode('content') }} />
       )}
       {headerOpen && <HeaderEditor uid={uid} c={c} onChange={(page) => set({ page })} onClose={() => setHeaderOpen(false)} />}
+    </div>
+  )
+}
+
+/** The community's picture — the square emblem on its page, in Friends → Communities and on its card. Without
+ *  one, the emblem is the name's first letter on the community's colour. */
+function EmblemField({ uid, c, onChange }: { uid: string; c: Community; onChange: (url: string | null) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const emblem = c.page?.emblem
+  async function upload(file: File | undefined) {
+    if (!file) return
+    setBusy(true); setError('')
+    try {
+      const blob = await shrink(file)
+      const r = ref(appStorage, `creators/${uid}/emblem-${Date.now()}.${blob.type === 'image/png' ? 'png' : 'jpg'}`)
+      await uploadBytes(r, blob, { contentType: blob.type || 'image/jpeg' })
+      onChange(await getDownloadURL(r))
+    } catch (e) {
+      setError('Couldn’t upload that picture — ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setBusy(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+  return (
+    <div className="mt-3 flex items-center gap-3">
+      <button type="button" onClick={() => input.current?.click()} disabled={busy} aria-label={emblem ? 'Change the community picture' : 'Upload a community picture'}
+        className="relative w-14 h-14 shrink-0 rounded-xl overflow-hidden border border-[#c4ae83] flex items-center justify-center text-2xl font-bold text-white pinbook-serif"
+        style={{ background: c.color }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {emblem ? <img src={badgeArt(emblem, 160)} alt="" className="w-full h-full object-cover" /> : (c.name.trim()[0] || '★').toUpperCase()}
+        {busy && <span className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={18} className="animate-spin" /></span>}
+      </button>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold text-slate-500">Community picture</p>
+        <div className="mt-1 flex items-center gap-2">
+          <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1.5">
+            <ImagePlus size={13} />{emblem ? 'Change' : 'Upload'}
+          </button>
+          {emblem && <button type="button" onClick={() => { if (confirm('Take the community picture off? The emblem goes back to your first letter.')) onChange(null) }} className="text-xs font-semibold text-slate-500 hover:text-red-600">Remove</button>}
+        </div>
+        <p className="mt-1 text-[10px] text-slate-500">Square pictures work best.</p>
+      </div>
+      <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
+      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
     </div>
   )
 }

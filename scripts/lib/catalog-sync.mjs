@@ -887,8 +887,20 @@ export async function downloadLorcana() {
 
   const promoByProductId = new Map() // productId → card (merges Normal + Foil rows)
 
+  // Only trust "lorcast doesn't have this group's cards" when lorcast actually answered. Each lorcast
+  // query above swallows its own error (returns 0), so an outage used to leave `seen` empty or thin —
+  // then EVERY real set's TCGplayer group looked unknown and was added a second time as tcg- cards.
+  // Syncs never delete, so one bad run left ~2,600 permanent duplicates in every numbered set
+  // (found and hidden 2026-11-16). Lorcast normally returns ~3,100 cards; well under that = skip
+  // this phase for the run (the promo-only groups just wait for the next healthy sync).
+  const LORCAST_HEALTHY_MIN = 2500
+  const lorcastHealthy = seen.size >= LORCAST_HEALTHY_MIN
+  if (!lorcastHealthy) {
+    console.warn(`   ⚠️  lorcast returned only ${seen.size} cards (expected ${LORCAST_HEALTHY_MIN}+) — skipping TCGPlayer-only groups this sync so real sets aren't re-added as duplicates`)
+  }
+
   let tcgcsvGroups = []
-  try {
+  if (lorcastHealthy) try {
     const groupData = await fetchJSON('https://tcgcsv.com/tcgplayer/71/groups', TCGCSV_HEADERS)
     tcgcsvGroups = (groupData.results ?? []).map((g) => ({ groupId: g.groupId, setName: g.name }))
     console.log(`   Found ${tcgcsvGroups.length} TCGPlayer groups (auto-discovered, incl. real numbered sets — those just contribute 0 new cards below)`)

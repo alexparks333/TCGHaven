@@ -5,9 +5,9 @@
 // newest first. Tap one to read it whole. Under each, the reactions (lib/wallReactions.ts): members and the
 // creator tap ♥ / 👍 / 🃏, everyone sees the counts. Flat on purpose — no fake-3D shading.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check } from 'lucide-react'
+import { Sparkles, X, Heart, ThumbsUp, Plus, Pencil, Move, Check, SmilePlus } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { timeAgo, useLook, type BlockContext } from '@/components/community/blocks'
 import { NoteCard, NoteEditor, PINS, PushPin, Tape, hash } from '@/components/community/WallNote'
@@ -22,6 +22,7 @@ import { isLive } from '@/lib/badges'
 export function ReactionIcon({ r, size = 15 }: { r: ReactionDef; size?: number }) {
   // eslint-disable-next-line @next/next/no-img-element
   if (r.art) return <img src={r.art} alt="" width={size} height={size} className="object-contain" />
+  if (r.emoji) return <span aria-hidden className="inline-block leading-none" style={{ fontSize: size, width: size + 1, textAlign: 'center' }}>{r.emoji}</span>
   if (r.id === 'heart') return <Heart size={size} className="text-[#b8402f]" fill="#b8402f" strokeWidth={1.5} />
   if (r.id === 'thumbs') return <ThumbsUp size={size} className="text-[#8a6420]" fill="#d6a957" strokeWidth={1.5} />
   // a trading card: a flat card with a star
@@ -33,6 +34,118 @@ export function ReactionIcon({ r, size = 15 }: { r: ReactionDef; size?: number }
       <path d="M5 10.2h6M5 12h4" stroke="#a8875c" strokeWidth="0.9" strokeLinecap="round" />
     </svg>
   )
+}
+
+type Rx = ReturnType<typeof useWallReactions>
+
+/** Under a post, the Discord way: only the reactions someone has used, each with its count (yours outlined —
+ *  tap to add yours or take it back), then a small "add a reaction" button that opens the picker. That
+ *  button only shows while the note is hovered (always on touch screens). */
+function ReactionRow({ post, rx, canReact }: { post: string; rx: Rx; canReact: boolean }) {
+  const [picker, setPicker] = useState<DOMRect | null>(null)
+  // The fun when *you* react (globals.css "Reaction animations"): adding — the bubble bounces in (or bumps),
+  // the emoji floats up out of it and sparks burst round it; taking it back — it squishes, the emoji drops
+  // away, and a bubble going to nothing shrinks off (`ghosts` keep it drawn while it leaves).
+  const [fx, setFx] = useState<Record<string, { kind: 'add' | 'remove'; n: number }>>({})
+  const [ghosts, setGhosts] = useState<Record<string, number>>({}) // reaction → the count it showed as it leaves
+  const animate = (id: string, kind: 'add' | 'remove') => {
+    setFx((f) => ({ ...f, [id]: { kind, n: (f[id]?.n ?? 0) + 1 } }))
+    const n = rx.count(post, id)
+    if (kind === 'remove' && n <= 1) {
+      setGhosts((g) => ({ ...g, [id]: n }))
+      setTimeout(() => setGhosts((g) => { const x = { ...g }; delete x[id]; return x }), 420)
+    }
+  }
+  // One reaction per person per post: picking a new one takes your old one back (it squishes off as the new one pops in)
+  const react = (id: string) => {
+    if (!canReact) return
+    const was = rx.mine(post, id)
+    if (!was) REACTIONS.forEach((r) => { if (r.id !== id && rx.mine(post, r.id)) { animate(r.id, 'remove'); rx.toggle(post, r.id) } })
+    animate(id, was ? 'remove' : 'add')
+    rx.toggle(post, id)
+  }
+  const used = REACTIONS.filter((r) => rx.count(post, r.id) > 0 || rx.mine(post, r.id) || r.id in ghosts)
+  if (!used.length && !canReact) return null
+  return (
+    <div className={cn('flex items-center justify-center', used.length ? 'mt-2.5' : 'mt-1.5')} onClick={(e) => e.stopPropagation()}>
+      {used.length > 0 && <div className="flex flex-wrap items-center justify-center gap-1">{used.map((r) => {
+        const ghost = r.id in ghosts && !rx.mine(post, r.id) && rx.count(post, r.id) === 0
+        const n = ghost ? ghosts[r.id] : rx.count(post, r.id), on = !ghost && rx.mine(post, r.id)
+        const f = fx[r.id]
+        // the chip's own move: in (new bubble), bump (one more), squish (one fewer), out (gone)
+        const move = ghost ? 'rx-out' : f?.kind === 'add' ? (n <= 1 ? 'rx-in' : 'rx-bump') : f?.kind === 'remove' ? 'rx-squish' : 'rx-in'
+        return (
+          <button key={r.id + (f ? '-' + f.n : '')} type="button" disabled={!canReact || ghost} onClick={() => react(r.id)}
+            title={canReact ? `${r.name}${on ? ' — tap to take yours back' : ''}` : r.name} aria-label={`${r.name} · ${n}`} aria-pressed={on}
+            className={cn(move, 'relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold tabular-nums transition-colors',
+              on ? 'border-current bg-[color-mix(in_srgb,currentColor_14%,transparent)]' : 'border-[color-mix(in_srgb,currentColor_22%,transparent)] bg-[color-mix(in_srgb,currentColor_5%,transparent)]',
+              canReact ? 'hover:border-current' : 'cursor-default', ghost && 'pointer-events-none')}>
+            <ReactionIcon r={r} size={13} />{n}
+            {f?.kind === 'add' && <>
+              <span aria-hidden className="rx-float pointer-events-none absolute left-1/2 bottom-full z-[5]"><ReactionIcon r={r} size={16} /></span>
+              {[0, 60, 120, 180, 240, 300].map((a) => (
+                <span key={a} aria-hidden className="rx-spark pointer-events-none absolute left-1/2 top-1/2 -ml-[2px] -mt-[2px] w-[4px] h-[4px] rounded-full bg-current"
+                  style={{ '--a': `${a}deg` } as React.CSSProperties} />
+              ))}
+            </>}
+            {f?.kind === 'remove' && <span aria-hidden className="rx-sink pointer-events-none absolute left-1/2 top-1/2 z-[5] grayscale"><ReactionIcon r={r} size={14} /></span>}
+          </button>
+        )
+      })}</div>}
+      {canReact && (
+        // Only while the note is hovered (or the opened note; always on touch screens, where nothing hovers). Hidden,
+        // it takes no room — the reactions sit centred — and as it grows in it nudges them over.
+        <button type="button" aria-label="Add a reaction" title="Add a reaction"
+          onClick={(e) => setPicker(picker ? null : e.currentTarget.getBoundingClientRect())}
+          className={cn('shrink-0 inline-flex items-center justify-center overflow-hidden rounded-full h-[22px] hover:!opacity-100 transition-all duration-200 ease-out',
+            'border-[color-mix(in_srgb,currentColor_22%,transparent)] hover:border-current',
+            picker ? 'w-[30px] border opacity-70' + (used.length ? ' ml-1' : '')
+              : cn('w-0 border-0 opacity-0',
+                '[.cork-note:hover_&]:w-[30px] [.cork-note:hover_&]:border [.cork-note:hover_&]:opacity-70',
+                '[[role=dialog]:hover_&]:w-[30px] [[role=dialog]:hover_&]:border [[role=dialog]:hover_&]:opacity-70',
+                'focus-visible:w-[30px] focus-visible:border focus-visible:opacity-100',
+                '[@media(hover:none)]:w-[30px] [@media(hover:none)]:border [@media(hover:none)]:opacity-70',
+                used.length > 0 && '[.cork-note:hover_&]:ml-1 [[role=dialog]:hover_&]:ml-1 focus-visible:ml-1 [@media(hover:none)]:ml-1'))}>
+          <SmilePlus size={14} className="shrink-0" />
+        </button>
+      )}
+      {picker && <ReactionPicker at={picker} post={post} rx={rx} onPick={react} onClose={() => setPicker(null)} />}
+    </div>
+  )
+}
+
+/** The reaction picker: every reaction in a grid, yours ticked — pick one to add it (or take it back) */
+function ReactionPicker({ at, post, rx, onPick, onClose }: { at: DOMRect; post: string; rx: Rx; onPick: (id: string) => void; onClose: () => void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', key)
+    window.addEventListener('scroll', onClose, true)
+    window.addEventListener('resize', onClose)
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('scroll', onClose, true); window.removeEventListener('resize', onClose) }
+  }, [onClose])
+  const W = 248
+  const left = Math.max(8, Math.min(at.left, window.innerWidth - W - 8))
+  const below = at.bottom + 8 + 170 < window.innerHeight
+  return createPortal(
+    <div className="fixed inset-0 z-[120]" onClick={(e) => { e.stopPropagation(); onClose() }}>
+      <div role="dialog" aria-label="Pick a reaction" onClick={(e) => e.stopPropagation()}
+        className="absolute rounded-xl border border-[#c4ae83] bg-[#fbf6ea] p-2 shadow-[0_14px_30px_-12px_rgba(40,25,10,0.55)]"
+        style={{ left, width: W, ...(below ? { top: at.bottom + 6 } : { bottom: window.innerHeight - at.top + 6 }) }}>
+        <p className="px-1 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8a7a62]">React</p>
+        <div className="grid grid-cols-6 gap-0.5">
+          {REACTIONS.map((r) => {
+            const on = rx.mine(post, r.id)
+            return (
+              <button key={r.id} type="button" title={r.name} aria-label={r.name} aria-pressed={on}
+                onClick={() => { onPick(r.id); onClose() }}
+                className={cn('h-9 rounded-lg flex items-center justify-center transition-transform hover:scale-125 hover:bg-[#efe4cc]', on && 'bg-[#e6d7b6] ring-1 ring-[#7a5230]')}>
+                <ReactionIcon r={r} size={20} />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>, document.body)
 }
 
 export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wall' }>; ctx: BlockContext }) {
@@ -73,23 +186,6 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
     '--b-accent': ink, '--b-line': mix(ink, w.color, 0.55), '--b-hover': mix(ink, w.color, 0.9),
   } as React.CSSProperties
 
-  const Reactions = ({ p }: { p: WallPost }) => (
-    <div className="mt-2.5 flex flex-wrap gap-1">
-      {REACTIONS.map((r) => {
-        const n = rx.count(p.id, r.id), on = rx.mine(p.id, r.id)
-        return (
-          <button key={r.id} type="button" disabled={!canReact}
-            onClick={(e) => { e.stopPropagation(); rx.toggle(p.id, r.id) }}
-            title={canReact ? r.name : 'Join the community to react'} aria-label={`${r.name}${n ? ` · ${n}` : ''}`} aria-pressed={on}
-            className={cn('inline-flex items-center gap-1 rounded-[3px] border px-1.5 py-0.5 text-[11px] font-bold tabular-nums transition-colors',
-              on ? 'border-current bg-[color-mix(in_srgb,currentColor_12%,transparent)]' : 'border-[color-mix(in_srgb,currentColor_22%,transparent)]',
-              canReact ? 'hover:border-current' : 'cursor-default', !n && !on && 'opacity-60')}>
-            <ReactionIcon r={r} size={13} />{n > 0 && n}
-          </button>
-        )
-      })}
-    </div>
-  )
 
   // isolate: the buttons' "always above the notes" stays inside the wall — never over a popup (the note editor, an opened note)
   return (
@@ -149,7 +245,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                       a sticker is decoration — nothing under it */}
                   {(!p.look?.kind || p.look.kind === 'note') && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
                   {/* a sticker is decoration and a poll has its votes — the rest get reactions */}
-                  {p.look?.kind !== 'sticker' && p.look?.kind !== 'poll' && <Reactions p={p} />}
+                  {p.look?.kind !== 'sticker' && p.look?.kind !== 'poll' && <ReactionRow post={p.id} rx={rx} canReact={canReact} />}
                 </NoteCard>
               )
             }} />
@@ -175,7 +271,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                 )}
               </>}>
               <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-50">{ctx.community.name} · {timeAgo(open.at)}</p>
-              {open.look?.kind !== 'poll' && <Reactions p={open} />}
+              {open.look?.kind !== 'poll' && <ReactionRow post={open.id} rx={rx} canReact={canReact} />}
             </NoteCard>
           </div>
         </div>, document.body)}

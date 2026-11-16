@@ -22,8 +22,11 @@ export function CommunityCard({ c, big = false }: { c: Community; big?: boolean 
         <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.35) 0, transparent 40%), radial-gradient(circle at 85% 70%, rgba(255,255,255,0.18) 0, transparent 35%)' }} />
       </div>
       <div className="px-5 pb-5 -mt-9 relative">
-        <div className="w-[72px] h-[72px] rounded-2xl border-4 border-[#f3e9d3] shadow-lg flex items-center justify-center text-3xl font-black text-white" style={{ background: c.color, transition: 'background 0.5s' }}>
-          {(c.name.trim()[0] || '★').toUpperCase()}
+        <div className="w-[72px] h-[72px] rounded-2xl border-4 border-[#f3e9d3] shadow-lg flex items-center justify-center text-3xl font-black text-white overflow-hidden" style={{ background: c.color, transition: 'background 0.5s' }}>
+          {c.page?.emblem
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={c.page.emblem} alt="" className="w-full h-full object-cover" />
+            : (c.name.trim()[0] || '★').toUpperCase()}
         </div>
         <h3 className="mt-3 text-xl font-bold text-ink leading-tight">{c.name.trim() || 'Your community'}</h3>
         <p className="text-sm text-slate-500 mt-0.5 min-h-[20px]">{c.tagline || <span className="opacity-50">Your tagline</span>}</p>

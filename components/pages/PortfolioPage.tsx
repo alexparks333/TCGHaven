@@ -555,7 +555,7 @@ export default function PortfolioPage() {
                     <PrintingTags card={card} />
                   </div>
                   <div className="text-xs text-slate-500">
-                    {card.set} {card.isFoil && '✨'}
+                    {card.set}
                     {' · '}{formatCurrency(card.currentPrice)} ea
                   </div>
                 </div>
