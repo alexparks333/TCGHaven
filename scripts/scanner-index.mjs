@@ -13,6 +13,8 @@
  *   npm run scanner-index -- publish-android <card-fingerprint.onnx>
  *       The same model for the Android app (tools/scanner-ai/convert_onnx.py), under the version
  *       already published — it must be made from the same .pt as that version's Core ML file.
+ *   npm run scanner-index -- prune
+ *       Takes now-hidden catalog cards out of the index (update does this first too).
  *   npm run scanner-index -- update [--max 3000]
  *       Fingerprints catalog cards that aren't in the index yet (new sets, photos that arrived
  *       later) and uploads the catalogs that changed. Needs Python with tools/scanner-ai's
@@ -157,10 +159,49 @@ if (cmd === 'publish-android') {
   process.exit(0)
 }
 
+/** Takes catalog cards that are now hidden out of the published index. The scan route refuses a catalog
+ *  holding under 80% of its index's count (lib/scan/server.ts CATALOG_FLOOR), so an index that kept hidden
+ *  cards turned a big hide into "busy" for every scan of that game — 2026-11-16, when 2,918 duplicate
+ *  Lorcana cards were hidden. Reads `hidden` from the card docs themselves (the snapshot can lag a hide
+ *  until that game's next sync). Returns how many fingerprints it removed. */
+async function pruneHidden(manifest) {
+  const { collection, getDocs, query, where } = await import('firebase/firestore')
+  let removed = 0
+  for (const catalog of CATALOGS) {
+    if (!manifest.catalogs?.[catalog]) continue
+    const hiddenSnap = await getDocs(query(collection(db, 'catalog', catalog, 'cards'), where('hidden', '==', true)))
+    const hidden = new Set(hiddenSnap.docs.map((d) => d.id))
+    if (hidden.size === 0) continue
+    const ids = JSON.parse(Buffer.from(await download(`index-${catalog}.json`)).toString('utf8'))
+    const keep = ids.map((id, i) => [id, i]).filter(([id]) => !hidden.has(id))
+    if (keep.length === ids.length) continue
+    const bin = await download(`index-${catalog}.bin`)
+    if (bin.length !== ids.length * DIM) throw new Error(`${catalog}: published index is inconsistent — re-publish it from the Mac`)
+    const out = Buffer.concat(keep.map(([, i]) => Buffer.from(bin.subarray(i * DIM, (i + 1) * DIM))))
+    await upload(`index-${catalog}.bin`, out, 'application/octet-stream')
+    await upload(`index-${catalog}.json`, Buffer.from(JSON.stringify(keep.map(([id]) => id))), 'application/json')
+    manifest.catalogs[catalog] = { count: keep.length, rev: Date.now() }
+    console.log(`   ${catalog}: −${ids.length - keep.length} hidden → ${keep.length}`)
+    removed += ids.length - keep.length
+  }
+  if (removed) await saveManifest(manifest)
+  return removed
+}
+
+if (cmd === 'prune') {
+  const manifest = await readManifest()
+  if (!manifest?.version) throw new Error('Nothing published yet')
+  const n = await pruneHidden(manifest)
+  console.log(n ? `✅ Took ${n} hidden card(s) out of the index` : 'Nothing hidden is in the index')
+  process.exit(0)
+}
+
 if (cmd === 'update') {
   const max = Number(flag('--max') ?? 3000)
   const manifest = await readManifest()
   if (!manifest?.weights) throw new Error('Nothing published yet — publish a full index from the Mac first (docs/scanner-ai.md)')
+  // Hidden cards out first (their count would otherwise keep the scan route refusing that game)
+  await pruneHidden(manifest)
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'scanner-index-'))
   const current = {}
   const todo = []
@@ -207,5 +248,5 @@ if (cmd === 'update') {
   process.exit(0)
 }
 
-console.error('Usage: npm run scanner-index -- status | publish <dir> [--model … --weights … --version …] | publish-android <onnx> | update [--max N]')
+console.error('Usage: npm run scanner-index -- status | publish <dir> [--model … --weights … --version …] | publish-android <onnx> | prune | update [--max N]')
 process.exit(1)
