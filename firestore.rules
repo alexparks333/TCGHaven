@@ -289,11 +289,12 @@ service cloud.firestore {
         && request.resource.data.photoURL == '';
       allow create, update: if signedIn() && request.auth.uid == uid && notBanned()
         && request.resource.data.uid == uid
-        && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'pinDisplay', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'previousUsernames', 'displayName', 'displayNameLower', 'photoURL', 'bio', 'privacy', 'pinDisplay', 'bannerPins', 'createdAt', 'updatedAt'])
         && (!('previousUsernames' in request.resource.data) || (request.resource.data.previousUsernames is list && request.resource.data.previousUsernames.size() <= 3))
         && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
         && (!('privacy' in request.resource.data) || request.resource.data.privacy.keys().hasOnly(['cardex', 'badges']))
         && (!('pinDisplay' in request.resource.data) || (request.resource.data.pinDisplay is list && request.resource.data.pinDisplay.size() <= 6))
+        && (!('bannerPins' in request.resource.data) || (request.resource.data.bannerPins is list && request.resource.data.bannerPins.size() <= 3))
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid
         // Photo-banned by staff: no photo until it's lifted
         && (!photoBanned(uid) || request.resource.data.get('photoURL', '') == '');

@@ -35,6 +35,8 @@ export const BIO_MAX = 160
 // The pin display pad on a profile's Badges tab: this many spots, each holding a badge id the owner
 // picked ('' = empty). Only earned badges are shown, whatever is stored.
 export const PIN_DISPLAY_SPOTS = 6
+// The pins attached to the profile's header banner, beside Settings: this many spots, same rules.
+export const BANNER_PIN_SPOTS = 3
 
 export interface Profile {
   uid: string
@@ -44,12 +46,15 @@ export interface Profile {
   bio: string
   privacy: ProfilePrivacy
   pinDisplay: string[]  // PIN_DISPLAY_SPOTS long, '' for an empty spot
+  bannerPins?: string[] // BANNER_PIN_SPOTS long, '' for an empty spot (absent before the first save)
 }
 
-export function toPinDisplay(v: unknown): string[] {
+function toSpots(v: unknown, n: number): string[] {
   const list = Array.isArray(v) ? v : []
-  return Array.from({ length: PIN_DISPLAY_SPOTS }, (_, i) => (typeof list[i] === 'string' ? (list[i] as string).slice(0, 64) : ''))
+  return Array.from({ length: n }, (_, i) => (typeof list[i] === 'string' ? (list[i] as string).slice(0, 64) : ''))
 }
+export function toPinDisplay(v: unknown): string[] { return toSpots(v, PIN_DISPLAY_SPOTS) }
+export function toBannerPins(v: unknown): string[] { return toSpots(v, BANNER_PIN_SPOTS) }
 
 export type FriendshipStatus = 'pending' | 'accepted'
 
@@ -86,6 +91,7 @@ export function toProfile(uid: string, d: Record<string, unknown> | undefined): 
     bio: String(d.bio ?? ''),
     privacy: { ...DEFAULT_PRIVACY, ...(d.privacy as Partial<ProfilePrivacy> | undefined) },
     pinDisplay: toPinDisplay(d.pinDisplay),
+    bannerPins: toBannerPins(d.bannerPins),
   }
 }
 
@@ -210,9 +216,10 @@ export async function searchProfiles(term: string, me: string): Promise<Profile[
 }
 
 /** Saves what the user curates on their profile: bio, what friends can see, and the pins on display. */
-export async function updateProfileDetails(uid: string, patch: { bio?: string; privacy?: ProfilePrivacy; pinDisplay?: string[] }): Promise<void> {
+export async function updateProfileDetails(uid: string, patch: { bio?: string; privacy?: ProfilePrivacy; pinDisplay?: string[]; bannerPins?: string[] }): Promise<void> {
   const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
   if (patch.pinDisplay) data.pinDisplay = toPinDisplay(patch.pinDisplay)
+  if (patch.bannerPins) data.bannerPins = toBannerPins(patch.bannerPins)
   if (patch.bio !== undefined) data.bio = patch.bio.trim().slice(0, BIO_MAX)
   if (patch.privacy) data.privacy = { cardex: !!patch.privacy.cardex, badges: !!patch.privacy.badges }
   await updateDoc(doc(db, 'profiles', uid), data)

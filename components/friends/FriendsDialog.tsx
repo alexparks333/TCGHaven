@@ -43,7 +43,7 @@ export function FriendsDialog() {
       <div
         role="dialog"
         aria-label="Friends"
-        className="add-card-panel relative w-full md:max-w-[480px] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl flex flex-col h-[86dvh] md:h-[640px] md:max-h-[90dvh] overflow-hidden"
+        className="add-card-panel relative w-full md:max-w-[34rem] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl flex flex-col h-[86dvh] md:h-[52rem] md:max-h-[90dvh] overflow-hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="md:hidden mx-auto mt-2 mb-1 w-10 h-1 rounded-full bg-slate-700" />

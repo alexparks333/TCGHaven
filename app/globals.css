@@ -525,6 +525,57 @@
   .showcase-card, .showcase-card:hover { transition: none; transform: none; }
 }
 
+/* Profile header banner (components/pages/ProfilePage.tsx) — the Haven parchment, a few shades
+   darker and aged: a fibre grain, warm light from the top left, darker toward the corners, and a
+   walnut rule with a gilt line along its foot. */
+.haven-banner {
+  background-color: #b99b6b;
+  background-image:
+    radial-gradient(120% 150% at 12% -10%, rgba(255, 241, 210, 0.42), transparent 55%),
+    radial-gradient(70% 110% at 100% 110%, rgba(74, 50, 31, 0.32), transparent 65%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='220'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.035' numOctaves='3' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.29 0 0 0 0 0.2 0 0 0 0 0.12 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #c8ac7c 0%, #b4955f 70%, #a8885a 100%);
+  background-size: 100% 100%, 100% 100%, 420px 220px, 100% 100%;
+  box-shadow: inset 0 -1px 0 rgba(74, 50, 31, 0.55), inset 0 -3px 0 rgba(233, 199, 120, 0.55), inset 0 -4px 0 rgba(74, 50, 31, 0.45);
+}
+/* A faint engraved flourish: two fine gilt rules near the foot, broken by a small diamond */
+.haven-banner-flourish {
+  background:
+    linear-gradient(90deg, transparent 4%, rgba(74, 50, 31, 0.28) 18%, rgba(74, 50, 31, 0.28) 44%, transparent 48%, transparent 52%, rgba(74, 50, 31, 0.28) 56%, rgba(74, 50, 31, 0.28) 82%, transparent 96%) 0 calc(100% - 12px) / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent 8%, rgba(255, 238, 200, 0.35) 20%, rgba(255, 238, 200, 0.35) 44%, transparent 47%, transparent 53%, rgba(255, 238, 200, 0.35) 56%, rgba(255, 238, 200, 0.35) 80%, transparent 92%) 0 calc(100% - 11px) / 100% 1px no-repeat;
+}
+.haven-banner-flourish::after {
+  content: ''; position: absolute; left: 50%; bottom: 8px; width: 7px; height: 7px;
+  transform: translateX(-50%) rotate(45deg);
+  background: linear-gradient(135deg, #f1d895, #a47630);
+  box-shadow: 0 0 0 1px rgba(74, 50, 31, 0.45);
+}
+/* Banner pins sit right on the parchment: an empty spot is a faint pressed ring in the paper
+   (owner's view only), a pin casts a short shadow onto it */
+.banner-hole {
+  border: 1.5px dashed rgba(74, 50, 31, 0.32);
+  background: radial-gradient(closest-side, rgba(74, 50, 31, 0.1), rgba(74, 50, 31, 0.03) 70%, transparent);
+  box-shadow: inset 0 2px 4px rgba(74, 50, 31, 0.22), 0 1px 0 rgba(255, 241, 210, 0.35);
+}
+.group:hover .banner-hole { border-color: rgba(74, 50, 31, 0.6); }
+/* A placed pin's backing: a copy of the pin turned into a soft dark silhouette, a little bigger
+   and lower than the pin, so the shadow follows the pin's own shape */
+.banner-pin-backing {
+  filter: brightness(0) blur(3px);
+  opacity: 0.25;
+  transform: translateY(3%) scale(1.05);
+}
+.banner-pin:focus-visible .banner-pin-backing { opacity: 0.4; }
+/* The pin's drop shadow sits on the button, which never moves; inside it the pin tilts toward the
+   mouse (BannerPins.tsx BannerPin, like the pin book's tilt) */
+.banner-pin {
+  filter: drop-shadow(0 4px 3px rgba(40, 22, 8, 0.45)) drop-shadow(0 1px 1px rgba(40, 22, 8, 0.35));
+}
+.banner-pin-tilt { transition: transform 0.2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .banner-pin-tilt { transition: none; }
+}
+
 /* Friend request popup (components/friends/FriendRequestToast.tsx) — slides in from the right on
    desktop, drops in from the top on phones. */
 @keyframes friend-toast-in-x { from { transform: translateX(110%); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -635,6 +686,52 @@
   clip-path: polygon(0 0, 100% 0, 100% 34%, 34% 34%, 34% 100%, 0 100%);
 }
 .case-screw::after { content: ''; position: absolute; inset: 45% 15%; background: rgba(60, 38, 10, 0.75); border-radius: 1px; transform: rotate(35deg); }
+
+/* The pin picker (BadgeShowcase.tsx PinPicker) — the profile header's look: the aged parchment
+   banner (.haven-banner) on top, lighter dotted parchment for the pins below. */
+@keyframes picker-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+.picker-in { animation: picker-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+.picker-sheet {
+  border: 2px solid #94805f;
+  box-shadow: 0 1px 2px rgba(120, 80, 30, 0.12), 0 24px 50px -18px rgba(40, 22, 8, 0.6);
+}
+.picker-paper {
+  background-color: #f3e9d3;
+  background-image: radial-gradient(circle at 1px 1px, rgba(122, 101, 74, 0.13) 1px, transparent 0);
+  background-size: 18px 18px;
+}
+.picker-close {
+  color: #2b2014; background: rgba(243, 233, 211, 0.9);
+  border: 1px solid #94805f;
+  transition: background 0.15s ease;
+}
+.picker-close:hover { background: #f3e9d3; }
+.picker-chip {
+  display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
+  padding: 5px 10px; border-radius: 10px;
+  font-size: 12px; font-weight: 600; color: #2b2014;
+  background: rgba(243, 233, 211, 0.85); border: 1px solid #94805f;
+  transition: background 0.15s ease;
+}
+.picker-chip:hover { background: #f3e9d3; }
+.picker-search {
+  color: #2b2014; background: rgba(243, 233, 211, 0.72);
+  border: 1px solid rgba(74, 50, 31, 0.35);
+  box-shadow: inset 0 2px 4px rgba(74, 50, 31, 0.16);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.picker-search::placeholder { color: rgba(74, 50, 31, 0.5); }
+.picker-search:focus { background: rgba(243, 233, 211, 0.92); border-color: #8a5d36; box-shadow: inset 0 2px 4px rgba(74, 50, 31, 0.16), 0 0 0 3px rgba(138, 93, 54, 0.18); }
+.picker-pin { transition: background 0.15s ease; }
+.picker-pin:hover, .picker-pin:focus-visible { background: rgba(214, 196, 159, 0.4); }
+.picker-pin-art { transition: transform 0.25s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.picker-pin:hover .picker-pin-art, .picker-pin:focus-visible .picker-pin-art { transform: translateY(-4px) rotate(-3deg) scale(1.06); }
+.picker-pin-here { background: rgba(214, 196, 159, 0.45); box-shadow: inset 0 0 0 1.5px #8a5d36; }
+@media (prefers-reduced-motion: reduce) {
+  .picker-in { animation: none; }
+  .picker-pin-art { transition: none; }
+  .picker-pin:hover .picker-pin-art { transform: none; }
+}
 
 /* Velvet: warm near-black, a fine pile texture, lighter toward the middle like light falling on it */
 .pinbook-page {

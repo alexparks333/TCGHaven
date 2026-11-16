@@ -15,6 +15,7 @@ in that area:**
 | A game's data source, schema, variants, adding a set | `docs/games.md` |
 | **Adding a whole new game** (e.g. Yu-Gi-Oh!) — every phase and file, step by step | `docs/adding-a-game.md` |
 | Card search ranking, prices / price history, the Cardex | `docs/search-prices-cardex.md` |
+| Graded card prices from PriceCharting (research + plan; not built, waiting on a licence) | `docs/PriceCharting.md` |
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
 | The Creator Studio, Creator Books, the 3D maker's GPU (tickets, hosting options and costs) | `docs/creators.md` |

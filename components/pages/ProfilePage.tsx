@@ -21,6 +21,7 @@ import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
 import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
+import { BannerPins } from '@/components/badges/BannerPins'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
 import {
@@ -109,6 +110,11 @@ function ProfileBody({ uid, viaUsername }: { uid?: string; viaUsername?: string 
 
 // ── Header ──────────────────────────────────────────────────────────────────────────────────
 
+// The banner's gilt rule and flourish along its foot (globals.css .haven-banner) — banner pins
+// stay above it — and the even margin above and below the pins.
+const BANNER_RULE = 14
+const BANNER_MARGIN = 4
+
 function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   profile: Profile
   isMe: boolean
@@ -156,6 +162,24 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     try { await fn() } catch (e) { console.error(e); setError('Something went wrong — please try again.') } finally { setBusy(null) }
   }
 
+  // Banner pins fill the banner top to bottom (an even margin above and below, the gilt rule kept
+  // clear) — but never so wide on a phone that they run into the avatar or Settings
+  const bannerRef = useRef<HTMLDivElement>(null)
+  const [bannerPin, setBannerPin] = useState(0)
+  useEffect(() => {
+    const el = bannerRef.current
+    if (!el) return
+    const fit = () => {
+      const tall = (el.clientHeight - BANNER_RULE - 2 * BANNER_MARGIN) / 1.12
+      const wide = (el.clientWidth - 150 - (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) - 16) / 3.3
+      setBannerPin(Math.max(28, Math.floor(Math.min(tall, wide))))
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [isMe])
+
   const me = user?.uid ?? ''
   const first = profile.displayName.split(' ')[0]
 
@@ -188,20 +212,31 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
 
   return (
     <section className="relative overflow-hidden card-glass">
-      {/* Banner */}
-      <div className="relative h-24 md:h-28 bg-gradient-to-br from-violet-600/30 via-slate-800 to-slate-700/70 overflow-hidden">
-        <Sparkles size={120} className="absolute right-6 -top-6 text-white/15" />
-        <Sparkles size={60} className="absolute right-40 top-10 text-white/10" />
-        {isMe && (
-          <button
-            onClick={() => setSettingsOpen(true)}
-            aria-label="Settings"
-            title="Settings"
-            className="absolute top-3 right-3 flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-xl bg-slate-950/80 backdrop-blur-sm border border-slate-700 text-sm font-semibold text-ink hover:bg-slate-950 shadow-sm transition-colors"
-          >
-            <Settings size={15} />Settings
-          </button>
+      {/* Banner: darker, aged Haven parchment with a walnut-and-gilt rule along its foot; your
+          pins in a stitched leather strap beside Settings (components/badges/BannerPins.tsx) */}
+      <div ref={bannerRef} className="haven-banner relative h-28 md:h-36 overflow-hidden">
+        <span aria-hidden className="haven-banner-flourish absolute inset-0 pointer-events-none" />
+        <Sparkles aria-hidden size={150} strokeWidth={1.25} className="absolute -left-6 -bottom-12 text-[#4a321f]/[0.07] rotate-12" />
+        <Sparkles aria-hidden size={64} strokeWidth={1.25} className="absolute left-[38%] top-3 text-[#4a321f]/[0.08] -rotate-6" />
+        {bannerPin > 0 && (
+          <div className="absolute top-0 flex items-center" style={{ bottom: BANNER_RULE, right: 12, paddingBlock: BANNER_MARGIN }}>
+            <div className={isMe ? 'mr-[52px] sm:mr-[120px]' : undefined}>
+              <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin} />
+            </div>
+          </div>
         )}
+        <div className="absolute top-2.5 right-2.5 md:top-3 md:right-3">
+          {isMe && (
+            <button
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Settings"
+              title="Settings"
+              className="shrink-0 flex items-center gap-1.5 px-2 sm:pl-2.5 sm:pr-3 py-1.5 rounded-xl bg-[#f3e9d3]/90 backdrop-blur-sm border border-[#94805f] text-sm font-semibold text-ink hover:bg-[#f3e9d3] shadow-sm transition-colors"
+            >
+              <Settings size={15} /><span className="hidden sm:inline">Settings</span>
+            </button>
+          )}
+        </div>
       </div>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {/* Phone: identity and the privacy box side by side, the bio full width under them.
@@ -210,7 +245,10 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         {/* Identity */}
         <div className="min-w-0 -mt-12">
           <div className="flex items-end justify-between gap-3">
-            <Avatar seed={profile.uid} name={profile.displayName} photoURL={profile.photoURL} size={96} className="ring-4 ring-slate-900 shadow-lg" />
+            {/* A gilt bezel around the photo */}
+            <span className="case-bead rounded-full p-[3px] shadow-lg shrink-0">
+              <Avatar seed={profile.uid} name={profile.displayName} photoURL={profile.photoURL} size={96} className="ring-[3px] ring-[#ede1c6]" />
+            </span>
             {action && <div className="mb-1 md:hidden">{action}</div>}
           </div>
           <h1 className="text-xl md:text-2xl font-bold text-ink mt-3 leading-tight break-words">{profile.displayName}</h1>
@@ -246,7 +284,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         {/* Right side: your privacy switches, or the friend action */}
         {isMe ? (
           <div className="flex gap-3 items-start pl-3 md:pl-5 pt-3 md:pt-4 md:row-span-2">
-            <div className="hidden md:flex flex-col gap-2 w-[204px] shrink-0">
+            {/* No fixed px width here: the tiles are in rem, and rem grows on wide screens
+                (globals.css html font-size), so a px column let them spill over the privacy box */}
+            <div className="hidden md:flex flex-col gap-2 shrink-0">
             <div className="flex gap-3">
             {/* Friend count, in the Friends page's stat-tile style */}
             <Link

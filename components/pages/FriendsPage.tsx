@@ -257,6 +257,28 @@ function RequestsSection({ sectionRef }: { sectionRef: React.RefObject<HTMLEleme
   )
 }
 
+// The little search box in a section's header (filters that section's own list)
+function SectionSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative w-44 sm:w-60">
+      <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Escape') onChange('') }}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="input-field pl-7 pr-7 py-1.5 text-xs"
+      />
+      {value && (
+        <button type="button" onClick={() => onChange('')} aria-label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-slate-500 hover:text-ink">
+          <X size={12} />
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ── Your friends ────────────────────────────────────────────────────────────────────────────
 
 function FriendsSection({ focus }: { focus: string | null }) {
@@ -272,12 +294,7 @@ function FriendsSection({ focus }: { focus: string | null }) {
   return (
     <section>
       <SectionHeader icon={Users} title="Your friends" count={ready ? friends.length : undefined}>
-        {friends.length > 6 && (
-          <div className="relative w-44 sm:w-56">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search friends" className="input-field pl-7 py-1.5 text-xs" />
-          </div>
-        )}
+        {ready && friends.length > 0 && <SectionSearch value={filter} onChange={setFilter} placeholder="Search friends" />}
       </SectionHeader>
 
       {!ready ? (
@@ -483,9 +500,17 @@ function CommunityBadge({ c, size = 44 }: { c: CommunityEntry; size?: number }) 
 function CommunitiesSection() {
   const { user } = useAuth()
   const { communities, ready } = useMyCommunities(user?.uid)
+  const [filter, setFilter] = useState('')
+  const shown = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return communities
+    return communities.filter((c) => c.name.toLowerCase().includes(q) || (c.tagline || '').toLowerCase().includes(q))
+  }, [communities, filter])
   return (
     <section id="communities" className="scroll-mt-4">
-      <SectionHeader icon={Sparkles} title="Your communities" count={ready ? communities.length : undefined} />
+      <SectionHeader icon={Sparkles} title="Your communities" count={ready ? communities.length : undefined}>
+        {ready && communities.length > 0 && <SectionSearch value={filter} onChange={setFilter} placeholder="Search communities" />}
+      </SectionHeader>
       {!ready ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[0, 1].map((i) => <div key={i} className="card-glass h-[76px] animate-pulse" />)}
@@ -498,7 +523,7 @@ function CommunitiesSection() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {communities.map((c) => (
+          {shown.map((c) => (
             <Link key={c.uid} href={communityPath(c.uid)} className="card-glass p-3.5 flex items-center gap-3 hover:border-slate-700 transition-colors">
               <CommunityBadge c={c} />
               <div className="min-w-0">
@@ -507,6 +532,7 @@ function CommunitiesSection() {
               </div>
             </Link>
           ))}
+          {shown.length === 0 && <div className="text-sm text-slate-500 py-6 col-span-full text-center">No communities match &ldquo;{filter}&rdquo;</div>}
         </div>
       )}
     </section>

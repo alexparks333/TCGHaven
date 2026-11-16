@@ -431,6 +431,16 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
   Saved as `profiles/{uid}.pinDisplay` (badge ids, '' = empty; rules allow a list ≤ 6) via
   `updateProfileDetails`, shown at once and put back if the save fails. Only earned pins show.
   The tab's top-right switch "Pin Display | Full Badges" (Full = the shelf of books).
+- **Banner pins (profile header, 2026-11-15)** — `components/badges/BannerPins.tsx`: up to
+  `BANNER_PIN_SPOTS` (3) earned pins pinned straight onto the profile banner, left of Settings, sized
+  to fill the banner top to bottom (ProfilePage measures it; capped on phones so they clear the
+  avatar). Same picker as the Pin Display (`PinPicker`, exported from BadgeShowcase.tsx). Saved as
+  `profiles/{uid}.bannerPins` (rules allow a list ≤ 3; the field is never written at profile
+  creation, so older rules can't block sign-up). Visitors see them only while the owner's Badges are
+  public, since a pin's look needs their progress. The banner is `.haven-banner` (darker aged
+  parchment) in globals.css. Each pin has a silhouette shadow (`.banner-pin-backing`), tilts toward
+  the mouse with a glint like the pin book, and a visitor's click opens the 3D view. The picker
+  (shared with the Pin Display) is in the same parchment look and has a name search.
 - **Pin art** (`components/badges/BadgePin.tsx`): temporary SVG enamel pins (gold hexagon rim,
   enamel, emblem, ribbon) keyed by `art`; `PIN_SILHOUETTE` is the hole's shape.
 
