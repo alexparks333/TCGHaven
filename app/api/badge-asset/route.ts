@@ -20,9 +20,19 @@ export async function GET(request: Request) {
 
   const res = await fetch(target, { cache: 'no-store' })
   if (!res.ok || !res.body) return NextResponse.json({ error: `Fetch failed (${res.status})` }, { status: 502 })
+  // These files are uploaded by Creators, and this route serves them from OUR origin — so anything a
+  // browser would run (HTML, SVG, XML, scripts) must never be served as itself: that would be script on
+  // tcghaven.org, able to read the viewer's sign-in. Only the kinds badges really use pass through
+  // (pictures, 3D models, JSON/binary kit data); anything else goes out as an inert download. The sandbox
+  // CSP + nosniff stop a browser running it even if it's opened directly.
+  const type = (res.headers.get('content-type') ?? '').toLowerCase().split(';')[0].trim()
+  const safe = /^(image\/(png|jpe?g|webp|gif|avif)|model\/[a-z0-9.+-]+|application\/(octet-stream|json))$/.test(type)
   return new NextResponse(res.body, {
     headers: {
-      'Content-Type': res.headers.get('content-type') ?? 'application/octet-stream',
+      'Content-Type': safe ? type : 'application/octet-stream',
+      ...(safe ? {} : { 'Content-Disposition': 'attachment' }),
+      'Content-Security-Policy': "sandbox; default-src 'none'",
+      'X-Content-Type-Options': 'nosniff',
       // Lets the 3D viewer show real download progress
       ...(res.headers.get('content-length') ? { 'Content-Length': res.headers.get('content-length')! } : {}),
       // Each upload gets a new file name (and token), so a URL's content never changes. s-maxage
