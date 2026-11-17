@@ -47,16 +47,29 @@ const apply = process.argv.includes('--apply')
 // TCGplayer names a card's Epic / Enchanted / Iconic version 'Elsa - Snow Queen (Epic)'; Lorcast calls that same #210
 // card just 'Elsa - Snow Queen' — so that one ending is ignored. Other endings (Oversized, Promo…) are different products.
 const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/[’‘]/g, "'").replace(/ \((epic|enchanted|iconic)\)$/, '')
-const num = (n) => parseInt(String(n ?? ''), 10)
+// The full collector number, letter kept: "4a" ≠ "4b" (Dalmatian Puppy 4a–4e are five different arts);
+// "0/204" and "007" read as "0" and "7"
+const num = (n) => String(n ?? '').split('/')[0].trim().toLowerCase().replace(/^0+(?=\w)/, '')
+// TCGplayer puts a lettered card's number in its name — "Dalmatian Puppy - Tail Wagger (4a/204)", number "4" —
+// so that ending is the real number, and comes off the name
+const parts = (c) => {
+  const m = String(c.name ?? '').match(/^(.*) \((\d+[a-z]?)\/\d+\)$/i)
+  return m ? { name: m[1], number: m[2] } : { name: c.name, number: c.number }
+}
 
 const snap = await getDocs(collection(db, 'catalog', 'lorcana', 'cards'))
 const all = snap.docs.map((d) => ({ ref: d.ref, ...d.data(), id: d.id }))
 const lorcast = all.filter((c) => !c.id.startsWith('tcg-'))
-const twinKey = (c) => `${c.setName}|${norm(c.name)}|${num(c.number)}`
+const twinKey = (c) => { const p = parts(c); return `${c.setName}|${norm(p.name)}|${num(p.number)}` }
 const lorcastKeys = new Set(lorcast.map(twinKey))
 
 const copies = all.filter((c) => c.id.startsWith('tcg-') && !c.hidden)
-const twins = copies.filter((c) => lorcastKeys.has(twinKey(c)))
+// --ids <file.json>: hide exactly these tcg- cards instead (checked by hand — e.g. the same card spelled
+// differently, "Te Ka" / "Te Kā", or a "(Foil)" product whose Lorcast twin already carries the foil price)
+const idsFile = process.argv.includes('--ids') ? process.argv[process.argv.indexOf('--ids') + 1] : null
+const listed = idsFile ? new Set(JSON.parse(fs.readFileSync(idsFile, 'utf8'))) : null
+const twins = listed ? copies.filter((c) => listed.has(c.id)) : copies.filter((c) => lorcastKeys.has(twinKey(c)))
+if (listed) console.log(`Hiding a hand-checked list: ${listed.size} ids, ${twins.length} of them visible tcg- cards.`)
 const lorcastSets = new Set(lorcast.map((c) => c.setName))
 const leftInRealSets = copies.filter((c) => !lorcastKeys.has(twinKey(c)) && lorcastSets.has(c.setName))
 
