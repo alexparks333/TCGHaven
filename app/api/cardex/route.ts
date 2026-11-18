@@ -31,7 +31,10 @@ export async function GET(request: Request) {
   const game = searchParams.get('game')
   const setName = searchParams.get('set')
 
-  if (!game || !setName) return NextResponse.json([])
+  // q= instead of set= → the whole game: every set's cards whose name (or number) matches —
+  // the Cardex search box's "All {game}" scope
+  const q = (searchParams.get('q') ?? '').trim()
+  if (!game || (!setName && q.length < 2)) return NextResponse.json([])
   if (game !== 'lorcana' && game !== 'riftbound' && game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh' && !isTcgplayerSourced(game)) return NextResponse.json([])
 
   // loadVisibleCatalog already excludes hidden cards (via the in-memory cache described in
@@ -44,7 +47,10 @@ export async function GET(request: Request) {
   // (Alt Art/Overnumbered/Signature variants share their base card's bare number; see
   // CLAUDE.md §9), so the "a"/"*" suffix is only added afterward, for display. Pokemon numbers
   // never carry that suffix, so riftboundDisplayNumber is a no-op for them (no publicCode field).
-  const cards = sortCatalogCards(visible.filter((c) => c.setName === setName))
+  const picked = setName
+    ? sortCatalogCards(visible.filter((c) => c.setName === setName))
+    : searchWholeGame(visible, q)
+  const cards = picked
     .map((c) => ({
       id:         c.id,
       // Yu-Gi-Oh!: the version too, as search and Add Card show it (lib/api/yugioh.ts yugiohDisplayName)
@@ -71,4 +77,33 @@ export async function GET(request: Request) {
   // Public catalog data: cached by Vercel's CDN, refreshed in the background (prices change at most
   // every few hours with the sync)
   return NextResponse.json(cards, { headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400' } })
+}
+
+// Most results a whole-game search returns — a one-letter-ish name ("a") would otherwise send a
+// whole game's catalog (MTG's is 100k+ cards)
+const GAME_SEARCH_LIMIT = 1000
+
+// Accents and case don't matter ("pokemon" finds "Pokémon")
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+// Same idea as the Cardex's in-set filter (CardexPage.tsx matchesSearch): the name contains the
+// query, or the collector number is it. Across a whole game a number has to match exactly
+// ("42" → every set's #42, not #142 and #420 too); leading zeros and a "#" are ignored.
+function searchWholeGame(cards: CatalogCard[], query: string): CatalogCard[] {
+  const q = fold(query)
+  const num = q.replace(/^#/, '').replace(/^0+(?=.)/, '')
+  const matches = cards.filter((c) => {
+    if (fold(c.variant ? `${c.name} ${c.variant}` : c.name).includes(q)) return true
+    const n = (c.publicCode ?? c.number ?? '').toLowerCase().replace(/^0+(?=.)/, '')
+    const bare = (c.number ?? '').toLowerCase().replace(/^0+(?=.)/, '')
+    return !!num && (n === num || bare === num || (c.number ?? '').toLowerCase() === q)
+  })
+  // Grouped by set, in collector-number order within each (the client orders the sets)
+  const bySet = new Map<string, CatalogCard[]>()
+  for (const c of matches) {
+    const list = bySet.get(c.setName)
+    if (list) list.push(c)
+    else bySet.set(c.setName, [c])
+  }
+  return Array.from(bySet.values()).flatMap((list) => sortCatalogCards(list)).slice(0, GAME_SEARCH_LIMIT)
 }

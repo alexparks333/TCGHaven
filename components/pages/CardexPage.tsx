@@ -647,6 +647,10 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   // on that card
   const [addPrefill, setAddPrefill] = useState<CardSearchResult | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  // What the search box searches: the set that's showing, or every set in the game
+  const [searchScope, setSearchScope] = useState<'set' | 'game'>('set')
+  // The whole-game search's cards, for the query and game they answer (undefined = on its way)
+  const [gameResults, setGameResults] = useState<{ key: string; cards: CatalogCard[] | null } | undefined>(undefined)
   // Riftbound-only rarity toggle filter — persists across sets/tabs on purpose (switching from
   // Origins to Spiritforged with "Alt Art" toggled off should keep it off), so this isn't reset
   // alongside searchQuery. A rarity in this set is hidden; empty set means nothing's hidden.
@@ -960,7 +964,28 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   }, [loading, activeGame, activeSet])
 
   // A search left over from a previous set/game is almost never what you want on the next one.
-  useEffect(() => { setSearchQuery('') }, [activeGame, activeSet])
+  // A whole-game search stays when you pick a set (you might be browsing from its results), but
+  // not when you change game.
+  const scopeRef = useRef(searchScope)
+  scopeRef.current = searchScope
+  useEffect(() => { if (scopeRef.current === 'set') setSearchQuery('') }, [activeSet])
+  useEffect(() => { setSearchQuery('') }, [activeGame])
+
+  // Whole-game search: every set's matching cards from the server, a moment after typing stops
+  const gameQuery = searchScope === 'game' && activeGame !== 'personal' ? searchQuery.trim() : ''
+  const gameSearchKey = gameQuery.length >= 2 ? `${activeGame}:${gameQuery.toLowerCase()}` : ''
+  useEffect(() => {
+    if (!gameSearchKey || activeGame === 'personal') return
+    let stale = false
+    const t = setTimeout(() => {
+      fetch(`/api/cardex?game=${baseGameOf(activeGame)}&q=${encodeURIComponent(gameQuery)}${activeGame === 'pokemon-jp' ? '&lang=ja' : ''}`)
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .then((cards: CatalogCard[]) => { if (!stale) setGameResults({ key: gameSearchKey, cards }) })
+        .catch(() => { if (!stale) setGameResults({ key: gameSearchKey, cards: null }) })
+    }, 250)
+    return () => { stale = true; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameSearchKey])
 
   // If the active game isn't one this user tracks (tracked games changed after this page first
   // rendered — e.g. the Firestore preference load landed with a different list than the
@@ -1031,15 +1056,19 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
   // anything else present sorts after, alphabetically, so a genuinely new/unexpected rarity (a
   // future set's new tier before this app has been updated for it) shows up as a toggle instead
   // of silently bypassing the filter.
+  // Whole-game search in progress (results undefined while on the way, null if it failed)
+  const gameSearching = !!gameSearchKey
+  const gameCardsReady = gameSearching && gameResults?.key === gameSearchKey ? gameResults.cards : undefined
+
   const rarityFilters = useMemo(() => {
     if (!RARITY_TOGGLE_GAMES.has(baseGame)) return []
-    const present = new Set(enriched.map((c) => c.rarity).filter((r): r is string => !!r))
+    const present = new Set((gameCardsReady ?? enriched).map((c) => c.rarity).filter((r): r is string => !!r))
     return Array.from(present).sort((a, b) => {
       const pa = CARDEX_RARITY_ORDER[a] ?? 9999
       const pb = CARDEX_RARITY_ORDER[b] ?? 9999
       return pa !== pb ? pa - pb : a.localeCompare(b)
     })
-  }, [baseGame, enriched])
+  }, [baseGame, enriched, gameCardsReady])
 
   const filteredEnriched = useMemo(() => {
     let list = enriched
@@ -1047,6 +1076,26 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
     if (RARITY_TOGGLE_GAMES.has(baseGame) && hiddenRarities.size > 0) list = list.filter((c) => !hiddenRarities.has(c.rarity))
     return list
   }, [enriched, searchQuery, baseGame, hiddenRarities])
+
+  // The whole-game search's results, owned/priced like the set grid, grouped by set in the order
+  // the set picker lists them (sets it doesn't list go last)
+  const gameSearchGroups = useMemo(() => {
+    if (!gameCardsReady) return []
+    const order = new Map<string, number>()
+    for (const g of groupsByGame[catalogGame] ?? []) for (const set of g.sets) if (!order.has(set.name)) order.set(set.name, order.size)
+    const bySet = new Map<string, (CatalogCard & { owned: boolean; quantity: number; ownedFoil: boolean; slab?: SlabInfo; marketPrice: number })[]>()
+    for (const cc of gameCardsReady) {
+      if (RARITY_TOGGLE_GAMES.has(baseGame) && hiddenRarities.has(cc.rarity)) continue
+      const owned = picker ? { owned: true, quantity: 0, ownedFoil: false } : getOwnedInfo(cc, gameCards, baseGame)
+      const card = { ...cc, ...owned, marketPrice: catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
+      const list = bySet.get(cc.setName)
+      if (list) list.push(card)
+      else bySet.set(cc.setName, [card])
+    }
+    return Array.from(bySet.entries())
+      .sort(([a], [b]) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity))
+      .map(([setName, cards]) => ({ setName, set: (groupsByGame[catalogGame] ?? []).flatMap((g) => g.sets).find((x) => x.name === setName), cards }))
+  }, [gameCardsReady, groupsByGame, catalogGame, baseGame, hiddenRarities, picker, gameCards])
 
   const isSpecial = activeSet.fromInventory
   const setKey = `${activeGame}:${activeSet.name}`
@@ -1201,15 +1250,37 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
 
             {/* Search within the active set/bucket */}
             {!setsLoading && activeSet.name && (
-              <div className="relative mb-4">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={`Search ${activeSet.label ?? activeSet.name}…`}
-                  className="input-field pl-9"
-                />
+              <div className="flex items-center gap-2 mb-4">
+                <div className="relative flex-1 min-w-0">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={searchScope === 'game' ? `Search all ${CARDEX_TAB_LABELS[catalogGame]} cards…` : `Search ${activeSet.label ?? activeSet.name}…`}
+                    className={cn('input-field pl-9', searchQuery && 'pr-9')}
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-ink">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                {/* Where the search looks: this set, or every set in the game */}
+                <div role="radiogroup" aria-label="Search in" className="flex shrink-0 rounded-lg border border-slate-800 bg-slate-900/50 p-0.5">
+                  {([['set', 'This set'], ['game', `All ${CARDEX_TAB_LABELS[catalogGame]}`]] as const).map(([scope, label]) => (
+                    <button
+                      key={scope}
+                      role="radio"
+                      aria-checked={searchScope === scope}
+                      onClick={() => setSearchScope(scope)}
+                      className={cn('px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors', searchScope !== scope && 'text-slate-500 hover:text-ink')}
+                      style={searchScope === scope ? { backgroundColor: gameColor + '28', color: gameColor } : undefined}
+                    >
+                      {scope === 'game' ? <><span className="hidden sm:inline">{label}</span><span className="sm:hidden">All sets</span></> : label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1245,6 +1316,82 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
               </div>
             )}
 
+            {/* Whole-game search results, in place of the set */}
+            {gameSearching && (
+              gameCardsReady === undefined ? (
+                <LogoLoader label={`Searching all ${CARDEX_TAB_LABELS[catalogGame]} cards…`} />
+              ) : gameCardsReady === null ? (
+                <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
+                  <div className="text-slate-400 font-medium">Couldn’t search right now — try again in a moment</div>
+                </div>
+              ) : gameSearchGroups.length === 0 ? (
+                <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
+                  <div className="text-4xl mb-3">🔍</div>
+                  <div className="text-slate-400 font-medium">No {CARDEX_TAB_LABELS[catalogGame]} cards match &quot;{searchQuery.trim()}&quot;</div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {gameCardsReady.length >= 1000 && (
+                    <div className="text-xs text-slate-500">Showing the first 1,000 matches — type more of the name to narrow it down.</div>
+                  )}
+                  {(() => {
+                    // One running list across every set, so a picker's Shift+Click range can span sets
+                    const flat = gameSearchGroups.flatMap((g) => g.cards)
+                    let i = 0
+                    return gameSearchGroups.map((group) => (
+                      <section key={group.setName}>
+                        <div className="flex items-baseline justify-between gap-3 mb-2">
+                          {group.set ? (
+                            <button onClick={() => setActiveSet(group.set!)} className="text-sm font-semibold text-ink hover:underline text-left" title="Open this set">
+                              {group.set.label ?? group.setName}
+                            </button>
+                          ) : (
+                            <span className="text-sm font-semibold text-ink">{group.setName}</span>
+                          )}
+                          <span className="text-xs text-slate-500 shrink-0">{group.cards.length} {group.cards.length === 1 ? 'card' : 'cards'}</span>
+                        </div>
+                        <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+                          {group.cards.map((card) => {
+                            const idx = i++
+                            return (
+                              <CardTile
+                                key={card.id}
+                                eagerArt={idx < FIRST_SCREEN_ART}
+                                card={card}
+                                gameColor={gameColor}
+                                game={baseGame}
+                                language={japanese ? 'ja' : undefined}
+                                isHovered={hoveredId === card.id}
+                                onHover={() => setHoveredId(card.id)}
+                                onLeave={() => setHoveredId(null)}
+                                onZoom={openZoom}
+                                onAdd={readOnly ? undefined : setAddPrefill}
+                                pick={picker && {
+                                  on: picker.selected.has(card.id),
+                                  onClick: (shift) => {
+                                    const pickGame = (catalogGame === 'pokemon-jp' ? 'pokemon' : catalogGame) as Game
+                                    const last = lastPicked.current ? flat.findIndex((c) => c.id === lastPicked.current) : -1
+                                    if (shift && last >= 0) {
+                                      const [a, b] = last < idx ? [last, idx] : [idx, last]
+                                      picker.onSelect(flat.slice(a, b + 1), true, pickGame)
+                                    } else {
+                                      picker.onSelect([card], !picker.selected.has(card.id), pickGame)
+                                    }
+                                    lastPicked.current = card.id
+                                  },
+                                }}
+                              />
+                            )
+                          })}
+                        </div>
+                      </section>
+                    ))
+                  })()}
+                </div>
+              )
+            )}
+
+            {!gameSearching && (<>
             {/* Progress bar (catalog-backed sets only; not when picking cards) */}
             {setReady && !isSpecial && totalCount > 0 && !picker && (
               <div className="mb-5 card-glass px-4 py-3">
@@ -1332,6 +1479,7 @@ export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; 
                 <div className="text-slate-400 font-medium">No cards match &quot;{searchQuery}&quot;</div>
               </div>
             )}
+            </>)}
           </>
         )}
       </div>
