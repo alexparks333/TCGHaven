@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { collection, documentId, getDocs, limit, orderBy, query } from 'firebase/firestore'
 import { Loader2, RefreshCw, Layers, Activity, Info } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { cn } from '@/lib/utils'
 import { staffDb } from '@/lib/firebase/staff'
 import { adminFetch } from '@/lib/firebase/authFetch'
@@ -97,7 +98,7 @@ export function StatisticsPage() {
       {error && <div className="mb-4 rounded-xl border border-red-600/40 bg-red-100/20 px-3 py-2 text-sm text-red-600">{error}</div>}
 
       {!days ? (
-        <div className="flex justify-center py-20"><Loader2 size={26} className="animate-spin text-slate-500" /></div>
+        <LogoLoader label="Loading statistics…" />
       ) : !latest ? (
         <Empty>
           No totals yet. They’re worked out twice a day with the price sync (09:00 and 21:00 UTC), or press <b>Refresh now</b>.

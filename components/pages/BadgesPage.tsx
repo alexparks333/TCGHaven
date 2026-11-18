@@ -1,6 +1,6 @@
 'use client'
 
-import { Loader2 } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends } from '@/components/friends/FriendsProvider'
@@ -30,7 +30,7 @@ function Body() {
       {myBadges ? (
         <BadgeLibrary full ownerName={me?.displayName ?? user?.displayName ?? 'You'} badges={myBadges} isMe />
       ) : (
-        <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+        <LogoLoader label="Loading your badges…" />
       )}
     </div>
     </ExtraBooksProvider>

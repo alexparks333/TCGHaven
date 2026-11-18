@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, documentId, getDocs, limit, orderBy, query } from 'firebase/firestore'
 import { Loader2, Plus, Pencil, Trash2, Lock, Crown, Receipt, TrendingUp, X, Check, CreditCard, Clock, MessageSquareWarning } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { cn } from '@/lib/utils'
 import { staffDb } from '@/lib/firebase/staff'
 import type { DailyStats } from '@/lib/stats/types'
@@ -121,7 +122,7 @@ export function FinancesPage() {
       </div>
 
       {!costs ? (
-        <div className="flex justify-center py-12"><Loader2 size={22} className="animate-spin text-slate-500" /></div>
+        <LogoLoader label="Loading finances…" />
       ) : costs.length === 0 ? (
         <Empty>No costs yet. Add each bill — Vercel, Firebase, the Apple Developer Program, your domain, AI tools — and this tracks them every month.</Empty>
       ) : (

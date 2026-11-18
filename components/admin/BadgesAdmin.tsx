@@ -6,6 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import {
   Plus, Pencil, Trash2, Box, Loader2, Search, X, Upload, Check, Cuboid, BookOpen, AlertTriangle, ImageIcon, Sparkles, CheckCircle2, Cpu, Cloud,
 } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { cn } from '@/lib/utils'
 import { badgeAsset } from '@/lib/badgeAssets'
@@ -67,7 +68,7 @@ export function BadgesAdmin() {
     }
   }
 
-  if (!loaded) return <div className="flex justify-center py-24"><Loader2 size={26} className="animate-spin text-slate-500" /></div>
+  if (!loaded) return <LogoLoader label="Loading badges…" />
 
   return (
     <div>

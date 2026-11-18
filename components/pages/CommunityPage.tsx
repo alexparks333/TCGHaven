@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Users, Check, LogOut, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { BlockView, LookScope, Section, type BlockContext } from '@/components/community/blocks'
 import { Medal, METALS } from '@/components/community/Medals'
 import { blockName, homeBlocks, tabBlocks, type Block } from '@/lib/communityBlocks'
@@ -60,7 +61,7 @@ function Body({ uid }: { uid: string }) {
   }, [uid])
   useEffect(() => { memberCount(uid).then(setMembers).catch(() => {}) }, [uid, isMember])
 
-  if (community === undefined) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+  if (community === undefined) return <LogoLoader label="Loading community…" />
   if (!community) {
     return (
       <div className="card-glass max-w-md mx-auto mt-10 p-6 text-center">

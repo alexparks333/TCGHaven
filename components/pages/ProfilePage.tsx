@@ -6,6 +6,7 @@ import {
   BookOpen, Lock, Award, TrendingUp, Pencil, Check, Loader2, UserPlus, UserMinus, Clock, Eye, EyeOff, ChevronRight, Users, Globe,
   Layers, LayoutGrid, Sparkles, Settings, X,
 } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import CardexPage, { CardZoomOverlay, RARITY_COLORS, bestSlab, SlabTileOverlay, type ZoomCardData, type SlabInfo } from './CardexPage'
@@ -52,7 +53,7 @@ function ByUsername({ username }: { username: string }) {
     resolveUsername(username).then((u) => { if (live) setUid(u) }).catch(() => { if (live) setUid(null) })
     return () => { live = false }
   }, [username])
-  if (uid === undefined) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+  if (uid === undefined) return <LogoLoader label="Loading profile…" />
   if (uid === null) return <NotFound />
   return <ProfileBody uid={uid} viaUsername={username} />
 }
@@ -93,7 +94,7 @@ function ProfileBody({ uid, viaUsername }: { uid?: string; viaUsername?: string 
   }, [viaUsername, profile?.username, profile?.uid])
 
   if (profile === undefined || (isMe && !profile)) {
-    return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+    return <LogoLoader label="Loading profile…" />
   }
   if (!profile) return <NotFound />
 
@@ -660,7 +661,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
     )
   }
   if (!isMe && friendCards === undefined) {
-    return <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-slate-500" /></div>
+    return <LogoLoader label={`Loading ${first}’s cards…`} />
   }
   if (unique.length === 0) {
     return <Locked>{isMe ? 'Add cards to your inventory and they’ll show up here.' : `${first} hasn’t added any cards yet.`}</Locked>
@@ -825,7 +826,7 @@ function BadgesTab({ profile, isMe, isFriend, view, onSaved }: { profile: Profil
   }
   const badges = isMe ? myBadges : theirs ?? null
   if (!badges) {
-    return <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-slate-500" /></div>
+    return <LogoLoader label={isMe ? 'Loading your badges…' : `Loading ${first}’s badges…`} />
   }
   if (view === 'full') return <BadgeLibrary ownerName={profile.displayName} badges={badges} isMe={isMe} />
 

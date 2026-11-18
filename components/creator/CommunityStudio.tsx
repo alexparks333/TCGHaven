@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, Home, Plus, Trash2, Check, Copy, Eye, ExternalLink, Loader2, Pencil, BookOpen, ImagePlus, X } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { useCommunity, saveCommunity, HEADER_ASPECT, MAX_TABS, newTabId, type Community, type CommunityLook, type CommunityTab, type CreatorBook } from '@/lib/creatorBooks'
 import { blockName, homeBlocks, newBlock, tabBlocks, type Block } from '@/lib/communityBlocks'
 import { AddBlockMenu, BlockEditor, MembersEditor } from '@/components/creator/BlockEditor'
@@ -47,7 +48,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
   // Leaving the Studio mid-wait still saves the last change
   useEffect(() => () => { clearTimeout(timer.current); pending.current?.() }, [])
 
-  if (!draft) return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+  if (!draft) return <LogoLoader label="Loading your community…" />
 
   // Saves a moment after the last change; a name needs 2 letters first
   function set(p: Partial<Community>) {

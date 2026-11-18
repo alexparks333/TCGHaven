@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Loader2, UserPlus, Link2Off } from 'lucide-react'
+import { LogoLoader } from '@/components/LogoLoader'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { resolveInviteCode, getProfile, profilePath } from '@/lib/firebase/friends'
 
@@ -36,7 +37,7 @@ function InviteRedirect({ code }: { code: string }) {
   }, [code, router])
 
   if (!missing) {
-    return <div className="flex justify-center py-24"><Loader2 size={28} className="animate-spin text-slate-500" /></div>
+    return <LogoLoader label="Loading invite…" />
   }
   return (
     <div className="min-h-[60dvh] flex items-center justify-center">
