@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
 import { catalogPrice, gradingOf } from '@/lib/pricing'
-import { gradedFor, withGraded, type GradingInput } from '@/lib/api/gradedPrices'
+import { gradedFor, withGraded, noteGradedSource, priceReply, type GradingInput, type GradedSource } from '@/lib/api/gradedPrices'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,8 +21,9 @@ interface CatalogCard {
 // isFoil branching to do here, just a direct id -> marketPrice lookup, kept fresh by
 // the 6-hourly cron the same way as the other games (see CLAUDE.md "Price Data").
 export async function POST(req: NextRequest) {
-  const { cards }: { cards: CardInput[] } = await req.json()
-  if (!cards.length) return NextResponse.json({})
+  const body: { cards: CardInput[]; withSources?: boolean } = await req.json()
+  const { cards } = body
+  if (!cards.length) return priceReply(body, {}, {})
 
   const catalog = await loadCatalog<CatalogCard>('onepiece')
   const byId = new Map(catalog.map((c) => [c.id, c]))
@@ -31,12 +32,16 @@ export async function POST(req: NextRequest) {
   // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
   // the Cardex or Personalized Collections.
   const results: Record<string, number> = {}
+  const sources: Record<string, GradedSource> = {}
   for (const card of cards) {
-    const cat = card.apiId ? byId.get(card.apiId) : undefined
-    if (!cat) continue
-    const price = catalogPrice('onepiece', withGraded(cat, graded), { isFoil: (card as { isFoil?: boolean }).isFoil, grading: gradingOf(card) })
+    const raw = card.apiId ? byId.get(card.apiId) : undefined
+    if (!raw) continue
+    const cat = withGraded(raw, graded)
+    const choice = { isFoil: (card as { isFoil?: boolean }).isFoil, grading: gradingOf(card) }
+    const price = catalogPrice('onepiece', cat, choice)
     if (price > 0) results[card.id] = price
+    noteGradedSource(sources, card.id, 'onepiece', cat, choice, graded)
   }
 
-  return NextResponse.json(results)
+  return priceReply(body, results, sources)
 }

@@ -583,7 +583,10 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
   for (const c of ghCards) {
     if (shadowed.has(c.set) || stalePriceSets.has(c.set)) continue
     const entry = priceEntryById.get(c.id)
-    if (entry) ghOut.push({ ...c, ...legacyFields(entry) })
+    // tcgProductId: the TCGplayer product this card is linked to — how PriceCharting's graded
+    // prices find it (docs/PriceCharting.md). Display only; the card's id never changes (rule 34).
+    const pid = Number(linkOf.get(c.id)?.product?.productId)
+    if (entry) ghOut.push({ ...c, ...legacyFields(entry), ...(pid > 0 && { tcgProductId: pid }) })
     else { ghOut.push(c); report.githubOnly.push({ id: c.id, name: c.name, set: c.setName }) }
   }
 

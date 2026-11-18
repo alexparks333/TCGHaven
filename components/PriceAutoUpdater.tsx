@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store'
 import { authFetch } from '@/lib/firebase/authFetch'
 import { loadPriceStatus } from '@/lib/api/priceStatus'
 import type { Card, Game } from '@/lib/types'
+import type { GradedSource } from '@/lib/api/gradedPrices'
 
 // Prices live ONLY in the shared catalog (refreshed twice a day by the scheduled sync) — nothing is
 // ever copied onto a user's own cards anymore. This (mounted once in ClientWrapper, renders
@@ -46,15 +47,20 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
 
 // A graded card's slab, sent with every game's payload: the routes price it from PriceCharting's
 // sales for its grade when there are any (lib/api/gradedPrices.ts — off unless GRADED_PRICES=on).
+// withSources: the routes also say which slabs got a PriceCharting price ({ prices, graded, gradedOn }).
 const slab = (c: Card) => (c.gradingCompany ? { gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier } : {})
-const priceBody = (game: Game, cards: Card[]) => JSON.stringify({ cards: cards.map((c) => ({ ...PRICE_ROUTES[game].payload(c), ...slab(c) })) })
+const priceBody = (game: Game, cards: Card[]) =>
+  JSON.stringify({ withSources: true, cards: cards.map((c) => ({ ...PRICE_ROUTES[game].payload(c), ...slab(c) })) })
+
+interface PriceReply { prices: Record<string, number>; graded: Record<string, GradedSource>; gradedOn: boolean }
+interface SavedPrices { prices: Record<string, number>; baselines: never; graded?: Record<string, GradedSource>; gradedOn?: boolean }
 
 // Everything that decides a card's price — a change to any of these reloads prices.
 const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}:${c.gradingCompany ?? ''}:${c.grade ?? ''}:${c.gradeTier ?? ''}`
 
 // The last successful load, saved per account on this device (see the first-load note in check())
 const savedKey = (uid: string) => `tcghaven-prices:${uid}`
-function readSavedPrices(uid: string): { prices: Record<string, number>; baselines: never } | null {
+function readSavedPrices(uid: string): SavedPrices | null {
   try {
     const raw = localStorage.getItem(savedKey(uid))
     return raw ? JSON.parse(raw) : null
@@ -62,28 +68,35 @@ function readSavedPrices(uid: string): { prices: Record<string, number>; baselin
     return null
   }
 }
-function savePrices(uid: string, data: { prices: Record<string, number>; baselines: unknown }) {
+function savePrices(uid: string, data: { prices: Record<string, number>; baselines: unknown; graded: Record<string, GradedSource>; gradedOn: boolean }) {
   try { localStorage.setItem(savedKey(uid), JSON.stringify({ ...data, at: Date.now() })) } catch { /* full or blocked: fine */ }
 }
 
-/** Today's market price of one card (the shared catalog's, through the same price routes) — for a
- *  friend's card in the profile's zoom view, whose shared copy carries no prices. 0 when unknown. */
-export async function fetchCardPrice(card: Card): Promise<number> {
-  if (!card.apiId) return 0
+/** Today's price of one card (the shared catalog's, through the same price routes) — for a friend's
+ *  card in the profile's zoom view, whose shared copy carries no prices. price 0 when unknown. A slab
+ *  is priced from PriceCharting's sales for its grade when there are any; `source` is then set, and
+ *  the caller must show the PriceCharting credit with the price (PriceChartingCredit). */
+export async function fetchCardPrice(
+  card: Card, slab?: { company: string; grade?: string; tier?: 'pristine' | 'black' | null },
+): Promise<{ price: number; source?: GradedSource }> {
+  if (!card.apiId) return { price: 0 }
   const { url } = PRICE_ROUTES[card.game]
+  const withSlab: Card = slab?.company
+    ? { ...card, gradingCompany: slab.company, grade: slab.grade, gradeTier: slab.tier ?? undefined }
+    : card
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: priceBody(card.game, [card]) })
-    if (!res.ok) return 0
-    const prices = (await res.json()) as Record<string, number>
-    return prices[card.id] ?? 0
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: priceBody(card.game, [withSlab]) })
+    if (!res.ok) return { price: 0 }
+    const reply = (await res.json()) as PriceReply
+    return { price: reply.prices?.[card.id] ?? 0, source: reply.graded?.[card.id] }
   } catch {
-    return 0
+    return { price: 0 }
   }
 }
 
 export function PriceAutoUpdater() {
   const { user, dataLoading } = useAuth()
-  const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setPriceBaselines, setPriceLoad } = useStore()
+  const { cards, trackedGames, setLastPriceRefresh, setPriceStatus, applyLivePrices, setGradedSources, setPriceBaselines, setPriceLoad } = useStore()
 
   // Latest values for the timer/visibility callbacks without re-subscribing every render.
   const latest = useRef({ cards, trackedGames })
@@ -112,6 +125,7 @@ export function PriceAutoUpdater() {
         const saved = readSavedPrices(user.uid)
         if (saved) {
           applyLivePrices(saved.prices)
+          setGradedSources(saved.graded ?? {}, saved.gradedOn ?? false)
           setPriceBaselines(saved.baselines)
           setPriceLoad({ done: 1, total: 1, complete: true })
         }
@@ -137,11 +151,14 @@ export function PriceAutoUpdater() {
       if (firstLoad) setPriceLoad({ done: 0, total, complete: false })
 
       let failed = false
-      const fresh: { prices: Record<string, number>; baselines: unknown } = { prices: {}, baselines: null }
+      const fresh = { prices: {} as Record<string, number>, baselines: null as unknown, graded: {} as Record<string, GradedSource>, gradedOn: false }
 
-      // 1. Live prices (cheap server lookups), one request per game, in parallel.
+      // 1. Live prices (cheap server lookups), one request per game, in parallel — plus which slabs
+      //    were priced from PriceCharting (shown by GradedPriceTag with the citation link).
       const pricesTask = (async () => {
         const prices: Record<string, number> = {}
+        const graded: Record<string, GradedSource> = {}
+        let gradedOn = false
         await Promise.all(gamesToLoad.map(async (game) => {
           const { url } = PRICE_ROUTES[game]
           try {
@@ -151,7 +168,10 @@ export function PriceAutoUpdater() {
               body: priceBody(game, eligible.filter((c) => c.game === game)),
             })
             if (!res.ok) { failed = true; return }
-            Object.assign(prices, await res.json())
+            const reply = (await res.json()) as PriceReply
+            Object.assign(prices, reply.prices)
+            Object.assign(graded, reply.graded)
+            gradedOn ||= reply.gradedOn
           } catch {
             failed = true
           } finally {
@@ -159,7 +179,8 @@ export function PriceAutoUpdater() {
           }
         }))
         applyLivePrices(prices)
-        fresh.prices = prices
+        setGradedSources(graded, gradedOn)
+        Object.assign(fresh, { prices, graded, gradedOn })
       })()
 
       // 2. Window baselines from the shared history — at the same time as the live prices.
@@ -203,7 +224,7 @@ export function PriceAutoUpdater() {
         setPriceLoad({ done: total, total, complete: true })
       }
     }
-  }, [user, setPriceStatus, applyLivePrices, setPriceBaselines, setLastPriceRefresh, setPriceLoad])
+  }, [user, setPriceStatus, applyLivePrices, setGradedSources, setPriceBaselines, setLastPriceRefresh, setPriceLoad])
 
   // After sign-in + data load, when owned cards / tracked games change, on a timer,
   // and when the tab comes back into view.

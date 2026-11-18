@@ -53,6 +53,8 @@ assert.equal(productIdOf({ id: 'OP01-003', tcgProductId: 500001 }), 500001)
 assert.equal(productIdOf({ id: 'tcg-600001' }), 600001)
 assert.equal(productIdOf({ id: 'jp-42382' }), 42382)
 assert.equal(productIdOf({ id: 'base1-4' }), null, 'Pokémon EN does not carry one yet')
+assert.equal(productIdOf({ id: 'rwb-670598', imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/670598_in_1000x1000.jpg' }), 670598, 'from a TCGplayer image')
+assert.equal(productIdOf({ id: 'x', imageUrl: 'https://images.pokemontcg.io/base1/4_hires.png' }), null)
 
 // Matching: one card per product id; hidden cards and shared ids skipped
 const catalog = [

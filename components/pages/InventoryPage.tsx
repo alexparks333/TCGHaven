@@ -1,6 +1,7 @@
 'use client'
 
 import { PrintingTags } from '@/components/PrintingTags'
+import { GradedPriceTag } from '@/components/GradedPriceTag'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter, ScanLine } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -752,6 +753,7 @@ export default function InventoryPage() {
                           {rep.set}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}
                         </div>
                         <div className="hidden md:block text-xs text-slate-500">#{rep.number}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
+                        {hasMarket && <GradedPriceTag card={rep} className="mt-1" />}
                         {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
@@ -940,6 +942,7 @@ export default function InventoryPage() {
                         {card.set}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}
                       </div>
                       <div className="hidden md:block text-xs text-slate-500">#{card.number}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
+                      {hasMarket && <GradedPriceTag card={card} className="mt-1" />}
                       {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>

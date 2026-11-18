@@ -129,14 +129,18 @@ export function pickByTcgId(rows) {
   return { byTcg, ambiguous }
 }
 
-/** A catalog card's TCGplayer product id: `tcgProductId`, or built into the id (`tcg-123`,
- *  Japanese Pokémon `jp-123`). null when the card doesn't carry one (Pokémon EN, Magic, Lorcana,
- *  Riftbound don't save it yet — docs/PriceCharting.md). */
+/** A catalog card's TCGplayer product id: `tcgProductId`; else built into the id (`tcg-123`,
+ *  Japanese Pokémon `jp-123`); else read from a TCGplayer image link
+ *  (tcgplayer-cdn.tcgplayer.com/product/670598_in_1000x1000.jpg — most Riftbound cards, like One
+ *  Piece's productIdFromImage). null when none of those (Pokémon EN, Magic, most Lorcana —
+ *  docs/PriceCharting.md). */
 export function productIdOf(card) {
   const n = Number(card?.tcgProductId)
   if (Number.isInteger(n) && n > 0) return n
   const m = /^(?:tcg|jp)-(\d+)$/.exec(String(card?.id ?? ''))
-  return m ? Number(m[1]) : null
+  if (m) return Number(m[1])
+  const img = /tcgplayer-cdn\.tcgplayer\.com\/product\/(\d+)_/.exec(String(card?.imageUrl ?? ''))
+  return img ? Number(img[1]) : null
 }
 
 /** Catalog cards × picked rows → entries { id, pc, u, p } for every card with graded prices.

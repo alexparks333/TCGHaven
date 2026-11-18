@@ -12,6 +12,8 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import CardexPage, { CardZoomOverlay, RARITY_COLORS, bestSlab, SlabTileOverlay, type ZoomCardData, type SlabInfo } from './CardexPage'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { fetchCardPrice } from '@/components/PriceAutoUpdater'
+import { gradedLabel } from '@/components/GradedPriceTag'
+import type { GradedSource } from '@/lib/api/gradedPrices'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { useFriends } from '@/components/friends/FriendsProvider'
@@ -611,7 +613,9 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   const [zoom, setZoom] = useState<ZoomCardData | null>(null)
   useScrollLock(zoom !== null)
   // A friend's shared Cardex has no prices: the zoom asks the price routes for the one card opened
-  const prices = useRef(new Map<string, number>())
+  const prices = useRef(new Map<string, { price: number; source?: GradedSource }>())
+  // Your own slabs' PriceCharting sources (their price is already the graded one) — for the credit
+  const gradedSources = useStore((s) => s.gradedSources)
   const opened = useRef('')
   const canView = isMe || profile.privacy.cardex || isFriend
 
@@ -682,13 +686,16 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   function open(el: HTMLElement, c: ShowcaseCard) {
     const color = GAME_COLORS[c.game]
     const label = RARITY_LABELS_BY_GAME[c.game]?.[c.rarity ?? ''] ?? c.rarity ?? ''
+    const credit = (s?: GradedSource) => (s ? { label: gradedLabel(s.key), url: s.url } : undefined)
+    const known = prices.current.get(c.id)
     setZoom({
       imageUrl: c.imageUrl ?? '',
       name: c.name,
       number: c.number,
       rarityLabel: label.replace('_', ' '),
       rarityColor: RARITY_COLORS[c.rarity ?? ''] ?? '#7a6a55',
-      marketPrice: isMe ? c.currentPrice ?? 0 : prices.current.get(c.id) ?? 0,
+      marketPrice: isMe ? c.currentPrice ?? 0 : known?.price ?? 0,
+      priceSource: credit(isMe ? gradedSources[c.id] : known?.source),
       owned: true,
       quantity: c.copies,
       isFoil: c.isFoil,
@@ -699,11 +706,12 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       originRect: el.getBoundingClientRect(),
     })
     opened.current = c.id
-    if (!isMe && !prices.current.has(c.id)) {
-      fetchCardPrice(c).then((p) => {
-        prices.current.set(c.id, p)
+    if (!isMe && !known) {
+      // A friend's slab is priced from PriceCharting's sales for its grade, with the credit under it
+      fetchCardPrice(c, c.slab).then((r) => {
+        prices.current.set(c.id, r)
         // still the card on screen: show its price as soon as it arrives
-        if (p > 0 && opened.current === c.id) setZoom((z) => (z ? { ...z, marketPrice: p } : z))
+        if (r.price > 0 && opened.current === c.id) setZoom((z) => (z ? { ...z, marketPrice: r.price, priceSource: credit(r.source) } : z))
       })
     }
   }

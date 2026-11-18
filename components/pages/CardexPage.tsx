@@ -20,6 +20,7 @@ import { CardName } from '@/components/CardName'
 import { SET_TYPE_LABELS as YUGIOH_SET_TYPE_LABELS } from '@/scripts/lib/yugioh-tcgplayer.mjs'
 import { TCGPLAYER_GAMES } from '@/scripts/lib/tcgplayer-games.mjs'
 import { FullSlab, slabStyle, type SlabInfo } from '@/components/SlabCase'
+import { PriceChartingCredit } from '@/components/GradedPriceTag'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,9 @@ export interface ZoomCardData {
   rarityColor: string
   marketPrice: number
   priceEstimated?: boolean   // Cardmarket EUR→USD backup price — shown with an Est. label
+  // A slab valued from PriceCharting's sales for its grade — the credit + link shown under the price
+  // (the licence requires it beside every graded price; components/GradedPriceTag.tsx)
+  priceSource?: { label: string; url: string }
   owned: boolean
   quantity: number
   isFoil?: boolean
@@ -2308,6 +2312,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 )}
               </div>
             )}
+            {d.marketPrice > 0 && d.priceSource && <PriceChartingCredit label={d.priceSource.label} url={d.priceSource.url} />}
             {!viewOnly && (
               <>
                 <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>

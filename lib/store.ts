@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { Card, Game, SoldCard } from './types'
 import type { PriceStatus } from './api/priceStatus'
+import type { GradedSource } from './api/gradedPrices'
 import { sharpImageUrl } from './utils'
 import type { PortfolioSort } from './firebase/preferences'
 import type { CurrencyCode } from './currency'
@@ -13,6 +14,11 @@ interface TCGStore {
   // currentPrice in memory by withLivePrice() — never written to Firestore. Prices live only in
   // the shared catalog; see components/PriceAutoUpdater.tsx.
   livePrices: Record<string, number>
+  // Slabs priced from PriceCharting's sales for their grade (user card id → { key, url }) and
+  // whether graded pricing is on at all (server env GRADED_PRICES). components/pricing/
+  // GradedPriceTag.tsx shows the source; a graded card missing here is valued raw ("Raw est.").
+  gradedSources: Record<string, GradedSource>
+  gradedOn: boolean
   // Each card's price at the start of each Portfolio window, from the shared price history
   // (app/api/price-history, mode "baselines"). Keyed by user card id.
   priceBaselines: Record<string, PriceBaseline>
@@ -60,6 +66,7 @@ interface TCGStore {
   removeSoldCard: (id: string) => void
   setActiveGame: (game: Game) => void
   applyLivePrices: (prices: Record<string, number>) => void
+  setGradedSources: (sources: Record<string, GradedSource>, on: boolean) => void
   setPriceBaselines: (baselines: Record<string, PriceBaseline>) => void
   setPriceLoad: (load: { done: number; total: number; complete: boolean }) => void
   setLastPriceRefresh: (date: string) => void
@@ -115,6 +122,8 @@ export const useStore = create<TCGStore>()(
   cards: [],
   soldCards: [],
   livePrices: {},
+  gradedSources: {},
+  gradedOn: false,
   priceBaselines: {},
   priceLoad: { done: 0, total: 0, complete: false },
   activeGame: 'pokemon',
@@ -134,7 +143,7 @@ export const useStore = create<TCGStore>()(
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
   loadUserSoldCards: (soldCards) => set({ soldCards: soldCards.map((c) => ({ ...c, imageUrl: sharpImageUrl(c.imageUrl) })) }),
-  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
+  clearUserData: () => set({ cards: [], soldCards: [], livePrices: {}, gradedSources: {}, gradedOn: false, priceBaselines: {}, priceLoad: { done: 0, total: 0, complete: false }, lastPriceRefresh: null, cardUnlocks: [], trackedGames: DEFAULT_TRACKED_GAMES }),
 
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, withLivePrice(card, state.livePrices)] })),
@@ -158,6 +167,7 @@ export const useStore = create<TCGStore>()(
   applyLivePrices: (prices) =>
     set((state) => ({ livePrices: prices, cards: state.cards.map((c) => withLivePrice(c, prices)) })),
 
+  setGradedSources: (gradedSources, gradedOn) => set({ gradedSources, gradedOn }),
   setPriceBaselines: (priceBaselines) => set({ priceBaselines }),
   setPriceLoad: (priceLoad) => set({ priceLoad }),
 

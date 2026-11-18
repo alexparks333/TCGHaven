@@ -837,6 +837,8 @@ export async function downloadLorcana() {
             // lorcast returns prices as numbers or strings; parseFloat handles both
             marketPrice: parseFloat(c.prices?.usd) || 0,
             marketPriceFoil: parseFloat(c.prices?.usd_foil) || 0,
+            // TCGplayer product — how PriceCharting's graded prices find the card (docs/PriceCharting.md)
+            ...(Number(c.tcgplayer_id) > 0 && { tcgProductId: Number(c.tcgplayer_id) }),
           })
           added++
         }
@@ -1618,6 +1620,7 @@ async function fetchRiftboundPrices() {
               cardType: 'Rune',
               tags: RUNE_TAGS[baseCode] ?? [],
               imageUrl: tcgImg,
+              ...(Number(row.productId) > 0 && { tcgProductId: Number(row.productId) }),
               marketPrice:      subType !== 'Foil' ? marketPrice : 0,
               marketPriceFoil:  subType === 'Foil' ? marketPrice : 0,
               lowPriceNM:       subType !== 'Foil' ? lowPrice    : 0,
@@ -1641,6 +1644,13 @@ async function fetchRiftboundPrices() {
         if (!key) continue
         const entry = prices.get(key) ?? { normal: 0, foil: 0, lowNormal: 0, lowFoil: 0, img: '', rarity: '' }
         if (extRarity) entry.rarity = extRarity
+        // The TCGplayer product, saved on the card as tcgProductId — how PriceCharting's graded
+        // prices are matched (docs/PriceCharting.md). Two products under one key = can't tell: none.
+        const pid = Number(row.productId)
+        if (Number.isInteger(pid) && pid > 0) {
+          if (entry.productId === undefined) entry.productId = pid
+          else if (entry.productId !== pid) entry.productId = null
+        }
         if (subType === 'Foil') {
           entry.foil    = marketPrice
           entry.lowFoil = lowPrice
@@ -1782,6 +1792,7 @@ export async function downloadRiftbound() {
         if (REGULAR_RARITIES.has(card.rarity) && REGULAR_RARITIES.has(p.rarity) && card.rarity !== p.rarity) {
           card.rarity = p.rarity
         }
+        if (p.productId) card.tcgProductId = p.productId
       }
       return card
     })
@@ -2125,6 +2136,8 @@ export async function planMtgCatalog() {
       marketPrice: parseFloat(c.prices?.usd) || 0,
       // usd_etched covers etched-only foil treatments that have no usd_foil price at all
       marketPriceFoil: parseFloat(c.prices?.usd_foil) || parseFloat(c.prices?.usd_etched) || 0,
+      // TCGplayer product — how PriceCharting's graded prices find the card (docs/PriceCharting.md)
+      ...(Number(c.tcgplayer_id) > 0 && { tcgProductId: Number(c.tcgplayer_id) }),
     })
   }
   if (streamError) throw streamError

@@ -7,11 +7,13 @@
  *   npm run pricecharting-sync -- --file a.csv --file b.csv     # write from local files
  *   npm run pricecharting-sync                                  # download, then write
  *   npm run pricecharting-sync -- --only pokemon-jp,onepiece    # just these catalogs
+ *   npm run pricecharting-sync -- --dry-run --save-dir <folder> # keep the downloads for --file reruns
+ *   npm run pricecharting-sync -- --categories one-piece-cards  # download just these lists
  *
- * Download: PRICECHARTING_CSV_URLS — the price-list link(s) copied from PriceCharting's
- * Subscriptions page → "API/Download" (Legendary plan), separated by commas or new lines. Each link
- * holds the account's token, so it lives in 1Password, .env.local and the GitHub secret — never
- * in the repo. PriceCharting rebuilds the file once a day and allows one download per 10 minutes.
+ * Download: PRICECHARTING_TOKEN — the account's API token (PriceCharting → Subscriptions →
+ * "API/Download", Legendary plan). It lives in 1Password, .env.local and the GitHub secret — never
+ * in the repo, never printed. One CSV per category (CATEGORIES below); PriceCharting rebuilds them
+ * once a day and allows one download per 10 minutes.
  *
  * Writes nothing to the catalog cards (their updatedAt would read as a staff edit to the catalog
  * sync). Each catalog's graded prices are rewritten whole: chunks first, then the meta doc's
@@ -59,23 +61,74 @@ if (only?.some((k) => !CATALOGS.includes(k))) {
   process.exit(1)
 }
 
+// The trading-card price lists to download. The first four are listed on PriceCharting's
+// Subscriptions → API/Download page (2026-11-18); Japanese Pokémon is inside pokemon-cards.
+// Riftbound, Lorcana and the rest live under "Other TCG Cards" on PriceCharting's site (e.g.
+// "Trading Cards > Other TCG Cards > Riftbound Promo") — other-tcg-cards is that category's slug,
+// not listed on the download page, so a run that can't read it just says so and carries on.
+// lorcana-cards / star-wars-cards / digimon-cards: not on the download page either, but real lists
+// (probed 2026-11-18). An unknown slug returns the video-game list — rejected below.
+const CATEGORIES = ['pokemon-cards', 'magic-cards', 'yugioh-cards', 'one-piece-cards', 'other-tcg-cards',
+  'lorcana-cards', 'star-wars-cards', 'digimon-cards']
+const csvUrl = (token, category) =>
+  `https://www.pricecharting.com/price-guide/download-custom?t=${encodeURIComponent(token)}&category=${encodeURIComponent(category)}`
+
+let downloadFailed = false
+
+// PriceCharting throttles back-to-back downloads (2026-11-18: three in a row were fine, the fourth
+// got HTTP 429). Space them out, and on a 429 wait as long as it asks (Retry-After) — or its
+// documented "one download every 10 minutes" — then try again.
+const BETWEEN_DOWNLOADS_MS = 20_000
+const RETRIES_429 = 2
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function download(url, category) {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { 'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)', Accept: 'text/csv,*/*' } })
+    if (res.ok) return res.text()
+    if (res.status !== 429 || attempt >= RETRIES_429) throw new Error(`HTTP ${res.status}`)
+    const retryAfter = Number(res.headers.get('retry-after'))
+    const ms = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 900) * 1000 : 10 * 60_000
+    console.log(`   ${category}: PriceCharting says too many requests — waiting ${Math.round(ms / 60_000 * 10) / 10} min, then retrying`)
+    await wait(ms)
+  }
+}
+
+// --categories pokemon-cards,one-piece-cards: download just these (default: all of CATEGORIES)
+const catArg = args.find((a, i) => args[i - 1] === '--categories')
+const categories = catArg ? catArg.split(',').map((s) => s.trim()).filter(Boolean) : CATEGORIES
+// --save-dir <folder>: keep each downloaded list as <folder>/<category>.csv (no token in them), so
+// later dry runs can use --file instead of downloading again
+const saveDir = args.find((a, i) => args[i - 1] === '--save-dir') ?? null
+
 async function readSources() {
   if (files.length) {
     return files.map((f) => ({ label: f, text: fs.readFileSync(f, 'utf8') }))
   }
-  const urls = String(process.env.PRICECHARTING_CSV_URLS ?? '').split(/[,\n]/).map((s) => s.trim()).filter(Boolean)
-  if (!urls.length) {
-    throw new Error('Set PRICECHARTING_CSV_URLS (the price-list link from PriceCharting → Subscriptions → API/Download; ' +
-      'it is in 1Password) or pass --file <downloaded.csv>')
+  const token = String(process.env.PRICECHARTING_TOKEN ?? '').trim()
+  if (!token) {
+    throw new Error('Set PRICECHARTING_TOKEN (PriceCharting → Subscriptions → API/Download — it is in 1Password) ' +
+      'or pass --file <downloaded.csv>')
   }
   const out = []
-  for (const [i, url] of urls.entries()) {
-    // The link holds the token — never print it
-    const label = `download ${i + 1} of ${urls.length}`
-    const res = await fetch(url, { headers: { 'User-Agent': 'TCGHaven/1.0 (+https://tcghaven.org)', Accept: 'text/csv,*/*' } })
-    if (!res.ok) throw new Error(`PriceCharting ${label}: HTTP ${res.status}`)
-    out.push({ label, text: await res.text() })
+  for (const [i, category] of categories.entries()) {
+    // The URL holds the token — only ever print the category
+    try {
+      if (i > 0) await wait(BETWEEN_DOWNLOADS_MS)
+      const text = await download(csvUrl(token, category), category)
+      if (saveDir) {
+        fs.mkdirSync(saveDir, { recursive: true })
+        fs.writeFileSync(`${saveDir}/${category}.csv`, text)
+      }
+      out.push({ label: category, text })
+    } catch (err) {
+      // One missing list must not stop the others; a catalog that loses its matches keeps
+      // yesterday's prices (COLLAPSE_RATIO below)
+      downloadFailed = true
+      console.error(`   ${category}: download failed — ${err.message}`)
+    }
   }
+  if (!out.length) throw new Error('No PriceCharting price list could be downloaded')
   return out
 }
 
@@ -84,13 +137,18 @@ async function main() {
   const rows = []
   for (const { label, text } of sources) {
     const r = parsePcCsv(text)
-    if (r.length < MIN_ROWS || !('tcg-id' in r[0]) || !('id' in r[0])) {
-      throw new Error(`${label}: ${r.length} rows, columns ${Object.keys(r[0] ?? {}).slice(0, 8).join(', ') || 'none'} — ` +
-        `doesn't look like PriceCharting's price list (needs id and tcg-id)`)
+    // An unknown category quietly returns PriceCharting's VIDEO GAME list (seen with
+    // flesh-and-blood-cards, 2026-11-18) — same columns, but no row has a TCGplayer id.
+    if (r.length < MIN_ROWS || !('tcg-id' in r[0]) || !('id' in r[0]) || !r.some((row) => row['tcg-id'])) {
+      downloadFailed = true
+      console.error(`   ${label}: ${r.length} rows, columns ${Object.keys(r[0] ?? {}).slice(0, 8).join(', ') || 'none'} — ` +
+        `doesn't look like PriceCharting's price list (needs id and tcg-id), skipped`)
+      continue
     }
     console.log(`   ${label}: ${r.length.toLocaleString()} rows`)
-    rows.push(...r)
+    for (const row of r) rows.push(row) // not push(...r): 135k arguments overflow the stack
   }
+  if (!rows.length) throw new Error('No usable PriceCharting price list')
   const { byTcg, ambiguous } = pickByTcgId(rows)
   console.log(`PriceCharting: ${byTcg.size.toLocaleString()} TCGplayer products with graded sales; ` +
     `${ambiguous.length} skipped (several listings, none plain)`)
@@ -137,7 +195,7 @@ async function main() {
     }
   }
   if (dryRun) console.log('Dry run: nothing written.')
-  if (failed) process.exitCode = 1
+  if (failed || downloadFailed) process.exitCode = 1
 }
 
 main().then(() => process.exit(process.exitCode ?? 0)).catch((err) => {

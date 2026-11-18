@@ -5,7 +5,7 @@
 import { NextResponse } from 'next/server'
 import { loadCatalog, invalidateCatalogCache } from './catalog'
 import { catalogPrice, gradingOf } from '../pricing'
-import { gradedFor, withGraded, type GradingInput } from './gradedPrices'
+import { gradedFor, withGraded, noteGradedSource, priceReply, type GradingInput, type GradedSource } from './gradedPrices'
 import { invalidateSetsCache } from './search'
 import { invalidateTcgplayerGameSetsCache } from './tcgplayerGames'
 import { recordSyncStatus } from './syncStatus'
@@ -20,21 +20,24 @@ interface CatalogPriceCard { id: string; marketPrice: number; marketPriceFoil: n
  *  sync-tcgplayer-games.yml) — lib/pricing.ts, the one rule every price display uses. A Flesh and
  *  Blood card logged as a specific printing is priced as exactly that printing. */
 export async function tcgplayerGamePrices(game: TcgplayerSourcedGame, req: Request): Promise<Response> {
-  const { cards }: { cards: PriceInput[] } = await req.json()
-  if (!cards?.length) return NextResponse.json({})
+  const body: { cards: PriceInput[]; withSources?: boolean } = await req.json()
+  const { cards } = body
+  if (!cards?.length) return priceReply(body, {}, {})
   const catalog = await loadCatalog<CatalogPriceCard>(game)
   const byId = new Map(catalog.map((c) => [c.id, c]))
   const graded = await gradedFor(game, cards)
   const results: Record<string, number> = {}
+  const sources: Record<string, GradedSource> = {}
   for (const card of cards) {
-    const cat = card.apiId ? byId.get(card.apiId) : undefined
-    if (!cat) continue
-    const price = catalogPrice(game, withGraded(cat, graded), {
-      isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card),
-    })
+    const raw = card.apiId ? byId.get(card.apiId) : undefined
+    if (!raw) continue
+    const cat = withGraded(raw, graded)
+    const choice = { isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card) }
+    const price = catalogPrice(game, cat, choice)
     if (price > 0) results[card.id] = price
+    noteGradedSource(sources, card.id, game, cat, choice, graded)
   }
-  return NextResponse.json(results)
+  return priceReply(body, results, sources)
 }
 
 /** The staff portal's "Sync Card Data" for one game (no auth check of its own — the route does

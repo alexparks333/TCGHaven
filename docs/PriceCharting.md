@@ -106,8 +106,9 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
    id on several of our cards (One Piece Normal/Foil pairs): skipped.
 2. **Daily job** — `npm run pricecharting-sync` (`scripts/pricecharting-sync.mjs`; `--file x.csv`,
    `--dry-run`, `--only pokemon-jp,onepiece`) and `.github/workflows/sync-graded-prices.yml` (manual
-   until the first real run is checked). Downloads the link(s) in `PRICECHARTING_CSV_URLS` (secret —
-   contains the token; 1Password). Writes **`graded_prices/{catalog}`** (meta: `chunkCount`, `matched`,
+   until the first real run is checked). Downloads the Pokémon, Magic, Yu-Gi-Oh! and One Piece price lists
+   (`/price-guide/download-custom?t={token}&category=…-cards`) with `PRICECHARTING_TOKEN` (secret; 1Password).
+   Japanese Pokémon is inside pokemon-cards; PriceCharting offers no CSV for Lorcana, Digimon, Star Wars etc. Writes **`graded_prices/{catalog}`** (meta: `chunkCount`, `matched`,
    `asOf`) + `chunks/{n}` — **not** the catalog cards: a card's new `updatedAt` would read as a staff
    edit and the next catalog sync would skip it. Never deletes; a match count that halves keeps the
    last run's prices.
@@ -119,16 +120,51 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
 4. **Switch:** server env **`GRADED_PRICES=on`** (Vercel + `.env.local`). Off → graded cards are priced
    raw exactly as before, whatever is in Firestore.
 
+5. **What people see** (2026-11-18) — `components/GradedPriceTag.tsx`, only while graded pricing is on:
+   - A slab priced from PriceCharting: a gold chip **"PSA 10 sales · PriceCharting ↗"** under its price
+     (Inventory rows, Portfolio rows and top performers), linking to the card's PriceCharting page — the
+     licence's citation. The card page says "From recent PSA 10 sales on PriceCharting ↗" under Current
+     Value.
+   - A slab with no sales for its grade: a dashed **"Raw est."** chip (tooltip: valued at TCGplayer's
+     ungraded price).
+   - How the app knows: PriceAutoUpdater sends `withSources: true`; the routes then answer
+     `{ prices, graded: { cardId: { key, url } }, gradedOn }` (`priceReply()`), kept in the store
+     (`gradedSources`, `gradedOn`) and in the on-device saved prices. Callers without `withSources`
+     (Personal Collections, a friend's card) get the plain price map — and a friend's card is always
+     priced ungraded, since that view has no citation.
+   - **No fake jumps:** a graded-priced slab's history is ungraded, so Portfolio shows "—" for its
+     24h–1y change and measures "since added" against what was paid; the card page's chart is titled
+     "Ungraded Price History" and doesn't end on the graded value.
+
 **Before switching on:**
-- Deploy `firestore.rules` (new `graded_prices` collection), add the secrets, run the job once by hand.
-- **The citation UI** (a licence condition): "Prices from PriceCharting" linking to the card's page
-  (`u` in each entry) beside every graded price, and "raw est." on a slab with no graded price. The price
-  routes return only numbers today — the UI needs a way to know which cards got a graded price.
-- **Portfolio changes:** baselines come from TCGplayer price history (`/api/price-history`), so a slab
-  switching to its graded price would show a fake jump (raw $5 yesterday → PSA 10 $500 today). Graded
-  cards need graded history, or to be left out of change figures.
-- Confirm on a real CSV: the price format, the download link, and that the citation URL pattern lands
-  on the right page.
+- Add the token (`PRICECHARTING_TOKEN`: `.env.local` on both machines + GitHub secret), run
+  `npm run pricecharting-sync -- --dry-run`, then for real. (Firestore rules: deployed 2026-11-17.)
+- Confirm on the real CSV: the price format, the One Piece category name (`one-piece-cards` — cut off in
+  the screenshot), and that the citation links land on the right card page.
+- Set `GRADED_PRICES=on` in Vercel (and `.env.local`), redeploy.
+- Confirm `other-tcg-cards` downloads (Riftbound, Lorcana … sit under "Other TCG Cards" on
+  PriceCharting — e.g. Teemo, Swift Scout [Alternate Art] #263A, PSA 10 $1,025 — but that list isn't on
+  the download page).
+- Later: graded price history (so slabs get 24h–1y changes), and `tcgProductId` saved by the Pokémon EN,
+  Magic, Lorcana and Riftbound syncs. Today matching also reads the id from a TCGplayer image link, which
+  covers 301 of 1,754 Riftbound cards (the TCGplayer-sourced ones, like that Teemo) and 561 of 3,669
+  Lorcana; Magic none.
+- A friend's slab in the profile zoom view gets the graded price with the credit under it
+  (`fetchCardPrice(card, slab)` → `{ price, source }`, `PriceChartingCredit`); so does your own.
+
+**TCGplayer ids now saved (2026-11-18):** the Pokémon EN sync (`pokemon-tcgplayer.mjs`, from each card's linked product) and the Riftbound sync (`fetchRiftboundPrices`, from the TCGCSV row) now save `tcgProductId`. Measured with `planPokemonCatalog()`: Pokémon EN 28,662 of 28,691 cards get an id → **22,290 graded-priced** (was 2,375). Riftbound: up to the ~437 PriceCharting has (was 35). Takes effect after their next sync.
+
+**All games (2026-11-18):** Magic (Scryfall `tcgplayer_id`), Lorcana (lorcast `tcgplayer_id`) and Riftbound Runes now save `tcgProductId` too — Magic ≈ 16,859 graded-priced after its next sync. Lists added after probing: `lorcana-cards`, `star-wars-cards`, `digimon-cards` (8 lists in all). An unknown list name quietly returns PriceCharting's **video-game** list (flesh-and-blood-cards, fab-cards, flesh-blood-cards, palworld-cards all did) — the job rejects a list with no TCGplayer ids. **Palworld** is inside other-tcg-cards (272 rows, 16 with a TCGplayer id, 0 graded prices yet) — it flows in automatically once PriceCharting has graded sales. **Flesh and Blood**: not on PriceCharting.
+
+**First real dry run (2026-11-18):** all five lists downloaded — pokemon 98,036 rows, magic 135,560,
+yugioh 79,490, one-piece 13,014, **other-tcg-cards 52,017** (Riftbound, Gundam, Cyberpunk… — the slug
+works though it isn't on the download page). PriceCharting throttled the 4th back-to-back download
+(HTTP 429) — the job now spaces them and retries. 89,806 TCGplayer products with graded prices; cards
+priced: Yu-Gi-Oh! 28,647 · Pokémon JP 16,388 · One Piece 2,667 · Pokémon EN 2,375 · Gundam 439 ·
+Riftbound 35 (incl. Teemo #263A, PSA 10 $1,025.01 ✓) · Cyberpunk 4. **None:** Magic (no ids saved),
+Lorcana (not in other-tcg-cards — its own category? untested), Star Wars, Flesh and Blood, Digimon,
+Palworld. Many columns are PriceCharting **estimates** (BGS 10 Black Label ≈ 5× BGS 10, CGC 10 ≈ 0.4×
+PSA 10), so the chips say "PSA 10 · PriceCharting", never "sales".
 
 Dry run on 2026-11-17 against the live catalog (fake CSV built from real ids): Pokémon JP, One Piece and
 Yu-Gi-Oh! all matched. Pokémon EN: only 8,056 of 28,692 cards carry a TCGplayer id (the `tcg-*` ones);

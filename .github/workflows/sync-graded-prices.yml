@@ -5,9 +5,8 @@ name: Sync graded prices (PriceCharting)
 # every 24 hours and allows one download per 10 minutes, so one run a day is all it needs.
 #
 # Setup (one-time):
-#  - Repository secret PRICECHARTING_CSV_URLS: the price-list link(s) from PriceCharting →
-#    Subscriptions → "API/Download" (Legendary plan), comma-separated. They contain the account
-#    token — copy them from 1Password, never into the repo.
+#  - Repository secret PRICECHARTING_TOKEN: the PriceCharting API token (Subscriptions →
+#    "API/Download", Legendary plan) — copy it from 1Password, never into the repo.
 #  - ADMIN_EMAIL / ADMIN_PASSWORD and the six NEXT_PUBLIC_FIREBASE_* variables, as sync-mtg.yml.
 #  - Deploy firestore.rules first (graded_prices is a new collection).
 #
@@ -26,7 +25,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
       NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
@@ -36,7 +35,7 @@ jobs:
       NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
       ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-      PRICECHARTING_CSV_URLS: ${{ secrets.PRICECHARTING_CSV_URLS }}
+      PRICECHARTING_TOKEN: ${{ secrets.PRICECHARTING_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,8 +45,8 @@ jobs:
       - run: npm ci
       - name: Check the secrets are set
         run: |
-          if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ] || [ -z "$PRICECHARTING_CSV_URLS" ]; then
-            echo "::error::Add the ADMIN_EMAIL, ADMIN_PASSWORD and PRICECHARTING_CSV_URLS repository secrets (see the top of this file)"
+          if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ] || [ -z "$PRICECHARTING_TOKEN" ]; then
+            echo "::error::Add the ADMIN_EMAIL, ADMIN_PASSWORD and PRICECHARTING_TOKEN repository secrets (see the top of this file)"
             exit 1
           fi
       - name: Sync graded prices

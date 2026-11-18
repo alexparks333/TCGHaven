@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
 import { catalogPrice, gradingOf, type CatalogPriceFields } from '@/lib/pricing'
-import { gradedFor, withGraded, type GradingInput } from '@/lib/api/gradedPrices'
+import { gradedFor, withGraded, noteGradedSource, priceReply, type GradingInput, type GradedSource } from '@/lib/api/gradedPrices'
 import type { Edition, Finish, Language } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -22,8 +22,9 @@ type CatalogCard = CatalogPriceFields & { id: string }
 // Portfolio refresh; see CLAUDE.md "Price Data" for the full rationale). Japanese cards
 // (language 'ja') are priced from the Japanese catalog.
 export async function POST(req: NextRequest) {
-  const { cards }: { cards: CardInput[] } = await req.json()
-  if (!cards.length) return NextResponse.json({})
+  const body: { cards: CardInput[]; withSources?: boolean } = await req.json()
+  const { cards } = body
+  if (!cards.length) return priceReply(body, {}, {})
 
   const wantJapanese = cards.some((c) => c.language === 'ja')
   const [english, japanese] = await Promise.all([
@@ -40,15 +41,18 @@ export async function POST(req: NextRequest) {
   // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
   // the Cardex or Personalized Collections.
   const results: Record<string, number> = {}
+  const sources: Record<string, GradedSource> = {}
   for (const card of cards) {
     const ja = card.language === 'ja'
-    const cat = card.apiId ? byId[ja ? 'ja' : 'en'].get(card.apiId) : undefined
-    if (!cat) continue
-    const price = catalogPrice('pokemon', withGraded(cat, ja ? gradedJa : gradedEn), {
-      isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card),
-    })
+    const raw = card.apiId ? byId[ja ? 'ja' : 'en'].get(card.apiId) : undefined
+    if (!raw) continue
+    const graded = ja ? gradedJa : gradedEn
+    const cat = withGraded(raw, graded)
+    const choice = { isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card) }
+    const price = catalogPrice('pokemon', cat, choice)
     if (price > 0) results[card.id] = price
+    noteGradedSource(sources, card.id, 'pokemon', cat, choice, graded)
   }
 
-  return NextResponse.json(results)
+  return priceReply(body, results, sources)
 }

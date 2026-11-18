@@ -1,6 +1,7 @@
 'use client'
 
 import { PrintingTags } from '@/components/PrintingTags'
+import { GradedPriceTag } from '@/components/GradedPriceTag'
 import { useState, useMemo } from 'react'
 import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle, SlidersHorizontal } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -32,7 +33,7 @@ const BASELINE_KEY = { '1d': 'd1', '7d': 'd7', '30d': 'd30', '365d': 'd365' } as
 
 export default function PortfolioPage() {
   const {
-    cards, priceBaselines, priceStatus, priceLoad,
+    cards, priceBaselines, gradedSources, priceStatus, priceLoad,
     soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     hiddenGroups, portfolioSort: sort, setPortfolioSort: setSort, includeSold, setIncludeSold,
     showFilters, setShowFilters,
@@ -63,9 +64,13 @@ export default function PortfolioPage() {
         let hasPeriodData: boolean
         let periodStartVal: number  // value at period start (for correct total % denominator)
 
+        // A slab valued at PriceCharting's graded price: its price history (and the price saved when
+        // it was added) are TCGplayer's ungraded prices, so comparing would fake a huge jump. Since
+        // added → measured against what was paid; the 24h–1y windows → no data ("—").
+        const gradedPriced = Boolean(gradedSources[c.id])
         if (timeFrame === 'entry') {
           // Baseline = market price when card was first added, or what was paid if unknown
-          const baseline = c.priceAtEntry ?? c.purchasePrice
+          const baseline = gradedPriced ? c.purchasePrice : (c.priceAtEntry ?? c.purchasePrice)
           pnl = (currentPrice - baseline) * c.quantity
           pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
           periodStartVal = baseline * c.quantity
@@ -73,7 +78,7 @@ export default function PortfolioPage() {
         } else if (baselineKey) {
           // The card's shared-history price at the start of the window. No fallback to a later
           // point (that would fake a 0% change): no price that far back → no data for this window.
-          const baseline = priceBaselines[c.id]?.[baselineKey] ?? null
+          const baseline = gradedPriced ? null : (priceBaselines[c.id]?.[baselineKey] ?? null)
           if (baseline !== null) {
             pnl = (currentPrice - baseline) * c.quantity
             pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
@@ -104,7 +109,7 @@ export default function PortfolioPage() {
         if (sort === 'nameDesc')   return b.name.localeCompare(a.name)
         return a.name.localeCompare(b.name)
       })
-  }, [cards, sort, activeGames, timeFrame, priceBaselines, hiddenGroups])
+  }, [cards, sort, activeGames, timeFrame, priceBaselines, gradedSources, hiddenGroups])
 
   // Apply calculation floor
   const filtered = useMemo(() => {
@@ -414,6 +419,7 @@ export default function PortfolioPage() {
                   <div className="text-xs text-slate-500 truncate">
                     {GAME_LABELS[c.game]} · {c.set} · {formatCurrency(c.currentPrice)} ea
                   </div>
+                  <GradedPriceTag card={c} className="mt-0.5" />
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-sm font-medium text-ink">{formatCurrency(c.currentVal)}</div>
@@ -558,6 +564,7 @@ export default function PortfolioPage() {
                     {card.set}
                     {' · '}{formatCurrency(card.currentPrice)} ea
                   </div>
+                  <GradedPriceTag card={card} className="mt-1" />
                 </div>
               </div>
               <div className="hidden md:flex items-center">
