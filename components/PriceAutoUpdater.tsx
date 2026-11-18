@@ -44,8 +44,13 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
   cyberpunk: { url: '/api/prices/cyberpunk', payload: (c) => ({ id: c.id, apiId: c.apiId, isFoil: c.isFoil }) },
 }
 
+// A graded card's slab, sent with every game's payload: the routes price it from PriceCharting's
+// sales for its grade when there are any (lib/api/gradedPrices.ts — off unless GRADED_PRICES=on).
+const slab = (c: Card) => (c.gradingCompany ? { gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier } : {})
+const priceBody = (game: Game, cards: Card[]) => JSON.stringify({ cards: cards.map((c) => ({ ...PRICE_ROUTES[game].payload(c), ...slab(c) })) })
+
 // Everything that decides a card's price — a change to any of these reloads prices.
-const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}`
+const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}:${c.gradingCompany ?? ''}:${c.grade ?? ''}:${c.gradeTier ?? ''}`
 
 // The last successful load, saved per account on this device (see the first-load note in check())
 const savedKey = (uid: string) => `tcghaven-prices:${uid}`
@@ -65,9 +70,9 @@ function savePrices(uid: string, data: { prices: Record<string, number>; baselin
  *  friend's card in the profile's zoom view, whose shared copy carries no prices. 0 when unknown. */
 export async function fetchCardPrice(card: Card): Promise<number> {
   if (!card.apiId) return 0
-  const { url, payload } = PRICE_ROUTES[card.game]
+  const { url } = PRICE_ROUTES[card.game]
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cards: [payload(card)] }) })
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: priceBody(card.game, [card]) })
     if (!res.ok) return 0
     const prices = (await res.json()) as Record<string, number>
     return prices[card.id] ?? 0
@@ -138,12 +143,12 @@ export function PriceAutoUpdater() {
       const pricesTask = (async () => {
         const prices: Record<string, number> = {}
         await Promise.all(gamesToLoad.map(async (game) => {
-          const { url, payload } = PRICE_ROUTES[game]
+          const { url } = PRICE_ROUTES[game]
           try {
             const res = await fetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ cards: eligible.filter((c) => c.game === game).map(payload) }),
+              body: priceBody(game, eligible.filter((c) => c.game === game)),
             })
             if (!res.ok) { failed = true; return }
             Object.assign(prices, await res.json())

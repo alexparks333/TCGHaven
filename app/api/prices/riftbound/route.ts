@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice } from '@/lib/pricing'
+import { catalogPrice, gradingOf } from '@/lib/pricing'
+import { gradedFor, withGraded, type GradingInput } from '@/lib/api/gradedPrices'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,7 @@ interface CatalogCard {
   lowPriceNMFoil: number
 }
 
-interface CardInput {
+interface CardInput extends GradingInput {
   id: string
   apiId: string
   isFoil: boolean
@@ -32,6 +33,7 @@ export async function POST(req: NextRequest) {
 
   const catalog = await loadCatalog<CatalogCard>('riftbound')
   const byId = new Map(catalog.map((c) => [c.id, c]))
+  const graded = await gradedFor('riftbound', cards)
 
   // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
   // the Cardex or Personalized Collections.
@@ -39,7 +41,7 @@ export async function POST(req: NextRequest) {
   for (const card of cards) {
     const cat = card.apiId ? byId.get(card.apiId) : undefined
     if (!cat) continue
-    const price = catalogPrice('riftbound', cat, { isFoil: (card as { isFoil?: boolean }).isFoil })
+    const price = catalogPrice('riftbound', withGraded(cat, graded), { isFoil: card.isFoil, grading: gradingOf(card) })
     if (price > 0) results[card.id] = price
   }
 

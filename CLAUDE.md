@@ -15,7 +15,7 @@ in that area:**
 | A game's data source, schema, variants, adding a set | `docs/games.md` |
 | **Adding a whole new game** (e.g. Yu-Gi-Oh!) — every phase and file, step by step | `docs/adding-a-game.md` |
 | Card search ranking, prices / price history, the Cardex | `docs/search-prices-cardex.md` |
-| Graded card prices from PriceCharting (research + plan; not built, waiting on a licence) | `docs/PriceCharting.md` |
+| Graded card prices from PriceCharting (licensed; pre-built, switched off with GRADED_PRICES) | `docs/PriceCharting.md` |
 | Friends, profiles, Haven Badges, the pin book, 3D pins, HavenRelief, the Relief Studio, badge tiers | `docs/community-and-badges.md` |
 | Firestore collections, the Card object, inventory caching, the Zustand store | `docs/user-data.md` |
 | The Creator Studio, Creator Books, the 3D maker's GPU (tickets, hosting options and costs) | `docs/creators.md` |
@@ -44,7 +44,7 @@ npm run lint
 npm run scanner-index -- status   # the scanner's picture index (docs/scanner-ai.md); publish / update too
 npm run download-cards # re-sync catalogs into Firestore (MTG only with -- --include-mtg; MTG also syncs daily via .github/workflows/sync-mtg.yml)
 npm run check-images -- <game>|all
-npm run test:search / test:snapshot / test:variants / test:pokemon-source / test:onepiece-source / test:yugioh-source / test:tcgplayer-games / test:scan
+npm run test:search / test:snapshot / test:pricecharting / test:variants / test:pokemon-source / test:onepiece-source / test:yugioh-source / test:tcgplayer-games / test:scan
 npm run test:realscans -- http://localhost:3000   # the scanner on 64 real phone scans (needs a running server; CI runs it on every deploy)
 ```
 
@@ -115,6 +115,7 @@ npm run test:realscans -- http://localhost:3000   # the scanner on 64 real phone
 36. Yu-Gi-Oh!: every card = one TCGplayer product (`tcg-{productId}`); editions are `variantPrices`; rarity versions are separate cards (`yugioh-tcgplayer.mjs`, `npm run yugioh-source-report`).
 37. Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld / Cyberpunk: one shared TCGplayer engine, a settings block per game (`tcgplayer-games.mjs` `TCGPLAYER_GAMES`, `npm run tcgplayer-games-report`) — add the next TCGplayer-only game there, don't copy.
 38. The scanner's picture AI: the model and the fingerprint index are published together (`npm run scanner-index -- publish`, same model for both); the picture never adds a card on its own (`decide.ts`); never commit models or indexes (`docs/scanner-ai.md`).
+39. PriceCharting adds graded prices only — TCGplayer stays the truth for cards, images, numbers and raw prices; graded prices live in `graded_prices/{catalog}`, never on catalog cards; never show one without the PriceCharting citation link (`docs/PriceCharting.md`).
 35. One Piece: every card = one TCGplayer product (`tcgProductId`); existing cards never change what they show (`onepiece-tcgplayer.mjs`, `npm run onepiece-source-report`).
 
 ## Badges & the Relief Studio — the essentials

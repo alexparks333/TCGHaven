@@ -4,7 +4,8 @@
 // allowed names — CLAUDE.md rule 24).
 import { NextResponse } from 'next/server'
 import { loadCatalog, invalidateCatalogCache } from './catalog'
-import { catalogPrice } from '../pricing'
+import { catalogPrice, gradingOf } from '../pricing'
+import { gradedFor, withGraded, type GradingInput } from './gradedPrices'
 import { invalidateSetsCache } from './search'
 import { invalidateTcgplayerGameSetsCache } from './tcgplayerGames'
 import { recordSyncStatus } from './syncStatus'
@@ -12,7 +13,7 @@ import { findNewRarities } from './syncHealth'
 import { ensureSignedIn, downloadTcgplayerGame } from '@/scripts/lib/catalog-sync.mjs'
 import type { Edition, Finish, TcgplayerSourcedGame } from '../types'
 
-interface PriceInput { id: string; apiId: string; isFoil: boolean; edition?: Edition; finish?: Finish }
+interface PriceInput extends GradingInput { id: string; apiId: string; isFoil: boolean; edition?: Edition; finish?: Finish }
 interface CatalogPriceCard { id: string; marketPrice: number; marketPriceFoil: number; variantPrices?: Record<string, number> }
 
 /** Live prices for a user's cards, straight from the catalog (refreshed daily by
@@ -23,11 +24,14 @@ export async function tcgplayerGamePrices(game: TcgplayerSourcedGame, req: Reque
   if (!cards?.length) return NextResponse.json({})
   const catalog = await loadCatalog<CatalogPriceCard>(game)
   const byId = new Map(catalog.map((c) => [c.id, c]))
+  const graded = await gradedFor(game, cards)
   const results: Record<string, number> = {}
   for (const card of cards) {
     const cat = card.apiId ? byId.get(card.apiId) : undefined
     if (!cat) continue
-    const price = catalogPrice(game, cat, { isFoil: card.isFoil, edition: card.edition, finish: card.finish })
+    const price = catalogPrice(game, withGraded(cat, graded), {
+      isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card),
+    })
     if (price > 0) results[card.id] = price
   }
   return NextResponse.json(results)

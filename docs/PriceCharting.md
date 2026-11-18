@@ -1,14 +1,16 @@
-# PriceCharting — graded card prices (research, 2026-11-15)
+# PriceCharting — graded card prices (research 2026-11-15, pre-built 2026-11-17)
 
-**Status: idea, not built.** Waiting on a commercial license from PriceCharting. Contact: **sales@vgpc.com**
-(VGPC = VideoGame PriceCharts, PriceCharting's original name). Email sent by the owner; nothing is
-coded yet.
+**Status: licensed (2026-11-17); pre-built and switched off (`GRADED_PRICES`) — see "How it's built"
+and "Before switching on".** PriceCharting allows it on the Legendary plan with attribution until
+$1,000/month revenue (see "Their offer" below). Contact: **sales@vgpc.com** (VGPC = VideoGame
+PriceCharts, PriceCharting's original name).
 
 ## The idea
 
 Today a graded card is valued at its raw (ungraded) TCGplayer price. The plan: once a day, pull
-PriceCharting's graded sold prices (PSA 10, Grade 9, 8, 7 …), match them to our catalog cards, and use
-them **only** for cards a user has marked as graded. No graded price → fall back to raw and say so.
+PriceCharting's graded sold prices (PSA 10, Grade 9, 8, 7 …), match them to our catalog cards by
+TCGplayer product ID, and use them **only** for cards a user has marked as graded. TCGplayer stays the
+truth for everything ungraded. No graded price → fall back to raw and say so.
 
 ## What PriceCharting offers
 
@@ -50,8 +52,23 @@ these "Grade 9 sales", not "PSA 9", until PriceCharting confirms either way (it'
 PriceCharting's docs and terms: API and CSV data are for **internal use only**. Showing it in an app others
 use needs a **commercial license and their written permission**. Its price isn't published. With
 permission they prefer attribution: a logo or a text link to the card's PriceCharting page. All stored data
-must be **deleted if the subscription ends**, so it is an ongoing dependency. **Don't build or ship this
-before the licence is agreed.**
+must be **deleted if the subscription ends**, so it is an ongoing dependency. Permission for our use is now
+in writing (below); attribution is a condition of it, so **never ship graded prices without the citation
+link.**
+
+### Their offer (2026-11-17)
+
+**Written permission received (2026-11-17, PriceCharting sales by email):** until TCGHaven reaches
+**$1,000/month in revenue**, the **Legendary subscription ($50/mo)** is enough to use the data via the API
+in our product, **provided we cite them** — an icon or text with a link back to the card's PriceCharting
+page. Past $1,000/month we move to a formal Commercial Agreement with a revenue share (quoted separately
+as **8% of total revenue**). Keep that email; it is the licence until the agreement exists.
+
+For the later Commercial Agreement, still to clarify with them:
+whether "total" means all TCGHaven revenue or only revenue tied to their data; gross or after Apple's /
+Stripe's cut; whether the $49/month Legendary plan is on top; any minimum, cap or reporting/audit terms;
+and the length and exit terms of the contract. At $3.99/mo, 8% of gross is ≈ $0.32 per subscriber per month (≈ 9.4%
+of the $3.39 kept after Apple's 15%).
 
 ## Coverage against our games
 
@@ -75,38 +92,68 @@ before the licence is agreed.**
   a source that lists TCGplayer IDs (Scryfall, lorcast), so saving `tcgProductId` is a small change. It's
   worth doing whatever happens with PriceCharting.
 
-## How it would be built
+## How it's built (pre-built 2026-11-17, switched off)
 
-1. **Daily job** on GitHub Actions, like the MTG sync (Pokémon already strains Vercel's function limit).
-   It downloads the CSV, matches by `tcg-id` → `tcgProductId`, and writes a small graded-price block onto
-   each matched catalog card. **Only changed cards** are written, with `update()` and
-   `updatedAt: serverTimestamp()` (rules 29 and the catalog rule in CLAUDE.md). The token lives in
-   1Password and `.env.local`, never in the repo.
-2. **Pricing rule** (`lib/pricing.ts` `catalogPrice()`): a graded card looks up its column. PSA 10 → PSA
-   10; BGS / CGC / SGC / TAG 10 → their own 10s, Pristine and Black Label included; 9.5 → Grade 9.5;
-   8.5 → Grade 8; 7.5 → Grade 7. Nothing there → raw price, shown as "raw est.". Graded cards already store
-   `gradingCompany`, `grade` and `gradeTier` (`lib/types.ts`, `lib/grading.ts`).
-3. **Attribution:** "Prices from PriceCharting" with a link beside graded prices.
+**The split:** TCGplayer stays the source of truth for everything ungraded — which cards exist, names,
+images, set numbers, the Cardex and raw prices. PriceCharting adds **only graded prices**; its ungraded
+`loose-price` is never imported. A card logged as a slab (PSA, CGC, BGS …) is priced from PriceCharting's
+sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.").
+
+1. **Pure logic** — `scripts/lib/pricecharting.mjs` (tests: `npm run test:pricecharting`, in CI): CSV
+   parsing by header name, the column map above, matching `tcg-id` → our card (`tcgProductId`, or the id
+   `tcg-{n}` / `jp-{n}`), grade → column (`gradedPriceKey()`), the citation link (`pcProductUrl()`).
+   Several PriceCharting rows on one TCGplayer id: the plain-named row wins, else skipped. One TCGplayer
+   id on several of our cards (One Piece Normal/Foil pairs): skipped.
+2. **Daily job** — `npm run pricecharting-sync` (`scripts/pricecharting-sync.mjs`; `--file x.csv`,
+   `--dry-run`, `--only pokemon-jp,onepiece`) and `.github/workflows/sync-graded-prices.yml` (manual
+   until the first real run is checked). Downloads the link(s) in `PRICECHARTING_CSV_URLS` (secret —
+   contains the token; 1Password). Writes **`graded_prices/{catalog}`** (meta: `chunkCount`, `matched`,
+   `asOf`) + `chunks/{n}` — **not** the catalog cards: a card's new `updatedAt` would read as a staff
+   edit and the next catalog sync would skip it. Never deletes; a match count that halves keeps the
+   last run's prices.
+3. **Pricing** — `lib/pricing.ts`: `catalogPrice()` takes `grading` and returns the graded price first
+   when there is one (`gradedPrice()`; Pokémon: only the ordinary printing, not 1st Edition / Shadowless /
+   Reverse). Every price route lays the prices on with `withGraded()` from `lib/api/gradedPrices.ts`
+   (30-minute cache, read only when a graded card is asked about); `PriceAutoUpdater` sends each card's
+   `gradingCompany` / `grade` / `gradeTier`.
+4. **Switch:** server env **`GRADED_PRICES=on`** (Vercel + `.env.local`). Off → graded cards are priced
+   raw exactly as before, whatever is in Firestore.
+
+**Before switching on:**
+- Deploy `firestore.rules` (new `graded_prices` collection), add the secrets, run the job once by hand.
+- **The citation UI** (a licence condition): "Prices from PriceCharting" linking to the card's page
+  (`u` in each entry) beside every graded price, and "raw est." on a slab with no graded price. The price
+  routes return only numbers today — the UI needs a way to know which cards got a graded price.
+- **Portfolio changes:** baselines come from TCGplayer price history (`/api/price-history`), so a slab
+  switching to its graded price would show a fake jump (raw $5 yesterday → PSA 10 $500 today). Graded
+  cards need graded history, or to be left out of change figures.
+- Confirm on a real CSV: the price format, the download link, and that the citation URL pattern lands
+  on the right page.
+
+Dry run on 2026-11-17 against the live catalog (fake CSV built from real ids): Pokémon JP, One Piece and
+Yu-Gi-Oh! all matched. Pokémon EN: only 8,056 of 28,692 cards carry a TCGplayer id (the `tcg-*` ones);
+Magic, Lorcana and Riftbound none — save `tcgProductId` in their syncs for full coverage.
 
 ## Cost estimate (monthly)
 
 | Item | Cost |
 |---|---|
-| PriceCharting Legendary | $49 |
-| Commercial license | unknown, waiting on their quote |
-| Firestore writes | ~$1–3 for changed cards only; worst case, every card rewritten daily, ~$15 |
-| Firestore storage | pennies |
+| PriceCharting Legendary | ~$50 |
+| Licence | $0 until $1,000/month revenue; then a revenue share (quoted 8%) |
+| Firestore writes | pennies — a few dozen chunk docs a day, not one write per card |
+| Firestore reads | pennies — each server reads a catalog's chunks at most every 30 min, only for graded cards |
 | Daily job (GitHub Actions) | $0 |
 
-≈ **$50–65/month plus the licence.** The Firestore figures are an estimate: a few hundred thousand catalog
-cards at standard prices ($0.18 per 100K writes).
+≈ **$50/month** until the $1,000/month revenue mark.
 
-## Questions sent to PriceCharting
+## Questions for PriceCharting
 
-1. Commercial license price and terms.
-2. Are Grade 7–9.5 prices all grading companies, or PSA only?
-3. Coverage of Riftbound, Gundam and Flesh and Blood.
-4. Preferred attribution: logo, text link, or both.
+1. ~~Commercial license price and terms~~ — answered 2026-11-17 (see "Their offer"); the later
+   agreement's details are still open.
+2. Are Grade 7–9.5 prices all grading companies, or PSA only? (unanswered — label them "Grade 9 sales")
+3. Coverage of Riftbound, Gundam and Flesh and Blood. (unanswered)
+4. Preferred attribution — answered: an icon or text with a link back to the card's page.
+5. New: is the daily price-list download fine, given the email says "via API"? (same plan; worth a line)
 
 ## Sources
 

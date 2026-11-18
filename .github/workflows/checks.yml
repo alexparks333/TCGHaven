@@ -54,6 +54,7 @@ jobs:
           npm run test:yugioh-source
           npm run test:tcgplayer-games
           npm run test:snapshot
+          npm run test:pricecharting
           npm run test:rebase
           npm run test:relief
           npm run test:scan

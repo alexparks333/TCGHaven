@@ -1,0 +1,54 @@
+name: Sync graded prices (PriceCharting)
+
+# PriceCharting's graded sold prices (PSA 10, Grade 9 …) into graded_prices/{catalog} once a day —
+# scripts/pricecharting-sync.mjs, docs/PriceCharting.md. PriceCharting rebuilds its price list once
+# every 24 hours and allows one download per 10 minutes, so one run a day is all it needs.
+#
+# Setup (one-time):
+#  - Repository secret PRICECHARTING_CSV_URLS: the price-list link(s) from PriceCharting →
+#    Subscriptions → "API/Download" (Legendary plan), comma-separated. They contain the account
+#    token — copy them from 1Password, never into the repo.
+#  - ADMIN_EMAIL / ADMIN_PASSWORD and the six NEXT_PUBLIC_FIREBASE_* variables, as sync-mtg.yml.
+#  - Deploy firestore.rules first (graded_prices is a new collection).
+#
+# Manual only ("Run workflow" in the Actions tab) until the first run has been checked — then
+# uncomment the schedule.
+
+on:
+  # schedule:
+  #   - cron: '30 10 * * *'   # 10:30 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: sync-graded-prices
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      PRICECHARTING_CSV_URLS: ${{ secrets.PRICECHARTING_CSV_URLS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the secrets are set
+        run: |
+          if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ] || [ -z "$PRICECHARTING_CSV_URLS" ]; then
+            echo "::error::Add the ADMIN_EMAIL, ADMIN_PASSWORD and PRICECHARTING_CSV_URLS repository secrets (see the top of this file)"
+            exit 1
+          fi
+      - name: Sync graded prices
+        run: npm run pricecharting-sync

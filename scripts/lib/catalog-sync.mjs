@@ -55,6 +55,10 @@ const firebaseApp = getApps().length === 0
 const auth = getAuth(firebaseApp)
 const db = getFirestore(firebaseApp)
 
+/** The signed-in Firestore this module uses — for the other command-line jobs that run beside the
+ *  catalog sync (scripts/pricecharting-sync.mjs) */
+export function getCatalogDb() { return db }
+
 // The command-line syncs (npm run download-cards, and the daily MTG job in .github/workflows/
 // sync-mtg.yml) record their result on sync_status/{game} like the website's sync routes do
 // (lib/api/syncStatus.ts recordSyncStatus — same doc, merged), so the staff portal's Sync panel

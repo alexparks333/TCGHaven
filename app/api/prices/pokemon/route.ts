@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice, type CatalogPriceFields } from '@/lib/pricing'
+import { catalogPrice, gradingOf, type CatalogPriceFields } from '@/lib/pricing'
+import { gradedFor, withGraded, type GradingInput } from '@/lib/api/gradedPrices'
 import type { Edition, Finish, Language } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-interface CardInput {
+interface CardInput extends GradingInput {
   id: string      // Firestore card ID
   apiId: string   // catalog card ID (e.g. "sv7-1", or "jp-123456" for a Japanese card)
   isFoil: boolean
@@ -30,14 +31,22 @@ export async function POST(req: NextRequest) {
     wantJapanese ? loadCatalog<CatalogCard>('pokemon-jp') : Promise.resolve([]),
   ])
   const byId = { en: new Map(english.map((c) => [c.id, c])), ja: new Map(japanese.map((c) => [c.id, c])) }
+  // PriceCharting graded prices, only when a graded card is asked about (lib/api/gradedPrices.ts)
+  const [gradedEn, gradedJa] = await Promise.all([
+    gradedFor('pokemon', cards.filter((c) => c.language !== 'ja')),
+    gradedFor('pokemon-jp', cards.filter((c) => c.language === 'ja')),
+  ])
 
   // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
   // the Cardex or Personalized Collections.
   const results: Record<string, number> = {}
   for (const card of cards) {
-    const cat = card.apiId ? byId[card.language === 'ja' ? 'ja' : 'en'].get(card.apiId) : undefined
+    const ja = card.language === 'ja'
+    const cat = card.apiId ? byId[ja ? 'ja' : 'en'].get(card.apiId) : undefined
     if (!cat) continue
-    const price = catalogPrice('pokemon', cat, { isFoil: card.isFoil, edition: card.edition, finish: card.finish })
+    const price = catalogPrice('pokemon', withGraded(cat, ja ? gradedJa : gradedEn), {
+      isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card),
+    })
     if (price > 0) results[card.id] = price
   }
 

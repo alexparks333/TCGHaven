@@ -253,6 +253,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // PriceCharting graded prices per catalog (meta: chunkCount, matched, asOf) and their chunks —
+    // written once a day by scripts/pricecharting-sync.mjs (docs/PriceCharting.md). Licensed data:
+    // must be removed if the PriceCharting subscription ends.
+    match /graded_prices/{game} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /graded_prices/{game}/chunks/{chunkId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Set registry (Lorcana/Riftbound set metadata, Cardex/Pack Analysis wiring) — formerly
     // data/set-registry.json. Moved to Firestore so the Admin Catalog sync routes can write it
     // from a Vercel serverless function, which has no writable local filesystem.
