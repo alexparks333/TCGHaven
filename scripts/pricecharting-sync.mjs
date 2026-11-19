@@ -42,7 +42,9 @@ loadEnvLocal()
 const { ensureSignedIn, getCatalogDb } = await import('./lib/catalog-sync.mjs')
 const { readCompressedSnapshot } = await import('./lib/snapshot-codec.mjs')
 const { parsePcCsv, pickByTcgId, matchCatalog } = await import('./lib/pricecharting.mjs')
-const { doc, getDoc, setDoc, writeBatch, serverTimestamp } = await import('firebase/firestore')
+const { buildGradedHistory, GRADED_HISTORY_COLLECTION } = await import('./lib/graded-history.mjs')
+const { encodePriceMap, dayDocId } = await import('./lib/price-history.mjs')
+const { doc, getDoc, setDoc, writeBatch, serverTimestamp, Bytes } = await import('firebase/firestore')
 
 // Every catalog a PriceCharting row could match (by TCGplayer product id)
 const CATALOGS = ['pokemon', 'pokemon-jp', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh',
@@ -189,6 +191,15 @@ async function main() {
         chunkCount: chunks.length, matched: entries.length, source: 'pricecharting', asOf: serverTimestamp(),
       })
       console.log(`${line} — written`)
+      // Today's graded prices into the kept history (graded-history.mjs). After the prices: a
+      // history failure never costs today's prices.
+      try {
+        const { months, chunks } = await writeGradedHistory(db, key, entries, snap.cards)
+        console.log(`   history: ${months} set-month doc(s), ${chunks} day chunk(s)`)
+      } catch (err) {
+        failed = true
+        console.error(`   history not written: ${err.message}`)
+      }
     } catch (err) {
       failed = true
       console.error(`- ${key}: failed — ${err.message}`)
@@ -196,6 +207,31 @@ async function main() {
   }
   if (dryRun) console.log('Dry run: nothing written.')
   if (failed || downloadFailed) process.exitCode = 1
+}
+
+// graded_history/{key}: today's day file (chunked, gzipped — Portfolio's windows) and each set's
+// month doc (days.{DD}, merged — the charts). Rerunning on the same day overwrites that day.
+async function writeGradedHistory(db, key, entries, cards) {
+  const byId = new Map(cards.map((c) => [c.id, c]))
+  const { day, months } = await buildGradedHistory(entries, byId)
+  const chunks = await encodePriceMap(day.prices)
+  const batch = writeBatch(db)
+  // Leftover higher chunks from a bigger earlier run the same day are ignored by the reader
+  // (decodePriceChunks keeps only chunks < `of` with the same `t`) — nothing to delete.
+  chunks.forEach((gz, n) => batch.set(doc(db, GRADED_HISTORY_COLLECTION, key, 'days', dayDocId(day.day, n)), {
+    day: day.day, t: day.t, chunk: n, of: chunks.length, gz: Bytes.fromUint8Array(gz),
+  }))
+  await batch.commit()
+  const docs = [...months.entries()]
+  for (let i = 0; i < docs.length; i += 400) {
+    const b = writeBatch(db)
+    for (const [docId, { setKey, month, dd, gz }] of docs.slice(i, i + 400)) {
+      b.set(doc(db, GRADED_HISTORY_COLLECTION, key, 'months', docId),
+        { setKey, month, days: { [dd]: Bytes.fromUint8Array(gz) } }, { merge: true })
+    }
+    await b.commit()
+  }
+  return { months: docs.length, chunks: chunks.length }
 }
 
 main().then(() => process.exit(process.exitCode ?? 0)).catch((err) => {

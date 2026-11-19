@@ -72,6 +72,32 @@ function savePrices(uid: string, data: { prices: Record<string, number>; baselin
   try { localStorage.setItem(savedKey(uid), JSON.stringify({ ...data, at: Date.now() })) } catch { /* full or blocked: fine */ }
 }
 
+/** Today's prices for many cards at once — a friend's whole shared Cardex, whose copies carry no
+ *  prices. One request per game, in parallel, through the same price routes as your own cards, so a
+ *  friend's slab gets its grade's PriceCharting price (graded = its source, for the credit).
+ *  Null when every request failed. */
+export async function fetchCardPrices(cards: Card[]): Promise<{ prices: Record<string, number>; graded: Record<string, GradedSource>; gradedOn: boolean } | null> {
+  const priced = cards.filter((c) => c.apiId && PRICE_ROUTES[c.game])
+  const games = Array.from(new Set(priced.map((c) => c.game)))
+  const out = { prices: {} as Record<string, number>, graded: {} as Record<string, GradedSource>, gradedOn: false }
+  let answered = games.length === 0
+  await Promise.all(games.map(async (game) => {
+    try {
+      const res = await fetch(PRICE_ROUTES[game].url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: priceBody(game, priced.filter((c) => c.game === game)),
+      })
+      if (!res.ok) return
+      const reply = (await res.json()) as PriceReply
+      Object.assign(out.prices, reply.prices)
+      Object.assign(out.graded, reply.graded)
+      out.gradedOn ||= reply.gradedOn
+      answered = true
+    } catch { /* that game stays unpriced */ }
+  }))
+  return answered ? out : null
+}
+
 /** Today's price of one card (the shared catalog's, through the same price routes) — for a friend's
  *  card in the profile's zoom view, whose shared copy carries no prices. price 0 when unknown. A slab
  *  is priced from PriceCharting's sales for its grade when there are any; `source` is then set, and
@@ -102,6 +128,10 @@ export function PriceAutoUpdater() {
   const latest = useRef({ cards, trackedGames })
   latest.current = { cards, trackedGames }
   const running = useRef(false)
+  // A check asked for while one is running (a slab added or edited mid-load) runs right after it —
+  // dropping it left the new card on its old price until the 15-minute timer.
+  const again = useRef(false)
+  const checkRef = useRef<() => void>(() => {})
   // What the last successful load was based on — reload only when one of these changes.
   const loadedFor = useRef<{ syncAt: number; cardsKey: string } | null>(null)
 
@@ -109,7 +139,8 @@ export function PriceAutoUpdater() {
   const cardsKey = cards.filter((c) => c.apiId).map(priceKey).sort().join('|')
 
   const check = useCallback(async () => {
-    if (!user || running.current) return
+    if (!user) return
+    if (running.current) { again.current = true; return }
     running.current = true
     try {
       const { cards, trackedGames } = latest.current
@@ -191,7 +222,8 @@ export function PriceAutoUpdater() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               mode: 'baselines',
-              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language })),
+              // Slabs send their grade: one valued at PriceCharting's graded price gets graded baselines
+              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language, gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined })),
             }),
           })
           if (res.ok) { fresh.baselines = await res.json(); setPriceBaselines(fresh.baselines as Parameters<typeof setPriceBaselines>[0]) }
@@ -217,6 +249,7 @@ export function PriceAutoUpdater() {
       console.error('Loading prices failed:', err)
     } finally {
       running.current = false
+      if (again.current) { again.current = false; setTimeout(() => checkRef.current(), 0) }
       // Release the pages even if part of it failed — they show whatever loaded (and Portfolio's
       // status line says so) rather than staying stuck behind the loader.
       if (!useStore.getState().priceLoad.complete) {
@@ -225,6 +258,8 @@ export function PriceAutoUpdater() {
       }
     }
   }, [user, setPriceStatus, applyLivePrices, setGradedSources, setPriceBaselines, setLastPriceRefresh, setPriceLoad])
+
+  checkRef.current = check
 
   // After sign-in + data load, when owned cards / tracked games change, on a timer,
   // and when the tab comes back into view.

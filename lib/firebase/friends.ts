@@ -236,7 +236,7 @@ export async function updateProfileDetails(uid: string, patch: { bio?: string; p
 // Only what the Cardex needs to show ownership — never prices, purchase dates or groups.
 
 const SHARED_FIELDS = ['id', 'game', 'name', 'set', 'setCode', 'number', 'quantity', 'isFoil', 'apiId', 'imageUrl',
-  'rarity', 'language', 'edition', 'finish', 'gradingCompany', 'grade', 'nexus'] as const
+  'rarity', 'language', 'edition', 'finish', 'gradingCompany', 'grade', 'gradeTier', 'nexus'] as const
 
 export function toSharedCards(cards: Card[]): Record<string, unknown>[] {
   return cards.map((c) => {

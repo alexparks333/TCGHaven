@@ -17,6 +17,9 @@ import { FullSlab } from '@/components/SlabCase'
 import { GRADER_CHOICES, graderOf, gradeWord, isValidGrade, SUBGRADE_KEYS, type GradeTier, type Subgrades } from '@/lib/grading'
 import { CardName } from '@/components/CardName'
 import { displayCurrency, toDisplay, toUSD } from '@/lib/currency'
+import { fetchCardPrice } from '@/components/PriceAutoUpdater'
+import { PriceChartingCredit, gradedLabel } from '@/components/GradedPriceTag'
+import type { GradedSource } from '@/lib/api/gradedPrices'
 
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
@@ -319,6 +322,27 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
     return form.isFoil ? (marketPrices.foil > 0 ? marketPrices.foil : marketPrices.regular) : marketPrices.regular
   }
 
+  // A slab is worth PriceCharting's price for its grade (docs/PriceCharting.md — one copy, one
+  // price), so the Market Price field shows that, with the credit, once a grade is picked. Asked of
+  // the same price route Inventory uses; null = not a slab, or not answered yet.
+  const [gradedQuote, setGradedQuote] = useState<{ key: string; price: number; source?: GradedSource } | null>(null)
+  const quoteKey = form.apiId && form.gradingCompany && form.grade
+    ? [form.game, form.apiId, form.isFoil ? 1 : 0, form.edition ?? '', form.finish ?? '', form.language ?? '', form.gradingCompany, form.grade, form.gradeTier ?? ''].join('|')
+    : ''
+  useEffect(() => {
+    if (!quoteKey) { setGradedQuote(null); return }
+    let stale = false
+    const t = setTimeout(() => {
+      fetchCardPrice({ ...form, id: 'quote' } as Card, { company: form.gradingCompany!, grade: form.grade, tier: form.gradeTier ?? null })
+        .then((r) => { if (!stale) setGradedQuote({ key: quoteKey, ...r }) })
+    }, 250)
+    return () => { stale = true; clearTimeout(t) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteKey])
+  // The graded price for the slab being entered, when PriceCharting has one for its grade
+  const gradedOn = useStore((st) => st.gradedOn)
+  const gradedMarket = gradedQuote && gradedQuote.key === quoteKey && gradedQuote.source && gradedQuote.price > 0 ? gradedQuote : null
+
   function pickEdition(edition: Edition) {
     if (!variantPrices) return
     setForm((f) => {
@@ -349,7 +373,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
     // Prices come from the shared catalog only. A card with no catalog price (a custom card, or one
     // TCGplayer doesn't price) keeps the price it already had.
-    const catalogPrice = catalogMarketPrice()
+    const catalogPrice = gradedMarket ? gradedMarket.price : catalogMarketPrice()
     const resolvedMarketPrice = catalogPrice > 0 ? catalogPrice : (editCard?.currentPrice ?? 0)
 
     const now = new Date().toISOString()
@@ -702,12 +726,28 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
           {/* Market price — always the shared catalog's (TCGplayer market), never chosen per user */}
           <div>
             <label className="field-label">Market Price</label>
-            <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm">
+            <div className="px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm flex items-center justify-between gap-2 flex-wrap">
               {(() => {
+                // A slab: its grade's PriceCharting price with the credit; no sales for its grade →
+                // the raw price, said so. A raw card: the catalog's price.
+                if (gradedMarket?.source) {
+                  return (
+                    <>
+                      <span className="text-emerald-600 font-medium">{formatCurrency(gradedMarket.price)}</span>
+                      <PriceChartingCredit label={gradedLabel(gradedMarket.source.key)} url={gradedMarket.source.url} />
+                    </>
+                  )
+                }
                 const mp = catalogMarketPrice()
-                return mp > 0
-                  ? <span className="text-emerald-600 font-medium">{formatCurrency(mp)}</span>
-                  : <span className="text-slate-500">No market price yet</span>
+                if (!(mp > 0)) return <span className="text-slate-500">No market price yet</span>
+                return (
+                  <>
+                    <span className="text-emerald-600 font-medium">{formatCurrency(mp)}</span>
+                    {gradedOn && quoteKey && gradedQuote?.key === quoteKey && (
+                      <span className="text-[11px] text-slate-500">Raw est. — no {form.gradingCompany} {form.grade} sales on PriceCharting yet</span>
+                    )}
+                  </>
+                )
               })()}
             </div>
           </div>

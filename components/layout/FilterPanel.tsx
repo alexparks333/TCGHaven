@@ -17,6 +17,7 @@ const pillOff  = 'text-xs px-3 py-1.5 rounded-full border font-medium transition
 export function FilterPanel() {
   const {
     calcFloor, setCalcFloor,
+    slabFilter, setSlabFilter,
     showFilters, setShowFilters,
     activeGames, setActiveGames, trackedGames,
     cards,
@@ -72,7 +73,7 @@ export function FilterPanel() {
   }
 
   const allGamesActive = shownGames.every((g) => activeGames.includes(g))
-  const hasActiveFilters = calcFloor > 0 || !allGamesActive || hiddenGroups.length > 0
+  const hasActiveFilters = calcFloor > 0 || !allGamesActive || hiddenGroups.length > 0 || slabFilter !== 'all'
 
   return (
     <>
@@ -120,6 +121,30 @@ export function FilterPanel() {
                     </button>
                   )
                 })}
+              </div>
+            </div>
+
+            {/* Cards: all / only slabs / only raw (SlabFilter) */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="w-32 shrink-0">
+                <div className="text-xs font-semibold text-slate-400">Cards</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {([['all', 'Both'], ['graded', 'Only Graded'], ['raw', 'Only Raw']] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setSlabFilter(value)}
+                    data-on={slabFilter === value}
+                    className={cn(
+                      'text-xs px-3 py-1.5 rounded-full border font-medium transition-all',
+                      slabFilter === value
+                        ? 'bg-violet-600/20 border-violet-500/40 text-violet-700 hover:bg-violet-600/30'
+                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -211,6 +236,7 @@ export function FilterPanel() {
           <div className="max-w-7xl mx-auto flex items-center gap-3">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
             <div className="flex items-center gap-2 text-xs text-amber-600 whitespace-nowrap overflow-x-auto min-w-0 [scrollbar-width:none]">
+              {slabFilter !== 'all' && <span>{slabFilter === 'graded' ? 'Only graded cards' : 'Only raw cards'}</span>}
               {calcFloor > 0 && <span>Floor: {formatCurrency(calcFloor)}{totalHidden > 0 ? ` (${totalHidden} hidden)` : ''}</span>}
               {!allGamesActive && <span>Games: {shownGames.filter((g) => activeGames.includes(g)).map((g) => GAME_LABELS[g]).join(', ')}</span>}
               {hiddenGroups.length > 0 && <span>Hidden: {hiddenGroups.join(', ')}</span>}

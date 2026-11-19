@@ -11,7 +11,7 @@ import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import CardexPage, { CardZoomOverlay, RARITY_COLORS, bestSlab, SlabTileOverlay, type ZoomCardData, type SlabInfo } from './CardexPage'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { fetchCardPrice } from '@/components/PriceAutoUpdater'
+import { fetchCardPrice, fetchCardPrices } from '@/components/PriceAutoUpdater'
 import { gradedLabel } from '@/components/GradedPriceTag'
 import type { GradedSource } from '@/lib/api/gradedPrices'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -607,6 +607,10 @@ function printingOf(c: Card): string {
 function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: boolean; isFriend: boolean; view: CardexView }) {
   const ownCards = useStore((s) => s.cards)
   const [friendCards, setFriendCards] = useState<Card[] | 'private' | undefined>(undefined)
+  // A friend's prices, all fetched together as their cards open (their shared copies carry none) —
+  // the tiles are ranked by them and the zoom shows them at once. null = couldn't be priced: their
+  // stored order stands and the zoom asks per card.
+  const [friendPrices, setFriendPrices] = useState<Awaited<ReturnType<typeof fetchCardPrices>> | undefined>(undefined)
   const [game, setGame] = useState<Game | 'all'>('all')
   const [set, setSet] = useState('')
   const [limit, setLimit] = useState(FIRST_PAGE)
@@ -622,23 +626,37 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   useEffect(() => {
     if (isMe || !canView) return
     let live = true
-    loadFriendCardex(profile.uid).then((r) => { if (live) setFriendCards(r) })
+    loadFriendCardex(profile.uid).then(async (r) => {
+      const priced = Array.isArray(r) ? await fetchCardPrices(r) : null
+      if (!live) return
+      setFriendPrices(priced)
+      setFriendCards(r)
+    })
     return () => { live = false }
   }, [isMe, canView, profile.uid])
 
   useEffect(() => { setLimit(FIRST_PAGE) }, [game, set])
 
-  // One tile per distinct card *and printing*, best first by what one copy is worth: your own by
-  // today's price; a friend's copy is already stored most-valuable-first (without the prices). A
-  // card's printings are separate tiles — seven Slowpokes, one of them a $142 Reverse Holo, were one
-  // "×7" tile ranked at the Reverse Holo's price (2026-11-13).
+  // A friend's copies with today's prices on them (the full Cardex view reads currentPrice)
+  const friendPriced = useMemo(
+    () => (Array.isArray(friendCards)
+      ? friendCards.map((c) => { const p = friendPrices?.prices[c.id]; return p ? { ...c, currentPrice: p } : c })
+      : []),
+    [friendCards, friendPrices],
+  )
+
+  // One tile per distinct card, printing *and grade*, best first by what one copy is worth today —
+  // a slab at its grade's PriceCharting price (one copy, one price: docs/PriceCharting.md). Your own
+  // and a friend's alike: a friend's stored order was ranked on their device, before slabs had
+  // graded prices, so a $1,000 PSA 8 sat below a $480 raw card (2026-11-19). A card's printings are
+  // separate tiles too — seven Slowpokes, one of them a $142 Reverse Holo, were one "×7" tile ranked
+  // at the Reverse Holo's price (2026-11-13).
   const unique = useMemo(() => {
-    const src = isMe
-      ? [...ownCards].sort((a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0))
-      : Array.isArray(friendCards) ? friendCards : []
+    const src = [...(isMe ? ownCards : friendPriced)].sort((a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0))
     const groups = new Map<string, Card[]>()
     for (const c of src) {
-      const key = `${c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`}|${printingOf(c)}`
+      const grade = c.gradingCompany ? `|${c.gradingCompany}|${c.grade ?? ''}|${c.gradeTier ?? ''}` : ''
+      const key = `${c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`}|${printingOf(c)}${grade}`
       const list = groups.get(key)
       if (list) list.push(c)
       else groups.set(key, [c])
@@ -649,11 +667,11 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       slab: bestSlab(copies),
       printing: printingOf(copies[0]),
     }))
-  }, [isMe, ownCards, friendCards])
+  }, [isMe, ownCards, friendPriced])
 
   const viewer = useMemo(
-    () => ({ cards: isMe ? ownCards : Array.isArray(friendCards) ? friendCards : [] }),
-    [isMe, ownCards, friendCards],
+    () => (isMe ? { cards: ownCards } : { cards: friendPriced, graded: friendPrices?.graded ?? {}, gradedOn: friendPrices?.gradedOn ?? false }),
+    [isMe, ownCards, friendPriced, friendPrices],
   )
 
   const first = profile.displayName.split(' ')[0]
@@ -687,7 +705,8 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
     const color = GAME_COLORS[c.game]
     const label = RARITY_LABELS_BY_GAME[c.game]?.[c.rarity ?? ''] ?? c.rarity ?? ''
     const credit = (s?: GradedSource) => (s ? { label: gradedLabel(s.key), url: s.url } : undefined)
-    const known = prices.current.get(c.id)
+    const batch = friendPrices?.prices[c.id]
+    const known = prices.current.get(c.id) ?? (batch ? { price: batch, source: friendPrices?.graded[c.id] } : undefined)
     setZoom({
       imageUrl: c.imageUrl ?? '',
       name: c.name,

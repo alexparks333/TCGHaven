@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { GamePicker } from '@/components/GamePicker'
 import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
-import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText, cardIdentityKey } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -20,7 +20,8 @@ import { CardName } from '@/components/CardName'
 import { SET_TYPE_LABELS as YUGIOH_SET_TYPE_LABELS } from '@/scripts/lib/yugioh-tcgplayer.mjs'
 import { TCGPLAYER_GAMES } from '@/scripts/lib/tcgplayer-games.mjs'
 import { FullSlab, slabStyle, type SlabInfo } from '@/components/SlabCase'
-import { PriceChartingCredit } from '@/components/GradedPriceTag'
+import { PriceChartingCredit, gradedLabel, slabName } from '@/components/GradedPriceTag'
+import type { GradedSource } from '@/lib/api/gradedPrices'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -104,6 +105,10 @@ export interface ZoomCardData {
   landscape?: boolean
   // Owned graded copy → the zoom view shows the card in a full slab
   slab?: SlabInfo
+  // Every version of this card the collector owns (each slab grade, the raw copies), best slab
+  // first — the zoom view steps through them with arrows, each with its own price. Absent or one
+  // entry = no arrows. See ownedVersions().
+  versions?: ZoomVersion[]
   setName?: string
   // The card-back/border/glow-ring accent color — rarity-based where lib/utils.ts's
   // ZOOM_GLOW_COLORS has an entry for this game+rarity, falling back to the game's own color
@@ -438,11 +443,69 @@ const EMPTY_SET: Set<string> = new Set()
 
 // ── Matching helpers ──────────────────────────────────────────────────────────
 
+// ── Owned versions (the zoom view's arrows) ─────────────────────────────────────
+// One price per copy, everywhere: a slab is worth PriceCharting's price for its grade (shown with
+// the PriceCharting credit — docs/PriceCharting.md), a raw copy TCGplayer's. So a card owned as a
+// PSA 10, a PSA 7 and a raw copy has three prices; the zoom view shows one version at a time and
+// steps through them. The grid tile's hover always shows the raw price — the card itself.
+
+export interface ZoomVersion {
+  label: string                 // "PSA 10", "Raw", "Raw · Foil"
+  slab?: SlabInfo
+  quantity: number
+  printing?: string
+  marketPrice: number
+  priceEstimated?: boolean      // Cardmarket backup price (raw)
+  priceSource?: { label: string; url: string }  // priced from PriceCharting → the credit link
+  rawEstimate?: boolean         // a slab with no sales for its grade: valued at the raw price
+}
+
+const slabScore = (c: Card) => {
+  const n = parseFloat(c.grade ?? '')
+  return (Number.isFinite(n) ? n : 0) + (c.gradeTier === 'black' ? 0.2 : c.gradeTier === 'pristine' ? 0.1 : 0)
+}
+
+/** The collector's versions of one card, best slab first (the one the tile shows), raw last.
+ *  copies = the owned inventory cards matching it; prices are the live ones Inventory shows. */
+export function ownedVersions(
+  copies: Card[], gradedSources: Record<string, GradedSource>, gradedOn: boolean,
+  rawPrice: number, rawEstimated: boolean,
+): ZoomVersion[] {
+  const groups = new Map<string, Card[]>()
+  for (const c of copies) groups.set(cardIdentityKey(c), [...(groups.get(cardIdentityKey(c)) ?? []), c])
+  return Array.from(groups.values())
+    .map((lots) => {
+      const rep = lots[0]
+      const quantity = lots.reduce((s, c) => s + c.quantity, 0)
+      const printing = printingText(rep) || undefined
+      const price = rep.currentPrice ?? rawPrice
+      if (rep.gradingCompany) {
+        const source = gradedOn ? gradedSources[rep.id] : undefined
+        const v: ZoomVersion = {
+          label: slabName(rep), slab: bestSlab([rep]), quantity, printing, marketPrice: price,
+          ...(source ? { priceSource: { label: gradedLabel(source.key), url: source.url } } : { rawEstimate: gradedOn && Boolean(rep.apiId) }),
+        }
+        return { score: slabScore(rep), v }
+      }
+      // Just "Raw" — the printing is added only when raw copies come in more than one (below)
+      const extra = [rep.isFoil && !printing ? 'Foil' : '', printing ?? ''].filter(Boolean).join(' · ')
+      const v: ZoomVersion = { label: 'Raw', quantity, printing, marketPrice: price, priceEstimated: rawEstimated }
+      return { score: -1, v, extra }
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((x, _i, all) => {
+      // Two raw versions (a normal and a foil copy — priced differently) are told apart by printing
+      const raws = all.filter((y) => !y.v.slab)
+      if (!x.v.slab && raws.length > 1 && 'extra' in x && x.extra) return { ...x.v, label: `Raw · ${x.extra}` }
+      return x.v
+    })
+}
+
 function getOwnedInfo(
   catalogCard: CatalogCard,
   ownedCards: Card[],
   game: Game,
-): { owned: boolean; quantity: number; ownedFoil: boolean; slab?: SlabInfo } {
+): { owned: boolean; quantity: number; ownedFoil: boolean; slab?: SlabInfo; copies?: Card[] } {
   const matches = ownedCards.filter((c) => {
     if (c.apiId) return c.apiId === catalogCard.id
     if (game === 'riftbound') return c.setCode === catalogCard.setCode && c.number === catalogCard.number
@@ -479,6 +542,7 @@ function getOwnedInfo(
     // Every owned copy is foil → show the foil price, matching what Inventory shows for them.
     ownedFoil: matches.length > 0 && matches.every((c) => c.isFoil),
     slab: bestSlab(matches),
+    copies: matches,
   }
 }
 
@@ -577,8 +641,14 @@ function MaybeAuthGuard({ guard, children }: { guard: boolean; children: React.R
 }
 
 export interface CardexViewer {
-  cards: Card[]
+  cards: Card[]   // a friend's copies, with currentPrice filled in by the profile (fetchCardPrices)
+  graded?: Record<string, GradedSource>   // which of them are priced from PriceCharting (the credit)
+  gradedOn?: boolean
 }
+
+// A friend's Cardex: their slabs' PriceCharting sources, in place of your own store's (keyed by
+// your card ids, so a friend's slab would read as "Raw est.")
+const ViewerGraded = createContext<{ sources: Record<string, GradedSource>; on: boolean } | null>(null)
 
 // The Cardex as a card picker (the staff portal's badge editor): one game, every card in full
 // colour, click to select, Shift+Click to select a range. No owned state, prices, adding or URL.
@@ -593,7 +663,13 @@ export interface CardexPicker {
   onGame?: (game: Game) => void
 }
 
-export default function CardexPage({ viewer, picker }: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
+export default function CardexPage(props: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
+  const v = props.viewer
+  const graded = useMemo(() => (v ? { sources: v.graded ?? {}, on: v.gradedOn ?? false } : null), [v])
+  return <ViewerGraded.Provider value={graded}><CardexPageBody {...props} /></ViewerGraded.Provider>
+}
+
+function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
   const store = useStore()
   const readOnly = !!viewer || !!picker
   const cards = picker ? NO_CARDS : viewer?.cards ?? store.cards
@@ -1580,7 +1656,7 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
 // ── Card tile (catalog-backed) ────────────────────────────────────────────────
 
 interface CardTileProps {
-  card: CatalogCard & { owned: boolean; quantity: number; slab?: SlabInfo }
+  card: CatalogCard & { owned: boolean; quantity: number; slab?: SlabInfo; copies?: Card[] }
   gameColor: string
   game: BaseGame
   language?: Language   // 'ja' on the Japanese Pokémon Cardex
@@ -1597,6 +1673,9 @@ interface CardTileProps {
 
 // A second tap within this long of the one that opened a card's zoom view counts as a double tap
 const DOUBLE_TAP_MS = 350
+// Swapping between owned versions in the zoom view: the old card out, then the new one in
+const SWAP_OUT_MS = 170
+const SWAP_IN_MS = 420
 
 function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave, onZoom, onAdd, eagerArt, onArtDone, pick }: CardTileProps) {
   const rarityColor = RARITY_COLORS[card.rarity] ?? '#7a6a55'
@@ -1608,6 +1687,14 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
   const slab = card.owned ? card.slab : undefined
   const ebayCard = { name: card.name, number: card.number, set: card.setName, game, gradingCompany: slab?.company, grade: slab?.grade, language }
   const lastPointerType = useRef('')
+  const ownSources = useStore((s) => s.gradedSources)
+  const ownOn = useStore((s) => s.gradedOn)
+  const viewerGraded = useContext(ViewerGraded)
+  const gradedSources = viewerGraded ? viewerGraded.sources : ownSources
+  const gradedOn = viewerGraded ? viewerGraded.on : ownOn
+  const versions = () => (card.owned && card.copies?.length
+    ? ownedVersions(card.copies, gradedSources, gradedOn, card.marketPrice, card.priceSource === 'cardmarket')
+    : undefined)
 
   // Shift+Click / double-tap: open Add Card on this exact card. AddCardDialog re-fetches it as a
   // search row; this copy is only its fallback.
@@ -1634,6 +1721,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
       glowColor: zoomGlowColor(game, card.rarity, gameColor),
       landscape: card.cardType === 'Battlefield',
       slab: card.owned ? card.slab : undefined,
+      versions: versions(),
       setName: card.setName,
       ebayCard,
       onDoubleTap: onAdd && lastPointerType.current === 'touch' ? addToInventory : undefined,
@@ -1729,18 +1817,22 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] mx-auto truncate"><CardName name={card.name} /></div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
             {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
+            {/* Always the card's raw (ungraded) price — a slab's own price is in the zoom view */}
             {card.marketPrice > 0 && (
               <div className="text-[10px] text-slate-400 mt-0.5">
                 ${card.marketPrice.toFixed(2)}{card.priceSource === 'cardmarket' && <span className="ml-1 font-semibold">Est.</span>}
+                {card.owned && card.slab && <span className="ml-1 text-slate-500">raw</span>}
               </div>
             )}
-            {card.owned && card.slab && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.slab.company}{card.slab.grade ? ` ${card.slab.grade}` : ''}</div>}
             {pick ? null : card.owned
               ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
               : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
+            {!pick && card.owned && card.slab && (
+              <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{versions()?.map((v) => v.label).join(' · ')}</div>
+            )}
           </div>
           <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
         </div>
@@ -1828,7 +1920,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] mx-auto truncate"><CardName name={card.name} /></div>
             {card.gradingCompany && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}</div>}
             {showPrinting(printingText(card), card.rarity) && <div className="text-[10px] text-amber-600 mt-0.5">{printingText(card)}</div>}
             <div className="text-[10px] text-emerald-600 mt-0.5">
@@ -2089,6 +2181,24 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   // immediately on close, but the fade/shrink-out still needs something to fade out.
   const lastData = useRef<ZoomCardData | null>(null)
   if (data) lastData.current = data
+  // Which owned version is picked (ZoomCardData.versions) — back to the first on every opening.
+  // `vi` is the bubble just tapped; `shown` the version on screen, which follows it after the swap
+  // animation: the old card shuffles out, the new one in (swapStyle below).
+  const [vi, setVi] = useState(0)
+  const [shown, setShown] = useState(0)
+  const [swap, setSwap] = useState<'idle' | 'out' | 'pre'>('idle')
+  const swapDir = useRef(1)
+  useEffect(() => {
+    if (vi === shown) return
+    swapDir.current = vi > shown ? 1 : -1
+    setSwap('out')
+    const t = setTimeout(() => {
+      setShown(vi)
+      setSwap('pre') // parked on the far side, invisible, no transition…
+      requestAnimationFrame(() => requestAnimationFrame(() => setSwap('idle'))) // …then glides in
+    }, SWAP_OUT_MS)
+    return () => clearTimeout(t)
+  }, [vi, shown])
   const inspect = useCardInspect()
   const openedAt = useRef(0)
   // Touch double tap: the second tap of a quick pair lands here — close at once and add the card
@@ -2116,6 +2226,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
     if (!data) { playedFor.current = null; return }
     if (!moverRef.current || data.originRect === playedFor.current) return
     playedFor.current = data.originRect
+    setVi(0)
+    setShown(0)
+    setSwap('idle')
     openedAt.current = performance.now()
     const el = moverRef.current
     setVisible(false)
@@ -2158,7 +2271,16 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
 
   useEffect(() => {
     if (!data) return
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') handleClose() }
+    const n = data.versions?.length ?? 0
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') handleClose()
+      // The arrow keys step through the owned versions, like tapping the next bubble
+      else if (n > 1 && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) {
+        e.preventDefault()
+        const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1
+        setVi((i) => (Math.min(i, n - 1) + dir + n) % n)
+      }
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2167,6 +2289,30 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   if (!data && !closing) return null
   const d = lastData.current
   if (!d) return null
+
+  // The version on show: its slab (or none = the raw card), price, credit, printing and count
+  const versions = d.versions?.length ? d.versions : null
+  const vIndex = versions ? Math.min(shown, versions.length - 1) : 0
+  const picked = versions ? Math.min(vi, versions.length - 1) : 0
+  const v = versions?.[vIndex]
+  const many = (versions?.length ?? 0) > 1
+  const slab = v ? v.slab : d.slab
+  const price = v ? v.marketPrice : d.marketPrice
+  const priceEstimated = v ? v.priceEstimated : d.priceEstimated
+  const priceSource = v ? v.priceSource : d.priceSource
+  const printing = v ? v.printing : d.printing
+  const quantity = v ? v.quantity : d.quantity
+  const ebayCard = v ? { ...d.ebayCard, gradingCompany: v.slab?.company, grade: v.slab?.grade } : d.ebayCard
+  // The swap between versions: the card tips away and fades out with a flash of light, and the next
+  // one rises in from the other side, settling with a slight overshoot — like flipping through a
+  // stack. Down the list = the card leaves upward.
+  const dir = swapDir.current
+  const swapStyle: React.CSSProperties = swap === 'out'
+    ? { transform: `translateY(${-dir * 22}px) rotateX(${dir * 32}deg) scale(0.84)`, opacity: 0, filter: 'blur(3px) brightness(1.7)', transition: `transform ${SWAP_OUT_MS}ms cubic-bezier(.55,0,1,.45), opacity ${SWAP_OUT_MS}ms ease-in, filter ${SWAP_OUT_MS}ms ease-in` }
+    : swap === 'pre'
+    ? { transform: `translateY(${dir * 30}px) rotateX(${-dir * 32}deg) scale(0.84)`, opacity: 0, filter: 'blur(3px) brightness(1.7)', transition: 'none' }
+    : { transform: 'none', opacity: 1, filter: 'none', transition: `transform ${SWAP_IN_MS}ms cubic-bezier(.34,1.56,.64,1), opacity ${SWAP_IN_MS * 0.6}ms ease-out, filter ${SWAP_IN_MS}ms ease-out` }
+  const fadeStyle: React.CSSProperties = { opacity: swap === 'idle' ? 1 : 0.25, transition: 'opacity 180ms ease' }
 
   return (
     <div
@@ -2188,7 +2334,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
         <div
           ref={moverRef}
           className="relative card-zoom-mover"
-          style={d.slab
+          style={slab
             // A real slab is the card plus a case: sized so the card inside comes out about as big
             // as a raw card's own zoom (300px), with the label and acrylic border on top of that
             ? { width: 'min(86vw, calc(68vh * 0.64), max(370px, calc(56vh * 0.64)))', aspectRatio: '0.64', perspective: '1200px' }
@@ -2196,6 +2342,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             ? { width: 'min(90vw, max(460px, 64vh))', aspectRatio: '7 / 5', perspective: '1200px' }
             : { width: 'min(80vw, calc(70vh * 5 / 7), max(300px, calc(54vh * 5 / 7)))', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
+          {/* Version swap layer (swapStyle) — its own element, so the swap never fights the fly-in
+              (the mover), the drag-to-turn (the tilter) or the flip (the flipper) for a transform.
+              Carries the perspective on to the tilter below. */}
+          <div className="relative w-full h-full" style={{ ...swapStyle, perspective: '1200px' }}>
           {/* Inspect layer — drag to turn the card in 3D (useCardInspect). Its own element because
               the flip animation below owns the flipper's transform. */}
           <div
@@ -2206,15 +2356,15 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
             {/* Edge thickness: thin outlines stacked through the card's depth, so it has real sides
                 when turned. A slab is a thick clear block; a raw card is a sliver. */}
-            {Array.from({ length: d.slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS }, (_, i) => {
-              const depth = d.slab ? SLAB_DEPTH : CARD_DEPTH
-              const layers = d.slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS
+            {Array.from({ length: slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS }, (_, i) => {
+              const depth = slab ? SLAB_DEPTH : CARD_DEPTH
+              const layers = slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS
               const z = -depth / 2 + (depth * (i + 1)) / (layers + 1)
               return (
                 <div
                   key={i}
-                  className={cn('absolute inset-0 pointer-events-none', d.slab ? 'rounded-[18px]' : 'rounded-2xl')}
-                  style={d.slab
+                  className={cn('absolute inset-0 pointer-events-none', slab ? 'rounded-[18px]' : 'rounded-2xl')}
+                  style={slab
                     ? { transform: `translateZ(${z}px)`, border: '1.5px solid rgba(220,232,246,0.3)' }
                     : { transform: `translateZ(${z}px)`, backgroundColor: '#1b1b22' }}
                 />
@@ -2224,12 +2374,12 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 treatment as their grid tile (grayscale(1) + darkened, not just desaturated —
                 matches card-unlock-reveal's own "before reveal" brightness elsewhere in this
                 file), rather than "revealing" full color/brightness on zoom. */}
-            {d.slab ? (
+            {slab ? (
               <div
                 className="card-zoom-face absolute inset-0 rounded-[18px]"
                 style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)` }}
               >
-                <FullSlab slab={d.slab} name={d.name} number={d.number} setName={d.setName}>
+                <FullSlab slab={slab} name={d.name} number={d.number} setName={d.setName}>
                   {d.imageUrl
                     ? <ZoomImage url={d.imageUrl} alt={d.name} />
                     : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
@@ -2252,9 +2402,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             {/* Back face — a generic card back (no real per-game back art exists), briefly visible
                 twice mid-flip since it never actually shows for more than an instant */}
             <div
-              className={cn('card-zoom-face card-zoom-face-back absolute inset-0 overflow-hidden flex items-center justify-center', d.slab ? 'rounded-[18px]' : 'rounded-2xl')}
+              className={cn('card-zoom-face card-zoom-face-back absolute inset-0 overflow-hidden flex items-center justify-center', slab ? 'rounded-[18px]' : 'rounded-2xl')}
               style={{
-                transform: `rotateY(180deg) translateZ(${(d.slab ? SLAB_DEPTH : CARD_DEPTH) / 2}px)`,
+                transform: `rotateY(180deg) translateZ(${(slab ? SLAB_DEPTH : CARD_DEPTH) / 2}px)`,
                 background: `radial-gradient(circle at 50% 40%, ${d.glowColor}33, #0a0a0f 70%)`,
                 boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
               }}
@@ -2265,9 +2415,45 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             </div>
           </div>
           </div>
+          </div>
 
+          {/* Your versions of this card — a small column of bubbles off the card's bottom-right
+              corner (over it on a phone, where there's no room beside it). Tap one to swap. */}
+          {visible && many && (
+            <div
+              role="tablist"
+              aria-label="Your copies of this card"
+              aria-orientation="vertical"
+              className="card-zoom-versions absolute z-20 bottom-3 right-3 sm:right-auto sm:left-full sm:ml-4 sm:bottom-2 flex flex-col items-end sm:items-start gap-1.5"
+            >
+              {versions!.map((ver, i) => {
+                const on = i === picked
+                return (
+                  <button
+                    key={i}
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => setVi(i)}
+                    title={ver.slab ? `Your ${ver.label} slab` : `Your ${ver.label.toLowerCase()} cop${ver.quantity > 1 ? 'ies' : 'y'}`}
+                    className={cn(
+                      'whitespace-nowrap text-[11px] font-bold leading-none px-2.5 py-1.5 rounded-full border shadow-lg backdrop-blur-md transition-all duration-200',
+                      on ? 'scale-105' : 'hover:scale-105 hover:brightness-125',
+                    )}
+                    style={{
+                      animationDelay: `${120 + i * 60}ms`,
+                      ...(on
+                        ? { background: 'linear-gradient(135deg, #f3cf72, #d39b2c)', color: '#2a1a05', borderColor: '#fbe7a8', boxShadow: '0 4px 16px -2px rgba(211,155,44,0.6)' }
+                        : { background: 'rgba(18,14,10,0.72)', color: '#f1e6d2', borderColor: 'rgba(255,255,255,0.16)' }),
+                    }}
+                  >
+                    {ver.label}{ver.quantity > 1 ? ` ×${ver.quantity}` : ''}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {visible && (
-            <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', d.slab ? 'rounded-[18px]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
+            <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', slab ? 'rounded-[18px]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
           )}
         </div>
 
@@ -2293,33 +2479,36 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                   {d.rarityLabel}
                 </span>
               )}
-              {showPrinting(d.printing, d.rarityLabel) && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700">{d.printing}</span>
+              {showPrinting(printing, d.rarityLabel) && (
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700">{printing}</span>
               )}
-              {d.slab && (
+              {slab && (
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 border border-amber-500/30">
-                  {d.slab.company}{d.slab.grade ? ` ${d.slab.grade}` : ''}
+                  {slab.company}{slab.grade ? ` ${slab.grade}` : ''}
                 </span>
               )}
             </div>
-            {d.marketPrice > 0 && (
-              <div className="text-sm font-semibold text-ink">
-                ${d.marketPrice.toFixed(2)}
-                {d.priceEstimated && (
+            {price > 0 && (
+              <div className="text-sm font-semibold text-ink" style={fadeStyle}>
+                ${price.toFixed(2)}
+                {priceEstimated && (
                   <span className="ml-1.5 text-[11px] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
                     Est.
                   </span>
                 )}
               </div>
             )}
-            {d.marketPrice > 0 && d.priceSource && <PriceChartingCredit label={d.priceSource.label} url={d.priceSource.url} />}
+            {price > 0 && priceSource && <span style={fadeStyle}><PriceChartingCredit label={priceSource.label} url={priceSource.url} /></span>}
+            {price > 0 && v?.rawEstimate && (
+              <div className="text-[11px] text-slate-500" style={fadeStyle}>Raw est. — no {v.label} sales on PriceCharting yet</div>
+            )}
             {!viewOnly && (
               <>
                 <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
-                  {d.owned ? `✓ ${d.quantity > 1 ? `×${d.quantity} owned` : 'owned'}` : 'not collected'}
+                  {d.owned ? `✓ ${quantity > 1 ? `×${quantity} owned` : 'owned'}` : 'not collected'}
                 </div>
                 <button
-                  onClick={() => openEbaySearch(d.ebayCard)}
+                  onClick={() => openEbaySearch(ebayCard)}
                   className="mt-1 text-[11px] text-slate-500 hover:text-ink underline underline-offset-2"
                 >
                   Search Recently Sold Listings

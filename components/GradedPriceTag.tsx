@@ -14,7 +14,7 @@ import type { Card } from '@/lib/types'
 
 type SlabCard = Pick<Card, 'id' | 'apiId' | 'gradingCompany' | 'grade' | 'gradeTier'>
 
-const slabName = (c: SlabCard) =>
+export const slabName = (c: SlabCard) =>
   `${c.gradingCompany}${c.gradeTier === 'black' ? ' Black Label' : c.gradeTier === 'pristine' && c.gradingCompany?.toUpperCase() !== 'BGS' ? ' Pristine' : ''}${c.grade ? ` ${c.grade}` : ''}`
 
 /** A graded card's price source, or null when there's nothing to say */

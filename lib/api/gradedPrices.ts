@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import { db } from '../firebase/config'
-import { gradedPrice, type CatalogPriceFields, type PrintingChoice } from '../pricing'
+import { gradedPrice, gradingOf, type CatalogPriceFields, type PrintingChoice } from '../pricing'
 import { gradedPriceKey } from '@/scripts/lib/pricecharting.mjs'
-import type { CatalogKey, Game } from '../types'
+import { catalogKeyFor, type CatalogKey, type Edition, type Finish, type Game, type Language } from '../types'
 
 /**
  * PriceCharting graded prices for the price routes — docs/PriceCharting.md. Written once a day by
@@ -79,6 +79,29 @@ export interface GradingInput {
   gradingCompany?: string
   grade?: string
   gradeTier?: 'pristine' | 'black'
+}
+
+/** Which of these items are valued at PriceCharting's graded price today (the same test the price
+ *  routes use) — their history is then the graded history (lib/api/priceHistory.ts). */
+export async function gradedPricedKeys(
+  items: (GradingInput & { key: string; game: Game; apiId: string; language?: Language; edition?: Edition; finish?: Finish })[],
+): Promise<Set<string>> {
+  const out = new Set<string>()
+  const slabs = items.filter((i) => i.gradingCompany)
+  if (!slabs.length || !gradedPricesEnabled()) return out
+  const byCatalog = new Map<CatalogKey, typeof slabs>()
+  for (const it of slabs) {
+    const key = catalogKeyFor(it.game, it.language)
+    byCatalog.set(key, [...(byCatalog.get(key) ?? []), it])
+  }
+  await Promise.all(Array.from(byCatalog.entries()).map(async ([key, list]) => {
+    const graded = await loadGradedPrices(key)
+    for (const it of list) {
+      const p = graded.get(it.apiId)?.p
+      if (p && gradedPrice(it.game, { graded: p }, { edition: it.edition, finish: it.finish, grading: gradingOf(it) }) > 0) out.add(it.key)
+    }
+  }))
+  return out
 }
 
 /** Loads the graded prices only when one of these cards is graded (most requests have none) */

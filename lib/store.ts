@@ -4,7 +4,7 @@ import { Card, Game, SoldCard } from './types'
 import type { PriceStatus } from './api/priceStatus'
 import type { GradedSource } from './api/gradedPrices'
 import { sharpImageUrl } from './utils'
-import type { PortfolioSort } from './firebase/preferences'
+import type { PortfolioSort, SlabFilter } from './firebase/preferences'
 import type { CurrencyCode } from './currency'
 
 interface TCGStore {
@@ -33,6 +33,7 @@ interface TCGStore {
   // Shared price-update health for Portfolio's "Prices updated …" line; not persisted.
   priceStatus: PriceStatus | null
   calcFloor: number
+  slabFilter: SlabFilter   // Portfolio: all cards / only slabs / only raw (lib/firebase/preferences.ts)
   showFilters: boolean
   activeGames: Game[]
   // The games this user has chosen to track (Inventory's game tabs + "+" picker). Inventory,
@@ -72,6 +73,7 @@ interface TCGStore {
   setLastPriceRefresh: (date: string) => void
   setPriceStatus: (status: PriceStatus | null) => void
   setCalcFloor: (v: number) => void
+  setSlabFilter: (v: SlabFilter) => void
   setShowFilters: (v: boolean) => void
   setActiveGames: (games: Game[]) => void
   setTrackedGames: (games: Game[]) => void
@@ -130,6 +132,7 @@ export const useStore = create<TCGStore>()(
   lastPriceRefresh: null,
   priceStatus: null,
   calcFloor: 0,
+  slabFilter: 'all',
   showFilters: false,
   activeGames: ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk'] as Game[],
   trackedGames: DEFAULT_TRACKED_GAMES,
@@ -184,6 +187,7 @@ export const useStore = create<TCGStore>()(
     set((state) => ({ cardUnlocks: state.cardUnlocks.filter((u) => u.id !== id) })),
 
   setCalcFloor: (v) => set({ calcFloor: v }),
+  setSlabFilter: (v) => set({ slabFilter: v }),
   setShowFilters: (v) => set({ showFilters: v }),
   setActiveGames: (games) => set({ activeGames: games }),
   // A game the user newly tracks (Inventory's "+") also gets switched on in Portfolio's game
@@ -211,6 +215,7 @@ export const useStore = create<TCGStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         calcFloor: state.calcFloor,
+        slabFilter: state.slabFilter,
         activeGames: state.activeGames,
         trackedGames: state.trackedGames,
         timeFrame: state.timeFrame,

@@ -10,12 +10,13 @@ name: Sync graded prices (PriceCharting)
 #  - ADMIN_EMAIL / ADMIN_PASSWORD and the six NEXT_PUBLIC_FIREBASE_* variables, as sync-mtg.yml.
 #  - Deploy firestore.rules first (graded_prices is a new collection).
 #
-# Manual only ("Run workflow" in the Actions tab) until the first run has been checked — then
-# uncomment the schedule.
+# Daily since 2026-11-18 (first run checked by hand). Each run also keeps the day's prices as
+# graded history (graded_history/{catalog}) — Portfolio's windows and the charts read it.
+# "Run workflow" in the Actions tab runs it on demand.
 
 on:
-  # schedule:
-  #   - cron: '30 10 * * *'   # 10:30 UTC
+  schedule:
+    - cron: '30 10 * * *'   # 10:30 UTC
   workflow_dispatch: {}
 
 concurrency:

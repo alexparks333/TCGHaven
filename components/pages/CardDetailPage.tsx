@@ -1,7 +1,7 @@
 'use client'
 
 import { PrintingTags } from '@/components/PrintingTags'
-import { GradedPriceNote } from '@/components/GradedPriceTag'
+import { GradedPriceNote, PriceChartingCredit, gradedLabel } from '@/components/GradedPriceTag'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
@@ -24,9 +24,10 @@ export default function CardDetailPage() {
   const [range, setRange] = useState<Range>('all')
 
   const card = cards.find((c) => c.id === cardId)
-  // A slab valued at PriceCharting's graded price: the shared history below is TCGplayer's ungraded
-  // price, so the chart is labelled as such and never ends on the (graded) value.
-  const gradedPriced = useStore((s) => Boolean(card && s.gradedOn && s.gradedSources[card.id]))
+  // A slab valued at PriceCharting's graded price: the server answers with its grade's graded
+  // history (lib/api/priceHistory.ts), so the chart is that grade's price, credited to PriceCharting.
+  const gradedSource = useStore((s) => (card && s.gradedOn ? s.gradedSources[card.id] : undefined))
+  const gradedPriced = Boolean(gradedSource)
 
   // This card's daily prices from the shared, catalog-level history (app/api/price-history) —
   // the same history every owner of this card sees. Unmatched cards have none.
@@ -37,13 +38,13 @@ export default function CardDetailPage() {
     authFetch('/api/price-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil, edition: card.edition, finish: card.finish, language: card.language }] }),
+      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil, edition: card.edition, finish: card.finish, language: card.language, gradingCompany: card.gradingCompany, grade: card.grade, gradeTier: card.gradeTier ?? undefined }] }),
     })
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
       .catch(() => {})
     return () => { stale = true }
-  }, [card?.id, card?.apiId, card?.game, card?.isFoil])
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.gradingCompany, card?.grade, card?.gradeTier, gradedPriced])
 
   const chartData = useMemo(() => {
     if (!card) return []
@@ -56,7 +57,7 @@ export default function CardDetailPage() {
     )
     const points = history.filter((p) => new Date(p.date) >= cutoff)
     // End the line on today's live price (prices update during the day; history is per day).
-    if (!gradedPriced && points.length > 0 && card.currentPrice != null && points[points.length - 1].date.slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
+    if (points.length > 0 && card.currentPrice != null && points[points.length - 1].date.slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
       points.push({ date: new Date().toISOString(), price: card.currentPrice })
     }
     if (points.length === 0) {
@@ -66,7 +67,7 @@ export default function CardDetailPage() {
       ]
     }
     return points
-  }, [history, range, card, gradedPriced])
+  }, [history, range, card])
 
   if (!card) {
     return (
@@ -165,9 +166,9 @@ export default function CardDetailPage() {
         <div className="card-glass p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-sm font-semibold text-ink">{gradedPriced ? 'Ungraded Price History' : 'Price History'}</h2>
-              {gradedPriced && history.length > 0 && (
-                <div className="text-xs text-slate-500 mt-0.5">TCGplayer&apos;s price for an ungraded copy — your slab is valued from graded sales above.</div>
+              <h2 className="text-sm font-semibold text-ink">{gradedSource ? `${gradedLabel(gradedSource.key)} Price History` : 'Price History'}</h2>
+              {gradedSource && (
+                <PriceChartingCredit label={gradedLabel(gradedSource.key)} url={gradedSource.url} className="mt-0.5" />
               )}
             </div>
             <div className="flex gap-1.5">
@@ -184,7 +185,9 @@ export default function CardDetailPage() {
           </div>
           <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} />
           <div className="text-center text-xs text-slate-600 mt-3">
-            {chartData.length <= 2 ? 'Price history builds up automatically as prices update each day.' : `${chartData.length} data points`}
+            {chartData.length <= 2
+              ? (gradedSource ? 'Graded price history started 19 Nov 2026 and builds up each day.' : 'Price history builds up automatically as prices update each day.')
+              : `${chartData.length} data points`}
           </div>
         </div>
       </div>

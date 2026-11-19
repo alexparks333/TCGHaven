@@ -5,6 +5,8 @@ import {
   parsePcPrice, penniesToUsd, parsePcCsv, gradedFromRow, pickByTcgId, productIdOf, matchCatalog,
   gradedPriceKey, gradedPriceFor, pcProductUrl,
 } from './pricecharting.mjs'
+import { GRADED_ORDER, gradedTuple, tupleToGraded, buildGradedHistory } from './graded-history.mjs'
+import { gunzip } from './price-history.mjs'
 
 // Prices: CSV is dollars (maybe with "$" and commas), API is pennies
 assert.equal(parsePcPrice('$1,234.56'), 1234.56)
@@ -85,5 +87,26 @@ for (const [company, grade, tier, want] of cases) {
 assert.equal(gradedPriceFor(zard.prices, { company: 'PSA', grade: '10' }), 12000)
 assert.equal(gradedPriceFor(zard.prices, { company: 'CGC', grade: '10' }), 0, 'no CGC 10 sales → 0 (raw fallback)')
 assert.equal(gradedPriceFor(undefined, { company: 'PSA', grade: '10' }), 0)
+
+// Graded history (graded-history.mjs): the slot order is append-only — stored history depends on it
+assert.deepEqual(GRADED_ORDER.slice(0, 3), ['g1', 'g2', 'g3'], 'GRADED_ORDER must never be reordered')
+assert.equal(GRADED_ORDER.indexOf('psa10'), 10)
+assert.equal(gradedTuple({}), null)
+const tuple = gradedTuple({ g9: 310, psa10: 1025.014 })
+assert.equal(tuple.length, 11, 'trailing zeros dropped')
+assert.deepEqual(tupleToGraded(tuple), { g9: 310, psa10: 1025.01 })
+assert.deepEqual(tupleToGraded(undefined), {})
+{
+  const when = new Date('2026-11-18T10:30:00Z')
+  const { day, months } = await buildGradedHistory(
+    [{ id: 'a', p: { psa10: 100 } }, { id: 'b', p: { g9: 5 } }, { id: 'c', p: {} }],
+    new Map([['a', { setCode: 'OP01' }], ['b', { setCode: 'OP02' }]]), when)
+  assert.equal(day.day, '2026-11-18')
+  assert.deepEqual(Object.keys(day.prices).sort(), ['a', 'b'], 'cards with no graded price are not kept')
+  assert.deepEqual([...months.keys()].sort(), ['OP01__2026-11', 'OP02__2026-11'])
+  const m = months.get('OP01__2026-11')
+  assert.equal(m.dd, '18')
+  assert.deepEqual(JSON.parse(await gunzip(m.gz)), { t: when.toISOString(), p: { a: gradedTuple({ psa10: 100 }) } })
+}
 
 console.log('pricecharting: all tests passed')

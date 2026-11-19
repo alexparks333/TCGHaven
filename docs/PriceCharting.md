@@ -132,9 +132,35 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
      (`gradedSources`, `gradedOn`) and in the on-device saved prices. Callers without `withSources`
      (Personal Collections, a friend's card) get the plain price map — and a friend's card is always
      priced ungraded, since that view has no citation.
-   - **No fake jumps:** a graded-priced slab's history is ungraded, so Portfolio shows "—" for its
-     24h–1y change and measures "since added" against what was paid; the card page's chart is titled
-     "Ungraded Price History" and doesn't end on the graded value.
+   - **No fake jumps:** a graded-priced slab is measured "since added" against what was paid (its
+     saved entry price is the ungraded one). Its 24h–1y changes and charts use the graded history (6.).
+
+6. **Graded price history** (2026-11-18) — `scripts/lib/graded-history.mjs`. Each run of the daily job
+   also keeps the day: `graded_history/{catalog}/days/{YYYY-MM-DD}__{n}` (whole catalog, gzipped —
+   Portfolio's windows) and `graded_history/{catalog}/months/{setKey}__{YYYY-MM}` (`days.{DD}` = gzipped
+   JSON — one card's chart, Analytics). Same layout as `price_history`, but each month day is gzipped:
+   a big set's graded month is over 1MiB as plain JSON (Secret Lair ~1.7MB). A tuple is the card's
+   prices in `GRADED_ORDER` — **append-only**, never reorder. `lib/api/priceHistory.ts` reads it for
+   every slab that is graded-priced today (`gradedPricedKeys()` — the same test as the price routes):
+   baselines, the card chart, Analytics. History starts 2026-11-19 (first day written 02:35 UTC), so a slab's 24h shows from
+   the 20th, 7d from the 26th, and so on; until then "—". The job runs daily at 10:30 UTC.
+
+7. **The one rule people see: one copy, one price.** A raw copy is worth TCGplayer's price; a slab
+   PriceCharting's price for its grade, with the credit. Inventory, Portfolio (value, P&L, by game,
+   top performers), Analytics, the card page, your profile, a friend's profile and the Add/Edit card
+   dialog's Market Price all follow it — each inventory copy is priced on its own (PSA 10 + PSA 8 +
+   CGC 10 + 2 raw = five prices summed). The only raw-only view is the Cardex tile hover.
+   A **friend's profile** prices all their cards in one batch as it opens (`fetchCardPrices()` —
+   their shared copies carry no prices) and ranks tiles by those; each grade is its own tile. Their
+   full Cardex view gets their PriceCharting sources through `CardexViewer.graded`. `gradeTier` is
+   shared (Black Label / Pristine change the price). **The Cardex:**
+   - Hovering a tile shows the **raw** price — the card itself (with "raw" beside it when you own a
+     slab of it), then the versions you own ("PSA 10 · PSA 7 · Raw").
+   - The zoom view opens on your best slab (the one the tile shows). Owning more than one version
+     (PSA 10, PSA 7, raw…) adds a small column of **bubbles** off the card's bottom-right corner (over
+     it on a phone); tapping one (or the arrow keys) swaps the card: the old one tips away with a flash,
+     the new one rises in. Each version shows its own price — a slab with the PriceCharting credit, or
+     "Raw est." when its grade has no sales. `ownedVersions()` in `CardexPage.tsx`, `ZoomCardData.versions`.
 
 **Before switching on:**
 - Add the token (`PRICECHARTING_TOKEN`: `.env.local` on both machines + GitHub secret), run
@@ -145,7 +171,7 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
 - Confirm `other-tcg-cards` downloads (Riftbound, Lorcana … sit under "Other TCG Cards" on
   PriceCharting — e.g. Teemo, Swift Scout [Alternate Art] #263A, PSA 10 $1,025 — but that list isn't on
   the download page).
-- Later: graded price history (so slabs get 24h–1y changes), and `tcgProductId` saved by the Pokémon EN,
+- Done 2026-11-18: graded price history (6. above), and `tcgProductId` saved by the Pokémon EN,
   Magic, Lorcana and Riftbound syncs. Today matching also reads the id from a TCGplayer image link, which
   covers 301 of 1,754 Riftbound cards (the TCGplayer-sourced ones, like that Teemo) and 561 of 3,669
   Lorcana; Magic none.
@@ -176,7 +202,8 @@ Magic, Lorcana and Riftbound none — save `tcgProductId` in their syncs for ful
 |---|---|
 | PriceCharting Legendary | ~$50 |
 | Licence | $0 until $1,000/month revenue; then a revenue share (quoted 8%) |
-| Firestore writes | pennies — a few dozen chunk docs a day, not one write per card |
+| Firestore writes | pennies — a few dozen chunk docs a day, plus ~1,500 history month docs (one per set with graded prices) |
+| Graded history storage | ~2MB a day gzipped → under 1GB a year (~$0.15/month after a year) |
 | Firestore reads | pennies — each server reads a catalog's chunks at most every 30 min, only for graded cards |
 | Daily job (GitHub Actions) | $0 |
 

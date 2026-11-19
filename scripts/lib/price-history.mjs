@@ -110,12 +110,12 @@ export function buildDayPrices(cards, when = new Date()) {
   return { day: t.slice(0, 10), t, prices }
 }
 
-async function gzip(text) {
+export async function gzip(text) {
   const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))
   return new Uint8Array(await new Response(stream).arrayBuffer())
 }
 
-async function gunzip(bytes) {
+export async function gunzip(bytes) {
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
   return new Response(stream).text()
 }

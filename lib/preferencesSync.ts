@@ -13,18 +13,19 @@ import { preferencesDoc, parseFilterPrefs, parseTrackedGames, saveFilterPrefs, t
 
 const SAVE_DELAY_MS = 600 // the floor is a typed number — don't write on every keystroke
 
-const FIELDS = ['calcFloor', 'activeGames', 'timeFrame', 'hiddenGroups', 'portfolioSort', 'includeSold'] as const
+const FIELDS = ['calcFloor', 'activeGames', 'timeFrame', 'hiddenGroups', 'portfolioSort', 'includeSold', 'slabFilter'] as const
 
 function currentFilters(): FilterPrefs {
   const s = useStore.getState()
   return {
     calcFloor: s.calcFloor, activeGames: s.activeGames, timeFrame: s.timeFrame,
     hiddenGroups: s.hiddenGroups, portfolioSort: s.portfolioSort, includeSold: s.includeSold,
+    slabFilter: s.slabFilter,
   }
 }
 
 const keyOf = (f: FilterPrefs) =>
-  JSON.stringify([f.calcFloor, [...f.activeGames].sort(), f.timeFrame, [...f.hiddenGroups].sort(), f.portfolioSort, f.includeSold])
+  JSON.stringify([f.calcFloor, [...f.activeGames].sort(), f.timeFrame, [...f.hiddenGroups].sort(), f.portfolioSort, f.includeSold, f.slabFilter])
 
 const sameGames = (a: string[], b: string[]) => a.length === b.length && a.every((g) => b.includes(g))
 

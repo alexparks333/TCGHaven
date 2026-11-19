@@ -36,8 +36,18 @@ const VALID_TIME_FRAMES: TimeFrame[] = ['entry', '1d', '7d', '30d', '365d']
 export const PORTFOLIO_SORTS = ['pnl', 'pnlAsc', 'pnlPct', 'pnlPctAsc', 'value', 'valueAsc', 'name', 'nameDesc'] as const
 export type PortfolioSort = typeof PORTFOLIO_SORTS[number]
 
+// Portfolio's "Cards" filter: everything, only slabs, or only raw copies — slabs move by tens or
+// hundreds of dollars a day and would otherwise crowd raw cards out of Top Performers.
+export const SLAB_FILTERS = ['all', 'graded', 'raw'] as const
+export type SlabFilter = typeof SLAB_FILTERS[number]
+
+/** Whether a card counts under the Cards filter (a slab = any card with a grading company) */
+export const passesSlabFilter = (card: { gradingCompany?: string }, filter: SlabFilter) =>
+  filter === 'all' || (filter === 'graded') === Boolean(card.gradingCompany)
+
 export interface FilterPrefs {
   calcFloor: number
+  slabFilter: SlabFilter
   activeGames: Game[]
   timeFrame: TimeFrame
   hiddenGroups: string[]
@@ -56,6 +66,7 @@ export function parseFilterPrefs(raw: unknown): Partial<FilterPrefs> | null {
   if (Array.isArray(r.hiddenGroups)) out.hiddenGroups = r.hiddenGroups.filter((g): g is string => typeof g === 'string')
   if (PORTFOLIO_SORTS.includes(r.portfolioSort as PortfolioSort)) out.portfolioSort = r.portfolioSort as PortfolioSort
   if (typeof r.includeSold === 'boolean') out.includeSold = r.includeSold
+  if (SLAB_FILTERS.includes(r.slabFilter as SlabFilter)) out.slabFilter = r.slabFilter as SlabFilter
   return Object.keys(out).length > 0 ? out : null
 }
 

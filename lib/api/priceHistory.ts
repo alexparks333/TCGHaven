@@ -1,18 +1,23 @@
 import { collection, doc, documentId, getDoc, getDocs, query, where, type Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice } from '@/lib/pricing'
+import { catalogPrice, gradedPrice, type GradingChoice } from '@/lib/pricing'
 import { catalogKeyFor, type CatalogKey, type Edition, type Finish, type Game, type Language } from '@/lib/types'
 import {
-  PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, setKeyOf, monthDocId, dayDocId, tupleToFields, decodePriceChunks,
+  PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, setKeyOf, monthDocId, dayDocId, tupleToFields, decodePriceChunks, gunzip,
 } from '@/scripts/lib/price-history.mjs'
+import { GRADED_HISTORY_COLLECTION, tupleToGraded } from '@/scripts/lib/graded-history.mjs'
+import { gradedPricedKeys, type GradingInput } from '@/lib/api/gradedPrices'
 
-// Server-side reader for the shared price history (format: scripts/lib/price-history.mjs).
+// Server-side reader for the shared price history (format: scripts/lib/price-history.mjs), and for
+// slabs priced from PriceCharting, the graded history (scripts/lib/graded-history.mjs) — same
+// layout, its own root. A slab whose value today is its graded price gets graded history
+// everywhere (baselines, charts, Analytics), so its past and present are the same kind of price.
 // Everything a page needs is computed here and only the answer is sent to the browser — a
 // phone never downloads the raw history.
 //
 
-export interface HistoryItem {
+export interface HistoryItem extends GradingInput {
   key: string       // the caller's id for this row (a user card id) — echoed back in results
   game: Game
   apiId: string     // catalog card id
@@ -25,6 +30,11 @@ export interface HistoryItem {
 export interface PricePoint { date: string; price: number }
 
 type DayEntry = { t: string; p: Record<string, number[]> }
+
+// Which history a read uses: the raw catalog prices, or PriceCharting's graded prices.
+interface Store { root: string; sync: (key: CatalogKey) => Promise<number> }
+const RAW: Store = { root: PRICE_HISTORY_COLLECTION, sync: (key) => lastSyncMs(key) }
+const GRADED: Store = { root: GRADED_HISTORY_COLLECTION, sync: (key) => lastGradedMs(key) }
 type MonthDoc = Map<string, DayEntry>   // 'DD' -> that day's entry, parsed
 
 const DAY_MS = 86_400_000
@@ -51,13 +61,26 @@ async function lastSyncMs(key: CatalogKey): Promise<number> {
   return syncMs
 }
 
+// The graded history changes when the daily PriceCharting job writes (graded_prices/{key}.asOf).
+const gradedChecks = new Map<CatalogKey, { at: number; syncMs: number }>()
+async function lastGradedMs(key: CatalogKey): Promise<number> {
+  const hit = gradedChecks.get(key)
+  if (hit && Date.now() - hit.at < SYNC_CHECK_MS) return hit.syncMs
+  let syncMs = hit?.syncMs ?? 0
+  try {
+    syncMs = ((await getDoc(doc(db, 'graded_prices', key))).data()?.asOf as Timestamp | undefined)?.toMillis() ?? 0
+  } catch { /* keep the last answer */ }
+  gradedChecks.set(key, { at: Date.now(), syncMs })
+  return syncMs
+}
+
 // A cached copy of something that covers up to `endsAt` (the end of its day / month) is final once
 // it was fetched comfortably after that moment; otherwise it's good until a newer sync.
 const SETTLE_MS = 30 * 60 * 1000
-async function stillGood(key: CatalogKey, fetchedAt: number, endsAt: number): Promise<boolean> {
+async function stillGood(store: Store, key: CatalogKey, fetchedAt: number, endsAt: number): Promise<boolean> {
   if (fetchedAt > endsAt + SETTLE_MS) return true
   if (Date.now() - fetchedAt > MAX_AGE_MS) return false
-  return fetchedAt > await lastSyncMs(key)
+  return fetchedAt > await store.sync(key)
 }
 
 // ── Month docs (one card's chart, Analytics) ───────────────────────────────────────────────────
@@ -97,35 +120,39 @@ function endOfMonthMs(month: string): number {
   return Date.UTC(y, m, 1) - 1 // Date.UTC's month is 0-based, so (y, m) is the next month's start
 }
 
-function parseMonth(data: Record<string, unknown>): { days: MonthDoc; size: number } {
+// A day is a JSON string (raw history) or gzipped JSON bytes (graded history).
+async function parseMonth(data: Record<string, unknown>): Promise<{ days: MonthDoc; size: number }> {
   const days: MonthDoc = new Map()
   let size = 0
-  for (const [dd, raw] of Object.entries((data.days ?? {}) as Record<string, string>)) {
-    size += raw.length * 2
-    try { days.set(dd, JSON.parse(raw) as DayEntry) } catch { /* skip a malformed day */ }
+  for (const [dd, stored] of Object.entries((data.days ?? {}) as Record<string, unknown>)) {
+    try {
+      const raw = typeof stored === 'string' ? stored : await gunzip((stored as { toUint8Array(): Uint8Array }).toUint8Array())
+      size += raw.length * 2
+      days.set(dd, JSON.parse(raw) as DayEntry)
+    } catch { /* skip a malformed day */ }
   }
   return { days, size }
 }
 
 // A set's month docs from `fromMonth` to now. Months not cached come in ONE document-id range
 // query (ids are `{setKey}__{YYYY-MM}`); a stale current month alone is a single get().
-async function loadSetMonths(game: CatalogKey, setKey: string, fromMonth: string): Promise<Map<string, MonthDoc>> {
+async function loadSetMonths(store: Store, game: CatalogKey, setKey: string, fromMonth: string): Promise<Map<string, MonthDoc>> {
   const wanted = monthsFrom(fromMonth, new Date().toISOString().slice(0, 7))
-  const keyOf = (month: string) => `${game}/${monthDocId(setKey, month)}`
+  const keyOf = (month: string) => `${store.root}/${game}/${monthDocId(setKey, month)}`
   const missing: string[] = []
   for (const month of wanted) {
     const hit = monthCache.get(keyOf(month))
-    if (!hit || !(await stillGood(game, hit.fetchedAt, endOfMonthMs(month)))) missing.push(month)
+    if (!hit || !(await stillGood(store, game, hit.fetchedAt, endOfMonthMs(month)))) missing.push(month)
   }
 
   const fetchedAt = Date.now()
   const found = new Map<string, Record<string, unknown>>()
   if (missing.length === 1) {
-    const snap = await getDoc(doc(db, PRICE_HISTORY_COLLECTION, game, 'months', monthDocId(setKey, missing[0])))
+    const snap = await getDoc(doc(db, store.root, game, 'months', monthDocId(setKey, missing[0])))
     if (snap.exists()) found.set(missing[0], snap.data())
   } else if (missing.length > 1) {
     const snap = await getDocs(query(
-      collection(db, PRICE_HISTORY_COLLECTION, game, 'months'),
+      collection(db, store.root, game, 'months'),
       where(documentId(), '>=', monthDocId(setKey, missing[0])),
       where(documentId(), '<=', monthDocId(setKey, missing[missing.length - 1])),
     ))
@@ -134,7 +161,7 @@ async function loadSetMonths(game: CatalogKey, setKey: string, fromMonth: string
   // A month with no doc is cached too (as empty), so it isn't asked for again.
   for (const month of missing) {
     const data = found.get(month)
-    const parsed = data ? parseMonth(data) : null
+    const parsed = data ? await parseMonth(data) : null
     cacheMonth(keyOf(month), { days: parsed?.days ?? null, fetchedAt, size: parsed?.size ?? 100 })
   }
 
@@ -156,27 +183,27 @@ const dayCache = new Map<string, { file: DayFile | null; fetchedAt: number }>()
 const dayLoading = new Map<string, Promise<DayFile | null>>() // requests at the same moment share one read
 const MAX_DAY_FILES = 60
 
-async function loadDay(key: CatalogKey, day: string): Promise<DayFile | null> {
-  const cacheKey = `${key}/${day}`
+async function loadDay(store: Store, key: CatalogKey, day: string): Promise<DayFile | null> {
+  const cacheKey = `${store.root}/${key}/${day}`
   const hit = dayCache.get(cacheKey)
-  if (hit && await stillGood(key, hit.fetchedAt, Date.parse(`${day}T23:59:59.999Z`))) {
+  if (hit && await stillGood(store, key, hit.fetchedAt, Date.parse(`${day}T23:59:59.999Z`))) {
     dayCache.delete(cacheKey); dayCache.set(cacheKey, hit) // most recently used goes last
     return hit.file
   }
   let loading = dayLoading.get(cacheKey)
   if (!loading) {
-    loading = fetchDay(key, day).finally(() => dayLoading.delete(cacheKey))
+    loading = fetchDay(store, key, day).finally(() => dayLoading.delete(cacheKey))
     dayLoading.set(cacheKey, loading)
   }
   return loading
 }
 
-async function fetchDay(key: CatalogKey, day: string): Promise<DayFile | null> {
-  const cacheKey = `${key}/${day}`
+async function fetchDay(store: Store, key: CatalogKey, day: string): Promise<DayFile | null> {
+  const cacheKey = `${store.root}/${key}/${day}`
   let decoded: Awaited<ReturnType<typeof decodePriceChunks>>
   try {
     const snap = await getDocs(query(
-      collection(db, PRICE_HISTORY_COLLECTION, key, DAYS_COLLECTION),
+      collection(db, store.root, key, DAYS_COLLECTION),
       where(documentId(), '>=', dayDocId(day, 0)),
       where(documentId(), '<=', dayDocId(day, '~')),
     ))
@@ -197,7 +224,7 @@ const firstsCache = new Map<CatalogKey, { prices: PriceMap; fetchedAt: number }>
 
 async function loadFirsts(key: CatalogKey): Promise<PriceMap> {
   const hit = firstsCache.get(key)
-  if (hit && await stillGood(key, hit.fetchedAt, Infinity)) return hit.prices
+  if (hit && await stillGood(RAW, key, hit.fetchedAt, Infinity)) return hit.prices
   const decoded = await getDocs(collection(db, PRICE_HISTORY_COLLECTION, key, FIRSTS_COLLECTION))
     .then((snap) => decodePriceChunks(snap.docs.map((d) => d.data())))
     .catch((err) => { console.error(`First prices ${key} unreadable:`, err); return null })
@@ -214,43 +241,72 @@ const BASELINE_WINDOWS = { d1: 1, d7: 7, d30: 30, d365: 365 } as const
 // or a card unpriced that day) — the "latest price at or before" the month-doc series gives.
 const LOOKBACK_DAYS = 3
 
-/** Each item's price 24h / 7d / 30d / 1y ago, and its first recorded price — Portfolio's P&L. */
-export async function loadBaselines(items: HistoryItem[], now = Date.now()): Promise<Record<string, Baseline>> {
-  const out: Record<string, Baseline> = {}
-  const byCatalog = new Map<CatalogKey, { game: Game; items: HistoryItem[] }>()
+// An item's price from a stored tuple — the raw history's tuple through the one pricing rule
+// (lib/pricing.ts), or the graded history's through the slab's grade. Null = no price.
+type CardFields = { rarity?: string; publicCode?: string }
+type PriceOf = (game: Game, item: HistoryItem, tuple: number[] | undefined, card?: CardFields) => number | null
+const rawPriceOf: PriceOf = (game, item, tuple, card) => {
+  if (!tuple) return null
+  const price = catalogPrice(game, { ...tupleToFields(tuple), rarity: card?.rarity, publicCode: card?.publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish })
+  return price > 0 ? price : null
+}
+const gradingOfItem = (item: HistoryItem): GradingChoice => ({ company: item.gradingCompany, grade: item.grade, tier: item.gradeTier ?? null })
+const gradedPriceOf: PriceOf = (game, item, tuple) => {
+  if (!tuple) return null
+  const price = gradedPrice(game, { graded: tupleToGraded(tuple) }, { edition: item.edition, finish: item.finish, grading: gradingOfItem(item) })
+  return price > 0 ? price : null
+}
+
+/** Slabs valued at PriceCharting's graded price today read the graded history; everything else
+ *  (raw cards, and slabs with no graded price, shown as "Raw est.") the raw history. */
+async function splitByStore(items: HistoryItem[]): Promise<{ raw: HistoryItem[]; graded: HistoryItem[] }> {
+  const gradedKeys = await gradedPricedKeys(items)
+  return { raw: items.filter((i) => !gradedKeys.has(i.key)), graded: items.filter((i) => gradedKeys.has(i.key)) }
+}
+
+function byCatalogOf(items: HistoryItem[]): Map<CatalogKey, { game: Game; items: HistoryItem[] }> {
+  const out = new Map<CatalogKey, { game: Game; items: HistoryItem[] }>()
   for (const it of items) {
     const key = catalogKeyFor(it.game, it.language)
-    if (!byCatalog.has(key)) byCatalog.set(key, { game: it.game, items: [] })
-    byCatalog.get(key)!.items.push(it)
+    if (!out.has(key)) out.set(key, { game: it.game, items: [] })
+    out.get(key)!.items.push(it)
   }
+  return out
+}
 
-  for (const [key, { game, items: gameItems }] of Array.from(byCatalog.entries())) {
+/** Each item's price 24h / 7d / 30d / 1y ago, and its first recorded price — Portfolio's P&L. A
+ *  graded-priced slab's come from the graded history (no "first": Portfolio measures a slab
+ *  since added against what was paid). */
+export async function loadBaselines(items: HistoryItem[], now = Date.now()): Promise<Record<string, Baseline>> {
+  const { raw, graded } = await splitByStore(items)
+  const [a, b] = await Promise.all([baselinesFrom(RAW, rawPriceOf, raw, now), baselinesFrom(GRADED, gradedPriceOf, graded, now)])
+  return { ...a, ...b }
+}
+
+async function baselinesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[], now: number): Promise<Record<string, Baseline>> {
+  const out: Record<string, Baseline> = {}
+  for (const [key, { game, items: gameItems }] of Array.from(byCatalogOf(items).entries())) {
     const catalog = await loadCatalog<{ id: string; rarity?: string; publicCode?: string }>(key)
     const byId = new Map(catalog.map((c) => [c.id, c]))
-    const priceOf = (item: HistoryItem, tuple: number[] | undefined): number | null => {
-      if (!tuple) return null
-      const card = byId.get(item.apiId)
-      const price = catalogPrice(game, { ...tupleToFields(tuple), rarity: card?.rarity, publicCode: card?.publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish })
-      return price > 0 ? price : null
-    }
 
     // Per window: the day files at or before its cutoff, newest first.
     const windows = await Promise.all((Object.keys(BASELINE_WINDOWS) as (keyof typeof BASELINE_WINDOWS)[]).map(async (name) => {
       const cutoff = now - BASELINE_WINDOWS[name] * DAY_MS
       const files: DayFile[] = []
       for (let back = 0; back < LOOKBACK_DAYS; back++) {
-        const file = await loadDay(key, new Date(cutoff - back * DAY_MS).toISOString().slice(0, 10))
+        const file = await loadDay(store, key, new Date(cutoff - back * DAY_MS).toISOString().slice(0, 10))
         if (file && file.t <= cutoff) files.push(file)
       }
       return { name, files }
     }))
-    const firsts = await loadFirsts(key)
+    const firsts = store === RAW ? await loadFirsts(key) : {}
 
     for (const item of gameItems) {
-      const b: Baseline = { d1: null, d7: null, d30: null, d365: null, first: priceOf(item, firsts[item.apiId]) }
+      const card = byId.get(item.apiId)
+      const b: Baseline = { d1: null, d7: null, d30: null, d365: null, first: priceOf(game, item, firsts[item.apiId], card) }
       for (const { name, files } of windows) {
         for (const file of files) {
-          const price = priceOf(item, file.prices[item.apiId])
+          const price = priceOf(game, item, file.prices[item.apiId], card)
           if (price !== null) { b[name] = price; break }
         }
       }
@@ -261,47 +317,46 @@ export async function loadBaselines(items: HistoryItem[], now = Date.now()): Pro
 }
 
 // Daily price points for each item from `from` until now, priced with the same rule every price
-// display uses (lib/pricing.ts) — so history and today's prices are always comparable.
+// display uses (lib/pricing.ts) — so history and today's prices are always comparable. A
+// graded-priced slab's points are its grade's graded prices.
 export async function loadPriceSeries(
   items: HistoryItem[],
   from: Date,
 ): Promise<Map<string, PricePoint[]>> {
+  const { raw, graded } = await splitByStore(items)
+  const [a, b] = await Promise.all([seriesFrom(RAW, rawPriceOf, raw, from), seriesFrom(GRADED, gradedPriceOf, graded, from)])
+  b.forEach((points, key) => a.set(key, points))
+  return a
+}
+
+async function seriesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[], from: Date): Promise<Map<string, PricePoint[]>> {
   const result = new Map<string, PricePoint[]>()
   const fromMonth = from.toISOString().slice(0, 7)
   const fromMs = from.getTime()
 
   // Grouped by catalog (Japanese Pokémon has its own catalog and history), priced by game.
-  const byCatalog = new Map<CatalogKey, { game: Game; items: HistoryItem[] }>()
-  for (const it of items) {
-    const key = catalogKeyFor(it.game, it.language)
-    if (!byCatalog.has(key)) byCatalog.set(key, { game: it.game, items: [] })
-    byCatalog.get(key)!.items.push(it)
-  }
-
-  for (const [catalogKey, { game, items: gameItems }] of Array.from(byCatalog.entries())) {
+  for (const [catalogKey, { game, items: gameItems }] of Array.from(byCatalogOf(items).entries())) {
     const catalog = await loadCatalog<{ id: string; rarity?: string; publicCode?: string; set?: string; setCode?: string; setName?: string }>(catalogKey)
     const byId = new Map(catalog.map((c) => [c.id, c]))
 
     // Group by set so each month doc is loaded once per set.
-    const bySet = new Map<string, { item: HistoryItem; rarity?: string; publicCode?: string }[]>()
+    const bySet = new Map<string, { item: HistoryItem; card: CardFields }[]>()
     for (const item of gameItems) {
       const card = byId.get(item.apiId)
       if (!card) continue
       const key = setKeyOf(card) as string
       if (!bySet.has(key)) bySet.set(key, [])
-      bySet.get(key)!.push({ item, rarity: card.rarity, publicCode: card.publicCode })
+      bySet.get(key)!.push({ item, card: { rarity: card.rarity, publicCode: card.publicCode } })
     }
 
     await Promise.all(Array.from(bySet.entries()).map(async ([setKey, rows]) => {
-      const monthDocs = await loadSetMonths(catalogKey, setKey, fromMonth)
+      const monthDocs = await loadSetMonths(store, catalogKey, setKey, fromMonth)
       for (const monthDoc of Array.from(monthDocs.values())) {
         for (const entry of Array.from(monthDoc.values())) {
           if (new Date(entry.t).getTime() < fromMs) continue
-          for (const { item, rarity, publicCode } of rows) {
-            const tuple = entry.p[item.apiId]
-            if (!tuple) continue
-            const price = catalogPrice(game, { ...tupleToFields(tuple), rarity, publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish })
-            if (price <= 0) continue
+          for (const { item, card } of rows) {
+            const price = priceOf(game, item, entry.p[item.apiId], card)
+            if (price === null) continue
             if (!result.has(item.key)) result.set(item.key, [])
             result.get(item.key)!.push({ date: entry.t, price })
           }

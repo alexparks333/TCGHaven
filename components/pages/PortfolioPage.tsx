@@ -7,7 +7,7 @@ import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle
 import { useRouter } from 'next/navigation'
 import { useStore, portfolioGames } from '@/lib/store'
 import type { PriceStatus } from '@/lib/api/priceStatus'
-import type { PortfolioSort } from '@/lib/firebase/preferences'
+import { passesSlabFilter, type PortfolioSort } from '@/lib/firebase/preferences'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
@@ -34,7 +34,7 @@ const BASELINE_KEY = { '1d': 'd1', '7d': 'd7', '30d': 'd30', '365d': 'd365' } as
 export default function PortfolioPage() {
   const {
     cards, priceBaselines, gradedSources, priceStatus, priceLoad,
-    soldCards, calcFloor, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
+    soldCards, calcFloor, slabFilter, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     hiddenGroups, portfolioSort: sort, setPortfolioSort: setSort, includeSold, setIncludeSold,
     showFilters, setShowFilters,
   } = useStore()
@@ -53,7 +53,7 @@ export default function PortfolioPage() {
     const baselineKey = timeFrame !== 'entry' ? BASELINE_KEY[timeFrame] : null
 
     return cards
-      .filter((c) => activeGames.includes(c.game) && (!c.group || !hiddenGroups.includes(c.group)))
+      .filter((c) => activeGames.includes(c.game) && (!c.group || !hiddenGroups.includes(c.group)) && passesSlabFilter(c, slabFilter))
       .map((c) => {
         const currentPrice = c.currentPrice ?? c.purchasePrice
         const currentVal = currentPrice * c.quantity
@@ -64,9 +64,10 @@ export default function PortfolioPage() {
         let hasPeriodData: boolean
         let periodStartVal: number  // value at period start (for correct total % denominator)
 
-        // A slab valued at PriceCharting's graded price: its price history (and the price saved when
-        // it was added) are TCGplayer's ungraded prices, so comparing would fake a huge jump. Since
-        // added → measured against what was paid; the 24h–1y windows → no data ("—").
+        // A slab valued at PriceCharting's graded price: the price saved when it was added is
+        // TCGplayer's ungraded one, so since added → measured against what was paid. The 24h–1y
+        // windows use the graded history (the baselines come back graded for these slabs) — "—"
+        // until that history reaches back far enough.
         const gradedPriced = Boolean(gradedSources[c.id])
         if (timeFrame === 'entry') {
           // Baseline = market price when card was first added, or what was paid if unknown
@@ -78,7 +79,7 @@ export default function PortfolioPage() {
         } else if (baselineKey) {
           // The card's shared-history price at the start of the window. No fallback to a later
           // point (that would fake a 0% change): no price that far back → no data for this window.
-          const baseline = gradedPriced ? null : (priceBaselines[c.id]?.[baselineKey] ?? null)
+          const baseline = priceBaselines[c.id]?.[baselineKey] ?? null
           if (baseline !== null) {
             pnl = (currentPrice - baseline) * c.quantity
             pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
@@ -109,7 +110,7 @@ export default function PortfolioPage() {
         if (sort === 'nameDesc')   return b.name.localeCompare(a.name)
         return a.name.localeCompare(b.name)
       })
-  }, [cards, sort, activeGames, timeFrame, priceBaselines, gradedSources, hiddenGroups])
+  }, [cards, sort, activeGames, timeFrame, priceBaselines, gradedSources, hiddenGroups, slabFilter])
 
   // Apply calculation floor
   const filtered = useMemo(() => {
@@ -204,12 +205,13 @@ export default function PortfolioPage() {
           (c) =>
             c.game === game &&
             (!c.group || !hiddenGroups.includes(c.group)) &&
+            passesSlabFilter(c, slabFilter) &&
             (calcFloor === 0 || (c.currentPrice ?? c.purchasePrice) >= calcFloor),
         )
         const value = gc.reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0)
         return { name: GAME_LABELS[game], value, color: GAME_COLORS[game], count: gc.length, game }
       })
-  }, [cards, calcFloor, activeGames, hiddenGroups])
+  }, [cards, calcFloor, activeGames, hiddenGroups, slabFilter])
 
   // Top Performers' game picker: "All Games" or one game the collection has cards in. Works
   // together with the time frame (groupedRows already carries the window's P&L).
@@ -261,7 +263,7 @@ export default function PortfolioPage() {
             >
               <SlidersHorizontal size={15} />
               Filters
-              {calcFloor > 0 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
+              {(calcFloor > 0 || slabFilter !== 'all') && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -379,6 +381,7 @@ export default function PortfolioPage() {
               Top Performers
               {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
               {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
+              {slabFilter !== 'all' && <span className="ml-2 text-[10px] text-amber-700 font-semibold normal-case">{slabFilter === 'graded' ? 'graded only' : 'raw only'}</span>}
             </h3>
             {performerGames.length > 0 && (
               <select
