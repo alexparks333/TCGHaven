@@ -94,11 +94,21 @@ export function gradedFromRow(row) {
   if (!Object.keys(prices).length) return null
   const name = String(row['product-name'] ?? '').trim()
   const consoleName = String(row['console-name'] ?? '').trim()
-  return { tcgId, pcId: String(row.id ?? '').trim(), name, console: consoleName, url: pcProductUrl(consoleName, name), prices }
+  const pcId = String(row.id ?? '').trim()
+  return { tcgId, pcId, name, console: consoleName, url: pcIdUrl(pcId) ?? pcProductUrl(consoleName, name), prices }
 }
 
-/** PriceCharting's card page, e.g. ("Pokemon Base Set", "Charizard #4") →
- *  https://www.pricecharting.com/game/pokemon-base-set/charizard-4 — the citation link. */
+/** PriceCharting's card page by its product id — /game/{id} always redirects to the exact card
+ *  page. The citation link. (A name-built address guesses PriceCharting's slug and, when it guesses
+ *  wrong — "Scarlet & Violet 151", "[Master Ball]" — lands on a search page: seen 2026-11-19.) */
+export function pcIdUrl(pcId) {
+  const id = String(pcId ?? '').trim()
+  return /^[0-9]+$/.test(id) ? `https://www.pricecharting.com/game/${id}` : null
+}
+
+/** A guess at PriceCharting's card page from its names, e.g. ("Pokemon Base Set", "Charizard #4") →
+ *  https://www.pricecharting.com/game/pokemon-base-set/charizard-4. Only for a row without an id —
+ *  pcIdUrl() is the reliable link. */
 export function pcProductUrl(consoleName, productName) {
   const slug = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')

@@ -101,7 +101,7 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
 
 1. **Pure logic** — `scripts/lib/pricecharting.mjs` (tests: `npm run test:pricecharting`, in CI): CSV
    parsing by header name, the column map above, matching `tcg-id` → our card (`tcgProductId`, or the id
-   `tcg-{n}` / `jp-{n}`), grade → column (`gradedPriceKey()`), the citation link (`pcProductUrl()`).
+   `tcg-{n}` / `jp-{n}`), grade → column (`gradedPriceKey()`), the citation link (`pcIdUrl()`: `/game/{productId}`, which always redirects to the exact card page — the old name-built address hit a search page for names with "&" or brackets, 2026-11-19).
    Several PriceCharting rows on one TCGplayer id: the plain-named row wins, else skipped. One TCGplayer
    id on several of our cards (One Piece Normal/Foil pairs): skipped.
 2. **Daily job** — `npm run pricecharting-sync` (`scripts/pricecharting-sync.mjs`; `--file x.csv`,

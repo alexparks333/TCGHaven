@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import {
   parsePcPrice, penniesToUsd, parsePcCsv, gradedFromRow, pickByTcgId, productIdOf, matchCatalog,
-  gradedPriceKey, gradedPriceFor, pcProductUrl,
+  gradedPriceKey, gradedPriceFor, pcProductUrl, pcIdUrl,
 } from './pricecharting.mjs'
 import { GRADED_ORDER, gradedTuple, tupleToGraded, buildGradedHistory } from './graded-history.mjs'
 import { gunzip } from './price-history.mjs'
@@ -38,7 +38,10 @@ assert.equal(rows[3]['product-name'], 'Venusaur\n#15')
 const zard = gradedFromRow(rows[0])
 assert.deepEqual(zard.prices, { g9: 1500, psa10: 12000, bgs10: 20000, g95: 4000 }, 'only graded columns, only real prices')
 assert.equal(zard.tcgId, 42382)
-assert.equal(zard.url, 'https://www.pricecharting.com/game/pokemon-base-set/charizard-4')
+assert.equal(zard.url, 'https://www.pricecharting.com/game/6910', 'the citation links by product id (exact page, never a search)')
+assert.equal(pcIdUrl('5399964'), 'https://www.pricecharting.com/game/5399964')
+assert.equal(pcIdUrl(''), null)
+assert.equal(gradedFromRow({ ...rows[0], id: '' }).url, 'https://www.pricecharting.com/game/pokemon-base-set/charizard-4', 'no id → the name-built guess')
 assert.equal(gradedFromRow(rows[2]), null, 'no graded price')
 assert.equal(gradedFromRow(rows[3]), null, 'no TCGplayer id')
 assert.equal(pcProductUrl('Pokémon Japanese Promo', 'Pikachu (Illustrator)'), 'https://www.pricecharting.com/game/pokemon-japanese-promo/pikachu-illustrator')
