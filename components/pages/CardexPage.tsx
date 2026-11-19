@@ -3,7 +3,8 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { GamePicker } from '@/components/GamePicker'
-import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye, Check } from 'lucide-react'
+import Link from 'next/link'
+import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye, Check, Edit2 } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, CONDITION_LABELS, CONDITION_SHORT, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
@@ -86,6 +87,8 @@ function showPrinting(printing: string | undefined, rarity: string | undefined):
 }
 
 export interface ZoomCardData {
+  // Your inventory copy shown (no versions list): the zoom's edit button opens it in Inventory
+  inventoryId?: string
   imageUrl: string
   name: string
   number: string
@@ -453,6 +456,7 @@ const EMPTY_SET: Set<string> = new Set()
 
 export interface ZoomVersion {
   label: string                 // "PSA 10", "Raw", "Raw · Foil"
+  cardId?: string               // one of your inventory copies of this version — the zoom's edit button opens it
   slab?: SlabInfo
   quantity: number
   printing?: string
@@ -485,7 +489,7 @@ export function ownedVersions(
       if (rep.gradingCompany) {
         const source = gradedOn ? gradedSources[rep.id] : undefined
         const v: ZoomVersion = {
-          label: slabName(rep), slab: bestSlab([rep]), quantity, printing, marketPrice: price,
+          label: slabName(rep), cardId: rep.id, slab: bestSlab([rep]), quantity, printing, marketPrice: price,
           ...(source ? { priceSource: { label: gradedLabel(source.key), url: source.url } } : { rawEstimate: gradedOn && Boolean(rep.apiId) }),
         }
         return { score: slabScore(rep), v }
@@ -495,7 +499,7 @@ export function ownedVersions(
       const cond = conditionFactor(rep) !== 1 ? CONDITION_SHORT[rep.condition] : ''
       const extra = [rep.isFoil && !printing ? 'Foil' : '', printing ?? ''].filter(Boolean).join(' · ')
       const conditionNote = cond ? CONDITION_LABELS[rep.condition] : undefined
-      const v: ZoomVersion = { label: cond ? `Raw · ${cond}` : 'Raw', quantity, printing, marketPrice: rep.currentPrice ?? conditionPrice(rawPrice, rep), priceEstimated: rawEstimated, conditionNote }
+      const v: ZoomVersion = { label: cond ? `Raw · ${cond}` : 'Raw', cardId: rep.id, quantity, printing, marketPrice: rep.currentPrice ?? conditionPrice(rawPrice, rep), priceEstimated: rawEstimated, conditionNote }
       return { score: -1, v, extra }
     })
     .sort((a, b) => b.score - a.score)
@@ -1876,6 +1880,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
             ? { priceSource: { label: gradedLabel(gradedSources[card.id].key), url: gradedSources[card.id].url } }
             : { rawEstimate: true })),
           owned: true,
+          inventoryId: card.id,
           quantity: card.quantity,
           isFoil: card.isFoil,
           printing: printingText(card) || undefined,
@@ -2410,6 +2415,8 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   const printing = v ? v.printing : d.printing
   const quantity = v ? v.quantity : d.quantity
   const ebayCard = v ? { ...d.ebayCard, gradingCompany: v.slab?.company, grade: v.slab?.grade } : d.ebayCard
+  // The copy on show, in your Inventory — where it's edited or deleted (the Cardex never deletes)
+  const editId = viewOnly ? undefined : (v?.cardId ?? d.inventoryId)
   // The swap between versions: the card tips away and fades out with a flash of light, and the next
   // one rises in from the other side, settling with a slight overshoot — like flipping through a
   // stack. Down the list = the card leaves upward.
@@ -2602,7 +2609,17 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
         {visible && (
           // On a phone the version bubbles sit to the right of this panel (sm and up: beside the card)
           <div className="flex items-center gap-2.5 max-w-full">
-          <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs min-w-0">
+          <div className={cn('card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs min-w-0', editId ? 'px-8' : 'px-5')}>
+            {editId && (
+              <Link
+                href={`/inventory?card=${encodeURIComponent(editId)}`}
+                title="Edit in Inventory"
+                aria-label="Edit this card in your Inventory"
+                className="absolute top-2 right-2 p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800/70 transition-colors"
+              >
+                <Edit2 size={13} />
+              </Link>
+            )}
             <div className="text-base font-bold text-ink leading-tight"><CardName name={d.name} /></div>
             {d.setName && <div className="text-xs font-medium text-slate-400">{d.setName}</div>}
             <div className="flex items-center gap-2 flex-wrap justify-center">

@@ -1444,3 +1444,10 @@
 }
 .pv-center-in { animation: pv-center-in 0.18s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .pv-center-in { animation: none; } }
+
+/* An Inventory row opened from the Cardex zoom's edit button (/inventory?card=) — lit for a moment */
+@keyframes inv-row-lit {
+  0%, 60% { background-color: rgba(211, 155, 44, 0.22); box-shadow: inset 3px 0 0 #d39b2c; }
+  100%    { background-color: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+.inv-row-lit { animation: inv-row-lit 2.6s ease-out both; }

@@ -16,6 +16,7 @@ import { decide, shortlist, trayVerdict, type ScanStatus } from './decide'
 import type { OcrLine } from './scanMatch'
 import type { ScanMatch, ScanSlab } from './server'
 import type { CardSearchResult } from '../api/search'
+import { authFetch } from '../firebase/authFetch'
 
 interface TrayOption {
   key: string      // "catalog:id" — how a pick comes back
@@ -122,25 +123,33 @@ async function searchCatalog(query: string, games: Game[]): Promise<ScanMatch[]>
  *  checkCatalogs): never guessed from, the scan is asked for again */
 class ScannerBusy extends Error {}
 
-async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
+/** Haven Premium: a free account has used this month's free scans (the server said 402). Never
+ *  retried; the Inventory page opens the Premium sheet once the scanner closes (scanLimitHit). */
+class ScanLimit extends Error {}
+let limitHit = false
+/** Did the last scanning session run into the free-scan limit? */
+export const scanLimitHit = () => limitHit
+
+async function fetchCandidates(scanId: string, lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS)
     let busy = false
     try {
-      const res = await fetch('/api/cards/scan', {
+      const res = await authFetch('/api/cards/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lines, games, ...(fingerprints?.length && { fingerprints }), ...(barcodes?.length && { barcodes }) }),
+        body: JSON.stringify({ scanId, lines, games, ...(fingerprints?.length && { fingerprints }), ...(barcodes?.length && { barcodes }) }),
         signal: ctrl.signal,
       })
+      if (res.status === 402) { limitHit = true; throw new ScanLimit() }
       busy = res.status === 503
       if (!res.ok) throw busy ? new ScannerBusy() : new Error(`scan match ${res.status}`)
       return (await res.json()) as { candidates: ScanMatch[]; slab: ScanSlab | null }
     } catch (err) {
       // a dropped connection on a phone is common: one retry. Busy: two more, a moment apart (the
       // next try usually reaches a server that's ready)
-      if (attempt >= (busy ? 2 : 1)) throw err
+      if (err instanceof ScanLimit || attempt >= (busy ? 2 : 1)) throw err
       if (busy) await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)))
     } finally {
       clearTimeout(timer)
@@ -149,7 +158,7 @@ async function fetchCandidates(lines: OcrLine[], games: Game[], fingerprints?: n
 }
 
 async function identify(scanId: string, lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ card: ScannedCard; tray: TrayOption[]; topDistance: number | null; topPicture: number | null }> {
-  const { candidates, slab } = await fetchCandidates(lines, games, fingerprints, barcodes)
+  const { candidates, slab } = await fetchCandidates(scanId, lines, games, fingerprints, barcodes)
 
   // Only the candidates still in the running get compared by picture — plus the picture AI's own
   // finds (cards the text didn't bring in)
@@ -194,6 +203,7 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
   fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`).catch(() => {})
   // The picture AI (normally already readied when the app opened — prepareScanner)
   prepareScanner()
+  limitHit = false
 
   const found = new Map<string, ScannedCard>()
   const searched = new Map<string, ScanMatch>()
@@ -223,7 +233,8 @@ export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
       })
       .catch((err) => CardScanner.update({
         scanId, status: 'error', options: [], choice: 0,
-        note: err instanceof ScannerBusy ? 'TCGHaven is busy — scan it again in a moment' : 'Couldn’t reach TCGHaven — check your connection',
+        note: err instanceof ScanLimit ? 'That’s this month’s free scans — Haven Premium scans without limits'
+          : err instanceof ScannerBusy ? 'TCGHaven is busy — scan it again in a moment' : 'Couldn’t reach TCGHaven — check your connection',
       }).catch(() => {}))
   })
   try {

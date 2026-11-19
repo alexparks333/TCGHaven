@@ -25,7 +25,7 @@ in that area:**
 | The scanner's picture AI — the trained model, the fingerprint index, after a training run | `docs/scanner-ai.md` |
 | Training the scanner's picture AI on the RTX 4090 PC | `docs/training-ai.md` |
 | Staff portal Statistics & Finances, usage tracking (`usage_days`, `user_stats`, `stats_daily`) | `docs/insights.md` |
-| Haven Premium's money side: Apple's cut, the Small Business Program, pricing plan, automatic costs | `docs/premium-business.md` |
+| Haven Premium: what it unlocks, the locks, payments (Stripe + RevenueCat), promo codes, Apple's cut, the Small Business Program, automatic costs | `docs/premium-business.md` |
 | Where a file lives | `docs/file-map.md` |
 | The full story behind any gotcha below | `docs/quirks.md` |
 
@@ -117,6 +117,7 @@ npm run test:realscans -- http://localhost:3000   # the scanner on 64 real phone
 38. The scanner's picture AI: the model and the fingerprint index are published together (`npm run scanner-index -- publish`, same model for both); the picture never adds a card on its own (`decide.ts`); never commit models or indexes (`docs/scanner-ai.md`).
 39. PriceCharting adds graded prices only — TCGplayer stays the truth for cards, images, numbers and raw prices; graded prices live in `graded_prices/{catalog}` (history: `graded_history/{catalog}`, `GRADED_ORDER` append-only), never on catalog cards; one copy, one price — a graded-priced slab uses graded prices and graded history everywhere (Cardex hover = raw); never show one without the PriceCharting citation link (`docs/PriceCharting.md`).
 40. A raw copy = the Near Mint price × its condition's discount (`CONDITION_MULTIPLIER`, applied in `copyPrice()`, which requires the copy's `condition` and `grading`) everywhere a copy is valued, history and `priceAtEntry` included; slabs ignore it; a card (not a copy) — the Cardex grid and its hover — uses `nearMintPrice()` (`docs/search-prices-cardex.md`).
+41. Haven Premium locks are checked on the server (`lib/premiumServer.ts` `callerAccess`, `gradedAllowed`) as well as in the app (`usePremiumAccess`), and all of them stay open while the Owner's launch switch `premium/launch` is off; only the server writes `entitlements/{uid}` (`docs/premium-business.md`).
 35. One Piece: every card = one TCGplayer product (`tcgProductId`); existing cards never change what they show (`onepiece-tcgplayer.mjs`, `npm run onepiece-source-report`).
 
 ## Badges & the Relief Studio — the essentials

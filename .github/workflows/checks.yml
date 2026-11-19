@@ -65,6 +65,9 @@ jobs:
       # and a version that adds a scan as the wrong card, or finds fewer right, never goes live
       # (scripts/scanner-realscans.mts, docs/card-scanner.md "The real-scan check")
       - name: Real-scan check
+        # It scans without signing in: Haven Premium's free-scan limit must not apply here
+        env:
+          PREMIUM_GATES: 'off'
         run: |
           npx next start -p 3100 > next-start.log 2>&1 &
           for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:3100/ && break; sleep 1; done

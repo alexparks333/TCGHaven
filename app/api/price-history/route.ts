@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verifyUserRequest } from '@/lib/firebase/verifyAdminRequest'
+import { callerAccess } from '@/lib/premiumServer'
+import { gradedAllowed } from '@/lib/api/gradedPrices'
 import { loadBaselines, loadPriceSeries, priceAtOrBefore, type HistoryItem } from '@/lib/api/priceHistory'
 
 export const dynamic = 'force-dynamic'
@@ -32,7 +34,15 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as Body | null
   if (!body || !Array.isArray(body.items)) return NextResponse.json({ error: 'Expected { mode, items }' }, { status: 400 })
-  const items = body.items.filter((i) => i && i.key && i.apiId && i.game)
+  // Haven Premium (docs/premium-business.md): price history and the portfolio over time are
+  // Premium once the launch switch is on — today's change (baselines) stays free. Without Premium,
+  // slabs follow the raw history, as their value does (lib/api/gradedPrices.ts gradedAllowed).
+  const access = await callerAccess(request)
+  if (!access.unlocked && body.mode !== 'baselines') return NextResponse.json({ error: 'premium', reason: 'history' }, { status: 402 })
+  const graded = await gradedAllowed(request)
+  const items = body.items
+    .filter((i) => i && i.key && i.apiId && i.game)
+    .map((i) => (graded || !i.gradingCompany ? i : { ...i, gradingCompany: undefined, grade: undefined, gradeTier: undefined }))
   const now = Date.now()
 
   if (body.mode === 'baselines') {

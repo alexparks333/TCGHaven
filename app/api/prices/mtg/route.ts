@@ -23,11 +23,11 @@ interface CatalogCard {
 export async function POST(req: NextRequest) {
   const body: { cards: CardInput[]; withSources?: boolean } = await req.json()
   const { cards } = body
-  if (!cards.length) return priceReply(body, {}, {})
+  if (!cards.length) return priceReply(req, body, {}, {})
 
   const catalog = await loadCatalog<CatalogCard>('mtg')
   const byId = new Map(catalog.map((c) => [c.id, c]))
-  const graded = await gradedFor('mtg', cards)
+  const graded = await gradedFor('mtg', cards, req)
 
   // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
   // the Cardex or Personalized Collections.
@@ -43,5 +43,5 @@ export async function POST(req: NextRequest) {
     noteGradedSource(sources, card.id, 'mtg', cat, choice, graded)
   }
 
-  return priceReply(body, results, sources)
+  return priceReply(req, body, results, sources)
 }

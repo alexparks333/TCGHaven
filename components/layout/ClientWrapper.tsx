@@ -16,6 +16,7 @@ import { FriendsProvider } from '@/components/friends/FriendsProvider'
 import { FriendsDialog } from '@/components/friends/FriendsDialog'
 import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
 import { DevPanel } from '@/components/dev/DevPanel'
+import { PremiumProvider } from '@/components/premium/PremiumProvider'
 import { hideLaunchScreen, inApp, onScanLink } from '@/lib/nativeApp'
 
 // Prices in the collector's currency (lib/currency.ts): today's rates fetched once a visit, and
@@ -84,6 +85,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
     <AuthProvider>
       <BanGate>
       <FriendsProvider>
+      <PremiumProvider>
         {/* 100dvh = the height actually visible right now (h-screen's 100vh is taller on iPhone — see
             the html/body note in globals.css). */}
         {studio ? (
@@ -118,6 +120,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         <FriendRequestToast />
         {/* Local dev server only — compiled out of production builds (NODE_ENV is fixed at build time) */}
         {process.env.NODE_ENV === 'development' && <DevPanel />}
+      </PremiumProvider>
       </FriendsProvider>
       </BanGate>
     </AuthProvider>

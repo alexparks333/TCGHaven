@@ -6,7 +6,7 @@ side is in `docs/insights.md` (Statistics, Finances, the Haven Premium page) and
 
 ## The plan (2026-11-09)
 
-- **Haven Premium** — monthly **$3.99**, yearly **$35.99** ($3.00 a month, 25% cheaper than paying
+- **Haven Premium** — monthly **$3.99**, yearly **$34.99** ($2.92 a month, 27% cheaper than paying
   monthly). Set on the staff portal's **Haven Premium** page (`premium/config`); every change is logged.
 - **What it unlocks** (still being decided): the current idea is Free = Inventory + Cardex; Premium =
   Friends, Portfolio, Badges. Suggested instead (keeps the app spreading and people coming back):
@@ -17,12 +17,114 @@ side is in `docs/insights.md` (Statistics, Finances, the Haven Premium page) and
   never removed unless the Owner removes it) and **promo codes** (1, 3, 6, 12… free months) are planned.
   When Premium is removed or someone stops paying, it lasts to the end of the month they paid for.
 
+## Decided 2026-11-19 — what Premium unlocks and how it's paid for
+
+- **Name:** stays **Haven Premium** everywhere.
+- **Free:** Inventory, Cardex, search, raw prices, Friends, profiles, joining Creator communities,
+  earning badges (Grayscale look), basic portfolio value, **10 scans a month**.
+- **Premium:** unlimited scans; graded prices (PriceCharting) + price history; badges' Full look,
+  3D pins, Pin Display, banner pins; Portfolio over time / P&L / Analytics; CSV export. Suggested:
+  a 7-day free trial and a "founding member" price lock.
+- **Payments:** RevenueCat ties it together. iPhone = Apple in-app purchase, Android = Google Play
+  Billing, website = Stripe Checkout + Stripe's billing portal. RevenueCat's webhook tells our
+  server, which keeps the live state in Firestore.
+- **Go live only after the LLC, its EIN and a business bank account exist.** Build and test first
+  with Stripe test mode and Apple's sandbox.
+
+### How it's built (2026-11-19)
+
+**The launch switch.** `premium/launch { gatesOn }`, turned on and off from the staff portal's
+Haven Premium page → **Launch**. While it's off, nothing is locked for anyone. Turn it on only
+once Premium can be bought on the website and in the apps. The env var `PREMIUM_GATES=off` forces
+everything open on a server (CI's real-scan check uses it, and it doubles as an emergency switch).
+
+**Who has Premium.**
+- The record is `entitlements/{uid}`: `{ active, source: apple|google|stripe|promo|permanent, plan,
+  expiresAt, willRenew, trial, stripeCustomerId?, redeemed[] }`.
+- Only the sync bot writes it (firestore.rules); each account can read its own.
+- An account has Premium if it has the Premium / Creator / Staff title, or an active record.
+  Cancelling keeps Premium to `expiresAt`.
+- In the app: `lib/premiumAccess.ts` `usePremium`, read through `usePremiumAccess()` from
+  `components/premium/PremiumProvider.tsx`. On the server: `lib/premiumServer.ts` `callerAccess`.
+- Shared rules: `lib/premiumRules.ts`.
+
+**What's locked (the server enforces each one):**
+- **Scans:** `/api/cards/scan` gives free accounts 10 a month. Each `scanId` counts once, in
+  `scan_usage/{uid}`; after that the route answers 402. The phone shows a note, and the Inventory
+  page opens the Premium sheet.
+- **Graded prices:** `gradedAllowed(req)` in `lib/api/gradedPrices.ts`. A free account's slabs are
+  priced as raw cards, and the reply carries `gradedLocked: true`.
+- **Price history and the portfolio over time:** `/api/price-history` answers 402 for `series` and
+  `portfolio`. Today's change (`baselines`) stays free. The app shows a `PremiumLock` on Portfolio →
+  Over time, on Analytics, and on a card's Price History.
+- **Not locked yet:** the badges' Full look, 3D pins, Pin Display, banner pins and CSV export.
+  - Open question: a friend's profile has to know whether *its owner* has Premium. Entitlements
+    are private, so that needs a public "has Premium" flag the server writes.
+
+**Buying (`lib/premiumPurchase.ts`, the sheet in `components/premium/PremiumSheet.tsx`, the page
+`/premium`):**
+- **Website:**
+  - `POST /api/premium/checkout` opens a Stripe Checkout subscription (`client_reference_id` and
+    `app_user_id` = uid).
+  - Stripe sends people back to `/premium?checkout=…`. `POST /api/premium/refresh` then checks the
+    session belongs to them, saves the Stripe customer, hands the purchase to RevenueCat
+    (`/v1/receipts`, `X-Platform: stripe`) and re-reads RevenueCat.
+  - `POST /api/premium/portal` opens Stripe's billing portal.
+- **Apps:**
+  - `@revenuecat/purchases-capacitor` 14.1.0 (pinned). Its user id is the Firebase uid; the app buys
+    the current offering's `monthly` / `annual` package.
+  - Restore purchases is in the sheet. Manage subscription opens the Apple / Google subscriptions page.
+- **RevenueCat's webhook:** `POST /api/premium/webhook`, with an Authorization header that must equal
+  `REVENUECAT_WEBHOOK_AUTH`. Each event is kept in `premium_events/{id}` for Finances, then the
+  account is re-read from RevenueCat (`syncEntitlement`). A promo or Permanent Premium that outlasts
+  the paid period is kept.
+- **Promo codes:** `POST /api/premium/redeem`, website only (Apple guideline 3.1.1 bans unlocking
+  features with our own codes in the app). Each code is **Starter** or **Gift**, chosen when it's made on
+  the Haven Premium page and changeable there (codes made before types existed count as Starter):
+  - any code works **once per person**;
+  - **one starter code per person, ever** — after any starter code, no other starter code works;
+  - gift codes: a person can use many *different* ones.
+
+  "A person" = their account and their email address: `promo_redemptions/u_{uid}` and
+  `e_{sha256(email)}` (`{ codes[], starter }`, server-written, kept for good), so a new account on the
+  same email doesn't start over. The months stack on any promo time left; refused while a renewing
+  subscription is active or with Permanent Premium. Separate from these: Stripe's own promotion
+  codes (discounts at checkout, made in Stripe) are allowed on the checkout page.
+
+**Finances** (`lib/premiumRevenue.ts`). After the first real (non-sandbox) event, the page switches
+from estimates to actual numbers:
+- revenue kept by month, after the store's cut or Stripe's fee (RevenueCat's
+  `takehome_percentage`);
+- subscribers by store;
+- new subscribers, trials, trials that paid, cancellations and refunds.
+
+**To do before launch (the Owner):**
+1. Form the LLC, get its EIN and open a business bank account.
+2. Create a Stripe account in test mode. Make the product with a monthly and a yearly price, and
+   switch on the billing portal.
+3. Create a RevenueCat project:
+   - add the iOS app, the Android app and Stripe;
+   - create the entitlement `premium` and an offering with `monthly` and `annual` packages;
+   - add a webhook pointing at `https://www.tcghaven.org/api/premium/webhook`, with a long random
+     Authorization value.
+4. Create the subscription products in App Store Connect and the Play Console, and join Apple's
+   Small Business Program (below).
+5. Add these env vars to `.env.local` and Vercel. Keep the values in 1Password; never commit or
+   print them:
+   - `STRIPE_SECRET_KEY`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_YEARLY`, optional `STRIPE_TRIAL_DAYS`;
+   - `REVENUECAT_SECRET_KEY`, `REVENUECAT_STRIPE_KEY`, `REVENUECAT_WEBHOOK_AUTH`, optional
+     `REVENUECAT_ENTITLEMENT`;
+   - `NEXT_PUBLIC_REVENUECAT_IOS_KEY`, `NEXT_PUBLIC_REVENUECAT_ANDROID_KEY`.
+6. On the Mac, run `npx cap sync` and rebuild the apps (the RevenueCat plugin is native).
+7. Deploy `firestore.rules`.
+8. Test every path with sandbox purchases, then turn the launch switch on.
+
 ## Where the money goes — who takes a cut
 
-| Bought… | Who takes a cut | You keep from $3.99 / mo | from $35.99 / yr |
+| Bought… | Who takes a cut | You keep from $3.99 / mo | from $34.99 / yr |
 |---|---|---|---|
-| In the **iPhone app** (Apple in-app purchase) | Apple — **15%** with the Small Business Program (30% without it) | **$3.39** | **$30.59** |
-| On the **website** (Stripe, when built) | Stripe — about **2.9% + 30¢** per payment (US cards) | ≈ $3.57 | ≈ $34.65 |
+| In the **iPhone app** (Apple in-app purchase) | Apple — **15%** with the Small Business Program (30% without it) | **$3.39** | **$29.74** |
+| On the **website** (Stripe) | Stripe — about **2.9% + 30¢** per payment (US cards) | ≈ $3.57 | ≈ $33.68 |
 
 - Apple only takes a cut of purchases made **inside the iPhone app**. Apple requires digital
   subscriptions sold in an iPhone app to go through Apple's in-app purchase.

@@ -27,10 +27,10 @@ interface CatalogCard {
 export async function POST(req: NextRequest) {
   const body: { cards: CardInput[]; withSources?: boolean } = await req.json()
   const { cards } = body
-  if (!cards.length) return priceReply(body, {}, {})
+  if (!cards.length) return priceReply(req, body, {}, {})
   const catalog = await loadCatalog<CatalogCard>('yugioh')
   const byId = new Map(catalog.map((c) => [c.id, c]))
-  const graded = await gradedFor('yugioh', cards)
+  const graded = await gradedFor('yugioh', cards, req)
   const results: Record<string, number> = {}
   const sources: Record<string, GradedSource> = {}
   for (const card of cards) {
@@ -42,5 +42,5 @@ export async function POST(req: NextRequest) {
     if (price > 0) results[card.id] = price
     noteGradedSource(sources, card.id, 'yugioh', cat, choice, graded)
   }
-  return priceReply(body, results, sources)
+  return priceReply(req, body, results, sources)
 }

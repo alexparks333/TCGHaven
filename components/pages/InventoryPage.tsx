@@ -26,6 +26,7 @@ import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 import { displayCurrency, toDisplay, toUSD } from '@/lib/currency'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
@@ -73,6 +74,7 @@ export default function InventoryPage() {
   // The card scanner is iPhone-app only (docs/card-scanner.md) — known after mount, so the server render
   // and the first client render agree
   const [canScan, setCanScan] = useState(false)
+  const { openPremium } = usePremiumAccess()
   useEffect(() => { setCanScan(inApp()) }, [])
   // Wake the scanner's matching server while the page is open, so the first scanned card doesn't
   // wait for it to load the catalogs (~6 s cold; ~0.3 s a card once warm)
@@ -83,9 +85,11 @@ export default function InventoryPage() {
   const [scanned, setScanned] = useState<ScannedCard[] | null>(null)
   async function startScan() {
     try {
-      const { scanCards } = await import('@/lib/scan/scanner')
+      const { scanCards, scanLimitHit } = await import('@/lib/scan/scanner')
       const cards = await scanCards(trackedGames.length ? trackedGames : [activeGame])
       if (cards.length) setScanned(cards)
+      // Ran out of this month's free scans (Haven Premium) → the Premium sheet
+      else if (scanLimitHit()) openPremium('scan-limit')
     } catch (err) {
       console.error('Card scanner failed:', err)
       setSaveError('The card scanner couldn’t start. Update the TCGHaven app and try again.')
@@ -194,6 +198,39 @@ export default function InventoryPage() {
   }, [user?.uid, dataLoading])
   const [editCard, setEditCard] = useState<Card | null>(null)
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
+
+  // Opened from the Cardex zoom's edit button (/inventory?card={id}): that copy's game, its name in
+  // the search, its row opened if it has several lots — then scrolled to and lit up for a moment,
+  // so it can be edited or deleted here (the Cardex never deletes)
+  const [focusCardId, setFocusCardId] = useState<string | null>(null)
+  const [litKey, setLitKey] = useState<string | null>(null)
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('card')
+    if (!id) return
+    window.history.replaceState(null, '', '/inventory')
+    setFocusCardId(id)
+  }, [])
+  useEffect(() => {
+    if (!focusCardId || dataLoading) return
+    const card = cards.find((c) => c.id === focusCardId)
+    // On a fresh page load the collection can still be empty here — wait for it rather than give
+    // up (opening the link directly landed on the wrong tab, 2026-11-19); a card that isn't in a
+    // loaded collection (deleted since) just leaves the page as it is
+    if (!card && cards.length === 0) return
+    setFocusCardId(null)
+    if (!card) return
+    setActiveGame(card.game)
+    setSearch(card.name)
+    setDateFilter('')
+    setSelectedRarities(new Set())
+    const key = cardIdentityKey(card)
+    if (cards.filter((c) => cardIdentityKey(c) === key).length > 1) setExpandedKey(key)
+    setLitKey(key)
+    // after the filtered list renders
+    setTimeout(() => document.getElementById(`inv-row-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120)
+    setTimeout(() => setLitKey(null), 2600)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusCardId, dataLoading, cards])
 
   function openSell(card: Card) {
     setSellCard(card)
@@ -717,7 +754,7 @@ export default function InventoryPage() {
               const multiLot = lots.length > 1
 
               return (
-                <div key={key} className="border-b border-slate-800/50 last:border-0">
+                <div key={key} id={`inv-row-${key}`} className={cn('border-b border-slate-800/50 last:border-0 transition-colors duration-700', litKey === key && 'inv-row-lit')}>
                   {/* Main row */}
                   <div
                     className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"

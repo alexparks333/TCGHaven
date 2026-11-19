@@ -203,8 +203,37 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
-    // Promo codes for free months of Premium — the Owner only. Redeeming one will be checked and
-    // counted on the server, never by the app writing here.
+    // Haven Premium's paid state (lib/premiumRules.ts Entitlement): written only by the server (the
+    // sync bot, from RevenueCat's webhook or a promo code); each account reads its own; staff can
+    // look (Accounts). Nobody's app can make itself Premium.
+    match /entitlements/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow write: if isBot();
+    }
+
+    // Free accounts' scans this month (lib/premiumServer.ts countFreeScan) — counted by the server.
+    match /scan_usage/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if isBot();
+    }
+
+    // Who has used which promo codes (lib/premiumBilling.ts redeemPromo): one doc per account and
+    // one per email address (hashed), so each code works once per person and starter codes once
+    // ever. Only the server writes them; the Owner can look.
+    match /promo_redemptions/{id} {
+      allow read: if isOwner();
+      allow write: if isBot();
+    }
+
+    // Every purchase, renewal, cancellation and refund RevenueCat reports (for Finances) — the
+    // server writes them; the Owner reads them.
+    match /premium_events/{id} {
+      allow read: if isOwner();
+      allow write: if isBot();
+    }
+
+    // Promo codes for free months of Premium — the Owner only. Redeeming one is checked and counted
+    // on the server (app/api/premium/redeem, as the sync bot), never by the app writing here.
     match /promo_codes/{code} {
       allow read, write: if isOwner();
     }

@@ -24,7 +24,7 @@ type CatalogCard = CatalogPriceFields & { id: string }
 export async function POST(req: NextRequest) {
   const body: { cards: CardInput[]; withSources?: boolean } = await req.json()
   const { cards } = body
-  if (!cards.length) return priceReply(body, {}, {})
+  if (!cards.length) return priceReply(req, body, {}, {})
 
   const wantJapanese = cards.some((c) => c.language === 'ja')
   const [english, japanese] = await Promise.all([
@@ -34,8 +34,8 @@ export async function POST(req: NextRequest) {
   const byId = { en: new Map(english.map((c) => [c.id, c])), ja: new Map(japanese.map((c) => [c.id, c])) }
   // PriceCharting graded prices, only when a graded card is asked about (lib/api/gradedPrices.ts)
   const [gradedEn, gradedJa] = await Promise.all([
-    gradedFor('pokemon', cards.filter((c) => c.language !== 'ja')),
-    gradedFor('pokemon-jp', cards.filter((c) => c.language === 'ja')),
+    gradedFor('pokemon', cards.filter((c) => c.language !== 'ja'), req),
+    gradedFor('pokemon-jp', cards.filter((c) => c.language === 'ja'), req),
   ])
 
   // Same rule every other price display uses (lib/pricing.ts), so this can never disagree with
@@ -54,5 +54,5 @@ export async function POST(req: NextRequest) {
     noteGradedSource(sources, card.id, 'pokemon', cat, choice, graded)
   }
 
-  return priceReply(body, results, sources)
+  return priceReply(req, body, results, sources)
 }

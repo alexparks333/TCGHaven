@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { collection, doc, documentId, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config'
+import { callerAccess } from '../premiumServer'
 import { gradedPrice, gradingOf, type CatalogPriceFields, type PrintingChoice } from '../pricing'
 import { gradedPriceKey, gradedVariantKey } from '@/scripts/lib/pricecharting.mjs'
 import { catalogKeyFor, type CatalogKey, type Condition, type Edition, type Finish, type Game, type Language } from '../types'
@@ -25,6 +26,20 @@ export interface GradedEntry {
 }
 
 export const gradedPricesEnabled = () => process.env.GRADED_PRICES === 'on'
+
+// Haven Premium (docs/premium-business.md): once the launch switch is on, graded prices are for
+// Premium accounts; everyone else's slabs are priced as raw cards, as before graded prices existed.
+// Checked once per request (the routes call gradedFor and priceReply with the same request).
+const _allowed = new WeakMap<Request, Promise<boolean>>()
+export function gradedAllowed(req: Request): Promise<boolean> {
+  if (!gradedPricesEnabled()) return Promise.resolve(false)
+  let p = _allowed.get(req)
+  if (!p) {
+    p = callerAccess(req).then((a) => a.unlocked).catch(() => false)
+    _allowed.set(req, p)
+  }
+  return p
+}
 
 // The data changes once a day, and a game's chunks are megabytes (Firestore bills data leaving
 // Google per GB). So every TTL only the tiny meta doc is read; the chunks are downloaded again only
@@ -112,8 +127,9 @@ export async function gradedPricedKeys(
 }
 
 /** Loads the graded prices only when one of these cards is graded (most requests have none) */
-export async function gradedFor(key: CatalogKey, cards: GradingInput[]): Promise<Map<string, GradedEntry> | null> {
-  return cards.some((c) => c.gradingCompany) ? loadGradedPrices(key) : null
+export async function gradedFor(key: CatalogKey, cards: GradingInput[], req: Request): Promise<Map<string, GradedEntry> | null> {
+  if (!cards.some((c) => c.gradingCompany) || !(await gradedAllowed(req))) return null
+  return loadGradedPrices(key)
 }
 
 /** Where a slab's price came from — the app shows it as "PSA 10 sales · PriceCharting ↗", the
@@ -135,9 +151,12 @@ export function noteGradedSource(
 }
 
 /** A price route's answer. Callers that ask `withSources` (PriceAutoUpdater) get
- *  { prices, graded, gradedOn }; everyone else the plain { cardId: price } map, as always. */
-export function priceReply(body: { withSources?: boolean } | null, prices: Record<string, number>, sources: Record<string, GradedSource>) {
-  return NextResponse.json(body?.withSources ? { prices, graded: sources, gradedOn: gradedPricesEnabled() } : prices)
+ *  { prices, graded, gradedOn, gradedLocked }; everyone else the plain { cardId: price } map.
+ *  gradedLocked = graded prices exist but this account needs Haven Premium for them. */
+export async function priceReply(req: Request, body: { withSources?: boolean } | null, prices: Record<string, number>, sources: Record<string, GradedSource>) {
+  if (!body?.withSources) return NextResponse.json(prices)
+  const on = await gradedAllowed(req)
+  return NextResponse.json({ prices, graded: sources, gradedOn: on, gradedLocked: gradedPricesEnabled() && !on })
 }
 
 /** The catalog card with its graded prices laid on, for copyPrice() */

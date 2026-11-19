@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { authFetch } from '@/lib/firebase/authFetch'
 import type { Card } from '@/lib/types'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 
 /** The collection's value on each past day — for Portfolio Analytics and the Portfolio's
  *  "Over time" chart, so the two can never disagree. Summed on the server from the shared price
@@ -15,7 +16,10 @@ export function usePortfolioTimeline(cards: Card[], enabled = true): {
   dailyValues: { day: string; value: number }[]
   fixedValue: number
   ready: boolean
+  /** Haven Premium: the value over time is a Premium feature (nothing is loaded) */
+  locked: boolean
 } {
+  const locked = !usePremiumAccess().unlocked
   const catalogCards = useMemo(() => cards.filter((c) => c.apiId), [cards])
   const fixedValue = useMemo(
     () => cards.filter((c) => !c.apiId).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
@@ -28,7 +32,7 @@ export function usePortfolioTimeline(cards: Card[], enabled = true): {
   const [loaded, setLoaded] = useState<{ key: string | null; days: { day: string; value: number }[] }>({ key: null, days: [] })
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || locked) return
     let stale = false
     if (catalogCards.length === 0) { setLoaded({ key: requestKey, days: [] }); return }
     authFetch('/api/price-history', {
@@ -50,8 +54,8 @@ export function usePortfolioTimeline(cards: Card[], enabled = true): {
       .catch(() => { if (!stale) setLoaded({ key: requestKey, days: [] }) })
     return () => { stale = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestKey, enabled])
+  }, [requestKey, enabled, locked])
 
   const ready = loaded.key === requestKey
-  return { dailyValues: ready ? loaded.days : [], fixedValue, ready }
+  return { dailyValues: ready ? loaded.days : [], fixedValue, ready: ready || locked, locked }
 }

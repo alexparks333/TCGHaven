@@ -99,7 +99,7 @@ export async function fetchCardPrices(cards: Card[]): Promise<{ prices: Record<s
   let answered = games.length === 0
   await Promise.all(games.map(async (game) => {
     try {
-      const res = await fetch(PRICE_ROUTES[game].url, {
+      const res = await authFetch(PRICE_ROUTES[game].url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: priceBody(game, priced.filter((c) => c.game === game)),
       })
@@ -127,7 +127,7 @@ export async function fetchCardPrice(
     ? { ...card, gradingCompany: slab.company, grade: slab.grade, gradeTier: slab.tier ?? undefined }
     : card
   try {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: priceBody(card.game, [withSlab]) })
+    const res = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: priceBody(card.game, [withSlab]) })
     if (!res.ok) return { price: 0 }
     const reply = (await res.json()) as PriceReply
     return { price: reply.prices?.[card.id] ?? 0, source: reply.graded?.[card.id] }
@@ -213,7 +213,7 @@ export function PriceAutoUpdater() {
         await Promise.all(gamesToLoad.map(async (game) => {
           const { url } = PRICE_ROUTES[game]
           try {
-            const res = await fetch(url, {
+            const res = await authFetch(url, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: priceBody(game, eligible.filter((c) => c.game === game)),

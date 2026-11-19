@@ -29,7 +29,8 @@
     "test:pricecharting": "node scripts/lib/pricecharting.test.mjs",
     "pricecharting-sync": "node scripts/pricecharting-sync.mjs",
     "optimize-pin": "npx -y @gltf-transform/cli@4.5.1 optimize --compress meshopt --texture-compress webp --texture-size 2048 --simplify false",
-    "scanner-index": "node scripts/scanner-index.mjs"
+    "scanner-index": "node scripts/scanner-index.mjs",
+    "stripe-setup": "node scripts/stripe-setup.mjs"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.6.0",
@@ -47,6 +48,7 @@
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
+    "@revenuecat/purchases-capacitor": "14.1.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",

@@ -22,10 +22,10 @@ interface CatalogPriceCard { id: string; marketPrice: number; marketPriceFoil: n
 export async function tcgplayerGamePrices(game: TcgplayerSourcedGame, req: Request): Promise<Response> {
   const body: { cards: PriceInput[]; withSources?: boolean } = await req.json()
   const { cards } = body
-  if (!cards?.length) return priceReply(body, {}, {})
+  if (!cards?.length) return priceReply(req, body, {}, {})
   const catalog = await loadCatalog<CatalogPriceCard>(game)
   const byId = new Map(catalog.map((c) => [c.id, c]))
-  const graded = await gradedFor(game, cards)
+  const graded = await gradedFor(game, cards, req)
   const results: Record<string, number> = {}
   const sources: Record<string, GradedSource> = {}
   for (const card of cards) {
@@ -37,7 +37,7 @@ export async function tcgplayerGamePrices(game: TcgplayerSourcedGame, req: Reque
     if (price > 0) results[card.id] = price
     noteGradedSource(sources, card.id, game, cat, choice, graded)
   }
-  return priceReply(body, results, sources)
+  return priceReply(req, body, results, sources)
 }
 
 /** The staff portal's "Sync Card Data" for one game (no auth check of its own — the route does

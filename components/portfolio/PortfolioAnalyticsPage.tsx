@@ -13,6 +13,7 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { conditionPrice } from '@/lib/pricing'
 import { usePortfolioTimeline } from './usePortfolioTimeline'
+import { PremiumLock } from '@/components/premium/PremiumLock'
 import { LogoLoader } from '@/components/LogoLoader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ export default function PortfolioAnalyticsPage() {
 
   // Daily portfolio value from the shared price history (usePortfolioTimeline — the Portfolio's
   // "Over time" chart reads the same, so the two always agree)
-  const { dailyValues, fixedValue, ready: timelineReady } = usePortfolioTimeline(filteredCards)
+  const { dailyValues, fixedValue, ready: timelineReady, locked } = usePortfolioTimeline(filteredCards)
 
   // P&L and Return use the same "Since Entry" baseline as PortfolioPage:
   // priceAtEntry (market price when added) → earliest shared-history price → purchasePrice.
@@ -130,6 +131,15 @@ export default function PortfolioAnalyticsPage() {
     { label: 'All-Time High', value: allTimeHigh, isChange: false },
     { label: 'Total Change',  value: totalChange, isChange: true  },
   ]
+
+  // Haven Premium: analytics are a Premium feature
+  if (locked) {
+    return (
+      <AuthGuard>
+        <PremiumLock reason="portfolio-time" className="py-24" title="Portfolio analytics" sub="Your collection’s value over time, its high points and profit and loss come with Haven Premium." />
+      </AuthGuard>
+    )
+  }
 
   if (!priceLoad.complete || !timelineReady) {
     return (

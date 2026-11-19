@@ -12,6 +12,8 @@ import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySea
 import { conditionLabel, GAME_LABELS, GAME_COLORS } from '@/lib/types'
 import { PriceHistoryChart } from '@/components/portfolio/PriceHistoryChart'
 import { authFetch } from '@/lib/firebase/authFetch'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
+import { PremiumLock } from '@/components/premium/PremiumLock'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
 
@@ -32,8 +34,10 @@ export default function CardDetailPage() {
   // This card's daily prices from the shared, catalog-level history (app/api/price-history) —
   // the same history every owner of this card sees. Unmatched cards have none.
   const [history, setHistory] = useState<{ date: string; price: number }[]>([])
+  // Haven Premium: price history is a Premium feature (the server refuses it too)
+  const historyLocked = !usePremiumAccess().unlocked
   useEffect(() => {
-    if (!card?.apiId) { setHistory([]); return }
+    if (!card?.apiId || historyLocked) { setHistory([]); return }
     let stale = false
     authFetch('/api/price-history', {
       method: 'POST',
@@ -44,7 +48,7 @@ export default function CardDetailPage() {
       .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
       .catch(() => {})
     return () => { stale = true }
-  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.gradingCompany, card?.grade, card?.gradeTier, card?.condition, gradedPriced])
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.gradingCompany, card?.grade, card?.gradeTier, card?.condition, gradedPriced, historyLocked])
 
   const chartData = useMemo(() => {
     if (!card) return []
@@ -183,7 +187,9 @@ export default function CardDetailPage() {
               ))}
             </div>
           </div>
-          <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} />
+          {historyLocked
+            ? <PremiumLock reason="graded" title="Price history" sub="See how this card’s price has moved, by day, with Haven Premium." />
+            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} />}
           <div className="text-center text-xs text-slate-600 mt-3">
             {chartData.length <= 2
               ? (gradedSource ? 'Graded price history started 19 Nov 2026 and builds up each day.' : 'Price history builds up automatically as prices update each day.')

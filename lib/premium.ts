@@ -9,8 +9,8 @@ import {
 //   premium/config         { monthly, yearly, yearlyOn, history[], updatedAt } — the prices. Readable
 //                          by everyone (the app shows them on the upgrade screen); only the Owner writes.
 //   promo_codes/{CODE}     { code, months, maxUses, uses, expires, active, note, createdAt, createdBy }
-//                          — a code giving `months` free months of Premium. Owner only for now;
-//                          redeeming one (checked and counted on the server) comes with Premium itself.
+//                          — a code giving `months` free months of Premium. Owner only; redeemed
+//                          on the server (lib/premiumBilling.ts redeemPromo, website only).
 //
 // Prices here are what the website charges (Stripe) and what the app shows. On iPhone, Apple charges
 // whatever price is set for the subscription in App Store Connect — keep the two in step by hand.
@@ -24,7 +24,7 @@ export interface PremiumConfig {
   history: PriceChange[]
 }
 
-export const DEFAULT_PREMIUM: PremiumConfig = { monthly: 3.99, yearly: 29.99, yearlyOn: true, history: [] }
+export const DEFAULT_PREMIUM: PremiumConfig = { monthly: 3.99, yearly: 34.99, yearlyOn: true, history: [] }
 
 export function toConfig(d: Record<string, unknown> | undefined): PremiumConfig {
   if (!d) return DEFAULT_PREMIUM
@@ -60,8 +60,22 @@ export async function savePrices(db: Firestore, next: Omit<PremiumConfig, 'histo
 
 // ── Promo codes ────────────────────────────────────────────────────────────────────────────
 
+// Two kinds of code (2026-11-19):
+//   starter — a welcome offer: each person gets ONE starter code in their life. Once they've used
+//             any starter code, no other starter code works for them.
+//   gift    — giveaways, apologies, thank-yous: any number of different gift codes, each once.
+// Every code works once per person either way. "A person" = their account AND their email address
+// (promo_redemptions — lib/premiumBilling.ts redeemPromo), so a new account on the same email
+// doesn't start over. Codes made before kinds existed count as starter codes.
+export type PromoKind = 'starter' | 'gift'
+export const PROMO_KINDS: Record<PromoKind, { label: string; hint: string }> = {
+  starter: { label: 'Starter', hint: 'One starter code per person, ever — after any starter code, no other works for them.' },
+  gift: { label: 'Gift', hint: 'Giveaways and thank-yous — a person can use many different gift codes, each once.' },
+}
+
 export interface PromoCode {
   code: string           // the doc id, upper case
+  kind: PromoKind
   months: number         // free months of Premium
   maxUses: number | null // null = unlimited
   uses: number
@@ -96,6 +110,7 @@ function toPromo(id: string, d: Record<string, unknown>): PromoCode {
   const at = d.createdAt as { toMillis?: () => number } | number | undefined
   return {
     code: id,
+    kind: d.kind === 'gift' ? 'gift' : 'starter',
     months: typeof d.months === 'number' ? d.months : 1,
     maxUses: typeof d.maxUses === 'number' ? d.maxUses : null,
     uses: typeof d.uses === 'number' ? d.uses : 0,
@@ -121,5 +136,6 @@ export async function createPromoCode(db: Firestore, p: Omit<PromoCode, 'uses' |
   })
 }
 
+export const setPromoKind = (db: Firestore, code: string, kind: PromoKind) => updateDoc(doc(db, 'promo_codes', code), { kind })
 export const setPromoActive = (db: Firestore, code: string, active: boolean) => updateDoc(doc(db, 'promo_codes', code), { active })
 export const deletePromoCode = (db: Firestore, code: string) => deleteDoc(doc(db, 'promo_codes', code))

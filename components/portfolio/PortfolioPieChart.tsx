@@ -6,6 +6,7 @@ import { PieChart as PieIcon, TrendingUp } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
 import type { Card } from '@/lib/types'
 import { usePortfolioTimeline } from './usePortfolioTimeline'
+import { PremiumLock } from '@/components/premium/PremiumLock'
 
 interface Slice { name: string; value: number; color: string; count?: number }
 type Mode = 'game' | 'time'
@@ -166,7 +167,7 @@ const RANGES = [['1M', 30], ['3M', 90], ['1Y', 365], ['All', 0]] as const
 type Range = typeof RANGES[number][0]
 
 function OverTime({ cards }: { cards: Card[] }) {
-  const { dailyValues, fixedValue, ready } = usePortfolioTimeline(cards)
+  const { dailyValues, fixedValue, ready, locked } = usePortfolioTimeline(cards)
   const [range, setRange] = useState<Range>('3M')
   const points = useMemo(() => {
     const days = RANGES.find(([r]) => r === range)![1]
@@ -184,6 +185,9 @@ function OverTime({ cards }: { cards: Card[] }) {
   const color = up ? '#4f7a2a' : '#b4432a'
   const fmtDay = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
+  if (locked) {
+    return <PremiumLock reason="portfolio-time" className="flex-1 min-h-[16rem]" title="Watch your collection grow" sub="Your collection’s value day by day comes with Haven Premium." />
+  }
   if (!ready) {
     return <div className="flex-1 min-h-[16rem] flex items-center justify-center text-xs text-slate-500">Loading your history…</div>
   }

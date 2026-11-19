@@ -12,6 +12,7 @@ import {
   type Cadence, type CostCategory, type CostItem,
 } from '@/lib/finance'
 import { DEFAULT_PREMIUM, loadPremiumConfig } from '@/lib/premium'
+import { loadPremiumRevenue, type PremiumRevenue } from '@/lib/premiumRevenue'
 import { useStaff } from '../StaffAuthProvider'
 import { StaffModal } from '../StaffModal'
 import { Empty, Panel, RankBars, Tile, TimeBars, fmtInt, fmtMoney, fmtPct } from './charts'
@@ -37,6 +38,9 @@ export function FinancesPage() {
   const [editing, setEditing] = useState<CostItem | null>(null)
   const [spread, setSpread] = useState(true)
   const [price, setPrice] = useState(DEFAULT_PREMIUM.monthly)
+  const [revenue, setRevenue] = useState<PremiumRevenue | null>(null)
+  // Sandbox (test) purchases are left out unless asked for — e.g. while testing with Stripe's sandbox
+  const [withTests, setWithTests] = useState(false)
 
   useEffect(() => {
     if (member?.role !== 'owner') return
@@ -45,6 +49,10 @@ export function FinancesPage() {
     loadPremiumConfig(staffDb).then((c) => setPrice(c.monthly))
     loadCosts().then(setCosts).catch((e) => setError(`Couldn’t load costs: ${(e as Error).message}`))
   }, [member?.role])
+  useEffect(() => {
+    if (member?.role !== 'owner') return
+    loadPremiumRevenue(staffDb, `${addMonths(monthKey(), -11)}-01`, withTests).then(setRevenue).catch(() => setRevenue(null))
+  }, [member?.role, withTests])
 
   const thisMonth = monthKey()
   const months = useMemo(() => Array.from({ length: 12 }, (_, i) => addMonths(thisMonth, i - 11)), [thisMonth])
@@ -56,11 +64,17 @@ export function FinancesPage() {
     return <div className="card-glass p-6 text-sm text-slate-400 flex items-center gap-2"><Lock size={15} />Finances are only for the Owner.</div>
   }
 
-  const paid = stats?.roles?.premium ?? 0
+  // Real numbers once Haven Premium payments arrive (premium_events, lib/premiumRevenue.ts);
+  // until then an estimate from the Premium titles in Accounts × the price
+  const real = !!revenue?.hasEvents
+  const paidStores = ['apple', 'google', 'stripe'] as const
+  const subscribers = paidStores.reduce((s, k) => s + (revenue?.activeByStore[k] ?? 0), 0)
+  const paid = real ? subscribers : stats?.roles?.premium ?? 0
   const freePremium = (stats?.roles?.creator ?? 0) + (stats?.roles?.staff ?? 0)
   const accounts = stats?.accounts?.total ?? 0
-  const grossMonthly = paid * price
-  const netMonthly = grossMonthly * (1 - APPLE_CUT)
+  const monthNow = revenue?.byMonth[thisMonth]
+  const grossMonthly = real ? monthNow?.gross ?? 0 : paid * price
+  const netMonthly = real ? monthNow?.net ?? 0 : grossMonthly * (1 - APPLE_CUT)
   const costNow = monthTotal(thisMonth)
 
   async function persist(next: CostItem[]) {
@@ -74,28 +88,33 @@ export function FinancesPage() {
       <div className="flex flex-wrap items-end gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-ink flex items-center gap-2">Finances <span className="text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 inline-flex items-center gap-1"><Crown size={10} />Owner only</span></h1>
-          <p className="text-sm text-slate-500 mt-0.5">Haven Premium is {fmtMoney(price)} a month (set on the Haven Premium page). Revenue numbers here are estimates until payments are connected.</p>
+          <p className="text-sm text-slate-500 mt-0.5">Haven Premium is {fmtMoney(price)} a month (set on the Haven Premium page). {real ? 'Revenue below is what was actually charged (test purchases left out).' : 'Revenue numbers here are estimates until the first real payment arrives.'}</p>
         </div>
       </div>
+      <label className="mb-3 flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none w-fit">
+        <input type="checkbox" checked={withTests} onChange={(e) => setWithTests(e.target.checked)} className="accent-violet-600" />
+        Include test purchases (Stripe sandbox, Apple / Google sandbox)
+      </label>
       {error && <div className="mb-4 rounded-xl border border-red-600/40 bg-red-100/20 px-3 py-2 text-sm text-red-600">{error}</div>}
 
       {/* Revenue */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        <Tile label="Paying users" value={stats === undefined ? '…' : fmtPct(accounts ? paid / accounts : 0)} sub={`${fmtInt(paid)} Premium of ${fmtInt(accounts)} accounts`} />
-        <Tile label="Monthly revenue (est.)" value={fmtMoney(netMonthly)} sub={`${fmtMoney(grossMonthly)} before Apple’s ${fmtPct(APPLE_CUT, 0)}`} />
+        <Tile label="Paying users" value={stats === undefined ? '…' : fmtPct(accounts ? paid / accounts : 0)} sub={`${fmtInt(paid)} ${real ? 'subscribers' : 'Premium'} of ${fmtInt(accounts)} accounts${real && revenue?.trialing ? ` · ${fmtInt(revenue.trialing)} on a trial` : ''}`} />
+        <Tile label={real ? 'Revenue this month' : 'Monthly revenue (est.)'} value={fmtMoney(netMonthly)} sub={real ? `${fmtMoney(grossMonthly)} charged, before store and card fees` : `${fmtMoney(grossMonthly)} before Apple’s ${fmtPct(APPLE_CUT, 0)}`} />
         <Tile label="Costs this month" value={costs ? fmtMoney(costNow) : '…'} sub={`${fmtMoney(lastMonth)} last month`} />
         <Tile
-          label="Profit this month (est.)"
+          label={real ? 'Profit this month' : 'Profit this month (est.)'}
           value={costs ? fmtMoney(netMonthly - costNow) : '…'}
           sub={freePremium ? `${fmtInt(freePremium)} Creators & Staff get Premium free` : 'Revenue (est.) minus costs'}
           delta={costs ? { text: netMonthly - costNow >= 0 ? 'In profit' : 'Costs more than it earns', good: netMonthly - costNow >= 0 } : undefined}
         />
       </div>
 
+      {real && revenue ? <RevenuePanels revenue={revenue} months={months} /> : (
       <div className="grid gap-4 md:grid-cols-3 mb-6">
         {[
-          { icon: CreditCard, title: 'Subscriptions & revenue by month', text: 'Real charges, refunds and renewals — from Apple and Stripe once Haven Premium payments are built.' },
-          { icon: Clock, title: 'How long people stay subscribed', text: 'Average months subscribed and how many renew each month — from the payment records.' },
+          { icon: CreditCard, title: 'Subscriptions & revenue by month', text: 'Real charges, refunds and renewals — from Apple, Google and Stripe, once the first payment arrives.' },
+          { icon: Clock, title: 'How long people stay subscribed', text: 'New subscribers, trials turned paid, and cancellations each month — from the payment records.' },
           { icon: MessageSquareWarning, title: 'Why people cancel', text: 'A short reason asked when someone cancels, counted here — built with the cancel flow.' },
         ].map(({ icon: Icon, title, text }) => (
           <div key={title} className="card-glass p-4 border-dashed">
@@ -105,6 +124,7 @@ export function FinancesPage() {
           </div>
         ))}
       </div>
+      )}
 
       {/* Costs */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -258,5 +278,45 @@ function CostEditor({ item, onClose, onSave }: { item: CostItem; onClose: () => 
         </div>
       </div>
     </StaffModal>
+  )
+}
+
+// ── Haven Premium revenue (real) ─────────────────────────────────────────────────────────────
+
+const STORE_LABEL: Record<string, string> = { apple: 'iPhone (Apple)', google: 'Android (Google Play)', stripe: 'Website (Stripe)', promo: 'Promo codes', permanent: 'Permanent Premium' }
+// Colours from CATEGORY_COLORS' palette above
+const STORE_COLOR: Record<string, string> = { apple: '#3d6db8', google: '#16876a', stripe: '#8a4fb0', promo: '#a87600', permanent: '#c94a2c' }
+
+function RevenuePanels({ revenue, months }: { revenue: PremiumRevenue; months: string[] }) {
+  const rows = months.map((m) => ({ m, r: revenue.byMonth[m] }))
+  const sum = (k: 'newSubs' | 'trials' | 'conversions' | 'cancellations' | 'refunds') => rows.reduce((s, x) => s + (x.r?.[k] ?? 0), 0)
+  const trials = sum('trials'), conversions = sum('conversions')
+  return (
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] mb-6">
+      <Panel title="Revenue by month" sub="What you keep, after the store’s or Stripe’s cut · refunds taken off">
+        <TimeBars
+          data={rows.map(({ m, r }) => ({ label: monthLabel(m), Revenue: Math.round((r?.net ?? 0) * 100) / 100 }))}
+          series={[{ key: 'Revenue', name: 'Kept', color: '#16876a' }]}
+          format={(n) => fmtMoney(n)}
+        />
+      </Panel>
+      <div className="flex flex-col gap-4">
+        <Panel title="Subscribers now" sub={`${fmtInt(revenue.activeTotal)} with Premium from a purchase or code`}>
+          <RankBars
+            items={Object.entries(revenue.activeByStore).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ key: k, label: STORE_LABEL[k] ?? k, value: n, color: STORE_COLOR[k] }))}
+            empty="No subscribers yet."
+          />
+        </Panel>
+        <Panel title="Last 12 months">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+            <dt className="text-slate-500">New subscribers</dt><dd className="text-right font-semibold text-ink tabular-nums">{fmtInt(sum('newSubs'))}</dd>
+            <dt className="text-slate-500">Free trials started</dt><dd className="text-right font-semibold text-ink tabular-nums">{fmtInt(trials)}</dd>
+            <dt className="text-slate-500">Trials that paid</dt><dd className="text-right font-semibold text-ink tabular-nums">{fmtInt(conversions)}{trials ? ` · ${fmtPct(conversions / trials, 0)}` : ''}</dd>
+            <dt className="text-slate-500">Cancellations</dt><dd className="text-right font-semibold text-ink tabular-nums">{fmtInt(sum('cancellations'))}</dd>
+            <dt className="text-slate-500">Refunds</dt><dd className="text-right font-semibold text-ink tabular-nums">{fmtInt(sum('refunds'))}</dd>
+          </dl>
+        </Panel>
+      </div>
+    </div>
   )
 }

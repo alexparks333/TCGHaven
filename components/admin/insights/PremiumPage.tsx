@@ -6,10 +6,12 @@ import { cn } from '@/lib/utils'
 import { staffDb } from '@/lib/firebase/staff'
 import {
   CODE_PATTERN, createPromoCode, deletePromoCode, listPromoCodes, makeCode, normalizeCode, promoStatus,
-  savePrices, setPromoActive, watchPremiumConfig, yearlySaving,
-  type PremiumConfig, type PromoCode, type PromoStatus,
+  savePrices, setPromoActive, setPromoKind, watchPremiumConfig, yearlySaving, PROMO_KINDS,
+  type PremiumConfig, type PromoCode, type PromoKind, type PromoStatus,
 } from '@/lib/premium'
 import { APPLE_CUT } from '@/lib/finance'
+import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore'
+import { toLaunch } from '@/lib/premiumRules'
 import { useStaff } from '../StaffAuthProvider'
 import { Panel, fmtInt, fmtMoney, fmtPct } from './charts'
 
@@ -40,10 +42,43 @@ export function PremiumPage() {
         <p className="text-sm text-slate-500 mt-0.5">What Premium costs, and promo codes for free months.</p>
       </div>
       <div className="flex flex-col gap-6">
+        <LaunchSwitch by={member.name || member.email} />
         <Pricing by={member.name || member.email} />
         <PromoCodes by={member.name || member.email} />
       </div>
     </div>
+  )
+}
+
+// ── Launch switch ───────────────────────────────────────────────────────────────────────────
+// premium/launch { gatesOn }: while off, nothing in the app is locked (lib/premiumAccess.ts,
+// lib/premiumServer.ts). Turn it on once Premium can be bought on every platform.
+
+function LaunchSwitch({ by }: { by: string }) {
+  const [on, setOn] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => onSnapshot(doc(staffDb, 'premium', 'launch'), (s) => setOn(toLaunch(s.data()).gatesOn), () => setOn(false)), [])
+  async function flip() {
+    const next = !on
+    if (!confirm(next
+      ? 'Turn the Premium locks ON?\n\nFree accounts lose Premium features straight away: scans past 10 a month, graded prices, price history, the portfolio over time and analytics. Only do this once Premium can be bought on the website and in the apps.'
+      : 'Turn the Premium locks OFF?\n\nEvery feature unlocks for everyone until you turn them back on.')) return
+    setBusy(true); setError('')
+    try { await setDoc(doc(staffDb, 'premium', 'launch'), { gatesOn: next, by, updatedAt: serverTimestamp() }) }
+    catch (e) { setError(`Couldn’t save: ${(e as Error).message}`) }
+    finally { setBusy(false) }
+  }
+  return (
+    <Panel title="Launch" sub="While the locks are off, every feature works for everyone. Turn them on when Premium is on sale.">
+      <div className="flex items-center gap-3">
+        <span className={cn('text-sm font-semibold', on ? 'text-emerald-700' : 'text-slate-400')}>{on === null ? '…' : on ? 'Premium locks are ON' : 'Premium locks are off'}</span>
+        <button onClick={flip} disabled={on === null || busy} className={cn('ml-auto disabled:opacity-50', on ? 'btn-secondary' : 'btn-primary')}>
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Power size={15} />}{on ? 'Turn locks off' : 'Turn locks on'}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </Panel>
   )
 }
 
@@ -179,6 +214,16 @@ function PromoCodes({ by }: { by: string }) {
     setCodes((l) => l?.map((x) => (x.code === c.code ? { ...x, active: !c.active } : x)) ?? l)
     try { await setPromoActive(staffDb, c.code, !c.active) } catch (e) { setError(`Couldn’t change ${c.code}: ${(e as Error).message}`); load() }
   }
+  async function switchKind(c: PromoCode) {
+    const kind: PromoKind = c.kind === 'starter' ? 'gift' : 'starter'
+    if (!confirm(`Make ${c.code} a ${PROMO_KINDS[kind].label} code?
+
+${PROMO_KINDS[kind].hint}
+
+People who already used it keep what they got.`)) return
+    setCodes((l) => l?.map((x) => (x.code === c.code ? { ...x, kind } : x)) ?? l)
+    try { await setPromoKind(staffDb, c.code, kind) } catch (e) { setError(`Couldn’t change ${c.code}: ${(e as Error).message}`); load() }
+  }
   async function remove(c: PromoCode) {
     if (!confirm(`Delete the code ${c.code}?${c.uses ? `\n\nIt’s been used ${c.uses} time${c.uses === 1 ? '' : 's'} — people who already redeemed it keep their free months. Switching it off instead keeps it in this list.` : ''}`)) return
     try { await deletePromoCode(staffDb, c.code); setCodes((l) => l?.filter((x) => x.code !== c.code) ?? l) } catch (e) { setError(`Couldn’t delete ${c.code}: ${(e as Error).message}`) }
@@ -188,7 +233,7 @@ function PromoCodes({ by }: { by: string }) {
     <div className="flex flex-col gap-4">
       <NewPromo by={by} existing={codes ?? []} onCreated={load} />
 
-      <Panel title="Promo codes" sub="Each code gives free months of Haven Premium. Redeeming them in the app comes with Premium itself.">
+      <Panel title="Promo codes" sub="Each code gives free months of Haven Premium, redeemed on the website (Apple doesn’t allow our own codes in the iPhone app). Every code works once per person; starter codes are one per person, ever.">
         {error && <div className="mb-3 text-xs text-red-600 flex items-center gap-2">{error}<button onClick={() => setError('')} className="ml-auto"><X size={13} /></button></div>}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {(['all', 'active', 'off', 'expired', 'used up'] as Filter[]).map((f) => (
@@ -204,25 +249,28 @@ function PromoCodes({ by }: { by: string }) {
           <div className="text-sm text-slate-500 py-8 text-center">{codes.length ? 'No codes match.' : 'No promo codes yet — make one above.'}</div>
         ) : (
           <div className="-mx-4 md:-mx-5">
-            <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_90px_120px_120px_90px_110px] gap-3 px-5 py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 border-y border-slate-800">
-              <span>Code</span><span>Gives</span><span>Used</span><span>Expires</span><span>Status</span><span />
+            <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_80px_90px_120px_120px_90px_110px] gap-3 px-5 py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 border-y border-slate-800">
+              <span>Code</span><span>Type</span><span>Gives</span><span>Used</span><span>Expires</span><span>Status</span><span />
             </div>
             {shown.map((c) => {
               const status = promoStatus(c)
               return (
-                <div key={c.code} className={cn('grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.6fr)_90px_120px_120px_90px_110px] items-center gap-x-3 gap-y-1 px-5 py-3 border-b border-slate-800/60 last:border-0', status !== 'active' && 'opacity-70')}>
+                <div key={c.code} className={cn('grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,1.6fr)_80px_90px_120px_120px_90px_110px] items-center gap-x-3 gap-y-1 px-5 py-3 border-b border-slate-800/60 last:border-0', status !== 'active' && 'opacity-70')}>
                   <div className="min-w-0">
                     <button onClick={() => copy(c.code)} className="font-mono text-sm font-bold text-ink hover:text-violet-700 inline-flex items-center gap-1.5" title="Copy">
                       {c.code}{copied === c.code ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} className="opacity-50" />}
                     </button>
                     <div className="text-[0.6875rem] text-slate-500 truncate">{c.note || `Made ${fmtDay(c.createdAt)}${c.createdBy ? ` by ${c.createdBy}` : ''}`}</div>
                   </div>
+                  <div className="hidden md:block">
+                    <button onClick={() => switchKind(c)} title={`${PROMO_KINDS[c.kind].hint} Click to change.`} className={cn('text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', c.kind === 'starter' ? 'bg-amber-500/20 text-amber-700' : 'bg-sky-500/15 text-sky-700')}>{PROMO_KINDS[c.kind].label}</button>
+                  </div>
                   <div className="hidden md:block text-sm text-ink font-semibold">{c.months} {c.months === 1 ? 'month' : 'months'}</div>
                   <div className="hidden md:block text-xs text-slate-400 tabular-nums">{fmtInt(c.uses)}{c.maxUses !== null ? ` / ${fmtInt(c.maxUses)}` : ' · no limit'}</div>
                   <div className="hidden md:block text-xs text-slate-400">{c.expires ? fmtDay(Date.parse(`${c.expires}T00:00:00`)) : 'Never'}</div>
                   <div className="hidden md:block"><span className={cn('text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', STATUS_STYLE[status])}>{status}</span></div>
                   <div className="flex items-center justify-end gap-1">
-                    <span className={cn('md:hidden text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mr-1', STATUS_STYLE[status])}>{c.months}mo · {status}</span>
+                    <span className={cn('md:hidden text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mr-1', STATUS_STYLE[status])}>{PROMO_KINDS[c.kind].label} · {c.months}mo · {status}</span>
                     <button onClick={() => toggle(c)} title={c.active ? 'Switch off' : 'Switch on'} className={cn('p-1.5 rounded-lg hover:bg-slate-800', c.active ? 'text-emerald-700' : 'text-slate-500')}><Power size={14} /></button>
                     <button onClick={() => remove(c)} title="Delete" className="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-100/30"><Trash2 size={14} /></button>
                   </div>
@@ -238,6 +286,7 @@ function PromoCodes({ by }: { by: string }) {
 
 function NewPromo({ by, existing, onCreated }: { by: string; existing: PromoCode[]; onCreated: () => void }) {
   const [code, setCode] = useState(() => makeCode())
+  const [kind, setKind] = useState<PromoKind>('starter')
   const [months, setMonths] = useState(3)
   const [custom, setCustom] = useState('')
   const [limitOn, setLimitOn] = useState(false)
@@ -260,7 +309,7 @@ function NewPromo({ by, existing, onCreated }: { by: string; existing: PromoCode
     if (limitOn && !(max! >= 1)) return setError('Set how many times it can be used.')
     setBusy(true)
     try {
-      await createPromoCode(staffDb, { code: normalized, months: finalMonths, maxUses: max, expires: expires || null, active: true, note: note.trim(), createdBy: by })
+      await createPromoCode(staffDb, { code: normalized, kind, months: finalMonths, maxUses: max, expires: expires || null, active: true, note: note.trim(), createdBy: by })
       setMade(normalized)
       setCode(makeCode()); setNote(''); setCustom('')
       onCreated()
@@ -279,6 +328,17 @@ function NewPromo({ by, existing, onCreated }: { by: string; existing: PromoCode
             </div>
             <span className="text-[0.6875rem] text-slate-500 mt-1 block">Random is safest for one-off gifts; a word like <span className="font-mono">LAUNCH3</span> works for something you share publicly.</span>
           </label>
+          <div>
+            <span className="field-label">Type</span>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.keys(PROMO_KINDS) as PromoKind[]).map((k) => (
+                <button key={k} onClick={() => setKind(k)} className={cn('rounded-xl border px-3 py-2 text-left transition-colors', kind === k ? 'bg-violet-600 border-violet-500 text-white' : 'border-slate-800 text-slate-400 hover:text-ink')}>
+                  <div className="text-sm font-semibold">{PROMO_KINDS[k].label}</div>
+                  <div className={cn('text-[0.6875rem] leading-snug', kind === k ? 'text-white/80' : 'text-slate-500')}>{PROMO_KINDS[k].hint}</div>
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <span className="field-label">Free months of Premium</span>
             <div className="flex flex-wrap gap-2">
@@ -313,7 +373,7 @@ function NewPromo({ by, existing, onCreated }: { by: string; existing: PromoCode
             {made && !error && <span className="text-xs text-emerald-700 mr-auto inline-flex items-center gap-1"><Check size={13} />Made <span className="font-mono font-bold">{made}</span></span>}
             <button onClick={create} disabled={busy} className="ml-auto btn-primary disabled:opacity-60">
               {busy ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              Make code · {Number.isFinite(finalMonths) ? finalMonths : '?'} {finalMonths === 1 ? 'month' : 'months'}
+              Make {PROMO_KINDS[kind].label.toLowerCase()} code · {Number.isFinite(finalMonths) ? finalMonths : '?'} {finalMonths === 1 ? 'month' : 'months'}
             </button>
           </div>
         </div>
