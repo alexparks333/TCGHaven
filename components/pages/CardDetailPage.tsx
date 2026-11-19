@@ -115,7 +115,7 @@ export default function CardDetailPage() {
               </span>
               <h1 className="text-xl font-bold text-ink"><CardName name={card.name} /></h1>
               {card.nexus && (
-                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30 w-fit">
+                <span className="text-[0.625rem] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30 w-fit">
                   Nexus
                 </span>
               )}

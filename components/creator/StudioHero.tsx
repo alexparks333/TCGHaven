@@ -66,15 +66,15 @@ export function StudioHero({ uid, community, book, since, tab, onTab, dirtyTabs 
           {/* The community's stamp, pressed into the paper */}
           <Seal letter={(community.name.trim()[0] || '★').toUpperCase()} ring={`✦ CREATOR STUDIO ✦ ${(since ?? '').match(/\d{4}/)?.[0] ?? new Date().getFullYear()} `} />
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#7a5230] flex items-center gap-1.5"><Wand2 size={13} />The Creator Studio of</p>
-            <h1 className="pinbook-serif text-[26px] md:text-[32px] font-bold text-ink leading-tight truncate">{community.name || 'Your community'}</h1>
+            <p className="text-[0.6875rem] font-bold uppercase tracking-[0.22em] text-[#7a5230] flex items-center gap-1.5"><Wand2 size={13} />The Creator Studio of</p>
+            <h1 className="pinbook-serif text-[1.625rem] md:text-[2rem] font-bold text-ink leading-tight truncate">{community.name || 'Your community'}</h1>
             <p className="text-sm text-slate-500 italic truncate" style={{ fontFamily: 'Georgia, serif' }}>{since ? `Creator since ${since} · Premium included` : community.tagline || 'Make something fans will want to collect'}</p>
           </div>
           <div className="flex w-full sm:w-auto md:mr-14 divide-x divide-[#d6c49f] rounded-xl border border-[#d6c49f] bg-[#f6eedb] shadow-[inset_0_0_0_3px_#f6eedb,inset_0_0_0_4px_rgba(148,128,95,0.22)]">
             {([['Badges', badges], ['Chapters', chapters], ['Members', members ?? '–']] as const).map(([label, value]) => (
               <div key={label} className="flex-1 sm:flex-none sm:min-w-[84px] px-3 py-2 text-center">
                 <div className="pinbook-serif text-xl md:text-2xl font-bold text-ink tabular-nums leading-none">{value}</div>
-                <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+                <div className="mt-1 text-[0.625rem] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
               </div>
             ))}
           </div>

@@ -77,7 +77,7 @@ function ShowAsField({ value, onChange }: { value: string; onChange: (v: string)
               </button>
             ))}
           </div>
-          <div className="text-[10px] text-slate-500 mt-1.5 px-0.5">Click to insert at the cursor — add as many as you like.</div>
+          <div className="text-[0.625rem] text-slate-500 mt-1.5 px-0.5">Click to insert at the cursor — add as many as you like.</div>
         </div>
       )}
     </div>
@@ -169,7 +169,7 @@ function TextKeysEditor({ onClose }: { onClose: () => void }) {
                 />
               </label>
               {k.color && (
-                <button onClick={() => change(k.id, { color: '' })} className="text-[10px] text-slate-500 hover:text-ink shrink-0" title="Use the name's own colour">
+                <button onClick={() => change(k.id, { color: '' })} className="text-[0.625rem] text-slate-500 hover:text-ink shrink-0" title="Use the name's own colour">
                   No colour
                 </button>
               )}

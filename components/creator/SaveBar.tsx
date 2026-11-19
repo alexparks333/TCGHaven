@@ -22,22 +22,22 @@ export function SaveBar({ dirty, onSave, onUndo, saveLabel = 'Save', savedLabel 
       {dirty ? (
         <>
           <span className="w-2 h-2 shrink-0 rounded-full bg-[#a8452a] shadow-[0_0_0_3px_rgba(168,69,42,0.15)]" />
-          <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink">Unsaved changes</span>
+          <span className="min-w-0 flex-1 truncate text-[0.75rem] font-semibold text-ink">Unsaved changes</span>
           <button type="button" onClick={onUndo} title="Undo all changes" aria-label="Undo all changes"
             className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-ink hover:bg-[#ebdfc3] transition-colors">
             <RotateCcw size={14} />
           </button>
           {blocked ? (
-            <span className="shrink-0 whitespace-nowrap pr-2 text-[11px] font-semibold text-[#a8452a]">{blocked}</span>
+            <span className="shrink-0 whitespace-nowrap pr-2 text-[0.6875rem] font-semibold text-[#a8452a]">{blocked}</span>
           ) : (
             <button type="button" onClick={onSave}
-              className="shrink-0 h-7 px-3.5 rounded-full bg-[#7a5230] hover:bg-[#6a4628] text-[#fbf6ea] text-[12px] font-semibold whitespace-nowrap inline-flex items-center gap-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] transition-colors">
+              className="shrink-0 h-7 px-3.5 rounded-full bg-[#7a5230] hover:bg-[#6a4628] text-[#fbf6ea] text-[0.75rem] font-semibold whitespace-nowrap inline-flex items-center gap-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] transition-colors">
               <Check size={13} strokeWidth={2.6} />{saveLabel}
             </button>
           )}
         </>
       ) : (
-        <span className="flex-1 text-[12px] font-semibold text-slate-500 inline-flex items-center gap-1.5"><Check size={13} className="text-emerald-600" />{savedLabel}</span>
+        <span className="flex-1 text-[0.75rem] font-semibold text-slate-500 inline-flex items-center gap-1.5"><Check size={13} className="text-emerald-600" />{savedLabel}</span>
       )}
     </div>
   )

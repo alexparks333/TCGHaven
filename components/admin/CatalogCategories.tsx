@@ -152,7 +152,7 @@ export function CategoriesPanel({
           return (
             <div key={cat} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
               <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-[10px] font-semibold text-slate-500 w-4 text-center">{i + 1}</span>
+                <span className="text-[0.625rem] font-semibold text-slate-500 w-4 text-center">{i + 1}</span>
                 {renaming === cat ? (
                   <>
                     <input
@@ -171,7 +171,7 @@ export function CategoriesPanel({
                 ) : (
                   <>
                     <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink">{cat}</span>
-                    <span className="text-[11px] text-slate-500 mr-1">{list.length}</span>
+                    <span className="text-[0.6875rem] text-slate-500 mr-1">{list.length}</span>
                     <button disabled={busy} onClick={() => { setRenaming(cat); setRenameValue(cat) }} className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800" title="Rename"><Pencil size={12} /></button>
                     <button disabled={busy || i === 0} onClick={() => move(i, -1)} className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-30" title="Move up"><ArrowUp size={12} /></button>
                     <button disabled={busy || i === categories.order.length - 1} onClick={() => move(i, 1)} className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-30" title="Move down"><ArrowDown size={12} /></button>
@@ -204,7 +204,7 @@ export function CategoriesPanel({
 
         {setsIn.none.length > 0 && (
           <div className="rounded-xl border border-dashed border-amber-400/60 p-3">
-            <div className="text-sm font-semibold text-amber-700 mb-2">No category <span className="text-[11px] font-normal text-slate-500">— not in the Cardex picker</span></div>
+            <div className="text-sm font-semibold text-amber-700 mb-2">No category <span className="text-[0.6875rem] font-normal text-slate-500">— not in the Cardex picker</span></div>
             <div className="space-y-1">
               {setsIn.none.map((name) => (
                 <SetRow key={name} name={name} category={null} categories={categories.order} busy={busy} onOpen={() => onOpenSet(name)} onMove={(to) => run({ action: 'assign', setName: name, category: to })} />
@@ -232,7 +232,7 @@ export function CategoriesPanel({
               {busy ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Add
             </button>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1.5">Added at the end — move it up to place it.</div>
+          <div className="text-[0.6875rem] text-slate-500 mt-1.5">Added at the end — move it up to place it.</div>
         </div>
       </div>
     </div>
@@ -259,7 +259,7 @@ function SetRow({
         value={category ?? ''}
         onChange={(e) => e.target.value && onMove(e.target.value)}
         title="Move to another category"
-        className={cn('bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-[11px] text-slate-400 max-w-[8rem]', 'opacity-60 group-hover:opacity-100')}
+        className={cn('bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-[0.6875rem] text-slate-400 max-w-[8rem]', 'opacity-60 group-hover:opacity-100')}
       >
         {category === null && <option value="">Move to…</option>}
         {categories.map((c) => <option key={c} value={c}>{c}</option>)}

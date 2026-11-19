@@ -97,7 +97,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_330px] items-start">
       {/* ── The page exactly as fans see it (CommunityPage's CommunityView) — every change on the right shows here at once ── */}
       <div className="min-w-0">
-        <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 flex items-center gap-1.5">
+        <p className="mb-3 text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-slate-500 flex items-center gap-1.5">
           <Eye size={13} />Your community page — exactly what fans see · <span className="normal-case tracking-normal font-semibold text-[#7a5230]">click + to add a block, click a block to edit it</span>
         </p>
         <div className="rounded-2xl border border-[#d6c49f] bg-slate-900 p-3 md:p-5">
@@ -132,37 +132,37 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
               {copied ? <Check size={15} className="text-emerald-600" /> : <Copy size={15} />}{copied ? 'Copied' : 'Copy link'}
             </button>
           </div>
-          <p className="mt-2.5 text-[11px] text-slate-500">Collectors find it under Friends → Communities and join it there.</p>
+          <p className="mt-2.5 text-[0.6875rem] text-slate-500">Collectors find it under Friends → Communities and join it there.</p>
         </div>
 
         {/* Everything on the page: header, colour, name, tagline, games, About */}
         <div className="haven-panel">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Page details</p>
+          <p className="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500">Page details</p>
           <button type="button" onClick={() => setHeaderOpen(true)} className="mt-2.5 w-full haven-chip px-3 py-2 text-sm font-semibold inline-flex items-center justify-center gap-2">
             <ImagePlus size={15} />{c.page?.header ? 'Change header picture' : 'Add a header picture'}
           </button>
           <EmblemField uid={uid} c={c} onChange={(emblem) => { const page = { ...(c.page ?? {}) }; if (emblem) page.emblem = emblem; else delete page.emblem; set({ page }) }} />
-          <label className="mt-3 block text-[11px] font-semibold text-slate-500">Name
+          <label className="mt-3 block text-[0.6875rem] font-semibold text-slate-500">Name
             <input value={c.name} maxLength={40} onChange={(e) => set({ name: e.target.value })} className="input-field mt-1 text-sm font-semibold" placeholder="Your community’s name" />
           </label>
-          {state === 'name' && <p className="mt-1 text-[11px] text-red-600">Give it a name of at least 2 letters to save.</p>}
-          <label className="mt-2.5 block text-[11px] font-semibold text-slate-500">Tagline
+          {state === 'name' && <p className="mt-1 text-[0.6875rem] text-red-600">Give it a name of at least 2 letters to save.</p>}
+          <label className="mt-2.5 block text-[0.6875rem] font-semibold text-slate-500">Tagline
             <input value={c.tagline} maxLength={80} onChange={(e) => set({ tagline: e.target.value })} className="input-field mt-1 text-sm" placeholder="A one-line tagline" />
           </label>
-          <p className="mt-2.5 text-[11px] font-semibold text-slate-500">Games you collect</p>
+          <p className="mt-2.5 text-[0.6875rem] font-semibold text-slate-500">Games you collect</p>
           <div className="mt-1.5 flex flex-wrap gap-1">
             {(Object.keys(GAME_LABELS) as Game[]).map((g) => {
               const has = c.games?.includes(g)
               return (
                 <button key={g} type="button" onClick={() => set({ games: has ? c.games!.filter((x) => x !== g) : [...(c.games ?? []), g] })}
-                  className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold transition-colors', has ? 'text-white' : 'border border-dashed border-[#c4ae83] text-slate-500 hover:text-ink')}
+                  className={cn('rounded-full px-2 py-0.5 text-[0.625rem] font-bold transition-colors', has ? 'text-white' : 'border border-dashed border-[#c4ae83] text-slate-500 hover:text-ink')}
                   style={has ? { background: GAME_COLORS[g] } : undefined}>{GAME_LABELS[g]}</button>
               )
             })}
           </div>
           <button type="button" onClick={() => set({ page: { ...(c.page ?? {}), sections: { ...(c.page?.sections ?? {}), members: !(c.page?.sections?.members ?? true) } } })}
             className="mt-3 w-full flex items-center gap-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] px-3 py-2 text-left">
-            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">Members beside the page</span><span className="block text-[11px] text-slate-500">Click it on the page to set it up</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-sm font-semibold text-ink">Members beside the page</span><span className="block text-[0.6875rem] text-slate-500">Click it on the page to set it up</span></span>
             <span className={cn('w-9 h-5 shrink-0 rounded-full p-0.5 transition-colors', (c.page?.sections?.members ?? true) ? 'bg-violet-600' : 'bg-slate-700')}>
               <span className={cn('block w-4 h-4 rounded-full bg-white shadow transition-transform', (c.page?.sections?.members ?? true) && 'translate-x-4')} />
             </span>
@@ -180,7 +180,7 @@ export function CommunityStudio({ uid, book, onEditBook, demo }: { uid: string; 
                 <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">On your page</p>
+                <p className="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500">On your page</p>
                 <p className="font-bold text-ink truncate">{book.book.name}</p>
                 <p className="text-xs text-slate-500">{book.badges.length} badge{book.badges.length === 1 ? '' : 's'} to collect</p>
                 <button type="button" onClick={onEditBook} className="mt-1.5 text-xs font-bold text-violet-700 hover:underline inline-flex items-center gap-1"><BookOpen size={12} />Edit the book</button>
@@ -238,14 +238,14 @@ function EmblemField({ uid, c, onChange }: { uid: string; c: Community; onChange
         {busy && <span className="absolute inset-0 bg-black/40 flex items-center justify-center"><Loader2 size={18} className="animate-spin" /></span>}
       </button>
       <div className="min-w-0">
-        <p className="text-[11px] font-semibold text-slate-500">Community picture</p>
+        <p className="text-[0.6875rem] font-semibold text-slate-500">Community picture</p>
         <div className="mt-1 flex items-center gap-2">
           <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1.5">
             <ImagePlus size={13} />{emblem ? 'Change' : 'Upload'}
           </button>
           {emblem && <button type="button" onClick={() => { if (confirm('Take the community picture off? The emblem goes back to your first letter.')) onChange(null) }} className="text-xs font-semibold text-slate-500 hover:text-red-600">Remove</button>}
         </div>
-        <p className="mt-1 text-[10px] text-slate-500">Square pictures work best.</p>
+        <p className="mt-1 text-[0.625rem] text-slate-500">Square pictures work best.</p>
       </div>
       <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
       {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
@@ -300,7 +300,7 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
                   aspect={HEADER_ASPECT} base={BLANK_HEADER} fillLabel="Fill header"
                   overlay={<div className="absolute inset-0 pointer-events-none" style={{ background: `linear-gradient(to bottom, transparent 35%, rgba(10,6,2,${look.headerShade ?? 0.35}))` }} /> /* the darkening, as on the page */} />
                 <ValueSlider label="Darken" min={0} max={1} step={0.05} value={look.headerShade ?? 0.35} onChange={(v) => onChange({ ...look, headerShade: v })} />
-                <p className="mt-1 text-[11px] text-slate-500">Darkens it toward the bottom so your page&rsquo;s name and text read on top.</p>
+                <p className="mt-1 text-[0.6875rem] text-slate-500">Darkens it toward the bottom so your page&rsquo;s name and text read on top.</p>
                 <div className="mt-4 flex items-center gap-2">
                   <button type="button" onClick={() => input.current?.click()} disabled={busy} className="haven-chip px-3 py-1.5 text-xs font-semibold inline-flex items-center gap-1.5">
                     {busy ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}Change picture
@@ -312,7 +312,7 @@ function HeaderEditor({ uid, c, onChange, onClose }: { uid: string; c: Community
                 className="w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] bg-[#f6eedb] py-10 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
                 <span className="haven-medallion w-11 h-11">{busy ? <Loader2 size={20} className="animate-spin" /> : <ImagePlus size={20} />}</span>
                 <span className="mt-1 text-sm font-bold text-ink">{busy ? 'Uploading…' : 'Upload a header picture'}</span>
-                <span className="text-[11px] px-6 text-center">Wide pictures work best (about 4 × as wide as tall). Then drag and zoom it into place.</span>
+                <span className="text-[0.6875rem] px-6 text-center">Wide pictures work best (about 4 × as wide as tall). Then drag and zoom it into place.</span>
               </button>
             )}
             <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
@@ -333,12 +333,12 @@ function TabsEditor({ c, set, open, onOpen }: { c: Community; set: (p: Partial<C
   const move = (i: number, d: -1 | 1) => { const n = [...tabs]; [n[i], n[i + d]] = [n[i + d], n[i]]; save(n) }
   return (
     <div className="haven-panel">
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">Tabs</p>
-      <p className="text-[11px] text-slate-500 mt-0.5">Under your Join button. Pick one to build it on the left.</p>
+      <p className="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500">Tabs</p>
+      <p className="text-[0.6875rem] text-slate-500 mt-0.5">Under your Join button. Pick one to build it on the left.</p>
       <div className="mt-2.5 space-y-1.5">
         <button type="button" onClick={() => onOpen('home')}
           className={cn('w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold', open === 'home' ? 'border-[#7a5230] bg-[#f6eedb] text-ink' : 'border-[#d6c49f] text-slate-500 hover:text-ink')}>
-          <Home size={14} />Home<span className="ml-auto text-[10px] font-normal">always first</span>
+          <Home size={14} />Home<span className="ml-auto text-[0.625rem] font-normal">always first</span>
         </button>
         {tabs.map((t, i) => (
           <div key={t.id} className={cn('flex items-center gap-1 rounded-xl border pl-3 pr-1 py-1', open === t.id ? 'border-[#7a5230] bg-[#f6eedb]' : 'border-[#d6c49f]')}>
@@ -355,7 +355,7 @@ function TabsEditor({ c, set, open, onOpen }: { c: Community; set: (p: Partial<C
         )}
       </div>
       {tab && (
-        <label className="mt-3 block text-[11px] font-semibold text-slate-500">This tab&rsquo;s name
+        <label className="mt-3 block text-[0.6875rem] font-semibold text-slate-500">This tab&rsquo;s name
           <input value={tab.title} maxLength={24} onChange={(e) => save(tabs.map((t) => (t.id === tab.id ? { ...t, title: e.target.value } : t)))} className="input-field mt-1 text-sm font-semibold" placeholder="e.g. Rules, Events, Giveaways" />
         </label>
       )}

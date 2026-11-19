@@ -78,7 +78,7 @@ export function ReliefAnalyzing({ kind, startedAt, artUrl, saving }: { kind: Ana
             )
           })}
         </ol>
-        <p className="mt-6 text-[11px] text-[#c9b994]/50">Keep this open — your pin appears here as soon as it&rsquo;s ready.</p>
+        <p className="mt-6 text-[0.6875rem] text-[#c9b994]/50">Keep this open — your pin appears here as soon as it&rsquo;s ready.</p>
       </div>
     </div>
   )

@@ -13,7 +13,7 @@ const UPDATED = 'November 9, 2026'
 export default function Page() {
   return (
     <div className="h-dvh overflow-y-auto">
-      <article className="mx-auto max-w-2xl px-5 py-10 md:py-16 text-[15px] leading-relaxed text-slate-300">
+      <article className="mx-auto max-w-2xl px-5 py-10 md:py-16 text-[0.9375rem] leading-relaxed text-slate-300">
         <Link href="/" className="text-sm font-semibold text-slate-500 hover:text-ink">← TCGHaven</Link>
         <h1 className="mt-6 text-3xl font-bold text-ink">Privacy Policy</h1>
         <p className="mt-1 text-sm text-slate-500">Last updated {UPDATED}</p>

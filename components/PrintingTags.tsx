@@ -18,7 +18,7 @@ export function PrintingTags({ card, className = '' }: { card: Pick<Card, 'editi
   return (
     <>
       {tags.map((t) => (
-        <span key={t.label} className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${t.tone} ${className}`}>
+        <span key={t.label} className={`text-[0.625rem] font-bold uppercase px-1.5 py-0.5 rounded border ${t.tone} ${className}`}>
           {t.label}
         </span>
       ))}

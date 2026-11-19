@@ -27,7 +27,7 @@ const sw = (...cs: string[]) => cs.map((color) => ({ name: color, color }))
 const OWN: Partial<Record<BlockType, string>> = { wall: 'Board', badges: 'Leaderboard', cards: 'Cards', about: 'Layout', text: 'Layout', announcements: 'Layout', picture: 'Picture', frame: 'Frame' }
 
 function Heading({ children }: { children: React.ReactNode }) {
-  return <p className="mt-5 first:mt-0 mb-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{children}</p>
+  return <p className="mt-5 first:mt-0 mb-1 text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500">{children}</p>
 }
 
 /** A row of choices, one picked (flat, square-cornered) */
@@ -38,7 +38,7 @@ function Seg<T extends string | number>({ label, value, options, onChange }: { l
       <div className="flex flex-1 rounded-md border border-[#d6c49f] overflow-hidden">
         {options.map(([v, name]) => (
           <button key={String(v)} type="button" onClick={() => onChange(v)}
-            className={cn('flex-1 py-1 text-[11px] font-bold border-r border-[#d6c49f] last:border-r-0 transition-colors', value === v ? 'bg-[#7a5230] text-[#fbf6ea]' : 'bg-[#f6eedb] text-slate-500 hover:text-ink')}>{name}</button>
+            className={cn('flex-1 py-1 text-[0.6875rem] font-bold border-r border-[#d6c49f] last:border-r-0 transition-colors', value === v ? 'bg-[#7a5230] text-[#fbf6ea]' : 'bg-[#f6eedb] text-slate-500 hover:text-ink')}>{name}</button>
         ))}
       </div>
     </div>
@@ -93,11 +93,11 @@ export function LookEditor({ type, style, onStyle, own, what }: {
               <button key={t.id} type="button" onClick={() => set({ bg: t.bg, title: t.title, text: t.text, accent: t.accent })} title={t.name}
                 className={cn('rounded-md p-1 transition', on ? 'outline outline-2 outline-[#7a5230]' : 'hover:outline hover:outline-1 hover:outline-[#c4ae83]')}>
                 <span className="relative block h-11 rounded-[3px] border border-black/15 overflow-hidden" style={{ background: t.bg }}>
-                  <span className="absolute left-1.5 top-1 text-[15px] font-bold leading-none" style={{ color: t.title, fontFamily: fontCss(st.titleFont ?? 'engraved') }}>Aa</span>
+                  <span className="absolute left-1.5 top-1 text-[0.9375rem] font-bold leading-none" style={{ color: t.title, fontFamily: fontCss(st.titleFont ?? 'engraved') }}>Aa</span>
                   <span className="absolute left-1.5 right-1.5 bottom-2 h-[3px]" style={{ background: t.accent }} />
                   <span className="absolute left-1.5 right-4 bottom-[13px] h-[2px] opacity-60" style={{ background: t.text }} />
                 </span>
-                <span className="block mt-1 text-[10px] font-semibold text-slate-500 truncate">{t.name}</span>
+                <span className="block mt-1 text-[0.625rem] font-semibold text-slate-500 truncate">{t.name}</span>
               </button>
             )
           })}
@@ -122,7 +122,7 @@ export function LookEditor({ type, style, onStyle, own, what }: {
           {BLOCK_FONTS.filter((f) => f.title).map((f) => (
             <button key={f.id} type="button" onClick={() => set({ titleFont: f.id as FontId })}
               className={cn('rounded-md border px-2.5 py-2 text-left transition-colors', (st.titleFont ?? 'engraved') === f.id ? 'border-[#7a5230] bg-[#f6e7c4]' : 'border-[#d6c49f] bg-[#f6eedb] hover:border-[#a8875c]')}>
-              <span className="block truncate text-[17px] leading-tight font-bold text-ink" style={{ fontFamily: f.css }}>{f.name}</span>
+              <span className="block truncate text-[1.0625rem] leading-tight font-bold text-ink" style={{ fontFamily: f.css }}>{f.name}</span>
             </button>
           ))}
         </div>
@@ -169,7 +169,7 @@ function Own({ block, st, set }: { block: Block; st: BlockStyle; set: (p: Partia
             <button key={x.id} type="button" onClick={() => put({ surface: x.id, color: x.color })}
               className={cn('rounded-md p-1 transition', w.surface === x.id ? 'outline outline-2 outline-[#7a5230]' : 'hover:outline hover:outline-1 hover:outline-[#c4ae83]')}>
               <span className="block h-10 rounded-[3px] border border-black/15" style={surfaceCss(x.id, w.surface === x.id ? w.color : x.color, 0.9)} />
-              <span className="block mt-1 text-[10px] font-semibold text-slate-500">{x.name}</span>
+              <span className="block mt-1 text-[0.625rem] font-semibold text-slate-500">{x.name}</span>
             </button>
           ))}
         </div>
@@ -187,7 +187,7 @@ function Own({ block, st, set }: { block: Block; st: BlockStyle; set: (p: Partia
             <span className="text-xs font-semibold text-slate-500 w-[92px] shrink-0 pt-1">Pin colour</span>
             <div className="flex flex-wrap gap-1.5">
               <button type="button" onClick={() => put({ pinColor: '' })} title="A mix of colours"
-                className={cn('h-6 px-2 rounded-md border border-black/15 text-[10px] font-bold text-slate-500 bg-[#f6eedb]', !w.pinColor && 'outline outline-2 outline-offset-1 outline-[#7a5230]')}>Mixed</button>
+                className={cn('h-6 px-2 rounded-md border border-black/15 text-[0.625rem] font-bold text-slate-500 bg-[#f6eedb]', !w.pinColor && 'outline outline-2 outline-offset-1 outline-[#7a5230]')}>Mixed</button>
               {PINS.map((c) => (
                 <button key={c} type="button" onClick={() => put({ pinColor: c })} aria-label={`Pin colour ${c}`}
                   className={cn('w-6 h-6 rounded-full border border-black/20', w.pinColor === c && 'outline outline-2 outline-offset-1 outline-[#7a5230]')} style={{ background: c }} />

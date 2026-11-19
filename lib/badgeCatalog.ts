@@ -71,9 +71,9 @@ function start() {
   }, (err) => console.error('Badge catalog listener failed:', err))
 }
 
-/** Extra books a part of the app adds to the catalog it reads — the collector's own Badges shelf adds
- *  the creator books of the communities they've joined (lib/creatorShelf.ts). Unset everywhere else,
- *  so the staff portal and other people's profiles see only TCG Haven's catalog. */
+/** Extra books a part of the app adds to the catalog it reads — the Badges page and a profile add
+ *  the creator books of the communities that collector has joined (lib/creatorShelf.ts). Unset elsewhere,
+ *  so the staff portal sees only TCG Haven's catalog. */
 const ExtraBooksContext = createContext<BadgeCatalog | null>(null)
 export function ExtraBooksProvider({ books, children }: { books: BadgeCatalog; children: React.ReactNode }) {
   return createElement(ExtraBooksContext.Provider, { value: books }, children)

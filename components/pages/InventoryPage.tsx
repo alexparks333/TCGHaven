@@ -508,7 +508,7 @@ export default function InventoryPage() {
                 aria-label="Manage games"
                 aria-expanded={showGamePicker}
                 className={cn(
-                  'w-9 h-9 md:w-[38px] md:h-[38px] rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
+                  'w-9 h-9 md:w-[2.375rem] md:h-[2.375rem] rounded-xl border-2 border-dashed flex items-center justify-center transition-colors',
                   showGamePicker
                     ? 'border-slate-400 text-ink'
                     : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'
@@ -518,7 +518,7 @@ export default function InventoryPage() {
               </button>
               {showGamePicker && (
                 <div className="absolute right-0 md:right-auto md:left-0 top-full mt-2 z-30 w-64 md:w-60 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5">
-                  <div className="md:hidden px-2.5 pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Your games</div>
+                  <div className="md:hidden px-2.5 pt-1.5 pb-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">Your games</div>
                   {trackedGames.map((game) => (
                     <div key={game} className="md:hidden flex items-center justify-between gap-2 pl-2.5 pr-1 py-1 text-sm text-slate-300">
                       <span className="flex items-center gap-2 min-w-0">
@@ -539,7 +539,7 @@ export default function InventoryPage() {
                   ))}
                   {untrackedGames.length > 0 && (
                     <>
-                      <div className="px-2.5 pt-3 md:pt-1.5 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
+                      <div className="px-2.5 pt-3 md:pt-1.5 pb-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">Track another game</div>
                       {untrackedGames.map((game) => (
                         <button
                           key={game}
@@ -555,7 +555,7 @@ export default function InventoryPage() {
                       ))}
                     </>
                   )}
-                  <div className="md:hidden px-2.5 pt-2 pb-1.5 text-[11px] text-slate-500">Removing a game keeps its cards, just hidden.</div>
+                  <div className="md:hidden px-2.5 pt-2 pb-1.5 text-[0.6875rem] text-slate-500">Removing a game keeps its cards, just hidden.</div>
                 </div>
               )}
             </div>
@@ -629,7 +629,7 @@ export default function InventoryPage() {
               value={dateFilter}
               max={todayISO()}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-slate-900 border border-slate-800 rounded-xl pl-9 py-2.5 text-sm text-ink focus:outline-none focus:border-slate-600 w-[170px] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
+              className="bg-slate-900 border border-slate-800 rounded-xl pl-9 py-2.5 text-sm text-ink focus:outline-none focus:border-slate-600 w-[10.625rem] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
               style={dateFilter ? { paddingRight: '1.5rem' } : { paddingRight: '0.5rem' }}
             />
             {dateFilter && (
@@ -654,15 +654,15 @@ export default function InventoryPage() {
             </div>
             <div className="grid grid-cols-3 gap-4 mb-3">
               <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Market Value</div>
+                <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-0.5">Market Value</div>
                 <div className="text-xl font-bold text-ink">{formatCurrency(session.market)}</div>
               </div>
               <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Paid</div>
+                <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-0.5">Paid</div>
                 <div className="text-xl font-bold text-ink">{formatCurrency(session.paid)}</div>
               </div>
               <div>
-                <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">Gain / Loss</div>
+                <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-0.5">Gain / Loss</div>
                 <div className={`text-xl font-bold ${session.market - session.paid >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {session.market - session.paid >= 0 ? '+' : ''}{formatCurrency(session.market - session.paid)}
                 </div>
@@ -731,18 +731,18 @@ export default function InventoryPage() {
                     <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                       <div className="relative shrink-0">
                         {rep.imageUrl ? (
-                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
+                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-11 h-[3.75rem] md:w-10 md:h-14 object-contain rounded-md" />
                         ) : (
-                          <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
+                          <div className="w-11 h-[3.75rem] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
                         {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
-                        {totalQty > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
+                        {totalQty > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-ink text-[15px] md:text-sm"><CardName name={rep.name} /></span>
+                          <span className="font-semibold text-ink text-[0.9375rem] md:text-sm"><CardName name={rep.name} /></span>
                           {rep.nexus && (
-                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
+                            <span className="text-[0.625rem] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                               Nexus
                             </span>
                           )}
@@ -754,7 +754,7 @@ export default function InventoryPage() {
                         </div>
                         <div className="hidden md:block text-xs text-slate-500">#{rep.number}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
                         {hasMarket && <GradedPriceTag card={rep} className="mt-1" />}
-                        {rep.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{rep.group}</div>}
+                        {rep.group && <div className="text-[0.625rem] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
                     <div className="text-sm text-slate-300 hidden md:flex items-center">{rep.set}</div>
@@ -767,7 +767,7 @@ export default function InventoryPage() {
                     <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
                       {marketTotal !== null ? (
                         <>
-                          <span className="text-[15px] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
+                          <span className="text-[0.9375rem] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
                           {pnl !== null && (
                             <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
@@ -917,22 +917,22 @@ export default function InventoryPage() {
                   <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
+                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[3.75rem] md:w-10 md:h-14 object-contain rounded-md" />
                       ) : (
-                        <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                        <div className="w-11 h-[3.75rem] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
-                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-ink text-[15px] md:text-sm"><CardName name={card.name} /></span>
+                        <span className="font-semibold text-ink text-[0.9375rem] md:text-sm"><CardName name={card.name} /></span>
                         {card.gradingCompany && (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
+                          <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                             {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
                           </span>
                         )}
                         {card.nexus && (
-                          <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
+                          <span className="text-[0.625rem] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                             Nexus
                           </span>
                         )}
@@ -943,7 +943,7 @@ export default function InventoryPage() {
                       </div>
                       <div className="hidden md:block text-xs text-slate-500">#{card.number}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
                       {hasMarket && <GradedPriceTag card={card} className="mt-1" />}
-                      {card.group && <div className="text-[10px] text-violet-600/70 mt-0.5">{card.group}</div>}
+                      {card.group && <div className="text-[0.625rem] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{card.set}</div>
@@ -953,7 +953,7 @@ export default function InventoryPage() {
                   <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
                     {marketTotal !== null ? (
                       <>
-                        <span className="text-[15px] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
+                        <span className="text-[0.9375rem] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
                         {pnl !== null && (
                           <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
@@ -1029,9 +1029,9 @@ export default function InventoryPage() {
                 {/* Card preview */}
                 <div className="flex items-center gap-3 mb-5 p-3 bg-slate-800/60 rounded-xl border border-slate-700/40">
                   {sellCard.imageUrl ? (
-                    <img src={cardImage(sellCard.imageUrl, 'thumb')} alt={sellCard.name} className="w-12 h-[67px] object-contain rounded-lg flex-shrink-0" />
+                    <img src={cardImage(sellCard.imageUrl, 'thumb')} alt={sellCard.name} className="w-12 h-[4.1875rem] object-contain rounded-lg flex-shrink-0" />
                   ) : (
-                    <div className="w-12 h-[67px] bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500 flex-shrink-0">#{sellCard.number}</div>
+                    <div className="w-12 h-[4.1875rem] bg-slate-700 rounded-lg flex items-center justify-center text-xs text-slate-500 flex-shrink-0">#{sellCard.number}</div>
                   )}
                   <div className="min-w-0">
                     <div className="font-semibold text-ink text-sm truncate"><CardName name={sellCard.name} /></div>
@@ -1045,11 +1045,11 @@ export default function InventoryPage() {
                 {/* Paid / Market value */}
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-700/30">
-                    <div className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">You Paid</div>
+                    <div className="text-slate-500 text-[0.625rem] uppercase tracking-wide mb-1">You Paid</div>
                     <div className="text-ink font-semibold text-sm">{formatCurrency(paid)}</div>
                   </div>
                   <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-700/30">
-                    <div className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Market Value</div>
+                    <div className="text-slate-500 text-[0.625rem] uppercase tracking-wide mb-1">Market Value</div>
                     <div className="text-ink font-semibold text-sm">{market > 0 ? formatCurrency(market) : '—'}</div>
                     {market > 0 && <GradedPriceTag card={sellCard} className="mt-1" />}
                   </div>
@@ -1137,7 +1137,7 @@ export default function InventoryPage() {
               </div>
               <div className="sold-text flex flex-col items-center gap-1">
                 <span className="text-5xl font-black text-ink tracking-widest drop-shadow-lg">SOLD!</span>
-                <span className="text-slate-300 text-sm font-medium max-w-[220px] text-center truncate">{soldCelebration}</span>
+                <span className="text-slate-300 text-sm font-medium max-w-[13.75rem] text-center truncate">{soldCelebration}</span>
               </div>
             </div>
           </div>

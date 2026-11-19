@@ -100,7 +100,7 @@ export function BadgesAdmin() {
           >
             <span className="w-4 h-5 rounded-sm" style={{ background: `linear-gradient(150deg, ${s.cover.from}, ${s.cover.to})` }} />
             {s.name}
-            <span className="text-[11px] text-slate-500">{badgesInSet(catalog, s.id).length}</span>
+            <span className="text-[0.6875rem] text-slate-500">{badgesInSet(catalog, s.id).length}</span>
           </button>
         ))}
         <button onClick={() => setEditSet({ id: '', name: '', subtitle: 'Haven Badges', monogram: '', game: 'riftbound', cover: { from: '#5a4632', to: '#1c140c', accent: '#e8b35a' } })}
@@ -118,7 +118,7 @@ export function BadgesAdmin() {
               <button onClick={() => setEditSet(selected)} className="btn-secondary !px-3 !py-1.5 !text-xs"><Pencil size={13} />Edit book</button>
               <button onClick={() => deleteSet(selected)} className="btn-secondary !px-3 !py-1.5 !text-xs hover:!text-red-600"><Trash2 size={13} />Delete</button>
             </div>
-            <div className="text-[11px] text-slate-500 text-center">{bookCollection(selected)} · {GAME_LABELS[selected.game]} · id <code>{selected.id}</code></div>
+            <div className="text-[0.6875rem] text-slate-500 text-center">{bookCollection(selected)} · {GAME_LABELS[selected.game]} · id <code>{selected.id}</code></div>
           </div>
 
           {/* Its chapters, each with its pages of pins */}
@@ -332,7 +332,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <label className="block">
       <span className="field-label">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] text-slate-500 mt-1">{hint}</span>}
+      {hint && <span className="block text-[0.6875rem] text-slate-500 mt-1">{hint}</span>}
     </label>
   )
 }
@@ -411,7 +411,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
         <div className="card-glass bg-slate-900 rounded-2xl p-4 flex flex-col gap-2">
           <p className="text-xs font-semibold text-slate-600">In the book</p>
           <BookPagePreview catalog={catalog} badge={{ ...b, id: id || '__new' }} large />
-          <p className="text-[11px] text-slate-500 leading-snug">Its page, drawn to the book&rsquo;s own sizes, with the chapter&rsquo;s other badges.</p>
+          <p className="text-[0.6875rem] text-slate-500 leading-snug">Its page, drawn to the book&rsquo;s own sizes, with the chapter&rsquo;s other badges.</p>
         </div>
       }
       footer={<>
@@ -471,7 +471,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                     const n = Math.max(1, b.slots.length)
                     patch({ tierCounts: [tierNeed(b, 1, n) || 1, tierNeed(b, 3, n) || 1] })
                   }}
-                    className={cn('px-2.5 py-1 rounded-lg text-[11px] font-semibold border', active ? 'bg-amber-500/20 border-amber-500/60 text-ink' : 'border-slate-800 text-slate-500')}>
+                    className={cn('px-2.5 py-1 rounded-lg text-[0.6875rem] font-semibold border', active ? 'bg-amber-500/20 border-amber-500/60 text-ink' : 'border-slate-800 text-slate-500')}>
                     {m}
                   </button>
                 )
@@ -484,7 +484,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                 const on = looksOn(b).includes(t)
                 return (
                   <div key={t} className="block">
-                    <label className="flex items-center gap-1.5 text-[11px] text-slate-500 mb-0.5"
+                    <label className="flex items-center gap-1.5 text-[0.6875rem] text-slate-500 mb-0.5"
                       title={t === 3 ? 'Full is always on' : on ? 'Skip the Grayscale look' : 'Use the Grayscale look'}>
                       <input type="checkbox" checked={on} disabled={t === 3}
                         onChange={(e) => patch({ tiersOff: e.target.checked ? undefined : [1] })} />
@@ -507,7 +507,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                 )
               })}
             </div>
-            <span className="block text-[11px] text-slate-500 mt-1">
+            <span className="block text-[0.6875rem] text-slate-500 mt-1">
               {b.tierCounts
                 ? `How many of the badge's ${b.slots.length} ${b.slotNoun || 'cards'} a collector needs for each look of the pin — it follows their current progress. It can't be more than the badge's ${b.slots.length}, and it stays put when you add cards later. Untick Grayscale to skip it: the pin stays a hole until Full.`
                 : 'How much of the badge a collector needs for each look of the pin — it follows their current progress. Set Full to 100 for a badge that has to be completed. Untick Grayscale to skip it: the pin stays a hole until Full.'}
@@ -524,30 +524,30 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
               editor on a wide screen (Modal's `side`); here, small, when there's no room beside it */}
           <div className="min-[1400px]:hidden flex flex-col gap-1">
             <BookPagePreview catalog={catalog} badge={{ ...b, id: id || '__new' }} />
-            <p className="text-[11px] text-slate-500 leading-snug text-center">How it sits on its page in the book.</p>
+            <p className="text-[0.6875rem] text-slate-500 leading-snug text-center">How it sits on its page in the book.</p>
           </div>
           <label className="block">
             <span className="flex items-center text-xs font-semibold text-slate-600">
               Display size
-              {(b.displayScale ?? 1) !== 1 && <button type="button" onClick={() => patch({ displayScale: undefined })} className="ml-2 text-[11px] font-semibold text-slate-500 underline">Back to 100%</button>}
+              {(b.displayScale ?? 1) !== 1 && <button type="button" onClick={() => patch({ displayScale: undefined })} className="ml-2 text-[0.6875rem] font-semibold text-slate-500 underline">Back to 100%</button>}
               <span className="ml-auto tabular-nums text-slate-500">{Math.round((b.displayScale ?? 1) * 100)}%</span>
             </span>
             {/* 100% = the pin fills its spot in the book; up to 150% there (HAVEN_MAX_SCALE) */}
             <input type="range" min={0.3} max={HAVEN_MAX_SCALE} step={0.01} value={Math.min(HAVEN_MAX_SCALE, b.displayScale ?? 1)} className="w-full accent-amber-600"
               onChange={(e) => { const v = Number(e.target.value); patch({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
-            <span className="block text-[11px] text-slate-500 leading-snug">How big the pin shows in the book, on the shelf and in lists — 100% fills its spot in the book. Evens out art that&rsquo;s framed bigger or smaller than the rest.</span>
+            <span className="block text-[0.6875rem] text-slate-500 leading-snug">How big the pin shows in the book, on the shelf and in lists — 100% fills its spot in the book. Evens out art that&rsquo;s framed bigger or smaller than the rest.</span>
           </label>
           <FileField label="Pin art" accept="image/png,image/webp,image/jpeg" badgeId={id || 'new'} kind="art" value={b.imageUrl} onChange={(imageUrl) => { setB((x) => ({ ...x, imageUrl, reliefKit: undefined, depthMapUrl: undefined, normalMapUrl: undefined, finishMapUrl: undefined, detailMapUrl: undefined, reliefBuildUrl: undefined, reliefBuildKey: undefined })); setReliefJob(null) /* the old kit and 3D maps were made from the old art */ }}
             note={reliefJob?.state === 'running'
-              ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-300"><Loader2 size={12} className="animate-spin" />Analyzing…</span>
-              : b.reliefKit && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-600"><CheckCircle2 size={12} />Relief ready</span>} />
+              ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[0.6875rem] font-semibold text-slate-300"><Loader2 size={12} className="animate-spin" />Analyzing…</span>
+              : b.reliefKit && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[0.6875rem] font-semibold text-emerald-600"><CheckCircle2 size={12} />Relief ready</span>} />
           <label className="-mt-1 flex items-start gap-2 text-xs text-slate-600" title="On: transparent areas inside the art become holes in the pin. Off: only the outside is cut out.">
             <input type="checkbox" className="mt-0.5" checked={reliefSettings(b.relief).artHoles}
               onChange={(e) => {
                 const artHoles = e.target.checked
                 setB((x) => ({ ...x, relief: { ...reliefSettings(x.relief), artHoles } }))
               }} />
-            <span>Use transparency channel<span className="block text-[11px] text-slate-500">Transparent areas inside the art become holes. Off: only the outside is cut out. Generate again after changing it.</span></span>
+            <span>Use transparency channel<span className="block text-[0.6875rem] text-slate-500">Transparent areas inside the art become holes. Off: only the outside is cut out. Generate again after changing it.</span></span>
           </label>
           {b.imageUrl && (
             <div className="flex flex-col gap-1.5">
@@ -561,7 +561,7 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
                   </button>
                 ))}
               </div>
-              <span className="text-[11px] text-slate-500 leading-snug">Local: this computer&rsquo;s GPU, through HavenRelief running here (free). Cloud: the GPU Creators use (Modal, billed per pin).</span>
+              <span className="text-[0.6875rem] text-slate-500 leading-snug">Local: this computer&rsquo;s GPU, through HavenRelief running here (free). Cloud: the GPU Creators use (Modal, billed per pin).</span>
             </div>
           )}
           {!b.imageUrl && (
@@ -584,19 +584,19 @@ function BadgeEditor({ catalog, initial, onClose, onSave, onPreview }: {
             {reliefJob?.state === 'running' ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{reliefJob?.state === 'running' ? `Analyzing ${reliefJob.gpu === 'cloud' ? 'on the cloud GPU' : 'on this computer'}…` : 'Relief Studio'}
           </button>
           {reliefJob && reliefJob.state !== 'running' && (
-            <span className={cn('text-[11px] leading-snug -mt-1', reliefJob.state === 'done' ? 'text-emerald-600' : 'text-amber-600')}>
+            <span className={cn('text-[0.6875rem] leading-snug -mt-1', reliefJob.state === 'done' ? 'text-emerald-600' : 'text-amber-600')}>
               {reliefJob.state === 'done' ? 'Relief kit ready — the Studio opens straight onto the controls.'
                 : reliefJob.state === 'offline' ? <>HavenRelief isn&rsquo;t running on this computer. On the GPU PC: <code>cd tools\havenrelief</code> then <code>.venv\Scripts\python server.py</code> (on the live site, with <code>HAVENRELIEF_ORIGINS=https://www.tcghaven.org</code>) — or use the cloud.</>
                 : `Analysis failed: ${reliefJob.msg}`}
             </span>
           )}
-          {reliefJob?.state === 'running' && <span className="text-[11px] text-slate-500 -mt-1">About a minute{reliefJob.gpu === 'cloud' ? ' (a little longer if the cloud GPU is waking up)' : ''} — keep this editor open.</span>}
+          {reliefJob?.state === 'running' && <span className="text-[0.6875rem] text-slate-500 -mt-1">About a minute{reliefJob.gpu === 'cloud' ? ' (a little longer if the cloud GPU is waking up)' : ''} — keep this editor open.</span>}
           {studio && <ReliefStudio badge={{ ...b, id: id || 'new' }} onClose={() => setStudio(false)}
             gpu={gpu} connect={(where) => { setGpu(where); return connectRelief(where, ticket) }}
             // the Studio's result is saved with the badge straight away — a separate "Save badge" was easy to miss
             onApply={async (p) => { const next = { ...b, ...p }; setB(next); const problem = await save(next); if (problem) throw new Error(problem + ' (the relief is kept in the editor — fix that and save the badge)') }} />}
           {/* the pin's normal and depth maps come from the Relief Studio ("Save relief to badge") */}
-          <p className="text-[11px] text-slate-500 leading-snug">
+          <p className="text-[0.6875rem] text-slate-500 leading-snug">
             With a 3D model, that&rsquo;s what the 3D view shows. Without one, the pin is built from the art — shape it in the Relief Studio.
           </p>
         </div>
@@ -678,14 +678,14 @@ function ModelFront({ badge, badgeId, patch }: { badge: BadgeDef; badgeId: strin
           </button>
         ))}
       </div>
-      <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+      <p className="text-[0.6875rem] text-slate-500 mt-1.5 leading-snug">
         {status ?? 'Pick the side that matches your art (not mirrored). The book picture is made from it.'}
       </p>
       <button type="button" onClick={() => makePicture(front === 1)} disabled={status !== null}
-        className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-ink hover:border-slate-600 disabled:opacity-60">
+        className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-700 text-[0.6875rem] font-semibold text-slate-400 hover:text-ink hover:border-slate-600 disabled:opacity-60">
         <ImageIcon size={12} />Remake book picture
       </button>
-      {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+      {error && <div className="text-[0.6875rem] text-red-600 mt-1">{error}</div>}
     </div>
   )
 }
@@ -743,7 +743,7 @@ function FileField({ label, accept, badgeId, kind, value, onChange, icon, note }
         </button>
         {value && <button type="button" onClick={() => onChange(undefined)} title="Remove" className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-slate-800"><X size={14} /></button>}
       </div>
-      {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+      {error && <div className="text-[0.6875rem] text-red-600 mt-1">{error}</div>}
       <input ref={input} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
     </div>
   )
@@ -779,8 +779,8 @@ function CoverImageField({ bookId, value, onChange }: { bookId: string; value?: 
         </button>
         {value && <button type="button" onClick={() => onChange(undefined)} title="Use the plain leather cover" className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-slate-800"><X size={14} /></button>}
       </div>
-      <p className="text-[10px] text-slate-500 mt-1 leading-snug">A picture of the cover on a plain light background — the background is removed for you.</p>
-      {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+      <p className="text-[0.625rem] text-slate-500 mt-1 leading-snug">A picture of the cover on a plain light background — the background is removed for you.</p>
+      {error && <div className="text-[0.6875rem] text-red-600 mt-1">{error}</div>}
       <input ref={input} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
     </div>
   )
@@ -820,7 +820,7 @@ function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]
         {slots.map((s, i) => (
           <div key={i} className="rounded-xl border border-slate-800 bg-slate-950/60 p-2.5">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] font-bold text-slate-500 w-5">{i + 1}.</span>
+              <span className="text-[0.6875rem] font-bold text-slate-500 w-5">{i + 1}.</span>
               <input className="input-field !py-1 !text-sm" value={s.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="Slot name, e.g. Lee Sin" />
               <button onClick={() => onChange(slots.filter((_, j) => j !== i))} title="Remove slot" className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-slate-500 hover:text-red-600 hover:bg-slate-800"><Trash2 size={14} /></button>
             </div>
@@ -829,7 +829,7 @@ function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]
                 const info = s.cards?.find((c) => c.id === id)
                 return (
                   <span key={id} className="contents">
-                  {k > 0 && <span className="text-[10px] font-bold uppercase text-slate-500">or</span>}
+                  {k > 0 && <span className="text-[0.625rem] font-bold uppercase text-slate-500">or</span>}
                   <span className="flex items-center gap-1.5 pl-1 pr-1.5 py-1 rounded-lg bg-slate-800 text-xs text-ink">
                     {info?.imageUrl
                       // eslint-disable-next-line @next/next/no-img-element
@@ -841,9 +841,9 @@ function SlotsEditor({ game, slots, onChange }: { game: Game; slots: BadgeSlot[]
                   </span>
                 )
               })}
-              {!s.cardIds.length && <span className="text-[11px] text-amber-700">No cards yet — search below.</span>}
+              {!s.cardIds.length && <span className="text-[0.6875rem] text-amber-700">No cards yet — search below.</span>}
               <button onClick={() => setPicking(i)} title="Pick more cards from the Cardex that also fill this slot"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-slate-700 text-[11px] font-semibold text-slate-400 hover:text-ink">
+                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-dashed border-slate-700 text-[0.6875rem] font-semibold text-slate-400 hover:text-ink">
                 <Plus size={11} />Add cards
               </button>
             </div>
@@ -895,7 +895,7 @@ function CardSearch({ game, exclude, onPick, placeholder }: { game: Game; exclud
                   : <span className="w-6 h-8 rounded-sm bg-slate-700" />}
                 <span className="min-w-0 flex-1">
                   <span className="block text-xs font-semibold text-ink truncate">{c.name}</span>
-                  <span className="block text-[10px] text-slate-500 truncate">{c.setName} · #{c.number} · <code>{c.id}</code></span>
+                  <span className="block text-[0.625rem] text-slate-500 truncate">{c.setName} · #{c.number} · <code>{c.id}</code></span>
                 </span>
                 {added ? <Check size={13} className="text-emerald-600" /> : <Plus size={13} className="text-slate-500" />}
               </button>
@@ -971,7 +971,7 @@ function SetEditor({ catalog, initial, onClose, onSave }: {
           </Field>
           {/* With a cover picture these only tint the chapter tabs, the shelf's progress bar and the
               small title line; without one they're the leather cover itself */}
-          {s.coverImage && <p className="text-[11px] text-slate-500 -mb-2">Book colours — for the chapter tabs, the progress bar under the book and the small title line.</p>}
+          {s.coverImage && <p className="text-[0.6875rem] text-slate-500 -mb-2">Book colours — for the chapter tabs, the progress bar under the book and the small title line.</p>}
           <div className="grid grid-cols-3 gap-3">
             {(['from', 'to', 'accent'] as const).map((k) => (
               <Field key={k} label={k === 'from' ? (s.coverImage ? 'Tabs (light)' : 'Leather (light)') : k === 'to' ? (s.coverImage ? 'Tabs (dark)' : 'Leather (dark)') : 'Gold accent'}>

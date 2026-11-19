@@ -74,13 +74,13 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="px-5 pt-6 pb-5 border-b border-white/10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-text.png" alt="TCGHaven" className="h-7 w-auto object-contain brightness-150" />
-          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70">Staff Portal</div>
+          <div className="mt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70">Staff Portal</div>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {nav.map(({ href, label, icon: Icon, insights, ownerOnly }, i) => (
             <div key={href}>
               {insights && !nav[i - 1]?.insights && (
-                <div className="mt-4 mb-2 pt-4 border-t border-white/15 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#d6c49f]/60">Insights</div>
+                <div className="mt-4 mb-2 pt-4 border-t border-white/15 px-3 text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[#d6c49f]/60">Insights</div>
               )}
               <Link
                 href={href}
@@ -100,7 +100,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div className="min-w-0">
             <div className="text-sm font-semibold text-white truncate">{member?.name}</div>
             <div className="text-xs text-[#d6c49f]/70 truncate">{member?.email}</div>
-            <div className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-[#ede1c6]">
+            <div className="mt-1 inline-block text-[0.625rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-[#ede1c6]">
               {member?.title ?? (member?.role === 'owner' ? 'Owner' : 'Staff')}
             </div>
           </div>
@@ -119,7 +119,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-text.png" alt="TCGHaven" className="h-5 w-auto object-contain brightness-150" />
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70 mt-0.5">Staff Portal</div>
+            <div className="text-[0.625rem] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70 mt-0.5">Staff Portal</div>
           </div>
           <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-[#d6c49f]">
             <LogOut size={14} /> Sign out
@@ -163,7 +163,7 @@ function GateCard({ title, subtitle, children }: { title: string; subtitle: stri
           <img src="/logo.png" alt="" className="w-20 h-20 object-contain mb-3" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-text.png" alt="TCGHaven" className="w-48 h-auto object-contain brightness-150" />
-          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70">Staff Portal</div>
+          <div className="mt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-[#d6c49f]/70">Staff Portal</div>
         </div>
         <div className="bg-[#ede1c6] rounded-2xl p-6 shadow-2xl">
           <h1 className="text-lg font-bold text-ink">{title}</h1>

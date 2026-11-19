@@ -67,7 +67,7 @@ export function ScanFromPhoneDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
-      <div className="add-card-panel relative w-full max-w-[460px] card-glass rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col overflow-hidden">
+      <div className="add-card-panel relative w-full max-w-[28.75rem] card-glass rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3 border-b border-slate-800">
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-ink leading-tight">Scan with your phone</h2>
@@ -82,8 +82,8 @@ export function ScanFromPhoneDialog({ onClose }: { onClose: () => void }) {
           {/* The code, on parchment, in a walnut double rule */}
           <div className="mx-auto w-fit rounded-2xl p-3 bg-[#fbf6ea] border-[3px] border-double border-[#7a5a3a] shadow-sm">
             {qr
-              ? <img src={qr} alt="QR code that opens the TCGHaven card scanner" className="w-[220px] h-[220px] block [image-rendering:pixelated]" />
-              : <div className="w-[220px] h-[220px] flex items-center justify-center"><Loader2 className="animate-spin text-slate-500" /></div>}
+              ? <img src={qr} alt="QR code that opens the TCGHaven card scanner" className="w-[13.75rem] h-[13.75rem] block [image-rendering:pixelated]" />
+              : <div className="w-[13.75rem] h-[13.75rem] flex items-center justify-center"><Loader2 className="animate-spin text-slate-500" /></div>}
           </div>
 
           <ol className="mt-5 space-y-2.5 text-sm text-ink">
@@ -121,9 +121,9 @@ export function ScanFromPhoneDialog({ onClose }: { onClose: () => void }) {
                 </p>
                 <ul className="mt-3 flex gap-2 overflow-x-auto no-scrollbar pb-1">
                   {arrived.map((c) => (
-                    <li key={c.id} className="flex-none w-[64px]" title={c.name}>
-                      <img src={cardImage(c.imageUrl, 'thumb') ?? c.imageUrl} alt={c.name} className="w-[64px] h-[89px] object-cover rounded-md border border-slate-800" />
-                      <p className="mt-1 text-[10px] leading-tight text-slate-400 truncate">{c.name}</p>
+                    <li key={c.id} className="flex-none w-[4rem]" title={c.name}>
+                      <img src={cardImage(c.imageUrl, 'thumb') ?? c.imageUrl} alt={c.name} className="w-[4rem] h-[5.5625rem] object-cover rounded-md border border-slate-800" />
+                      <p className="mt-1 text-[0.625rem] leading-tight text-slate-400 truncate">{c.name}</p>
                     </li>
                   ))}
                 </ul>

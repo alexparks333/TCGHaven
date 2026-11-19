@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
@@ -77,7 +78,7 @@ function BannerPin({ def, size, box, grayscale, title, onClick }: {
 // The pins a collector attaches to their profile's header banner (left of Settings), pinned
 // straight into the parchment and sized by the page to fill the banner top to bottom. Saved as `profiles/{uid}.bannerPins` (BANNER_PIN_SPOTS long). Like the
 // Pin Display, only pins actually earned show, in their tier's look (Grayscale / Full).
-// The owner sees empty spots to fill; visitors see only the pins, and only when the owner's
+// The owner always sees their spots (with nothing earned yet they lead to the Badges page); visitors see only the pins, and only when the owner's
 // Badges are public (a pin's look needs their badge progress, which is private otherwise).
 
 export function BannerPins({ profile, isMe, onSaved, size }: {
@@ -115,8 +116,9 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
   if (!badges) return null
   // Visitors: nothing on the strap → no strap at all. You: always, so you can fill it.
   if (!isMe && shown.every((d) => !d)) return null
-  // Nothing earned yet: an empty strap would only point at something you can't do
-  if (isMe && earned.length === 0) return null
+  // You always see your strap, even before your first badge — Brad never knew it was there
+  // (2026-11-19). With nothing earned its spots lead to the Badges page instead of the picker.
+  const nothingYet = isMe && earned.length === 0
 
   async function save(next: string[]) {
     const before = profile
@@ -155,6 +157,19 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
             title={isMe ? `${def.name} — change or take off` : `${def.name} — view in 3D`}
             onClick={() => (isMe ? setPicking(i) : setInspect(def))}
           />
+        ) : nothingYet ? (
+          <Link
+            key={i}
+            href="/badges"
+            title="Earn a badge to pin it here"
+            aria-label="Earn a badge to pin it here — open your Badges"
+            className="group flex items-center justify-center outline-none"
+            style={box}
+          >
+            <span className="banner-hole flex items-center justify-center rounded-full transition-colors" style={{ width: size * 0.9, height: size * 0.9 }}>
+              <Plus size={Math.max(14, size * 0.22)} strokeWidth={1.5} className="text-[#4a321f]/40 group-hover:text-[#4a321f]/75" />
+            </span>
+          </Link>
         ) : (
           <button
             key={i}
@@ -170,7 +185,7 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
             </span>
           </button>
         ))}
-        {error && <span className="absolute -bottom-5 right-0 whitespace-nowrap text-[10px] font-semibold text-red-700">Couldn’t save — try again</span>}
+        {error && <span className="absolute -bottom-5 right-0 whitespace-nowrap text-[0.625rem] font-semibold text-red-700">Couldn’t save — try again</span>}
       </div>
 
       {picking !== null && (

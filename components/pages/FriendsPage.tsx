@@ -114,7 +114,7 @@ function ProfileHero() {
         <div className="flex items-center gap-4 min-w-0 flex-1">
           <Avatar seed={user.uid} name={name} photoURL={me?.photoURL ?? user.photoURL ?? ''} size={72} className="shadow-md ring-4 ring-slate-900" />
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Your profile</div>
+            <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500">Your profile</div>
             <h1 className="text-2xl font-bold text-ink truncate leading-tight">{name}</h1>
             {editing ? (
               <form onSubmit={(e) => { e.preventDefault(); save() }} className="mt-1 max-w-xs">
@@ -137,7 +137,7 @@ function ProfileHero() {
                     <X size={14} />
                   </button>
                 </div>
-                {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+                {error && <div className="text-[0.6875rem] text-red-600 mt-1">{error}</div>}
               </form>
             ) : (
               <button
@@ -155,7 +155,7 @@ function ProfileHero() {
         <div className="flex gap-2 sm:gap-3 items-stretch">
           <Link href="/profile" className="hidden sm:flex flex-col items-center justify-center w-24 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-violet-600/60 text-slate-500 hover:text-ink transition-colors">
             <Eye size={18} />
-            <span className="text-[11px] font-semibold mt-1">My profile</span>
+            <span className="text-[0.6875rem] font-semibold mt-1">My profile</span>
           </Link>
           {stats.map((s) => (
             <button
@@ -167,7 +167,7 @@ function ProfileHero() {
               )}
             >
               <div className={cn('text-xl font-bold leading-none', s.hot ? 'text-violet-700' : 'text-ink')}>{s.value}</div>
-              <div className="text-[11px] font-semibold text-slate-500 mt-1">{s.label}</div>
+              <div className="text-[0.6875rem] font-semibold text-slate-500 mt-1">{s.label}</div>
             </button>
           ))}
         </div>
@@ -300,7 +300,7 @@ function FriendsSection({ focus }: { focus: string | null }) {
 
       {!ready ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2].map((i) => <div key={i} className="card-glass h-[88px] animate-pulse" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="card-glass h-[5.5rem] animate-pulse" />)}
         </div>
       ) : friends.length === 0 ? (
         <div className="card-glass border-dashed flex flex-col items-center text-center py-12 px-6">
@@ -359,7 +359,7 @@ function FriendCard({ entry: e, highlighted }: { entry: FriendEntry; highlighted
         <div className="text-sm font-bold text-ink truncate">{e.profile?.displayName ?? <span className="inline-block w-24 h-3 rounded bg-slate-800 animate-pulse" />}</div>
         {e.profile?.username && <div className="text-xs text-slate-500 truncate">@{e.profile.username}</div>}
         {e.friendship.respondedAt > 0 && (
-          <div className="text-[11px] text-slate-500 mt-1">Friends since {sinceLabel(e.friendship.respondedAt)}</div>
+          <div className="text-[0.6875rem] text-slate-500 mt-1">Friends since {sinceLabel(e.friendship.respondedAt)}</div>
         )}
       </div>
       <button
@@ -383,7 +383,7 @@ function FriendCard({ entry: e, highlighted }: { entry: FriendEntry; highlighted
                 </button>
                 <button onClick={() => { setConfirming(false); setMenu(false) }} className="flex-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg text-slate-400 hover:bg-slate-800">Keep</button>
               </div>
-              {error && <div className="text-[11px] text-red-600 mt-1.5">{error}</div>}
+              {error && <div className="text-[0.6875rem] text-red-600 mt-1.5">{error}</div>}
             </div>
           ) : (
             <button onClick={() => setConfirming(true)} className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm text-slate-300 hover:text-red-600 hover:bg-red-100/20">
@@ -411,7 +411,7 @@ function SentSection() {
       <div className="card-glass px-4 divide-y divide-slate-800">
         {outgoing.map((e) => (
           <PersonRow key={e.uid} uid={e.uid} profile={e.profile}>
-            <span className="hidden sm:flex items-center gap-1 text-[11px] text-slate-500"><Clock size={11} />Waiting</span>
+            <span className="hidden sm:flex items-center gap-1 text-[0.6875rem] text-slate-500"><Clock size={11} />Waiting</span>
             <button
               onClick={() => run(e.uid, () => removeFriendship(me, e.uid))}
               disabled={busy === e.uid}
@@ -517,7 +517,7 @@ function CommunitiesSection() {
       </SectionHeader>
       {!ready ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1].map((i) => <div key={i} className="card-glass h-[76px] animate-pulse" />)}
+          {[0, 1].map((i) => <div key={i} className="card-glass h-[4.75rem] animate-pulse" />)}
         </div>
       ) : communities.length === 0 ? (
         <div className="card-glass border-dashed flex flex-col items-center text-center py-10 px-6">

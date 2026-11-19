@@ -267,7 +267,7 @@ function AppStats({ days, latest, range }: { days: DailyStats[]; latest: DailySt
             ]}
             format={(n) => `${fmtInt(n)} · ${a.total ? fmtPct(n / a.total, 0) : '0%'}`}
           />
-          <div className="text-[11px] text-slate-500 mt-3">{fmtInt(a.total)} accounts in all · {fmtInt(signups)} new in the last {range} days</div>
+          <div className="text-[0.6875rem] text-slate-500 mt-3">{fmtInt(a.total)} accounts in all · {fmtInt(signups)} new in the last {range} days</div>
         </Panel>
         <Panel title="iPhone app vs website" sub={`${shortDay(full.day)} · active accounts on each (some use both)`}>
           <RankBars
@@ -304,7 +304,7 @@ function AppStats({ days, latest, range }: { days: DailyStats[]; latest: DailySt
 
 function Note() {
   return (
-    <p className="flex items-start gap-1.5 text-[11px] text-slate-500">
+    <p className="flex items-start gap-1.5 text-[0.6875rem] text-slate-500">
       <Info size={12} className="shrink-0 mt-0.5" />
       Days are in UTC. Accounts are counted from the first time they opened the app after statistics began, so early numbers undercount. Time only counts while someone is actually using the app (touched in the last 2 minutes).
     </p>

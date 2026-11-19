@@ -35,7 +35,7 @@ export function PremiumPage() {
     <div>
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-ink flex items-center gap-2">
-          Haven Premium <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 inline-flex items-center gap-1"><Crown size={10} />Owner only</span>
+          Haven Premium <span className="text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 inline-flex items-center gap-1"><Crown size={10} />Owner only</span>
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">What Premium costs, and promo codes for free months.</p>
       </div>
@@ -108,13 +108,13 @@ function Pricing({ by }: { by: string }) {
                 {saved ? 'Saved' : 'Save prices'}
               </button>
             </div>
-            <p className="mt-3 flex items-start gap-1.5 text-[11px] text-slate-500">
+            <p className="mt-3 flex items-start gap-1.5 text-[0.6875rem] text-slate-500">
               <Info size={12} className="shrink-0 mt-0.5" />
               These are the website’s prices and what the app shows. Apple charges iPhone subscribers the price set in App Store Connect, from Apple’s fixed price points ($3.99, $4.99…) — set it to match there.
             </p>
           </div>
           <div>
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2"><History size={13} />Price changes</div>
+            <div className="flex items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-2"><History size={13} />Price changes</div>
             {config.history.length === 0 ? (
               <div className="text-xs text-slate-500">No changes yet — Premium is at its starting price of {fmtMoney(config.monthly)}/month.</div>
             ) : (
@@ -204,7 +204,7 @@ function PromoCodes({ by }: { by: string }) {
           <div className="text-sm text-slate-500 py-8 text-center">{codes.length ? 'No codes match.' : 'No promo codes yet — make one above.'}</div>
         ) : (
           <div className="-mx-4 md:-mx-5">
-            <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_90px_120px_120px_90px_110px] gap-3 px-5 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-y border-slate-800">
+            <div className="hidden md:grid grid-cols-[minmax(0,1.6fr)_90px_120px_120px_90px_110px] gap-3 px-5 py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 border-y border-slate-800">
               <span>Code</span><span>Gives</span><span>Used</span><span>Expires</span><span>Status</span><span />
             </div>
             {shown.map((c) => {
@@ -215,14 +215,14 @@ function PromoCodes({ by }: { by: string }) {
                     <button onClick={() => copy(c.code)} className="font-mono text-sm font-bold text-ink hover:text-violet-700 inline-flex items-center gap-1.5" title="Copy">
                       {c.code}{copied === c.code ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} className="opacity-50" />}
                     </button>
-                    <div className="text-[11px] text-slate-500 truncate">{c.note || `Made ${fmtDay(c.createdAt)}${c.createdBy ? ` by ${c.createdBy}` : ''}`}</div>
+                    <div className="text-[0.6875rem] text-slate-500 truncate">{c.note || `Made ${fmtDay(c.createdAt)}${c.createdBy ? ` by ${c.createdBy}` : ''}`}</div>
                   </div>
                   <div className="hidden md:block text-sm text-ink font-semibold">{c.months} {c.months === 1 ? 'month' : 'months'}</div>
                   <div className="hidden md:block text-xs text-slate-400 tabular-nums">{fmtInt(c.uses)}{c.maxUses !== null ? ` / ${fmtInt(c.maxUses)}` : ' · no limit'}</div>
                   <div className="hidden md:block text-xs text-slate-400">{c.expires ? fmtDay(Date.parse(`${c.expires}T00:00:00`)) : 'Never'}</div>
-                  <div className="hidden md:block"><span className={cn('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', STATUS_STYLE[status])}>{status}</span></div>
+                  <div className="hidden md:block"><span className={cn('text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', STATUS_STYLE[status])}>{status}</span></div>
                   <div className="flex items-center justify-end gap-1">
-                    <span className={cn('md:hidden text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mr-1', STATUS_STYLE[status])}>{c.months}mo · {status}</span>
+                    <span className={cn('md:hidden text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full mr-1', STATUS_STYLE[status])}>{c.months}mo · {status}</span>
                     <button onClick={() => toggle(c)} title={c.active ? 'Switch off' : 'Switch on'} className={cn('p-1.5 rounded-lg hover:bg-slate-800', c.active ? 'text-emerald-700' : 'text-slate-500')}><Power size={14} /></button>
                     <button onClick={() => remove(c)} title="Delete" className="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-100/30"><Trash2 size={14} /></button>
                   </div>
@@ -277,7 +277,7 @@ function NewPromo({ by, existing, onCreated }: { by: string; existing: PromoCode
               <input value={code} onChange={(e) => setCode(e.target.value)} className="input-field font-mono font-bold uppercase tracking-wide" maxLength={24} />
               <button onClick={() => setCode(makeCode())} title="Make a random code" className="btn-secondary !px-3"><Shuffle size={15} /></button>
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">Random is safest for one-off gifts; a word like <span className="font-mono">LAUNCH3</span> works for something you share publicly.</span>
+            <span className="text-[0.6875rem] text-slate-500 mt-1 block">Random is safest for one-off gifts; a word like <span className="font-mono">LAUNCH3</span> works for something you share publicly.</span>
           </label>
           <div>
             <span className="field-label">Free months of Premium</span>
@@ -318,7 +318,7 @@ function NewPromo({ by, existing, onCreated }: { by: string; existing: PromoCode
           </div>
         </div>
       </div>
-      <p className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500"><Tag size={12} />Switching a code off stops new redemptions but keeps it (and how often it was used) in the list. Deleting removes it.</p>
+      <p className="mt-3 flex items-center gap-1.5 text-[0.6875rem] text-slate-500"><Tag size={12} />Switching a code off stops new redemptions but keeps it (and how often it was used) in the list. Deleting removes it.</p>
     </Panel>
   )
 }

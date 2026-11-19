@@ -130,7 +130,7 @@ export function BookPlanner({ uid, book, badges, onAdd, onEdit, onRenameChapter,
       <div className="grid grid-cols-3 gap-1.5 p-2 border-b border-[#d6c49f]">
         {([['chapters', 'Chapters', BookOpen], ['inside', 'Page Design', Palette], ['accessories', 'Badge Accessories', Sun]] as const).map(([id, label, Icon]) => (
           <button key={id} type="button" onClick={() => setPanel(id)}
-            className={cn('haven-chip px-1.5 py-2 text-[12px] leading-tight font-semibold inline-flex items-center justify-center gap-1.5 text-center', panel === id && 'haven-chip-on')}>
+            className={cn('haven-chip px-1.5 py-2 text-[0.75rem] leading-tight font-semibold inline-flex items-center justify-center gap-1.5 text-center', panel === id && 'haven-chip-on')}>
             <Icon size={14} className="shrink-0" />{label}
           </button>
         ))}
@@ -174,7 +174,7 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
           return (
             <li key={c} className={cn('relative rounded-xl border p-2.5 pl-3 transition-colors overflow-hidden bg-[#f6eedb]', on ? 'border-[#c4ae83] shadow-[inset_0_0_0_2px_#f6eedb,inset_0_0_0_3px_rgba(148,128,95,0.28)]' : 'border-[#d6c49f] hover:border-[#c4ae83]')}>
               <div className="flex items-center gap-2">
-                <span className="haven-medallion pinbook-serif w-8 h-8 text-[11px] font-bold shrink-0">{romanOf(i)}</span>
+                <span className="haven-medallion pinbook-serif w-8 h-8 text-[0.6875rem] font-bold shrink-0">{romanOf(i)}</span>
                 <ChapterName name={c} onRename={(to) => onRename(c, to)} taken={chapters} />
                 <button type="button" onClick={() => onGo(i)} title="Show this chapter" aria-label={`Show ${c}`} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800"><Eye size={15} /></button>
               </div>
@@ -190,9 +190,9 @@ function ChaptersPanel({ chapters, badges, showing, onGo, onRename, onAdd, onCha
                 })}
               </div>
               <div className="mt-1.5 flex items-center gap-1 pl-10">
-                <span className="text-[11px] text-slate-500 flex-1 whitespace-nowrap italic" style={{ fontFamily: 'Georgia, serif' }}>{count} badge{count === 1 ? '' : 's'} · {Math.max(1, Math.ceil((count + 1) / PER_PAGE))} page{Math.ceil((count + 1) / PER_PAGE) > 1 ? 's' : ''}</span>
+                <span className="text-[0.6875rem] text-slate-500 flex-1 whitespace-nowrap italic" style={{ fontFamily: 'Georgia, serif' }}>{count} badge{count === 1 ? '' : 's'} · {Math.max(1, Math.ceil((count + 1) / PER_PAGE))} page{Math.ceil((count + 1) / PER_PAGE) > 1 ? 's' : ''}</span>
                 <button type="button" onClick={() => onAddBadge(c)} title={`Make a new badge in ${c}`}
-                  className="mr-1 haven-chip haven-chip-on px-2 py-0.5 text-[11px] font-semibold inline-flex items-center gap-0.5"><Plus size={11} />Badge</button>
+                  className="mr-1 haven-chip haven-chip-on px-2 py-0.5 text-[0.6875rem] font-semibold inline-flex items-center gap-0.5"><Plus size={11} />Badge</button>
                 <button type="button" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up" title="Move up" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowUp size={14} /></button>
                 <button type="button" disabled={i === chapters.length - 1} onClick={() => move(i, 1)} aria-label="Move down" title="Move down" className="p-1 rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25"><ArrowDown size={14} /></button>
                 <button type="button" disabled={count > 0 || chapters.length < 2}
@@ -276,9 +276,9 @@ function InsidePanel({ uid, part, style, onChange, onRevert, coverImage }: { uid
       ) : (<>
       <p className="text-xs text-slate-500 mb-3">How the pages of your book look — fans see it exactly like this.</p>
       <Group id="pages" open={open} setOpen={setOpen} icon={Palette} title="Pages" summary="Felt colour, trim and texture">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Felt</p>
+        <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-2">Felt</p>
         {swatches(FELTS, page, 'page')}
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-2">Trim <span className="normal-case font-normal tracking-normal">· titles, nameplates, the classic border</span></p>
+        <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-2">Trim <span className="normal-case font-normal tracking-normal">· titles, nameplates, the classic border</span></p>
         {swatches(TRIMS, trim, 'trim')}
         <div className="mt-4">{toggle('Felt texture', s.texture !== false, () => set({ texture: s.texture === false ? undefined : false }))}</div>
       </Group>
@@ -338,7 +338,7 @@ function TabsPicker({ s, set }: { s: InsideStyle; set: (p: Partial<InsideStyle>)
   return (
     <div>
       <p className="text-xs text-slate-500 mb-3">The tabs that stick out of your book’s edge, one per chapter. The open chapter’s tab stands out.</p>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Design</p>
+      <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Design</p>
       <div className="grid grid-cols-2 gap-1.5">
         {TAB_DESIGNS.map((x) => {
           const on = d.id === x.id
@@ -356,19 +356,19 @@ function TabsPicker({ s, set }: { s: InsideStyle; set: (p: Partial<InsideStyle>)
                   <span className="pinbook-tab pinbook-serif pinbook-tab-shut relative flex items-center gap-1 rounded-r-xl font-bold !w-[84px]"><span className="pinbook-tab-num">II</span><span className="pinbook-tab-label">Chapter</span></span>
                 </span>
               </span>
-              <span className={cn('block mt-1 text-[11px] font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{x.name}</span>
+              <span className={cn('block mt-1 text-[0.6875rem] font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{x.name}</span>
             </button>
           )
         })}
       </div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-1.5">Finish</p>
+      <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-1.5">Finish</p>
       <div className="flex flex-wrap gap-1.5">
         {([['leather', 'Leather'], ['flat', 'Flat']] as const).map(([id, name]) => (
           <button key={id} type="button" onClick={() => put({ finish: id === 'leather' ? undefined : id })} aria-pressed={(t.finish ?? 'leather') === id}
             className={cn('haven-chip px-2.5 py-1 text-xs font-semibold', (t.finish ?? 'leather') === id && 'haven-chip-on')}>{name}</button>
         ))}
       </div>
-      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-1.5">Shows</p>
+      <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mt-4 mb-1.5">Shows</p>
       <div className="flex flex-wrap gap-1.5">
         {([['both', 'Number and name'], ['numbers', 'Number only'], ['names', 'Name only']] as const).map(([id, name]) => (
           <button key={id} type="button" onClick={() => put({ labels: id === 'both' ? undefined : id })} aria-pressed={labels === id}
@@ -414,7 +414,7 @@ function ShadowPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p:
           <ValueSlider label="Spread" min={0} max={24} step={0.5} value={s.pinShadowSpread ?? PIN_SHADOW.spread} unit="px" onChange={(v) => set({ pinShadowSpread: v })} />
           <ValueSlider label="Softness" min={0} max={30} step={0.5} value={s.pinShadowBlur ?? PIN_SHADOW.blur} unit="px" onChange={(v) => set({ pinShadowBlur: v })} />
           {(s.pinShadowColor || s.pinShadowStrength !== undefined || s.pinShadowBlur !== undefined || s.pinShadowSpread !== undefined) && (
-            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined, pinShadowSpread: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
+            <button type="button" onClick={() => set({ pinShadowColor: undefined, pinShadowStrength: undefined, pinShadowBlur: undefined, pinShadowSpread: undefined })} className="mt-2 text-[0.6875rem] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />Back to the usual shadow</button>
           )}
         </div>
       )}
@@ -463,7 +463,7 @@ function PagePicture({ uid, s, set }: { uid: string; s: InsideStyle; set: (p: Pa
           className="w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] bg-[#f6eedb] py-6 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
           <span className="haven-medallion w-10 h-10">{busy ? <Loader2 size={18} className="animate-spin" /> : <ImagePlus size={18} />}</span>
           <span className="text-sm font-bold text-ink">{busy ? 'Uploading…' : 'Upload a page picture'}</span>
-          <span className="text-[11px] px-5 text-center">It shows softly behind your badges on every page, over the felt.</span>
+          <span className="text-[0.6875rem] px-5 text-center">It shows softly behind your badges on every page, over the felt.</span>
         </button>
       )}
       <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0])} />
@@ -480,7 +480,7 @@ function FramePicker({ s, page, trim, set }: { s: InsideStyle; page: string; tri
     <button key={id} type="button" onClick={onClick} title={label}
       className={cn('rounded-lg border p-0.5 transition-colors', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
       <span className="relative block w-full aspect-[0.78] rounded-[5px] overflow-hidden" style={{ background: felt }}>{inner}</span>
-      <span className={cn('block mt-0.5 text-[9px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{label}</span>
+      <span className={cn('block mt-0.5 text-[0.5625rem] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{label}</span>
     </button>
   )
   return (
@@ -492,7 +492,7 @@ function FramePicker({ s, page, trim, set }: { s: InsideStyle; page: string; tri
       </div>
       {(['Elegant', 'Retro', 'Fun'] as const).map((g) => (
         <div key={g} className="mt-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
+          <p className="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
           <div className="grid grid-cols-5 gap-1.5">
             {PAGE_FRAMES.filter((f) => f.group === g).map((f) => tile(f.id, f.name, def?.id === f.id, () => set({ frame: undefined, frameStyle: f.id }),
               <span className="absolute inset-[9%]" style={{ border: '9px solid transparent', borderImage: `${frameCss({ ...s, frameStyle: f.id }, trim)} 40 / 9px / 0 round` }} />))}
@@ -506,7 +506,7 @@ function FramePicker({ s, page, trim, set }: { s: InsideStyle; page: string; tri
           {def.two && <ColorPick label={def.two[0]} value={s.frameColor2 ?? def.two[1]} palette={ACCENT_COLORS} onChange={(c) => set({ frameColor2: c })} />}
           <ValueSlider label="Width" min={6} max={40} step={1} value={s.frameWidth ?? FRAME_W} unit="px" onChange={(v) => set({ frameWidth: v })} />
           {(s.frameColor || s.frameColor2) && (
-            <button type="button" onClick={() => set({ frameColor: undefined, frameColor2: undefined })} className="mt-2 text-[11px] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />This border’s own colours</button>
+            <button type="button" onClick={() => set({ frameColor: undefined, frameColor2: undefined })} className="mt-2 text-[0.6875rem] font-semibold text-slate-500 hover:text-ink inline-flex items-center gap-1"><RotateCcw size={11} />This border’s own colours</button>
           )}
         </div>
       )}
@@ -547,7 +547,7 @@ function RingsPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p: 
             <button key={id} type="button" onClick={() => set({ binding: id })} title={name}
               className={cn('rounded-lg border p-0.5 transition-colors', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
               {mini(st)}
-              <span className={cn('block mt-0.5 text-[9px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{name}</span>
+              <span className={cn('block mt-0.5 text-[0.5625rem] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{name}</span>
             </button>
           )
         })}
@@ -556,8 +556,8 @@ function RingsPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p: 
         <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
           <div className="flex items-center gap-2">
             <p className="pinbook-serif font-bold text-ink flex-1 truncate">{def.name}</p>
-            <button type="button" onClick={() => surprise(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1"><Dices size={12} />Surprise</button>
-            <button type="button" onClick={() => reset(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1" title="Back to this binding's defaults"><RotateCcw size={12} />Reset</button>
+            <button type="button" onClick={() => surprise(def)} className="haven-chip px-2 py-1 text-[0.6875rem] font-semibold inline-flex items-center gap-1"><Dices size={12} />Surprise</button>
+            <button type="button" onClick={() => reset(def)} className="haven-chip px-2 py-1 text-[0.6875rem] font-semibold inline-flex items-center gap-1" title="Back to this binding's defaults"><RotateCcw size={12} />Reset</button>
           </div>
           {/* A bigger live look at it */}
           <div className="mt-2.5">{mini({ ...s, binding: def.id }, true)}</div>
@@ -584,8 +584,8 @@ function EdgePicker({ s, set, coverImage }: { s: InsideStyle; set: (p: Partial<I
       <div className="grid grid-cols-4 gap-1.5">
         <button type="button" onClick={() => set({ edgeTexture: undefined })} title="The book's usual rim"
           className={cn('rounded-lg border p-0.5', !on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
-          <span className="block w-full h-10 rounded-[5px] bg-[#e6d7b6] flex items-center justify-center text-[10px] text-slate-500">Usual</span>
-          <span className={cn('block mt-0.5 text-[9px] font-semibold truncate', !on ? 'text-ink' : 'text-slate-500')}>Usual</span>
+          <span className="block w-full h-10 rounded-[5px] bg-[#e6d7b6] flex items-center justify-center text-[0.625rem] text-slate-500">Usual</span>
+          <span className={cn('block mt-0.5 text-[0.5625rem] font-semibold truncate', !on ? 'text-ink' : 'text-slate-500')}>Usual</span>
         </button>
         {EDGE_TEXTURES.map((t) => {
           const bg = edgeBackground({ ...s, edgeTexture: t.id }, badgeAsset(coverImage))!
@@ -594,7 +594,7 @@ function EdgePicker({ s, set, coverImage }: { s: InsideStyle; set: (p: Partial<I
             <button key={t.id} type="button" onClick={() => set({ edgeTexture: t.id })} title={t.name}
               className={cn('rounded-lg border p-0.5', picked ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
               <span className="block w-full h-10 rounded-[5px]" style={{ backgroundImage: bg.image, backgroundSize: bg.size }} />
-              <span className={cn('block mt-0.5 text-[9px] font-semibold truncate', picked ? 'text-ink' : 'text-slate-500')}>{t.name}</span>
+              <span className={cn('block mt-0.5 text-[0.5625rem] font-semibold truncate', picked ? 'text-ink' : 'text-slate-500')}>{t.name}</span>
             </button>
           )
         })}
@@ -643,7 +643,7 @@ function PatternPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p
             <button key={d?.id ?? 'none'} type="button" onClick={() => set({ pattern: d?.id })} title={d?.name ?? 'No pattern'}
               className={cn('rounded-lg border p-0.5 transition-colors', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#d6c49f] hover:border-[#a8875c]')}>
               <span className="block w-full aspect-[0.78] rounded-[5px]" style={{ background: bg ? `${bg} center / cover no-repeat, ${felt}` : felt }} />
-              <span className={cn('block mt-0.5 text-[9px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{d?.name ?? 'Plain'}</span>
+              <span className={cn('block mt-0.5 text-[0.5625rem] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{d?.name ?? 'Plain'}</span>
             </button>
           )
         })}
@@ -652,8 +652,8 @@ function PatternPicker({ s, page, set }: { s: InsideStyle; page: string; set: (p
         <div className="mt-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3">
           <div className="flex items-center gap-2">
             <p className="pinbook-serif font-bold text-ink flex-1 truncate">{def.name}</p>
-            <button type="button" onClick={() => surprise(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1"><Dices size={12} />Surprise</button>
-            <button type="button" onClick={() => reset(def)} className="haven-chip px-2 py-1 text-[11px] font-semibold inline-flex items-center gap-1" title="Back to this pattern's defaults"><RotateCcw size={12} />Reset</button>
+            <button type="button" onClick={() => surprise(def)} className="haven-chip px-2 py-1 text-[0.6875rem] font-semibold inline-flex items-center gap-1"><Dices size={12} />Surprise</button>
+            <button type="button" onClick={() => reset(def)} className="haven-chip px-2 py-1 text-[0.6875rem] font-semibold inline-flex items-center gap-1" title="Back to this pattern's defaults"><RotateCcw size={12} />Reset</button>
           </div>
           <ColorPick label={def.color[0]} value={s.patternColor ?? def.color[1]} palette={ACCENT_COLORS} onChange={(c) => set({ patternColor: c })} />
           {def.detail && <ColorPick label={def.detail[0]} value={s.patternDetail ?? def.detail[1]} palette={ACCENT_COLORS} onChange={(c) => set({ patternDetail: c })} />}
@@ -754,7 +754,7 @@ function Page({ page, accent, side, onAdd, onEdit, onRename }: {
                   <BadgePin art={b.art} imageUrl={b.imageUrl} size={pinDrawSize(b, pin)} />
                 </span>
               </span>
-              {!isLive(b) && <span className="absolute top-1 right-1 z-10 rounded-full bg-[#2b2014]/80 border border-[#d6b168]/50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#f2d38a]" title="Only you can see it — open it and Publish to make it live">Draft</span>}
+              {!isLive(b) && <span className="absolute top-1 right-1 z-10 rounded-full bg-[#2b2014]/80 border border-[#d6b168]/50 px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-[0.14em] text-[#f2d38a]" title="Only you can see it — open it and Publish to make it live">Draft</span>}
               <span className="pinbook-serif shrink-0 max-w-full truncate rounded px-2 py-0.5 text-[clamp(8px,1.1vw,11px)] font-bold uppercase tracking-wider" style={{ background: 'linear-gradient(180deg, var(--trim), color-mix(in srgb, var(--trim) 45%, black))', color: '#1c1206' }}>{b.name}</span>
             </button>
           ) : i === plusAt ? (

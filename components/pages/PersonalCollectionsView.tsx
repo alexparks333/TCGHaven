@@ -176,7 +176,7 @@ export function PersonalCollectionsView({
               const color = GAME_COLORS[game]
               return (
                 <div key={game}>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1.5 px-0.5">
+                  <div className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-600 mb-1.5 px-0.5">
                     {GAME_LABELS[game]}
                   </div>
                   <div className="flex gap-2 flex-wrap">
@@ -512,7 +512,7 @@ function CollectionDetail({
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span
-            className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+            className="text-[0.625rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
             style={{ backgroundColor: color + '22', color }}
           >
             {GAME_LABELS[collection.game]}
@@ -571,7 +571,7 @@ function CollectionDetail({
 
       {/* Phones only: reordering needs a press-and-hold now (see MOVE_MODE_HOLD_MS), so say so */}
       {totalCount > 1 && !normalizedQuery && (
-        <p className="md:hidden text-[11px] text-slate-500 mb-3">Press and hold a card to move it.</p>
+        <p className="md:hidden text-[0.6875rem] text-slate-500 mb-3">Press and hold a card to move it.</p>
       )}
 
       {/* Progress */}
@@ -604,7 +604,7 @@ function CollectionDetail({
       ) : normalizedQuery ? (
         // Drag-to-reorder is ambiguous against a filtered subset, so search results render as a
         // plain (non-sortable) grid — clear the search to go back to reordering.
-        <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+        <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] md:grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] min-[1700px]:grid-cols-[repeat(auto-fill,minmax(6.2222rem,1fr))]">
           {filteredEnriched.map((card) => (
             <PersonalCardTile
               key={cardKey(card)}
@@ -633,7 +633,7 @@ function CollectionDetail({
           onDragCancel={handleDragCancel}
         >
           <SortableContext items={orderedIds} strategy={rectSortingStrategy}>
-            <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+            <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] md:grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] min-[1700px]:grid-cols-[repeat(auto-fill,minmax(6.2222rem,1fr))]">
               {enriched.map((card) => (
                 <SortablePersonalCardTile
                   key={cardKey(card)}
@@ -780,7 +780,7 @@ function AddCardToCollectionModal({
                   <div className="text-xs text-slate-500 truncate">{result.setName} · #{result.number}</div>
                 </div>
                 {added ? (
-                  <span className="text-[10px] text-emerald-600 font-medium shrink-0">Added</span>
+                  <span className="text-[0.625rem] text-emerald-600 font-medium shrink-0">Added</span>
                 ) : (
                   <Plus size={16} className="text-violet-600 shrink-0" />
                 )}
@@ -891,14 +891,14 @@ const TrashDropZone = forwardRef<HTMLDivElement, { isOver: boolean }>(function T
       <div
         ref={ref}
         className={cn(
-          'flex flex-col items-center justify-center gap-1 w-[72px] h-[72px] rounded-full border-2 shadow-xl transition-all duration-200 ease-out',
+          'flex flex-col items-center justify-center gap-1 w-[4.5rem] h-[4.5rem] rounded-full border-2 shadow-xl transition-all duration-200 ease-out',
           isOver
             ? 'scale-125 bg-red-600 border-red-700 text-white shadow-[0_0_0_10px_rgba(168,69,42,0.18),0_12px_28px_rgba(168,69,42,0.35)]'
             : 'bg-slate-950 border-slate-700 text-slate-300',
         )}
       >
         <Trash2 size={24} />
-        <span className="text-[10px] font-semibold leading-none">{isOver ? 'Release' : 'Remove'}</span>
+        <span className="text-[0.625rem] font-semibold leading-none">{isOver ? 'Release' : 'Remove'}</span>
       </div>
     </div>
   )
@@ -995,7 +995,7 @@ function PersonalCardTile({
 
         {card.owned && (
           card.quantity > 1 ? (
-            <div className="absolute top-1 right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none" style={{ backgroundColor: gameColor }}>
+            <div className="absolute top-1 right-1 rounded-full px-1.5 py-0.5 text-[0.5625rem] font-black text-white leading-none" style={{ backgroundColor: gameColor }}>
               ×{card.quantity > 99 ? '99+' : card.quantity}
             </div>
           ) : (
@@ -1007,7 +1007,7 @@ function PersonalCardTile({
           )
         )}
 
-        <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1 py-0.5 text-[8px] font-bold text-white/80 leading-none">
+        <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1 py-0.5 text-[0.5rem] font-bold text-white/80 leading-none">
           #{card.number}
         </div>
 
@@ -1018,12 +1018,12 @@ function PersonalCardTile({
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] truncate"><CardName name={card.name} /></div>
-            <div className="text-[10px] mt-0.5 text-slate-400">{card.setName}</div>
-            {(card.marketPrice ?? 0) > 0 && <div className="text-[10px] text-slate-400 mt-0.5">{formatCurrency(card.marketPrice!)}</div>}
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[8.75rem] truncate"><CardName name={card.name} /></div>
+            <div className="text-[0.625rem] mt-0.5 text-slate-400">{card.setName}</div>
+            {(card.marketPrice ?? 0) > 0 && <div className="text-[0.625rem] text-slate-400 mt-0.5">{formatCurrency(card.marketPrice!)}</div>}
             {card.owned
-              ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
-              : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
+              ? <div className="text-[0.625rem] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
+              : <div className="text-[0.625rem] text-slate-500 mt-0.5">not collected</div>}
           </div>
           <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
         </div>

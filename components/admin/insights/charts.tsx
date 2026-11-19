@@ -46,7 +46,7 @@ export function Panel({ title, sub, children, className, right }: { title: strin
       <div className="flex items-start gap-2 mb-3">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-ink">{title}</h3>
-          {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
+          {sub && <p className="text-[0.6875rem] text-slate-500 mt-0.5">{sub}</p>}
         </div>
         {right && <div className="ml-auto shrink-0">{right}</div>}
       </div>
@@ -59,10 +59,10 @@ export function Panel({ title, sub, children, className, right }: { title: strin
 export function Tile({ label, value, sub, delta }: { label: string; value: string; sub?: string; delta?: { text: string; good: boolean } }) {
   return (
     <div className="card-glass p-4">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 truncate">{label}</div>
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 truncate">{label}</div>
       <div className="mt-1 text-2xl font-bold text-ink tabular-nums">{value}</div>
-      {delta && <div className={cn('text-[11px] font-semibold mt-0.5', delta.good ? 'text-emerald-700' : 'text-red-600')}>{delta.text}</div>}
-      {sub && <div className="text-[11px] text-slate-500 mt-0.5">{sub}</div>}
+      {delta && <div className={cn('text-[0.6875rem] font-semibold mt-0.5', delta.good ? 'text-emerald-700' : 'text-red-600')}>{delta.text}</div>}
+      {sub && <div className="text-[0.6875rem] text-slate-500 mt-0.5">{sub}</div>}
     </div>
   )
 }

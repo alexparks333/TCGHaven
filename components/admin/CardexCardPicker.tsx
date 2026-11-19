@@ -183,13 +183,13 @@ export default function CardexCardPicker({ game, games, onAdd, onClose, title, a
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={cardImage(c.imageUrl, 'grid') ?? c.imageUrl} alt={c.name} loading="lazy"
                       className={cn('w-full aspect-[5/7] object-cover rounded-lg transition-shadow', on ? 'outline outline-[3px] outline-violet-600' : 'opacity-90 hover:opacity-100')} />
-                    {on && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center text-[10px] font-black shadow">✓</span>}
+                    {on && <span className="absolute top-1 right-1 w-5 h-5 rounded-full bg-violet-600 text-white flex items-center justify-center text-[0.625rem] font-black shadow">✓</span>}
                     <span role="button" tabIndex={0} aria-label={`Look at ${c.name}`} title="Look at the card"
                       onClick={(e) => { e.stopPropagation(); look(e.currentTarget.parentElement!, c) }}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); look(e.currentTarget.parentElement!, c) } }}
                       className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/55 text-white flex items-center justify-center shadow hover:bg-black/80"><Eye size={13} /></span>
-                    <p className="text-[11px] font-semibold text-ink truncate mt-1">{c.name}</p>
-                    <p className="text-[10px] text-slate-500 truncate">{c.setName}{c.number ? ` · #${c.number}` : ''}</p>
+                    <p className="text-[0.6875rem] font-semibold text-ink truncate mt-1">{c.name}</p>
+                    <p className="text-[0.625rem] text-slate-500 truncate">{c.setName}{c.number ? ` · #${c.number}` : ''}</p>
                   </button>
                 )
               })}

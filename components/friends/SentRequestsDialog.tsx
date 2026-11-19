@@ -53,7 +53,7 @@ export function SentRequestsDialog({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-label="Sent friend requests"
-        className="add-card-panel relative w-full md:max-w-[440px] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl flex flex-col max-h-[80dvh] md:max-h-[560px] overflow-hidden"
+        className="add-card-panel relative w-full md:max-w-[27.5rem] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl flex flex-col max-h-[80dvh] md:max-h-[35rem] overflow-hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="md:hidden mx-auto mt-2 mb-1 w-10 h-1 rounded-full bg-slate-700" />

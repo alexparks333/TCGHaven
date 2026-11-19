@@ -12,7 +12,7 @@ import { useStore, portfolioGames } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { conditionPrice } from '@/lib/pricing'
-import { authFetch } from '@/lib/firebase/authFetch'
+import { usePortfolioTimeline } from './usePortfolioTimeline'
 import { LogoLoader } from '@/components/LogoLoader'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -64,55 +64,22 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceBaselines, gradedSources, priceLoad, activeGames: filterGames, trackedGames, calcFloor } = useStore()
+  const { cards, priceBaselines, gradedSources, priceLoad, activeGames: filterGames, trackedGames, calcFloor, hiddenGroups } = useStore()
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // Apply the same filters as PortfolioPage so numbers line up exactly
   const filteredCards = useMemo(() => {
     return cards.filter((c) => {
       if (!activeGames.includes(c.game)) return false
+      if (c.group && hiddenGroups.includes(c.group)) return false // hidden groups, as on Portfolio
       if (calcFloor > 0 && (c.currentPrice ?? c.purchasePrice) < calcFloor) return false
       return true
     })
-  }, [cards, activeGames, calcFloor])
+  }, [cards, activeGames, calcFloor, hiddenGroups])
 
-  // Daily portfolio value comes from the shared, catalog-level price history, summed on the
-  // server (app/api/price-history, mode "portfolio") — only one number per day is downloaded.
-  // Cards without a catalog match count at their own price every day.
-  const catalogCards = useMemo(() => filteredCards.filter((c) => c.apiId), [filteredCards])
-  const fixedValue = useMemo(
-    () => filteredCards.filter((c) => !c.apiId).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
-    [filteredCards],
-  )
-  const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}:${c.gradingCompany ?? ''}${c.grade ?? ''}${c.gradeTier ?? ''}:${c.condition ?? ''}`).join('|')
-  const [dailyValues, setDailyValues] = useState<{ day: string; value: number }[]>([])
-  // Which request the current dailyValues answer — the page waits behind the loader until the
-  // timeline for the current cards has actually come back.
-  const [loadedKey, setLoadedKey] = useState<string | null>(null)
-  useEffect(() => {
-    let stale = false
-    if (catalogCards.length === 0) { setDailyValues([]); setLoadedKey(requestKey); return }
-    authFetch('/api/price-history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mode: 'portfolio',
-        days: 730,
-        items: catalogCards.map((c) => ({
-          key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language,
-          gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined, // a graded-priced slab's days are its graded prices
-          condition: c.condition, // a raw copy's days are discounted for its condition
-          qty: c.quantity, fallback: c.currentPrice ?? c.purchasePrice,
-        })),
-      }),
-    })
-      .then((r) => (r.ok ? r.json() : { timeline: [] }))
-      .then((data: { timeline: { day: string; value: number }[] }) => { if (!stale) setDailyValues(data.timeline ?? []) })
-      .catch(() => {})
-      .finally(() => { if (!stale) setLoadedKey(requestKey) })
-    return () => { stale = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestKey])
+  // Daily portfolio value from the shared price history (usePortfolioTimeline — the Portfolio's
+  // "Over time" chart reads the same, so the two always agree)
+  const { dailyValues, fixedValue, ready: timelineReady } = usePortfolioTimeline(filteredCards)
 
   // P&L and Return use the same "Since Entry" baseline as PortfolioPage:
   // priceAtEntry (market price when added) → earliest shared-history price → purchasePrice.
@@ -164,7 +131,7 @@ export default function PortfolioAnalyticsPage() {
     { label: 'Total Change',  value: totalChange, isChange: true  },
   ]
 
-  if (!priceLoad.complete || loadedKey !== requestKey) {
+  if (!priceLoad.complete || !timelineReady) {
     return (
       <AuthGuard>
         <LogoLoader label="Loading your portfolio history…" progress={!priceLoad.complete && priceLoad.total > 0 ? { done: priceLoad.done, total: priceLoad.total } : undefined} />
@@ -301,7 +268,7 @@ export default function PortfolioAnalyticsPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {summaryStats.map(({ label, value, isChange }) => (
               <div key={label} className="card-glass p-4">
-                <div className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-1.5">
+                <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide font-semibold mb-1.5">
                   {label}
                 </div>
                 <div className={`text-lg font-bold ${

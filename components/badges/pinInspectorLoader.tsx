@@ -52,7 +52,7 @@ export function PolishingBar({ value }: { value: number }) {
             style={{ width: `${Math.round(Math.max(0.04, value) * 100)}%`, background: 'linear-gradient(90deg, #a87a2c, #f3d48a, #c9973f)' }}
           />
         </div>
-        <div className="text-[11px] text-white/40 mt-1.5 tabular-nums">{Math.round(value * 100)}%</div>
+        <div className="text-[0.6875rem] text-white/40 mt-1.5 tabular-nums">{Math.round(value * 100)}%</div>
       </div>
     </div>
   )

@@ -26,6 +26,8 @@ import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
 import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
 import { BannerPins } from '@/components/badges/BannerPins'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
+import { ExtraBooksProvider } from '@/lib/badgeCatalog'
+import { useJoinedCreatorBooks } from '@/lib/creatorShelf'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
 import { conditionFactor } from '@/lib/pricing'
 import {
@@ -105,11 +107,23 @@ function ProfileBody({ uid, viaUsername }: { uid?: string; viaUsername?: string 
   const isFriend = friendship?.status === 'accepted'
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto">
-      <ProfileHeader profile={profile} isMe={isMe} onSaved={setMe} friendship={friendship} />
-      <Showcase profile={profile} isMe={isMe} isFriend={isFriend} onSaved={setMe} />
-    </div>
+    <ProfileBooks uid={profile.uid}>
+      <div className="flex flex-col gap-6 max-w-5xl mx-auto">
+        <ProfileHeader profile={profile} isMe={isMe} onSaved={setMe} friendship={friendship} />
+        <Showcase profile={profile} isMe={isMe} isFriend={isFriend} onSaved={setMe} />
+      </div>
+    </ProfileBooks>
   )
+}
+
+// The books of the communities THIS PROFILE'S OWNER has joined (yours on your profile, Brad's on
+// Brad's) — added to the badge catalog everything on the profile reads: the Community Badges shelf,
+// their earned community badges, the Pin Display and the banner pins. Without it a profile only
+// knew TCG Haven's own books: Brad joined a community and earned its badge, but his profile showed
+// "Community Badges 0" and couldn't show the badge (2026-11-19). The Badges page does the same for you.
+function ProfileBooks({ uid, children }: { uid: string; children: React.ReactNode }) {
+  const { catalog } = useJoinedCreatorBooks(uid)
+  return <ExtraBooksProvider books={catalog}>{children}</ExtraBooksProvider>
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────────────────────
@@ -129,7 +143,7 @@ function StatTile({ href, n, label }: { href?: string; n: number | undefined; la
   const cls = 'block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5 text-center transition-colors'
   const body = <>
     <div className="text-xl font-bold leading-none text-ink">{n ?? '–'}</div>
-    <div className="text-[11px] font-semibold text-slate-500 mt-1">{label}</div>
+    <div className="text-[0.6875rem] font-semibold text-slate-500 mt-1">{label}</div>
   </>
   return href ? <Link href={href} className={cn(cls, 'hover:border-slate-700')}>{body}</Link> : <div className={cls}>{body}</div>
 }
@@ -208,7 +222,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     if (!el) return
     const fit = () => {
       const tall = (el.clientHeight - BANNER_RULE - 2 * BANNER_MARGIN) / 1.12
-      const wide = (el.clientWidth - 150 - (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) - 16) / 3.3
+      // The avatar / Settings room is sized in rem (it grows with the root size on big monitors)
+      const r = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
+      const wide = (el.clientWidth - (150 + (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) + 16) * r) / 3.3
       setBannerPin(Math.max(28, Math.floor(Math.min(tall, wide))))
     }
     fit()
@@ -278,7 +294,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         <BannerArt />
         {bannerPin > 0 && (
           <div className="absolute top-0 flex items-center" style={{ bottom: BANNER_RULE, right: 12, paddingBlock: BANNER_MARGIN }}>
-            <div className={isMe ? 'mr-[52px] sm:mr-[120px]' : undefined}>
+            <div className={isMe ? 'mr-[3.25rem] sm:mr-[7.5rem]' : undefined}>
               <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin} />
             </div>
           </div>
@@ -305,7 +321,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           <div className="flex items-end justify-between gap-3">
             {/* A ring of the banner round the photo — a flex box, so it hugs the photo exactly (as an inline span it
                 kept a text line's descender gap under it, and the gold showed as a crescent below the photo) */}
-            <span ref={ringRef} className="relative isolate flex rounded-full p-[9px] shrink-0 overflow-hidden shadow-[0_10px_18px_-8px_rgba(40,22,8,0.5)]">
+            <span ref={ringRef} className="relative isolate flex rounded-full p-[0.5625rem] shrink-0 overflow-hidden shadow-[0_10px_18px_-8px_rgba(40,22,8,0.5)]">
               {/* the banner itself, lined up with the real one — so the ring is a window onto the header art */}
               {ringAt && (
                 <span aria-hidden className="haven-banner absolute -z-10 pointer-events-none"
@@ -329,7 +345,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             <span className="text-sm text-slate-500 truncate">@{profile.username}</span>
             {(isMe || title.role !== 'regular') && (
               <span
-                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                className="shrink-0 text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"
                 style={{ backgroundColor: titleColor(title) + '22', color: titleColor(title) }}
               >
                 {titleLabel(title)}
@@ -371,7 +387,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
                 className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-[#7a5230] px-3 py-2 transition-colors">
                 <Users size={15} className="shrink-0 text-[#7a5230]" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{isMe ? 'Your community' : `${first}’s community`}</span>
+                  <span className="block text-[0.625rem] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{isMe ? 'Your community' : `${first}’s community`}</span>
                   <span className="block text-sm font-bold text-ink truncate mt-0.5">{owned.name || 'Community'}</span>
                 </span>
                 <ChevronRight size={15} className="shrink-0 text-slate-500" />
@@ -394,7 +410,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
                 className="input-field resize-none"
               />
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-[11px] text-slate-500 mr-auto">{bio.length}/{BIO_MAX}</span>
+                <span className="text-[0.6875rem] text-slate-500 mr-auto">{bio.length}/{BIO_MAX}</span>
                 <button onClick={() => { setEditing(false); setBio(profile.bio) }} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:bg-slate-800">Cancel</button>
                 <button onClick={saveBio} disabled={saving} className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold disabled:opacity-60">
                   {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}Save
@@ -430,7 +446,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
 // ── What others can see (compact, inside your header) ─────────────────────────────────────
 
 /** The width of the Everyone / Friends choice (and Portfolio's "Only you"): icons only on a phone, words from md */
-const SEG_W = 'w-[60px] md:w-[164px]'
+const SEG_W = 'w-[3.75rem] md:w-[10.25rem]'
 
 function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profile) => void }) {
   const [saving, setSaving] = useState<keyof ProfilePrivacy | null>(null)
@@ -455,10 +471,10 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
   ]
 
   return (
-    <div className="w-[176px] md:w-[320px] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-2 md:p-3">
+    <div className="w-[11rem] md:w-[20rem] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-2 md:p-3">
       <div className="flex items-center gap-1.5 px-1 mb-1 md:mb-2">
         <Eye size={13} className="text-slate-500 shrink-0" />
-        <span className="text-[10px] md:text-[11px] font-bold uppercase md:tracking-wider leading-tight text-slate-500">Who can see it</span>
+        <span className="text-[0.625rem] md:text-[0.6875rem] font-bold uppercase md:tracking-wider leading-tight text-slate-500">Who can see it</span>
       </div>
       <div className="flex flex-col md:gap-1">
         {rows.map(({ key, icon: Icon, label, hint }) => {
@@ -467,7 +483,7 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
           const opt = (value: boolean, I: typeof Globe, name: string, tip: string) => (
             <button type="button" role="radio" aria-checked={everyone === value} aria-label={`${label}: ${name}`} title={tip}
               onClick={() => choose(key, value)} disabled={saving === key}
-              className={cn('flex items-center justify-center gap-1 px-1 md:px-2 py-1 text-[10px] md:text-[11px] font-bold leading-none whitespace-nowrap transition-colors',
+              className={cn('flex items-center justify-center gap-1 px-1 md:px-2 py-1 text-[0.625rem] md:text-[0.6875rem] font-bold leading-none whitespace-nowrap transition-colors',
                 everyone === value ? 'bg-[#7a5230] text-[#fbf6ea]' : 'text-slate-500 hover:text-ink')}>
               {saving === key && everyone !== value ? <Loader2 size={11} className="animate-spin" /> : <I size={11} />}<span className="hidden md:inline">{name}</span>
             </button>
@@ -487,10 +503,10 @@ function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profi
         <div className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5" title="Your values and P&L are only ever for you — not even friends">
           <TrendingUp size={15} className="text-slate-500" />
           <span className="text-sm font-semibold text-ink flex-1 min-w-0 truncate md:overflow-visible md:whitespace-nowrap">Portfolio</span>
-          <span className={cn(SEG_W, 'shrink-0 flex items-center justify-center gap-1 rounded-lg border border-dashed border-[#d6c49f] py-1 text-[10px] md:text-[11px] font-bold leading-none text-slate-500')} aria-label="Only you"><Lock size={11} /><span className="hidden md:inline">Only you</span></span>
+          <span className={cn(SEG_W, 'shrink-0 flex items-center justify-center gap-1 rounded-lg border border-dashed border-[#d6c49f] py-1 text-[0.625rem] md:text-[0.6875rem] font-bold leading-none text-slate-500')} aria-label="Only you"><Lock size={11} /><span className="hidden md:inline">Only you</span></span>
         </div>
       </div>
-      {error && <div className="text-[11px] text-red-600 mt-1.5 px-1">{error}</div>}
+      {error && <div className="text-[0.6875rem] text-red-600 mt-1.5 px-1">{error}</div>}
     </div>
   )
 }
@@ -536,7 +552,7 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
           </div>
           {isMe && (
             <span className={cn(
-              'flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full',
+              'flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full',
               shared ? 'bg-emerald-600/15 text-emerald-700' : 'bg-slate-800 text-slate-500',
             )}>
               {shared ? <Eye size={11} /> : <EyeOff size={11} />}{shared ? 'Everyone' : 'Friends only'}
@@ -785,7 +801,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
               <select
                 value={set}
                 onChange={(e) => setSet(e.target.value)}
-                className="appearance-none bg-slate-900 border border-slate-800 rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-ink outline-none cursor-pointer max-w-[240px]"
+                className="appearance-none bg-slate-900 border border-slate-800 rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-ink outline-none cursor-pointer max-w-[15rem]"
               >
                 <option value="">All sets ({sets.length})</option>
                 {sets.map(([name, n]) => <option key={name} value={name}>{name} ({n})</option>)}
@@ -810,14 +826,14 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cardImage(c.imageUrl, 'grid')} alt={c.name} loading="lazy" className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center p-2 text-center text-[11px] font-semibold text-slate-400"><CardName name={c.name} /></div>
+              <div className="w-full h-full flex items-center justify-center p-2 text-center text-[0.6875rem] font-semibold text-slate-400"><CardName name={c.name} /></div>
             )}
             {c.slab && <SlabTileOverlay slab={c.slab} />}
             {c.copies > 1 && (
-              <span className="absolute top-1 right-1 text-[10px] font-bold text-white bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-full leading-none">×{c.copies}</span>
+              <span className="absolute top-1 right-1 text-[0.625rem] font-bold text-white bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-full leading-none">×{c.copies}</span>
             )}
             {c.printing && !c.slab && (
-              <span className="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)] truncate text-[9px] font-bold text-white bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-full leading-none">{c.printing}</span>
+              <span className="absolute bottom-1 left-1 max-w-[calc(100%-0.5rem)] truncate text-[0.5625rem] font-bold text-white bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded-full leading-none">{c.printing}</span>
             )}
           </button>
         ))}
@@ -827,7 +843,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
           <button onClick={() => setLimit((n) => n + PAGE)} className="btn-secondary">
             Show more
           </button>
-          <span className="text-[11px] text-slate-500">Showing {Math.min(limit, shown.length).toLocaleString()} of {shown.length.toLocaleString()}</span>
+          <span className="text-[0.6875rem] text-slate-500">Showing {Math.min(limit, shown.length).toLocaleString()} of {shown.length.toLocaleString()}</span>
         </div>
       )}
       <CardZoomOverlay data={zoom} onClose={() => setZoom(null)} viewOnly />

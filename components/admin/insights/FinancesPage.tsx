@@ -73,7 +73,7 @@ export function FinancesPage() {
     <div>
       <div className="flex flex-wrap items-end gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-ink flex items-center gap-2">Finances <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 inline-flex items-center gap-1"><Crown size={10} />Owner only</span></h1>
+          <h1 className="text-2xl font-bold text-ink flex items-center gap-2">Finances <span className="text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 inline-flex items-center gap-1"><Crown size={10} />Owner only</span></h1>
           <p className="text-sm text-slate-500 mt-0.5">Haven Premium is {fmtMoney(price)} a month (set on the Haven Premium page). Revenue numbers here are estimates until payments are connected.</p>
         </div>
       </div>
@@ -101,7 +101,7 @@ export function FinancesPage() {
           <div key={title} className="card-glass p-4 border-dashed">
             <div className="flex items-center gap-2 text-sm font-bold text-ink"><Icon size={15} className="text-slate-500" />{title}</div>
             <p className="text-xs text-slate-500 mt-1.5">{text}</p>
-            <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-800 text-slate-500">Connects with payments</span>
+            <span className="inline-block mt-2 text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-800 text-slate-500">Connects with payments</span>
           </div>
         ))}
       </div>
@@ -158,7 +158,7 @@ export function FinancesPage() {
           </div>
 
           <div className="card-glass overflow-hidden">
-            <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_110px_100px_150px_70px] gap-3 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-800">
+            <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_110px_100px_150px_70px] gap-3 px-4 py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-800">
               <span>Cost</span><span>Category</span><span>Amount</span><span>How often</span><span>Running</span><span />
             </div>
             {[...costs].sort((a, b) => Number(!!a.end && a.end < thisMonth) - Number(!!b.end && b.end < thisMonth) || b.amount - a.amount).map((c) => {
@@ -167,14 +167,14 @@ export function FinancesPage() {
                 <div key={c.id} className={cn('grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_110px_100px_150px_70px] items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-slate-800/60 last:border-0', stopped && 'opacity-55')}>
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-ink truncate">{c.name}</div>
-                    {c.note && <div className="text-[11px] text-slate-500 truncate">{c.note}</div>}
+                    {c.note && <div className="text-[0.6875rem] text-slate-500 truncate">{c.note}</div>}
                   </div>
                   <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[c.category] }} />{c.category}</div>
                   <div className="hidden md:block text-sm font-semibold text-ink tabular-nums">{fmtMoney(c.amount)}</div>
                   <div className="hidden md:block text-xs text-slate-400">{CADENCE_LABEL[c.cadence]}</div>
                   <div className="hidden md:block text-xs text-slate-400">{c.cadence === 'once' ? monthLabel(c.start, true) : `${monthLabel(c.start)} → ${c.end ? monthLabel(c.end) : 'now'}`}</div>
                   <div className="flex items-center justify-end gap-1">
-                    <span className="md:hidden text-sm font-semibold text-ink mr-1">{fmtMoney(c.amount)}<span className="text-[10px] text-slate-500 font-normal"> {c.cadence === 'once' ? 'once' : c.cadence === 'yearly' ? '/yr' : '/mo'}</span></span>
+                    <span className="md:hidden text-sm font-semibold text-ink mr-1">{fmtMoney(c.amount)}<span className="text-[0.625rem] text-slate-500 font-normal"> {c.cadence === 'once' ? 'once' : c.cadence === 'yearly' ? '/yr' : '/mo'}</span></span>
                     <button onClick={() => setEditing(c)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800" aria-label={`Edit ${c.name}`}><Pencil size={14} /></button>
                     <button
                       onClick={() => { if (confirm(`Delete “${c.name}”? It leaves every month's totals, past ones too. (To stop a cost but keep its history, edit it and set a last month.)`)) persist(costs.filter((x) => x.id !== c.id)) }}
@@ -185,7 +185,7 @@ export function FinancesPage() {
               )
             })}
           </div>
-          <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><TrendingUp size={12} />Firebase and Vercel bills change with use — update their amount each month, or add each month’s bill as a one-off.</p>
+          <p className="text-[0.6875rem] text-slate-500 flex items-center gap-1.5"><TrendingUp size={12} />Firebase and Vercel bills change with use — update their amount each month, or add each month’s bill as a one-off.</p>
         </div>
       )}
 

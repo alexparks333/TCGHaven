@@ -1046,7 +1046,7 @@ function SetInfoBar({
             </button>
           )}
           {isAdmin && !editable && (
-            <span className="text-slate-600 text-[11px]">(sourced live from {game === 'mtg' ? 'Scryfall' : 'the official Pokémon TCG API'}, not editable here)</span>
+            <span className="text-slate-600 text-[0.6875rem]">(sourced live from {game === 'mtg' ? 'Scryfall' : 'the official Pokémon TCG API'}, not editable here)</span>
           )}
         </>
       )}
@@ -1076,7 +1076,7 @@ function SetInfoBar({
         </>
       )}
       {activeSet.isCustom && (
-        <span className="text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
+        <span className="text-[0.625rem] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
       )}
       {onAddCard && (
         <button
@@ -1111,7 +1111,7 @@ function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {
     ? `Live price — updated from ${source} on every sync${card.marketPrice ? '' : ' (no price there yet)'}`
     : 'Static price — added by hand, so no sync ever updates it'
   return (
-    <div className={cn('mt-0.5 flex items-center gap-1 text-[10px] leading-none', linked ? 'text-emerald-700' : 'text-red-600')} title={title}>
+    <div className={cn('mt-0.5 flex items-center gap-1 text-[0.625rem] leading-none', linked ? 'text-emerald-700' : 'text-red-600')} title={title}>
       <span className={cn('w-3 h-3 rounded-full flex items-center justify-center text-white', linked ? 'bg-emerald-600' : 'bg-red-500')}>
         {linked ? <Check size={8} strokeWidth={3.5} /> : <X size={8} strokeWidth={3.5} />}
       </span>
@@ -1123,7 +1123,7 @@ function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {
 function DetailField({ label, value, mono, truncate }: { label: string; value: string; mono?: boolean; truncate?: boolean }) {
   return (
     <div className="min-w-0">
-      <div className="text-slate-600 uppercase tracking-wide text-[10px]">{label}</div>
+      <div className="text-slate-600 uppercase tracking-wide text-[0.625rem]">{label}</div>
       <div className={cn('text-slate-300', mono && 'font-mono', truncate && 'truncate')} title={truncate ? value : undefined}>
         {value}
       </div>
@@ -1212,7 +1212,7 @@ function CardTable({
                       number field never carries — curators need to see these to tell visually
                       similar variants apart, unlike the simplified end-user display elsewhere. */}
                   {game === 'riftbound' && c.publicCode && (
-                    <div className="text-[10px] text-slate-600 font-mono">{c.publicCode}</div>
+                    <div className="text-[0.625rem] text-slate-600 font-mono">{c.publicCode}</div>
                   )}
                 </td>
                 <td className="px-3 py-2">
@@ -1228,8 +1228,8 @@ function CardTable({
                 </td>
                 <td className="px-3 py-2 text-ink" title={c.name}>
                   <CardName name={c.name} />
-                  {c.isCustom && <span className="ml-2 text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>}
-                  {c.isHidden && <span className="ml-2 text-[10px] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}
+                  {c.isCustom && <span className="ml-2 text-[0.625rem] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>}
+                  {c.isHidden && <span className="ml-2 text-[0.625rem] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}
                   {c.notes && <StickyNote size={11} className="inline ml-2 text-amber-500 align-text-top" aria-label="Has notes" />}
                 </td>
                 {showSetColumn && (
@@ -1241,7 +1241,7 @@ function CardTable({
                     >
                       {c.setName}
                     </button>
-                    <span className="text-[10px] text-slate-600">{c.releaseDate || 'release date unknown'}</span>
+                    <span className="text-[0.625rem] text-slate-600">{c.releaseDate || 'release date unknown'}</span>
                   </td>
                 )}
                 <td className="px-3 py-2 text-slate-400">{c.rarity ?? '—'}</td>
@@ -1305,7 +1305,7 @@ function CardTable({
                     </div>
                     {c.notes && (
                       <div className="mt-3 pt-3 border-t border-slate-800">
-                        <div className="text-slate-600 uppercase tracking-wide text-[10px] mb-1">Notes / Keywords</div>
+                        <div className="text-slate-600 uppercase tracking-wide text-[0.625rem] mb-1">Notes / Keywords</div>
                         <div className="text-slate-300 text-xs whitespace-pre-wrap">{c.notes}</div>
                       </div>
                     )}
@@ -1327,7 +1327,7 @@ function CardTable({
           <img
             src={hoverPreviewUrl}
             alt=""
-            className="w-[380px] max-w-[80vw] max-h-[80vh] h-auto object-contain rounded-lg shadow-2xl border border-slate-700"
+            className="w-[23.75rem] max-w-[80vw] max-h-[80vh] h-auto object-contain rounded-lg shadow-2xl border border-slate-700"
           />
         </div>,
         document.body,
@@ -1475,7 +1475,7 @@ function ImageUploadField({
         ) : (
           <div className="flex flex-col items-center gap-2 text-slate-600 px-4 text-center">
             <ImagePlus size={28} />
-            <span className="text-[11px] leading-tight">Drag &amp; drop a photo, or click to upload</span>
+            <span className="text-[0.6875rem] leading-tight">Drag &amp; drop a photo, or click to upload</span>
           </div>
         )}
       </div>
@@ -1498,7 +1498,7 @@ function ImageUploadField({
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); e.target.value = '' }}
       />
-      {uploadError && <div className="text-[10.5px] text-red-600 text-center leading-tight">{uploadError}</div>}
+      {uploadError && <div className="text-[0.6563rem] text-red-600 text-center leading-tight">{uploadError}</div>}
       {cropSource && (
         <ImageCropModal source={cropSource} uploading={uploading} onCancel={() => setCropSource(null)} onConfirm={uploadCropped} />
       )}
@@ -1660,7 +1660,7 @@ function ImageCropModal({
       <div className="flex-1 min-h-0 flex items-center justify-center p-4 sm:p-8 overflow-hidden">
         <div
           ref={frameRef}
-          className="crop-modal-frame relative h-full max-h-[640px] w-auto aspect-[5/7] max-w-[92vw] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl shadow-black/60 overflow-hidden touch-none select-none cursor-move ring-1 ring-black/40"
+          className="crop-modal-frame relative h-full max-h-[40rem] w-auto aspect-[5/7] max-w-[92vw] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl shadow-black/60 overflow-hidden touch-none select-none cursor-move ring-1 ring-black/40"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -2377,13 +2377,13 @@ function RawSourceCheckPanel({
                     </div>
                     <button
                       onClick={() => onAddCandidate({ number: c.number, name: c.name, rarity: c.rarity, imageUrl: c.imageUrl })}
-                      className="shrink-0 text-[11px] font-medium text-cyan-600 hover:text-cyan-700 flex items-center gap-1"
+                      className="shrink-0 text-[0.6875rem] font-medium text-cyan-600 hover:text-cyan-700 flex items-center gap-1"
                     >
                       <Plus size={11} /> Add
                     </button>
                   </div>
                 ))}
-                {result.gallery.truncated && <div className="text-slate-600 text-[11px] px-1">Showing the first 200 — there are more.</div>}
+                {result.gallery.truncated && <div className="text-slate-600 text-[0.6875rem] px-1">Showing the first 200 — there are more.</div>}
               </div>
             )}
           </div>
@@ -2410,7 +2410,7 @@ function RawSourceCheckPanel({
                     #{row.number} — {row.name}
                   </div>
                 ))}
-                {result.tcgcsv.truncated && <div className="text-slate-600 text-[11px] px-1">Showing the first 200 — there are more.</div>}
+                {result.tcgcsv.truncated && <div className="text-slate-600 text-[0.6875rem] px-1">Showing the first 200 — there are more.</div>}
               </div>
             )}
           </div>

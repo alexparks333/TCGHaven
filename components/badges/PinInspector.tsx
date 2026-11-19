@@ -156,7 +156,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
 
       {/* Name + status */}
       <div className="relative pointer-events-none pb-[calc(env(safe-area-inset-bottom)+20px)] px-5 text-center">
-        <div className="inline-flex items-center gap-1.5 text-[11px] text-white/45 mb-2"><Move3d size={13} />Drag to turn it over · scroll to zoom</div>
+        <div className="inline-flex items-center gap-1.5 text-[0.6875rem] text-white/45 mb-2"><Move3d size={13} />Drag to turn it over · scroll to zoom</div>
         <div className="text-2xl font-black text-[#fbe9c4] tracking-tight">{def.name}</div>
         <div className={cn('mt-1 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', tier ? 'text-emerald-400' : 'text-white/50')}>
           {tier

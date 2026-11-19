@@ -184,7 +184,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
           {sculpted ? (
             <div className="relative w-full h-[min(420px,48dvh)]">
               <PinInspector key={draft.reliefBuildKey ?? draft.depthMapUrl} def={draft} embedded onClose={() => {}} />
-              <p className="absolute bottom-1 inset-x-0 text-center text-[11px] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
+              <p className="absolute bottom-1 inset-x-0 text-center text-[0.6875rem] text-[#e9dcc3]/60 pointer-events-none">Drag to turn it · scroll to zoom</p>
             </div>
           ) : (
           // The pin in its spot, zoomed to fill the side: the faint dashed outline is its spot (100%), the pin
@@ -193,7 +193,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
             {draft.imageUrl && (
               <>
                 <span className="absolute inset-[-6px] rounded-2xl border border-dashed border-white/25 pointer-events-none" aria-hidden />
-                <span style={{ top: -22 - Math.max(0, (pinDrawSize(draft, pin) - pin) * 0.56) /* above a pin that's grown past its spot */ }} className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40 pointer-events-none">Its spot on the page</span>
+                <span style={{ top: -22 - Math.max(0, (pinDrawSize(draft, pin) - pin) * 0.56) /* above a pin that's grown past its spot */ }} className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-center text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-white/40 pointer-events-none">Its spot on the page</span>
               </>
             )}
             {draft.imageUrl
@@ -205,7 +205,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
             {draft.name.trim() || '? ? ?'}
           </span>
           {draft.slots.length > 0 && (
-            <span className="relative text-[11px] text-[#e9dcc3]/80">Collect {draft.slots.length} {draft.slotNoun || 'cards'} to earn it</span>
+            <span className="relative text-[0.6875rem] text-[#e9dcc3]/80">Collect {draft.slots.length} {draft.slotNoun || 'cards'} to earn it</span>
           )}
         </div>
 
@@ -238,7 +238,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
                     </span>
                     <span className="min-w-0">
                       <span className="block text-xs font-bold text-emerald-700"><Check size={12} className="inline -mt-0.5 mr-0.5" />Cut out</span>
-                      <span className="block text-[11px] text-slate-500 leading-snug">See-through around it</span>
+                      <span className="block text-[0.6875rem] text-slate-500 leading-snug">See-through around it</span>
                     </span>
                   </div>
                   <div className="rounded-xl border border-emerald-600/40 bg-slate-950/40 p-2 flex items-center gap-2.5">
@@ -250,11 +250,11 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
                     </span>
                     <span className="min-w-0">
                       <span className="block text-xs font-bold text-emerald-700"><Check size={12} className="inline -mt-0.5 mr-0.5" />On plain white</span>
-                      <span className="block text-[11px] text-slate-500 leading-snug">We cut the white away</span>
+                      <span className="block text-[0.6875rem] text-slate-500 leading-snug">We cut the white away</span>
                     </span>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-500">Any shape · at least 1000 × 1000 px · bold shapes and colours read best small</p>
+                <p className="mt-2 text-[0.6875rem] text-slate-500">Any shape · at least 1000 × 1000 px · bold shapes and colours read best small</p>
                 {draft.imageUrl && !busy ? (
                   <div className="mt-4 rounded-2xl border-2 border-emerald-600/50 bg-emerald-600/5 p-3 flex items-center gap-3">
                     <span className="w-16 h-16 shrink-0 rounded-xl bg-[repeating-conic-gradient(#d8ccb2_0%_25%,#ece2cc_0%_50%)] [background-size:12px_12px] flex items-center justify-center p-1.5">
@@ -283,11 +283,11 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-bold text-ink flex-1">Size on the page</p>
                       <span className="text-xs tabular-nums text-slate-500">{Math.round((draft.displayScale ?? 1) * 100)}%</span>
-                      {(draft.displayScale ?? 1) !== 1 && <button type="button" onClick={() => set({ displayScale: undefined })} className="text-[11px] font-semibold text-slate-500 hover:text-ink">Reset</button>}
+                      {(draft.displayScale ?? 1) !== 1 && <button type="button" onClick={() => set({ displayScale: undefined })} className="text-[0.6875rem] font-semibold text-slate-500 hover:text-ink">Reset</button>}
                     </div>
                     <input type="range" min={0.3} max={CREATOR_MAX_SCALE} step={0.01} value={draft.displayScale ?? 1} className="mt-2 w-full accent-violet-600"
                       onChange={(e) => { const v = Number(e.target.value); set({ displayScale: Math.abs(v - 1) < 0.005 ? undefined : v }) }} />
-                    <p className="mt-1 text-[11px] text-slate-500">The dashed outline on the left is its spot on the page, shown big — the pin compares to it exactly as it will in your book. Go over 100% to let it grow past it.</p>
+                    <p className="mt-1 text-[0.6875rem] text-slate-500">The dashed outline on the left is its spot on the page, shown big — the pin compares to it exactly as it will in your book. Go over 100% to let it grow past it.</p>
                   </div>
                 )}
               </div>
@@ -307,7 +307,7 @@ export function BadgeMaker({ uid, book, badges = [], badge, onSave, onDelete, on
                 <label className="block">
                   <span className="field-label">What to call the cards</span>
                   <input className="input-field text-sm" maxLength={20} value={draft.slotNoun} onChange={(e) => set({ slotNoun: e.target.value })} placeholder="cards" />
-                  <span className="text-[11px] text-slate-500 mt-1 block">Fans see “3 / 10 {draft.slotNoun || 'cards'}”</span>
+                  <span className="text-[0.6875rem] text-slate-500 mt-1 block">Fans see “3 / 10 {draft.slotNoun || 'cards'}”</span>
                 </label>
               </div>
             )}
@@ -540,9 +540,9 @@ export function CardPicker({ slots, onChange, title = 'What do fans collect?', h
                 onClick={(e) => { e.stopPropagation(); look(e.currentTarget.closest('button')!, r) }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); look(e.currentTarget.closest('button')!, r) } }}
                 className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center shadow opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-black/80 transition-opacity"><Eye size={14} /></span>
-              <p className="text-[11px] font-semibold text-ink truncate mt-1">{r.name}</p>
-              <p className="text-[10px] text-slate-500 truncate">{r.setName}{r.number ? ` · #${r.number}` : ''}</p>
-              {on && <p className="text-[10px] text-emerald-700 font-semibold">Added · tap to remove</p>}
+              <p className="text-[0.6875rem] font-semibold text-ink truncate mt-1">{r.name}</p>
+              <p className="text-[0.625rem] text-slate-500 truncate">{r.setName}{r.number ? ` · #${r.number}` : ''}</p>
+              {on && <p className="text-[0.625rem] text-emerald-700 font-semibold">Added · tap to remove</p>}
             </button>
           )
         })}
@@ -595,7 +595,7 @@ function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<
         <span className="w-3 h-3 rounded-full shrink-0" style={{ background: color }} />
         <span className="text-sm font-bold text-ink">{title}</span>
         {i === 0 && (
-          <label className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer">
+          <label className="ml-auto flex items-center gap-1.5 text-[0.6875rem] font-semibold text-slate-500 cursor-pointer">
             <input type="checkbox" checked={on} onChange={(e) => onChange({ tiersOff: e.target.checked ? undefined : [1] })} />Use it
           </label>
         )}
@@ -606,7 +606,7 @@ function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<
       <input type="range" disabled={!on} className="w-full mt-2 accent-[#7a5a3a]"
         min={1} max={byCards ? total : 100} step={1} value={byCards ? n : Math.round(pct)}
         onChange={(e) => (byCards ? putCards(i, Number(e.target.value)) : put(i, Number(e.target.value)))} />
-      <p className="text-[11px] text-slate-500">{on ? (byCards ? `${Math.round(pct)}% of the badge` : `${n} of ${total} ${noun}`) + ' · ' + hint : 'Off — the pin stays an empty spot until Full colour'}</p>
+      <p className="text-[0.6875rem] text-slate-500">{on ? (byCards ? `${Math.round(pct)}% of the badge` : `${n} of ${total} ${noun}`) + ' · ' + hint : 'Off — the pin stays an empty spot until Full colour'}</p>
     </div>
   )
 
@@ -614,7 +614,7 @@ function UnlockEditor({ def, onChange }: { def: BadgeDef; onChange: (p: Partial<
     <div className="mt-6">
       <div className="flex items-center gap-2">
         <h3 className="text-base font-bold text-ink">When fans unlock the pin</h3>
-        <div className="ml-auto flex rounded-lg bg-slate-950/60 border border-slate-800 p-0.5 text-[11px] font-bold">
+        <div className="ml-auto flex rounded-lg bg-slate-950/60 border border-slate-800 p-0.5 text-[0.6875rem] font-bold">
           {(['%', 'Cards'] as const).map((m) => (
             <button key={m} type="button" onClick={() => setByCards(m === 'Cards')}
               className={cn('px-2.5 py-1 rounded-md', (m === 'Cards') === byCards ? 'bg-violet-600 text-white' : 'text-slate-500 hover:text-ink')}>{m}</button>
@@ -726,10 +726,10 @@ export function CardsReview({ slots, onSave, onClose }: { slots: BadgeSlot[]; on
                         {off && <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs font-bold uppercase tracking-wider text-red-600">Will be removed</span>}
                       </div>
                       <p className={cn('mt-2 text-sm font-bold truncate', off ? 'text-slate-500 line-through' : 'text-ink')} title={sl.label}>{sl.label}</p>
-                      <p className="text-[11px] text-slate-500 truncate" title={c?.setName}>{c?.setName ?? '—'}{c?.number ? ` · #${c.number}` : ''}</p>
+                      <p className="text-[0.6875rem] text-slate-500 truncate" title={c?.setName}>{c?.setName ?? '—'}{c?.number ? ` · #${c.number}` : ''}</p>
                       <div className="mt-1.5 flex items-center gap-1.5">
-                        {g && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500"><span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}</span>}
-                        {sl.cardIds.length > 1 && <span className="text-[10px] text-slate-500">· any of {sl.cardIds.length} versions</span>}
+                        {g && <span className="inline-flex items-center gap-1 text-[0.625rem] font-semibold text-slate-500"><span className="w-2 h-2 rounded-full" style={{ background: GAME_COLORS[g] }} />{GAME_LABELS[g]}</span>}
+                        {sl.cardIds.length > 1 && <span className="text-[0.625rem] text-slate-500">· any of {sl.cardIds.length} versions</span>}
                       </div>
                       <button type="button" onClick={() => toggle(i)}
                         className={cn('mt-2 w-full rounded-lg py-1.5 text-xs font-semibold transition-colors', off ? 'bg-slate-800 text-ink hover:bg-slate-700' : 'text-slate-500 hover:text-red-600 hover:bg-red-500/10 border border-slate-800')}>

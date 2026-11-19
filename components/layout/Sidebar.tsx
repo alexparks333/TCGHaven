@@ -49,10 +49,10 @@ export function Sidebar() {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-[272px] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
+      <aside className="hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
         <div className="flex items-center gap-1.5 px-1 mb-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="w-[72px] h-[72px] object-contain shrink-0" />
+          <img src="/logo.png" alt="" className="w-[4.5rem] h-[4.5rem] object-contain shrink-0" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo-text.png" alt="TCGHaven" className="min-w-0 flex-1 h-auto object-contain" />
         </div>
@@ -80,7 +80,7 @@ export function Sidebar() {
               >
                 <Wand2 size={16} className="text-violet-600" />
                 Creator
-                <span className="ml-auto text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-violet-600/15 text-violet-700">Studio</span>
+                <span className="ml-auto text-[0.5625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-violet-600/15 text-violet-700">Studio</span>
               </Link>
             )}
             {/* The community you run, straight to its page (where you post, pin notes and arrange the wall) */}
@@ -110,7 +110,7 @@ export function Sidebar() {
                 <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? user.email ?? ''} photoURL={user.photoURL ?? ''} size={34} />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</div>
-                  <div className="text-[10px] text-slate-500 truncate">{me ? `@${me.username}` : 'Your profile'}</div>
+                  <div className="text-[0.625rem] text-slate-500 truncate">{me ? `@${me.username}` : 'Your profile'}</div>
                 </div>
                 <ChevronRight size={14} className="text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
               </Link>
@@ -142,12 +142,12 @@ export function Sidebar() {
               {/* The current tab gets a darker tinted pill so it's obvious which page you're on */}
               <span
                 className={cn(
-                  'flex flex-col items-center gap-1 w-full max-w-[64px] py-1.5 rounded-xl transition-colors',
+                  'flex flex-col items-center gap-1 w-full max-w-[4rem] py-1.5 rounded-xl transition-colors',
                   active ? 'bg-slate-700 text-ink' : 'text-slate-300',
                 )}
               >
                 <Icon size={22} strokeWidth={active ? 2.4 : 2} />
-                <span className={cn('text-[11px] leading-none', active ? 'font-bold' : 'font-semibold')}>{label}</span>
+                <span className={cn('text-[0.6875rem] leading-none', active ? 'font-bold' : 'font-semibold')}>{label}</span>
               </span>
             </Link>
           )
@@ -183,7 +183,7 @@ export function MobileHeader() {
       >
         <Users size={17} />
         {incoming.length > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">{incoming.length}</span>
+          <span className="absolute -top-1 -right-1 min-w-[1rem] h-4 px-1 rounded-full bg-red-500 text-white text-[0.5625rem] font-bold flex items-center justify-center leading-none">{incoming.length}</span>
         )}
       </Link>
     </header>

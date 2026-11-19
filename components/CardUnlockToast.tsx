@@ -55,7 +55,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
 
   return (
     <div
-      className={cn('fixed z-[60] bottom-20 md:bottom-4 right-4 w-[264px] card-unlock-toast', exiting && 'exiting')}
+      className={cn('fixed z-[60] bottom-20 md:bottom-4 right-4 w-[16.5rem] card-unlock-toast', exiting && 'exiting')}
     >
       <div
         role="button"
@@ -75,7 +75,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
         </button>
 
         {/* Card image with glow ring + shine sweep behind/over the grayscale->color reveal */}
-        <div className="relative shrink-0 w-[76px]" style={{ aspectRatio: '5/7' }}>
+        <div className="relative shrink-0 w-[4.75rem]" style={{ aspectRatio: '5/7' }}>
           <div
             className="absolute inset-0 rounded-lg card-unlock-glow-ring"
             style={{ background: `radial-gradient(circle, ${color}90 0%, transparent 70%)` }}
@@ -84,7 +84,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
             {card.imageUrl ? (
               <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-full h-full object-cover card-unlock-image" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-slate-400 bg-slate-800 card-unlock-image">
+              <div className="w-full h-full flex items-center justify-center text-[0.625rem] font-bold text-slate-400 bg-slate-800 card-unlock-image">
                 #{card.number}
               </div>
             )}
@@ -96,7 +96,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
         </div>
 
         <div className="min-w-0 flex-1 flex flex-col justify-center card-unlock-label">
-          <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide mb-1" style={{ color }}>
+          <div className="flex items-center gap-1 text-[0.6875rem] font-black uppercase tracking-wide mb-1" style={{ color }}>
             <PartyPopper size={12} />
             Card Unlocked!
           </div>
@@ -104,7 +104,7 @@ function UnlockCard({ id, card, onDismiss }: { id: string; card: Card; onDismiss
           <div className="text-xs text-slate-500 truncate">
             {card.set}{card.number && card.number !== 'N/A' ? ` · #${card.number}` : ''}
           </div>
-          <div className="flex items-center gap-1 text-[10px] text-slate-600 group-hover:text-slate-400 mt-1 transition-colors">
+          <div className="flex items-center gap-1 text-[0.625rem] text-slate-600 group-hover:text-slate-400 mt-1 transition-colors">
             View in Cardex <ArrowUpRight size={10} />
           </div>
         </div>

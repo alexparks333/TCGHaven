@@ -62,8 +62,8 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
           <button key={f.id} type="button" onClick={() => setStyle({ font: f.id })} title={f.name}
             className={cn('rounded-lg border px-1.5 py-2 text-center transition-colors', on ? 'border-transparent text-white shadow' : 'border-slate-800 bg-slate-950/40 text-ink hover:border-slate-700')}
             style={on ? { background: '#7a5230' } : undefined}>
-            <span className={cn('block truncate text-[15px] leading-tight', f.upper && 'uppercase')} style={{ fontFamily: f.css, fontWeight: f.weight }}>{(book.name || 'Aa').slice(0, 10)}</span>
-            <span className={cn('block text-[9px] mt-0.5 truncate', on ? 'text-white/70' : 'text-slate-500')}>{f.name}</span>
+            <span className={cn('block truncate text-[0.9375rem] leading-tight', f.upper && 'uppercase')} style={{ fontFamily: f.css, fontWeight: f.weight }}>{(book.name || 'Aa').slice(0, 10)}</span>
+            <span className={cn('block text-[0.5625rem] mt-0.5 truncate', on ? 'text-white/70' : 'text-slate-500')}>{f.name}</span>
           </button>
         )
       })}
@@ -99,8 +99,8 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
           className="w-full rounded-xl px-4 py-3 flex items-center gap-3 text-left shadow-sm border border-black/20 transition-[filter] hover:brightness-110"
           style={{ background: havenOn ? 'linear-gradient(150deg, #3a2414, #150c06)' : 'linear-gradient(150deg, #4a4038, #2a241f)' }}>
           <span className="min-w-0 flex-1">
-            <span className="block pinbook-serif uppercase tracking-[0.14em] font-bold text-[16px]" style={havenOn ? { backgroundImage: 'linear-gradient(180deg, #fff6d6 0%, #f6d98c 40%, #d9a948 75%, #f8e2a2 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' } : { color: '#cfc4b4' }}>Haven Style</span>
-            <span className="block text-[11px] text-[#d9c39a]/70 mt-0.5">{havenOn ? 'On — engraved foil lettering, like TCG Haven’s books' : 'Off — a plain title'}</span>
+            <span className="block pinbook-serif uppercase tracking-[0.14em] font-bold text-[1rem]" style={havenOn ? { backgroundImage: 'linear-gradient(180deg, #fff6d6 0%, #f6d98c 40%, #d9a948 75%, #f8e2a2 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' } : { color: '#cfc4b4' }}>Haven Style</span>
+            <span className="block text-[0.6875rem] text-[#d9c39a]/70 mt-0.5">{havenOn ? 'On — engraved foil lettering, like TCG Haven’s books' : 'Off — a plain title'}</span>
           </span>
           <span className={cn('relative w-11 h-6 rounded-full transition-colors shrink-0', havenOn ? 'bg-[#d9a948]' : 'bg-white/20')}>
             <span className={cn('absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all', havenOn ? 'left-[22px]' : 'left-0.5')} />
@@ -109,10 +109,10 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
 
         {havenOn && (
           <>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5 mb-1.5">Elegant lettering</p>
+            <p className="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5 mb-1.5">Elegant lettering</p>
             <FontGrid fonts={COVER_FONTS.filter((f) => f.group === 'Elegant')} />
 
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5 mb-2">Foil</p>
+            <p className="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5 mb-2">Foil</p>
             <div className="flex flex-wrap gap-2">
               {TITLE_FINISHES.map((x) => (
                 <button key={x.id} type="button" title={x.name} onClick={() => setStyle({ titleFinish: x.id })}
@@ -131,7 +131,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
             <div className="mt-4 max-h-[300px] overflow-y-auto scroll-themed pr-1 space-y-3">
               {FONT_GROUPS.filter((g) => g !== 'Elegant').map((g) => (
                 <div key={g}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
+                  <p className="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-slate-500 mb-1.5">{g}</p>
                   <FontGrid fonts={COVER_FONTS.filter((f) => f.group === g)} />
                 </div>
               ))}
@@ -145,7 +145,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
 
       <Group id="text" open={open} setOpen={setOpen} icon={AlignCenter} title="Text"
         summary={[st.showSubtitle !== false ? 'Top line' : null, st.showCount !== false ? 'Count' : null].filter(Boolean).join(' · ') || 'All off'}>
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2">Line above the title</p>
+        <p className="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2">Line above the title</p>
         <Toggle on={st.showSubtitle !== false} onChange={(v) => setStyle({ showSubtitle: v })} label="Show it" />
         {st.showSubtitle !== false && (
           <>
@@ -153,7 +153,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
             <Colors label="Colour" value={st.subtitleColor ?? '#e8b35a'} onChange={(c) => setStyle({ subtitleColor: c })} />
           </>
         )}
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mt-5 mb-2">Count</p>
+        <p className="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500 mt-5 mb-2">Count</p>
         <div><Toggle on={st.showCount !== false} onChange={(v) => setStyle({ showCount: v })} label="Earned count" hint="“3 / 10 earned” at the bottom" /></div>
         {st.showCount !== false && <Colors label="Colour" value={st.countColor ?? '#e8b35a'} onChange={(c) => setStyle({ countColor: c })} />}
       </Group>
@@ -176,7 +176,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
               className="w-full rounded-2xl border-2 border-dashed border-[#c4ae83] hover:border-[#7a5230] bg-[#f6eedb] py-7 flex flex-col items-center gap-1.5 text-slate-500 hover:text-ink transition-colors">
               <span className="haven-medallion w-11 h-11">{uploading ? <Loader2 size={20} className="animate-spin" /> : <ImagePlus size={20} />}</span>
               <span className="mt-1 text-sm font-bold text-ink">{uploading ? 'Uploading…' : 'Upload your cover picture'}</span>
-              <span className="text-[11px] px-6 text-center">Every Creator Book is covered in its own artwork. Then drag and zoom it into place.</span>
+              <span className="text-[0.6875rem] px-6 text-center">Every Creator Book is covered in its own artwork. Then drag and zoom it into place.</span>
             </button>
           )}
           <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => uploadCover(e.target.files?.[0])} />
@@ -199,7 +199,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
                 <span className="relative block w-full h-16 rounded-[6px] overflow-hidden" style={{ background: BLANK_COVER }}>
                   {sp ? <CoverSpine st={st} look={sp.id} swatch={0.6} /> : <span className="absolute inset-0 flex items-center justify-center text-[#8a7350] text-lg">∅</span>}
                 </span>
-                <span className={cn('block mt-1 text-[10px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{sp?.name ?? 'None'}</span>
+                <span className={cn('block mt-1 text-[0.625rem] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{sp?.name ?? 'None'}</span>
               </button>
             )
           })}
@@ -213,12 +213,12 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
               <button type="button" onClick={() => resetSpine(spine)} className="haven-chip px-2.5 py-1 text-xs font-semibold inline-flex items-center gap-1" title="Back to this look's defaults"><RotateCcw size={13} />Reset</button>
             </div>
 
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mt-4">Colours</p>
+            <p className="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-slate-500 mt-4">Colours</p>
             <ColorPick label={spine.base} value={st.spineColor ?? SPINE_COLORS[0].color} palette={SPINE_COLORS} onChange={(c) => setStyle({ spineColor: c })} />
             {spine.accent && <ColorPick label={spine.accent[0]} value={st.spineAccent ?? spine.accent[1]} palette={ACCENT_COLORS} onChange={(c) => setStyle({ spineAccent: c })} />}
             {spine.detail && <ColorPick label={spine.detail[0]} value={st.spineDetail ?? spine.detail[1]} palette={ACCENT_COLORS} onChange={(c) => setStyle({ spineDetail: c })} />}
 
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5">Shape</p>
+            <p className="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-slate-500 mt-5">Shape</p>
             <ValueSlider label="Width" min={SPINE_W_RANGE[0]} max={SPINE_W_RANGE[1]} step={0.5} value={spineWidth(st)} unit="%" onChange={(v) => setStyle({ spineWidth: v })} />
             <ValueSlider label="Roundness" min={0} max={1} step={0.05} value={st.spineRound ?? 0.8} onChange={(v) => setStyle({ spineRound: v })} />
             {spine.sliders.map((x) => (
@@ -244,7 +244,7 @@ export function CoverDesigner({ uid, book, onChange, initialOpen }: { uid: strin
                   <span className="absolute left-0 top-0 right-[5px] bottom-[5px] translate-x-[5px] translate-y-[5px] rounded-[5px]" style={{ background: bg ?? '#221d1a' }} />
                   <span className="absolute left-0 top-0 right-[12px] bottom-[12px] rounded-[5px] shadow-[2px_2px_4px_rgba(0,0,0,0.35)]" style={{ background: `linear-gradient(150deg, #5a3a22, #2b1a0f)` }} />
                 </span>
-                <span className={cn('block mt-1 text-[10px] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{e?.name ?? 'Classic'}</span>
+                <span className={cn('block mt-1 text-[0.625rem] leading-tight font-semibold truncate', on ? 'text-ink' : 'text-slate-500')}>{e?.name ?? 'Classic'}</span>
               </button>
             )
           })}
@@ -377,14 +377,14 @@ export function PicturePlacer({ src, fit: fit0, onChange, aspect, area = { left:
         </div>
       </div>
       <div className="mt-3 flex items-center gap-2">
-        <span className="text-[11px] font-semibold text-slate-500 w-10">Zoom</span>
+        <span className="text-[0.6875rem] font-semibold text-slate-500 w-10">Zoom</span>
         <input type="range" min={0.1} max={6} step={0.01} value={fit.scale} onChange={(e) => change({ ...fit, scale: Number(e.target.value) })} className="flex-1 accent-violet-600" />
       </div>
       <div className="mt-2 flex gap-2">
         <button type="button" onClick={() => change({ x: 0, y: 0, scale: fillScale })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">{fillLabel}</button>
         <button type="button" onClick={() => change({ ...fit, x: 0, y: 0 })} className="flex-1 rounded-lg border border-slate-800 py-1.5 text-xs font-semibold text-slate-400 hover:text-ink">Center</button>
       </div>
-      <p className="text-[11px] text-slate-500 mt-2 text-center">Drag to move · scroll or slide to zoom</p>
+      <p className="text-[0.6875rem] text-slate-500 mt-2 text-center">Drag to move · scroll or slide to zoom</p>
     </div>
   )
 }
@@ -433,7 +433,7 @@ export function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (
       </span>
       <span className="min-w-0">
         <span className="block text-sm font-semibold text-ink">{label}</span>
-        {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
+        {hint && <span className="block text-[0.6875rem] text-slate-500">{hint}</span>}
       </span>
     </button>
   )
@@ -442,7 +442,7 @@ export function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2.5">
+      <p className="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-slate-500 mb-2.5">
         {title}{hint && <span className="font-normal normal-case tracking-normal"> · {hint}</span>}
       </p>
       {children}
@@ -457,7 +457,7 @@ export function ValueSlider({ label, min, max, step, value, unit = '', onChange 
     <label className="mt-2.5 flex items-center gap-3">
       <span className="text-xs font-semibold text-slate-500 w-[92px] shrink-0 truncate">{label}</span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="flex-1 min-w-0 accent-[#7a5230]" />
-      <span className="text-[11px] tabular-nums text-slate-500 w-9 text-right shrink-0">{shown}{unit}</span>
+      <span className="text-[0.6875rem] tabular-nums text-slate-500 w-9 text-right shrink-0">{shown}{unit}</span>
     </label>
   )
 }

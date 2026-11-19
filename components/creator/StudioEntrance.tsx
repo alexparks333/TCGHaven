@@ -55,7 +55,7 @@ export function StudioEntrance({ ready, onOpen, onDone }: { ready: boolean; onOp
           <Wand2 className="absolute inset-0 m-auto w-[22%] h-[22%] text-[#7a5230]" strokeWidth={1.6} />
         </div>
 
-        <p className="studio-title pinbook-serif mt-9 text-center text-[17px] md:text-[22px] font-bold uppercase text-ink">Entering Creator Studio</p>
+        <p className="studio-title pinbook-serif mt-9 text-center text-[1.0625rem] md:text-[1.375rem] font-bold uppercase text-ink">Entering Creator Studio</p>
         <div className="studio-rule mt-4 h-px w-[min(280px,60vw)] bg-gradient-to-r from-transparent via-[#a8875c] to-transparent" />
         <p className="studio-fade mt-4 text-sm italic text-slate-500" style={{ fontFamily: 'Georgia, serif' }}>Laying out your pages and polishing the pins…</p>
       </div>

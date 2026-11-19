@@ -420,8 +420,8 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
       <div className="mb-7 flex flex-wrap items-end gap-x-6 gap-y-4">
         {/* the same room for either title, so switching shelves never moves the toggle */}
         <div className="min-w-0 sm:min-w-[23rem] flex-1">
-          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">{isMe ? 'Your badge books' : 'Badge books'}</p>
-          <h1 className="pinbook-serif text-3xl md:text-[36px] font-bold text-ink leading-[1.05] mt-0.5 sm:whitespace-nowrap">{collection === 'community' ? 'Community Badges' : 'Haven Badges'}</h1>
+          <p className="text-[0.6875rem] font-bold uppercase tracking-[0.22em] text-[#8a6420]">{isMe ? 'Your badge books' : 'Badge books'}</p>
+          <h1 className="pinbook-serif text-3xl md:text-[2.25rem] font-bold text-ink leading-[1.05] mt-0.5 sm:whitespace-nowrap">{collection === 'community' ? 'Community Badges' : 'Haven Badges'}</h1>
           <p className="mt-1.5 text-sm text-slate-500">
             {books.length === 0 ? (collection === 'community' ? 'Badges from the communities you join' : 'No books yet')
               : <>{books.length} {books.length === 1 ? 'book' : 'books'}{tally.all > 0 && <> · <b className="text-ink tabular-nums">{tally.got}</b> of {tally.all} pins earned</>}{tally.done > 0 && <> · {tally.done} complete</>}</>}
@@ -480,7 +480,7 @@ function Shelf({ badges, full, onOpen, intro = true, away, collection, onCollect
                   return (
                     <div key={set.id} className="mx-auto w-full max-w-[240px] text-center">
                       <div className="text-sm font-bold text-ink truncate">{set.name}</div>
-                      {!isHaven(set) && set.subtitle && <div className="text-[11px] text-slate-500 truncate">{set.subtitle.replace(/\s*·\s*Creator Book$/, '')}</div>}
+                      {!isHaven(set) && set.subtitle && <div className="text-[0.6875rem] text-slate-500 truncate">{set.subtitle.replace(/\s*·\s*Creator Book$/, '')}</div>}
                       <CompletionBar earned={earned} total={inSet.length} />
                     </div>
                   )
@@ -508,7 +508,7 @@ function ShelfToggle({ value, onChange, counts }: { value: ShelfKind; onChange: 
           {icon}
           {/* a phone has room for the short name */}
           <span className="sm:hidden">{label.replace(' Badges', '')}</span><span className="hidden sm:inline">{label}</span>
-          <span className={cn('min-w-[20px] px-1.5 rounded-full text-[11px] tabular-nums', value === k ? 'bg-white/20' : 'bg-[#7a5230]/[0.12]')}>{counts[k]}</span>
+          <span className={cn('min-w-[20px] px-1.5 rounded-full text-[0.6875rem] tabular-nums', value === k ? 'bg-white/20' : 'bg-[#7a5230]/[0.12]')}>{counts[k]}</span>
         </button>
       ))}
     </div>
@@ -543,7 +543,7 @@ function CompletionBar({ earned, total }: { earned: number; total: number }) {
         <span className="relative inline-flex items-center gap-1 px-[18px] py-[4px] whitespace-nowrap bg-[#efe2c2] text-[#5a3a1c] border-y border-[#b8995f]"
           style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 9px) 50%, 100% 100%, 0 100%, 9px 50%)' }}>
           <Check size={13} strokeWidth={3} className="text-[#7a5230]" />
-          <span className="pinbook-serif text-[11px] font-bold uppercase tracking-[0.08em]">Book complete</span>
+          <span className="pinbook-serif text-[0.6875rem] font-bold uppercase tracking-[0.08em]">Book complete</span>
         </span>
       </div>
     )
@@ -554,7 +554,7 @@ function CompletionBar({ earned, total }: { earned: number; total: number }) {
       <div className="h-2 rounded-full bg-[#e6d6b0] border border-[#c9b48a] overflow-hidden">
         <div className="h-full rounded-full bg-[#7a5230] transition-[width] duration-700 ease-out" style={{ width: `${pct}%` }} />
       </div>
-      <div className="mt-1.5 flex justify-between text-[11px] font-semibold text-slate-500">
+      <div className="mt-1.5 flex justify-between text-[0.6875rem] font-semibold text-slate-500">
         <span>{!total ? 'First pins coming soon' : `${earned} / ${total} ${total === 1 ? 'pin' : 'pins'}`}</span>
         {total > 0 && <span className="tabular-nums">{pct}%</span>}
       </div>
@@ -632,7 +632,7 @@ function StyledCover({ set, inSet, earned, emptyLabel }: { set: BadgeSet; inSet:
       {/* No emblem on creator covers any more (2026-11-12) — old showEmblem / emblemColor are ignored */}
       {st.showCount !== false && (
         <div className="absolute bottom-[8%] flex justify-center" style={inArea}>
-          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: st.countColor ?? COVER_TEXT_GOLD }}>
+          <span className="rounded-full px-2.5 py-0.5 text-[0.625rem] font-bold" style={{ background: 'rgba(0,0,0,0.5)', color: st.countColor ?? COVER_TEXT_GOLD }}>
             {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
           </span>
         </div>
@@ -676,7 +676,7 @@ export function BookCover({ set, badges, defs, emptyLabel = 'Coming soon' }: { s
           </span>
         </div>
         <div className="absolute inset-x-0 bottom-[5%] flex justify-center">
-          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.55)', color: accent }}>
+          <span className="rounded-full px-2.5 py-0.5 text-[0.625rem] font-bold backdrop-blur-sm" style={{ background: 'rgba(0,0,0,0.55)', color: accent }}>
             {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
           </span>
         </div>
@@ -712,7 +712,7 @@ export function BookCover({ set, badges, defs, emptyLabel = 'Coming soon' }: { s
             </span>
           )}
         </div>
-        <div className="mt-[10%] rounded-full px-2.5 py-0.5 text-[10px] font-bold" style={{ background: 'rgba(0,0,0,0.4)', color: accent }}>
+        <div className="mt-[10%] rounded-full px-2.5 py-0.5 text-[0.625rem] font-bold" style={{ background: 'rgba(0,0,0,0.4)', color: accent }}>
           {inSet.length ? `${earned} / ${inSet.length} earned` : emptyLabel}
         </div>
       </div>

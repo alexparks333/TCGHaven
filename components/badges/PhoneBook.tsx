@@ -375,14 +375,14 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           <X size={18} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="pinbook-serif text-[15px] font-bold uppercase tracking-[0.12em] text-[#f1d58f] truncate">{set.name}</div>
-          <div className="text-[11px] font-semibold text-white/45">{setBadges.length ? `${earned} / ${setBadges.length} earned` : 'Coming soon'}</div>
+          <div className="pinbook-serif text-[0.9375rem] font-bold uppercase tracking-[0.12em] text-[#f1d58f] truncate">{set.name}</div>
+          <div className="text-[0.6875rem] font-semibold text-white/45">{setBadges.length ? `${earned} / ${setBadges.length} earned` : 'Coming soon'}</div>
         </div>
         {chapters.length > 0 && (
           <div className="relative shrink-0">
             <button
               onClick={() => setMenu((m) => !m)}
-              className="pinbook-serif h-9 pl-3 pr-2 rounded-full flex items-center gap-1.5 text-[13px] font-bold text-[#f1d58f] bg-white/[0.07] active:bg-white/15"
+              className="pinbook-serif h-9 pl-3 pr-2 rounded-full flex items-center gap-1.5 text-[0.8125rem] font-bold text-[#f1d58f] bg-white/[0.07] active:bg-white/15"
               aria-expanded={menu}
             >
               <span>{ROMAN[shownChapter] ?? ''}</span>

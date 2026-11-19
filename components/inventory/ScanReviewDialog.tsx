@@ -195,7 +195,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4">
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={saving ? undefined : onClose} />
-      <div className="add-card-panel relative w-full max-w-[600px] card-glass rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col overflow-hidden">
+      <div className="add-card-panel relative w-full max-w-[37.5rem] card-glass rounded-t-2xl sm:rounded-2xl max-h-[94dvh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3 border-b border-slate-800">
           <div className="min-w-0">
@@ -222,7 +222,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           )
           return (
             <div className="px-5 py-3 border-b border-slate-800">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+              <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 mb-2">
                 Add these cards to group <span className="font-normal normal-case tracking-normal">· optional</span>
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -287,9 +287,9 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                   <div className="flex gap-3">
                     <div className="relative shrink-0">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={cardImage(match.imageUrl, 'thumb')} alt="" className="w-[72px] h-[100px] rounded-lg object-cover bg-slate-900 shadow" />
+                      <img src={cardImage(match.imageUrl, 'thumb')} alt="" className="w-[4.5rem] h-[6.25rem] rounded-lg object-cover bg-slate-900 shadow" />
                       {row.slab?.grade && (
-                        <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-white px-1.5 py-0.5 text-[10px] font-black text-[#1a1a1a] shadow ring-1 ring-[#c8102e]">
+                        <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-white px-1.5 py-0.5 text-[0.625rem] font-black text-[#1a1a1a] shadow ring-1 ring-[#c8102e]">
                           <span className="text-[#c8102e]">{row.slab.company}</span> {row.slab.grade}
                         </span>
                       )}
@@ -309,7 +309,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                       </div>
                       <div className="mt-2 text-lg font-bold text-ink tabular-nums">
                         {price > 0 ? formatCurrency(price) : <span className="text-slate-500 text-sm font-medium">No price yet</span>}
-                        {price > 0 && row.slab?.company && row.slab.grade && <span className="ml-2 text-[11px] font-medium text-slate-500" title="The ungraded price — once added, the slab is valued at its grade's PriceCharting price">raw · graded price once added</span>}
+                        {price > 0 && row.slab?.company && row.slab.grade && <span className="ml-2 text-[0.6875rem] font-medium text-slate-500" title="The ungraded price — once added, the slab is valued at its grade's PriceCharting price">raw · graded price once added</span>}
                         {row.quantity > 1 && price > 0 && <span className="ml-2 text-xs font-medium text-slate-400">× {row.quantity} = {formatCurrency(price * row.quantity)}</span>}
                       </div>
                       {cr === 'loading' && <Loader2 size={14} className="animate-spin text-slate-400 mt-1" />}
@@ -338,14 +338,14 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
 
                   {printings.length > 1 && (
                     <div className="mt-3">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Finish</div>
+                      <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Finish</div>
                       <div className="flex flex-wrap gap-1.5">
                         {printings.map((p) => (
                           <button key={p.id} type="button" onClick={p.set}
                             className={cn('rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors text-left',
                               p.on ? 'border-amber-500 bg-amber-500/15 text-ink' : 'border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700')}>
                             {p.label}
-                            {p.price > 0 && <span className="block text-[11px] font-medium tabular-nums opacity-80">{formatCurrency(p.price)}</span>}
+                            {p.price > 0 && <span className="block text-[0.6875rem] font-medium tabular-nums opacity-80">{formatCurrency(p.price)}</span>}
                           </button>
                         ))}
                       </div>
@@ -355,7 +355,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                   {/* A graded slab: its cert number, read off the label (or its barcode) — check it here */}
                   {row.slab?.company && (
                     <label className="mt-3 block">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">
                         {row.slab.company} Slab ID <span className="font-normal normal-case tracking-normal">· {row.slab.cert ? 'read from the label' : 'not read — type it in'}</span>
                       </span>
                       <input
@@ -371,14 +371,14 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
 
                   <div className="mt-3 flex items-end gap-2">
                     <label className="flex-1 min-w-0">
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Condition</span>
+                      <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">Condition</span>
                       <select className="input-field mt-1 py-2 text-sm" value={row.condition} onChange={(e) => update(row.rowId, { condition: e.target.value as Condition })}>
                         {CONDITIONS.map(([c, label]) => <option key={c} value={c}>{label}</option>)}
                       </select>
                     </label>
                     <div>
-                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Qty</span>
-                      <div className="mt-1 flex items-center rounded-xl border border-slate-800 bg-slate-950 text-sm h-[38px]">
+                      <span className="text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">Qty</span>
+                      <div className="mt-1 flex items-center rounded-xl border border-slate-800 bg-slate-950 text-sm h-[2.375rem]">
                         <button type="button" className="px-3 h-full text-slate-400 hover:text-ink disabled:opacity-40" disabled={row.quantity <= 1}
                           onClick={() => update(row.rowId, { quantity: Math.max(1, row.quantity - 1) })} aria-label="One fewer">−</button>
                         <span className="w-6 text-center text-ink font-semibold tabular-nums">{row.quantity}</span>

@@ -77,7 +77,7 @@ function ReactionRow({ post, rx, canReact }: { post: string; rx: Rx; canReact: b
         return (
           <button key={r.id + (f ? '-' + f.n : '')} type="button" disabled={!canReact || ghost} onClick={() => react(r.id)}
             title={canReact ? `${r.name}${on ? ' — tap to take yours back' : ''}` : r.name} aria-label={`${r.name} · ${n}`} aria-pressed={on}
-            className={cn(move, 'relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold tabular-nums transition-colors',
+            className={cn(move, 'relative inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6875rem] font-bold tabular-nums transition-colors',
               on ? 'border-current bg-[color-mix(in_srgb,currentColor_14%,transparent)]' : 'border-[color-mix(in_srgb,currentColor_22%,transparent)] bg-[color-mix(in_srgb,currentColor_5%,transparent)]',
               canReact ? 'hover:border-current' : 'cursor-default', ghost && 'pointer-events-none')}>
             <ReactionIcon r={r} size={13} />{n}
@@ -131,7 +131,7 @@ function ReactionPicker({ at, post, rx, onPick, onClose }: { at: DOMRect; post: 
       <div role="dialog" aria-label="Pick a reaction" onClick={(e) => e.stopPropagation()}
         className="absolute rounded-xl border border-[#c4ae83] bg-[#fbf6ea] p-2 shadow-[0_14px_30px_-12px_rgba(40,25,10,0.55)]"
         style={{ left, width: W, ...(below ? { top: at.bottom + 6 } : { bottom: window.innerHeight - at.top + 6 }) }}>
-        <p className="px-1 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8a7a62]">React</p>
+        <p className="px-1 pb-1.5 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-[#8a7a62]">React</p>
         <div className="grid grid-cols-6 gap-0.5">
           {REACTIONS.map((r) => {
             const on = rx.mine(post, r.id)
@@ -243,7 +243,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                   )}>
                   {/* a polaroid keeps its strip for the caption: just the reactions under it (the time shows when opened);
                       a sticker is decoration — nothing under it */}
-                  {(!p.look?.kind || p.look.kind === 'note') && <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
+                  {(!p.look?.kind || p.look.kind === 'note') && <p className="mt-2 text-[0.625rem] font-semibold uppercase tracking-[0.12em] opacity-50">{timeAgo(p.at)}</p>}
                   {/* a sticker is decoration and a poll has its votes — the rest get reactions */}
                   {p.look?.kind !== 'sticker' && p.look?.kind !== 'poll' && <ReactionRow post={p.id} rx={rx} canReact={canReact} />}
                 </NoteCard>
@@ -270,7 +270,7 @@ export function CreatorWall({ block, ctx }: { block: Extract<Block, { type: 'wal
                   </span>
                 )}
               </>}>
-              <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.12em] opacity-50">{ctx.community.name} · {timeAgo(open.at)}</p>
+              <p className="mt-3 text-[0.6875rem] font-semibold uppercase tracking-[0.12em] opacity-50">{ctx.community.name} · {timeAgo(open.at)}</p>
               {open.look?.kind !== 'poll' && <ReactionRow post={open.id} rx={rx} canReact={canReact} />}
             </NoteCard>
           </div>

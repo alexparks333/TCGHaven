@@ -214,6 +214,13 @@ export default function PortfolioPage() {
       })
   }, [cards, calcFloor, activeGames, hiddenGroups])
 
+  // The same cards the by-game split counts — for the chart's "Over time" view
+  const chartCards = useMemo(() => cards.filter((c) =>
+    activeGames.includes(c.game) &&
+    (!c.group || !hiddenGroups.includes(c.group)) &&
+    (calcFloor === 0 || (c.currentPrice ?? c.purchasePrice) >= calcFloor),
+  ), [cards, calcFloor, activeGames, hiddenGroups])
+
   // Top Performers' game picker: "All Games" or one game the collection has cards in. Works
   // together with the time frame (groupedRows already carries the window's P&L).
   const [performerGame, setPerformerGame] = useState<Game | 'all'>('all')
@@ -257,7 +264,7 @@ export default function PortfolioPage() {
             <button
               onClick={() => setShowFilters(!showFilters)}
               // A real button in the same colour as the cards around it: a soft shadow that lifts on hover; filled when the panel is open
-              className={`md:order-last shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[13px] font-semibold transition-all active:translate-y-px ${
+              className={`md:order-last shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-[0.8125rem] font-semibold transition-all active:translate-y-px ${
                 showFilters
                   ? 'bg-violet-600 border-violet-600 text-white shadow-inner'
                   : 'bg-slate-900/70 border-slate-800 text-ink shadow-[0_2px_4px_rgba(90,60,20,0.18)] hover:shadow-[0_4px_8px_rgba(90,60,20,0.22)] hover:border-slate-700 hover:-translate-y-px'
@@ -266,7 +273,7 @@ export default function PortfolioPage() {
             >
               <SlidersHorizontal size={15} />
               Filters
-              {calcFloor > 0 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
+              {calcFloor > 0 && <span className={`text-[0.5625rem] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -282,7 +289,7 @@ export default function PortfolioPage() {
           >
             <span className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Collection Value</span>
             <span className="text-2xl md:text-3xl font-bold text-ink">{formatCurrency(totals.value)}<span className="ml-1 align-baseline text-xs font-semibold uppercase tracking-wide text-slate-500">{displayCurrency().code}</span></span>
-            {calcFloor > 0 && <span className="text-[10px] text-slate-600">floor {formatCurrency(calcFloor)}</span>}
+            {calcFloor > 0 && <span className="text-[0.625rem] text-slate-600">floor {formatCurrency(calcFloor)}</span>}
           </div>
           <div
             className="stat-card cursor-pointer hover:ring-1 hover:ring-violet-500/50 transition-all"
@@ -294,7 +301,7 @@ export default function PortfolioPage() {
                 <button
                   onClick={(e) => { e.stopPropagation(); setIncludeSold(!includeSold) }}
                   title={includeSold ? 'Click to remove sold proceeds' : 'Click to subtract sold proceeds from cost basis'}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                  className={`text-[0.625rem] font-bold px-2 py-0.5 rounded-full border transition-all ${
                     includeSold
                       ? 'bg-emerald-600 border-emerald-500 text-white'
                       : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
@@ -306,7 +313,7 @@ export default function PortfolioPage() {
             </div>
             <span className="text-xl md:text-2xl font-bold text-ink">{formatCurrency(totals.adjustedCost)}</span>
             {includeSold && totalSoldRevenue > 0 && timeFrame === 'entry' && (
-              <span className="text-[11px] text-slate-500 mt-0.5">
+              <span className="text-[0.6875rem] text-slate-500 mt-0.5">
                 cards {formatCurrency(totals.cardCost)} · sold -{formatCurrency(totalSoldRevenue)}
               </span>
             )}
@@ -322,7 +329,7 @@ export default function PortfolioPage() {
               {formatCurrency(totals.pnl)}
             </span>
             {showHistoryNote
-              ? <span className="text-[10px] text-slate-500">{periodCardCount} card{periodCardCount !== 1 ? 's' : ''} w/ history</span>
+              ? <span className="text-[0.625rem] text-slate-500">{periodCardCount} card{periodCardCount !== 1 ? 's' : ''} w/ history</span>
               : (totals.pnl >= 0 ? <TrendingUp size={14} className="text-emerald-500" /> : <TrendingDown size={14} className="text-red-500" />)
             }
           </div>
@@ -341,7 +348,7 @@ export default function PortfolioPage() {
               {formatPercent(totals.pnlPct)}
             </span>
             {showHistoryNote && (
-              <span className="text-[10px] text-slate-500">
+              <span className="text-[0.625rem] text-slate-500">
                 {periodCardCount} card{periodCardCount !== 1 ? 's' : ''} w/ history
               </span>
             )}
@@ -400,19 +407,21 @@ export default function PortfolioPage() {
 
         {/* Circle chart: the collection's value by game (it replaced the By Game cards, 2026-11-15) —
             beside Top Performers on wide screens, above it on phones */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(240px,1fr)_2fr] gap-4 mb-8">
-        <div className="card-glass p-6">
-          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Value by Game</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(15rem,1fr)_2fr] gap-4 mb-8">
+        <div className="card-glass p-6 flex flex-col">
           {byGame.some((g) => g.value > 0)
-            ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} />
-            : <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>}
+            ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} cards={chartCards} />
+            : <>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Value by Game</h3>
+                <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>
+              </>}
         </div>
         <div className="card-glass p-6 min-w-0">
           <div className="flex items-start justify-between gap-3 mb-4">
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
               Top Performers
-              {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
-              {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
+              {showHistoryNote && <span className="ml-2 text-[0.625rem] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
+              {calcFloor > 0 && <span className="ml-2 text-[0.625rem] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
             </h3>
             <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
             {/* All Cards / Graded / Raw */}
@@ -461,7 +470,7 @@ export default function PortfolioPage() {
                   <div className="flex items-center gap-1.5">
                     <span className="font-medium text-ink text-sm truncate"><CardName name={c.name} /></span>
                     {c.quantity > 1 && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 shrink-0">
+                      <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50 shrink-0">
                         ×{c.quantity}
                       </span>
                     )}
@@ -504,12 +513,12 @@ export default function PortfolioPage() {
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-ink">All Cards</h3>
                 {hiddenCount > 0 && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/40 text-amber-600 border border-amber-300/40">
+                  <span className="text-[0.625rem] font-bold px-2 py-0.5 rounded-full bg-amber-200/40 text-amber-600 border border-amber-300/40">
                     {hiddenCount} hidden
                   </span>
                 )}
                 {cardSearch && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-200/40 text-violet-600 border border-violet-300/40">
+                  <span className="text-[0.625rem] font-bold px-2 py-0.5 rounded-full bg-violet-200/40 text-violet-600 border border-violet-300/40">
                     {displayRows.length} result{displayRows.length !== 1 ? 's' : ''}
                   </span>
                 )}
@@ -565,28 +574,28 @@ export default function PortfolioPage() {
                     ? <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-8 h-11 object-contain rounded" />
                     : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
                   }
-                  {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                  {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-semibold text-ink text-sm"><CardName name={card.name} /></span>
                     {card.quantity > 1 && (
-                      <span className="hidden md:inline text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">
+                      <span className="hidden md:inline text-[0.625rem] font-bold px-1.5 py-0.5 rounded bg-slate-700/80 text-slate-300 border border-slate-600/50">
                         ×{card.quantity}
                       </span>
                     )}
                     {card.group && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 border border-violet-500/20">
+                      <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 border border-violet-500/20">
                         {card.group}
                       </span>
                     )}
                     {card.gradingCompany && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
+                      <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                         {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
                       </span>
                     )}
                     {card.nexus && (
-                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
+                      <span className="text-[0.625rem] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                         Nexus
                       </span>
                     )}
@@ -642,7 +651,7 @@ function PriceUpdateStatus({ status }: { status: PriceStatus | null }) {
   if (status?.failed) {
     return (
       <div
-        className="flex items-center gap-1.5 text-[11px] font-semibold text-red-700 bg-red-100/60 border border-red-300 rounded-lg px-2.5 py-1.5"
+        className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-red-700 bg-red-100/60 border border-red-300 rounded-lg px-2.5 py-1.5"
         title={`Latest scheduled price update didn't go through for: ${status.failedGames.join(', ')}`}
       >
         <AlertTriangle size={13} className="shrink-0" />
@@ -651,7 +660,7 @@ function PriceUpdateStatus({ status }: { status: PriceStatus | null }) {
     )
   }
   return (
-    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-800/60 border border-slate-700/50 rounded-lg px-2.5 py-1.5">
+    <div className="flex items-center gap-1.5 text-[0.6875rem] text-slate-400 bg-slate-800/60 border border-slate-700/50 rounded-lg px-2.5 py-1.5">
       <Clock size={13} className="shrink-0" />
       <span>{status === null ? 'Checking prices…' : when ? `Prices updated ${when}` : 'Prices not synced yet'}</span>
     </div>

@@ -91,7 +91,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
         <div ref={padRef} className="pinbook-page case-well relative rounded-[8px] overflow-hidden">
           <div className="case-light absolute inset-0 pointer-events-none" />
           {nothing && !isMe && (
-            <div className="relative text-center pinbook-serif text-[11px] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/60 pt-12 pb-12">
+            <div className="relative text-center pinbook-serif text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/60 pt-12 pb-12">
               {first} hasn’t put any pins on display yet
             </div>
           )}
@@ -123,7 +123,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
 
         {/* A small brass tag on the bottom rail: how many pins earned */}
         {earned.length > 0 && (
-          <div className="absolute right-[clamp(40px,5vw,56px)] bottom-[clamp(4px,0.7vw,7px)] case-brass rounded-[2px] px-2 py-[2px] pinbook-serif text-[9px] font-bold uppercase tracking-[0.18em]">
+          <div className="absolute right-[clamp(40px,5vw,56px)] bottom-[clamp(4px,0.7vw,7px)] case-brass rounded-[2px] px-2 py-[2px] pinbook-serif text-[0.5625rem] font-bold uppercase tracking-[0.18em]">
             {earned.length} {earned.length === 1 ? 'pin' : 'pins'} earned
           </div>
         )}
@@ -167,7 +167,7 @@ function EmptyDisplaySpot({ size, canAdd, onClick }: { size: number; canAdd: boo
   return (
     <button type="button" onClick={onClick} aria-label="Put a pin here" className="group flex flex-col items-center justify-center gap-2 outline-none" style={box}>
       {ring}
-      <span className="pinbook-serif text-[10px] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/45 transition-colors group-hover:text-[#f1d58f]">Add a pin</span>
+      <span className="pinbook-serif text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/45 transition-colors group-hover:text-[#f1d58f]">Add a pin</span>
     </button>
   )
 }
@@ -221,7 +221,7 @@ export function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove
                 <BadgePin art={current.art} imageUrl={current.imageUrl} size={Math.min(44, pinSize(current, 44))} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#4a321f]/60">In this spot now</span>
+                <span className="block text-[0.625rem] font-bold uppercase tracking-[0.16em] text-[#4a321f]/60">In this spot now</span>
                 <span className="block text-sm font-bold text-ink truncate">{current.name}</span>
               </span>
               <button onClick={() => onView(current)} className="picker-chip"><Box size={13} />3D</button>
@@ -282,9 +282,9 @@ export function PinPicker({ current, earned, tierOf, displayed, onPick, onRemove
                         <BadgePin art={d.art} imageUrl={d.imageUrl} size={Math.min(PICKER_PIN, pinSize(d, PICKER_PIN))} />
                       </span>
                     </span>
-                    <span className="text-[13px] font-semibold text-ink leading-tight line-clamp-2">{d.name}</span>
+                    <span className="text-[0.8125rem] font-semibold text-ink leading-tight line-clamp-2">{d.name}</span>
                     {(here || elsewhere) && (
-                      <span className="absolute top-1 right-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#8a5d36] text-[#f6ead0]">
+                      <span className="absolute top-1 right-1 text-[0.5625rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#8a5d36] text-[#f6ead0]">
                         {here ? 'Here' : 'Shown'}
                       </span>
                     )}

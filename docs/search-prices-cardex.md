@@ -88,6 +88,8 @@ raw copy is valued at the Near Mint price × its condition's discount — `CONDI
 - `priceAtEntry` is saved as the Near Mint price and discounted when compared (`conditionPrice()`),
   so a later condition edit moves both together.
 
+**The UI never shows the math** (no "90% of Near Mint", no Near Mint price beside a played copy — 2026-11-19, the owner's call): a copy shows its price; the Cardex zoom says only its condition ("Raw · LP", "Lightly Played").
+
 Not discounted: slabs (the grade is the condition — PriceCharting or the Near Mint "Raw est."),
 and the **Cardex grid hover** (a card, not a copy: Near Mint). Copies below Near Mint get their
 own Inventory / Portfolio row and profile tile (`cardIdentityKey` adds the condition). A friend's

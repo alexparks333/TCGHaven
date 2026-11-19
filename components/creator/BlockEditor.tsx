@@ -44,7 +44,7 @@ export function AddBlockMenu({ onPick, onClose, has }: { onPick: (t: BlockType) 
                   className="group flex items-start gap-3 rounded-xl border border-[#d6c49f] bg-[#f6eedb] p-3.5 text-left hover:border-[#7a5230] hover:shadow-[0_6px_16px_-10px_rgba(40,25,10,0.6)] transition disabled:opacity-50 disabled:cursor-default disabled:hover:border-[#d6c49f] disabled:hover:shadow-none">
                   <span className="haven-medallion w-10 h-10 shrink-0"><Icon size={17} /></span>
                   <span className="min-w-0">
-                    <span className="block font-bold text-ink">{b.name}{!b.ready && <span className="ml-2 rounded-full bg-[#e6d7b6] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 align-middle">Coming soon</span>}</span>
+                    <span className="block font-bold text-ink">{b.name}{!b.ready && <span className="ml-2 rounded-full bg-[#e6d7b6] px-2 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wider text-slate-500 align-middle">Coming soon</span>}</span>
                     <span className="block text-xs text-slate-500 mt-0.5">{once ? 'Already on this page' : b.hint}</span>
                   </span>
                 </button>
@@ -73,7 +73,7 @@ function useUpload(uid: string) {
   return { busy, up }
 }
 
-const label = 'block text-[11px] font-semibold text-slate-500'
+const label = 'block text-[0.6875rem] font-semibold text-slate-500'
 
 /** The side-panel editor for the block selected on the page */
 export function BlockEditor({ uid, block, community, mode, onMode, onChange, onCommunity, onDone, onDelete }: {
@@ -179,13 +179,13 @@ function MedalFields({ uid, m, put }: { uid: string; m: MembersLook; put: (p: Pa
                 ? <ImagePlus size={20} className="text-[#a8875c] mb-1" />
                 : ([1, 0, 2] as const).map((p) => <Medal key={p} place={p} style={s.id} art={art[p] || undefined} size={p === 0 ? 22 : 17} />)}
             </span>
-            <span className="text-[10px] font-bold text-slate-500">{s.name}</span>
+            <span className="text-[0.625rem] font-bold text-slate-500">{s.name}</span>
           </button>
         ))}
       </div>
       {style === 'custom' && (
         <div className="mt-2.5">
-          <p className="text-[11px] text-slate-500">Your own pictures — square ones with a see-through background look best. An empty place shows a plain medal.</p>
+          <p className="text-[0.6875rem] text-slate-500">Your own pictures — square ones with a see-through background look best. An empty place shows a plain medal.</p>
           <div className="mt-1.5 grid grid-cols-3 gap-1.5">
             {(['1st', '2nd', '3rd'] as const).map((name, i) => (
               <div key={name} className="flex flex-col items-center gap-1">
@@ -197,7 +197,7 @@ function MedalFields({ uid, m, put }: { uid: string; m: MembersLook; put: (p: Pa
                     : art[i] ? <img src={art[i]} alt="" className="w-full h-full object-contain p-1" />
                     : <ImagePlus size={18} className="text-[#a8875c]" />}
                 </button>
-                <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500">{name}
+                <span className="flex items-center gap-1 text-[0.625rem] font-bold text-slate-500">{name}
                   {art[i] && <button type="button" onClick={() => { if (confirm(`Take the ${name} place picture off?`)) setArt(i, '') }} className="p-0.5 hover:text-red-600" aria-label={`Remove the ${name} place picture`}><X size={11} /></button>}
                 </span>
                 <input ref={files[i]} type="file" accept="image/*" hidden
@@ -223,7 +223,7 @@ function Choice<T extends string>({ label: name, value, options, onChange }: { l
       <div className="mt-1 flex rounded-md border border-[#d6c49f] overflow-hidden">
         {options.map(([v, n]) => (
           <button key={v} type="button" onClick={() => onChange(v)}
-            className={cn('flex-1 py-1.5 text-[11px] font-bold border-r border-[#d6c49f] last:border-r-0 transition-colors', value === v ? 'bg-[#7a5230] text-[#fbf6ea]' : 'bg-[#f6eedb] text-slate-500 hover:text-ink')}>{n}</button>
+            className={cn('flex-1 py-1.5 text-[0.6875rem] font-bold border-r border-[#d6c49f] last:border-r-0 transition-colors', value === v ? 'bg-[#7a5230] text-[#fbf6ea]' : 'bg-[#f6eedb] text-slate-500 hover:text-ink')}>{n}</button>
         ))}
       </div>
     </div>
@@ -250,7 +250,7 @@ function Fields({ uid, block, community, onChange, onCommunity }: { uid: string;
       )
     case 'badges':
       return <><TitleField value={block.title} placeholder="Badge Achievements" onChange={(title) => onChange({ ...block, title })} />
-        <p className="mt-2 text-[11px] text-slate-500">Fills itself: the newest members to earn one of your published badges.</p></>
+        <p className="mt-2 text-[0.6875rem] text-slate-500">Fills itself: the newest members to earn one of your published badges.</p></>
     case 'board':
       return <TitleField value={block.title} placeholder="Community Board" onChange={(title) => onChange({ ...block, title })} />
     case 'text':
@@ -349,7 +349,7 @@ function FrameFields({ uid, block, onChange }: { uid: string; block: Extract<Blo
             <div key={src + i} className="group relative aspect-square rounded-md overflow-hidden border border-[#d6c49f] bg-[#f6eedb]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={badgeArt(src, 320)} alt="" className="w-full h-full object-cover" />
-              <span className="absolute left-1 top-1 rounded bg-black/55 px-1.5 text-[10px] font-bold text-white tabular-nums">{i + 1}</span>
+              <span className="absolute left-1 top-1 rounded bg-black/55 px-1.5 text-[0.625rem] font-bold text-white tabular-nums">{i + 1}</span>
               <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/45 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <button type="button" disabled={i === 0} onClick={() => move(i, -1)} className="p-1 text-white disabled:opacity-30" aria-label="Show earlier"><ChevronLeft size={14} /></button>
                 <button type="button" onClick={() => { if (confirm('Take this picture out of the frame?')) onChange({ ...block, images: imgs.filter((_, j) => j !== i) }) }}
@@ -365,7 +365,7 @@ function FrameFields({ uid, block, onChange }: { uid: string; block: Extract<Blo
         {room <= 0 ? 'The frame is full' : imgs.length ? 'Add more pictures' : 'Upload pictures'}
       </button>
       <input ref={file} type="file" accept="image/*" multiple hidden onChange={async (e) => { await add(e.target.files); e.target.value = '' }} />
-      {failed > 0 && <p className="mt-1.5 text-[11px] text-red-600">{failed === 1 ? 'One picture' : `${failed} pictures`} didn’t upload — check your connection and try again.</p>}
+      {failed > 0 && <p className="mt-1.5 text-[0.6875rem] text-red-600">{failed === 1 ? 'One picture' : `${failed} pictures`} didn’t upload — check your connection and try again.</p>}
       <ValueSlider label="Each shows for" min={2} max={20} step={1} value={block.seconds ?? 5} unit="s" onChange={(seconds) => onChange({ ...block, seconds })} />
     </>
   )

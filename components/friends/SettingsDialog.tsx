@@ -125,7 +125,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-label="Settings"
-        className="add-card-panel relative w-full md:max-w-[440px] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl overflow-hidden"
+        className="add-card-panel relative w-full md:max-w-[27.5rem] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl overflow-hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="md:hidden mx-auto mt-2 mb-1 w-10 h-1 rounded-full bg-slate-700" />
@@ -153,20 +153,20 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="text-sm font-bold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</div>
               <div className="text-xs text-slate-500 truncate">{google ? 'Signed in with Google' : 'Signed in with email'}</div>
               {photoBlocked ? (
-                <div className="mt-1 text-[11px] text-amber-700">Your profile photo was removed by TCG Haven staff, and photos are turned off for your account.</div>
+                <div className="mt-1 text-[0.6875rem] text-amber-700">Your profile photo was removed by TCG Haven staff, and photos are turned off for your account.</div>
               ) : (
                 <div className="mt-1 flex items-center gap-3 text-xs font-semibold">
                   <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me} className="text-violet-700 hover:underline">Change photo</button>
                   {me?.photoURL && <button type="button" onClick={removePhoto} disabled={photoBusy} className="text-slate-500 hover:text-red-600">Remove</button>}
                 </div>
               )}
-              {photoError && <div className="text-[11px] text-red-600 mt-1">{photoError}</div>}
+              {photoError && <div className="text-[0.6875rem] text-red-600 mt-1">{photoError}</div>}
             </div>
           </div>
 
           {/* Account */}
           <section>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Account</div>
+            <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Account</div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 divide-y divide-slate-800">
               <div className={row}>
                 <UserRound size={16} className="text-slate-500 shrink-0" />
@@ -184,7 +184,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                         <X size={13} />
                       </button>
                     </div>
-                    {nameError && <div className="text-[11px] text-red-600 mt-1">{nameError}</div>}
+                    {nameError && <div className="text-[0.6875rem] text-red-600 mt-1">{nameError}</div>}
                   </form>
                 ) : (
                   <>
@@ -222,7 +222,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                         <X size={13} />
                       </button>
                     </div>
-                    {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+                    {error && <div className="text-[0.6875rem] text-red-600 mt-1">{error}</div>}
                   </form>
                 ) : (
                   <>
@@ -238,12 +238,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 )}
               </div>
             </div>
-            <p className="text-[11px] text-slate-500 mt-1.5 px-1">Your profile link uses your username. Your last 3 old usernames stay yours, so links with them still work; older ones are freed up.</p>
+            <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">Your profile link uses your username. Your last 3 old usernames stay yours, so links with them still work; older ones are freed up.</p>
           </section>
 
           {/* Currency: what prices are shown in (lib/currency.ts) — everything is still tracked in USD */}
           <section>
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Prices</div>
+            <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Prices</div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60">
               <label className={row}>
                 <Coins size={16} className="text-slate-500 shrink-0" />
@@ -254,7 +254,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 </select>
               </label>
             </div>
-            <p className="text-[11px] text-slate-500 mt-1.5 px-1">
+            <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">
               {currency === 'USD'
                 ? 'Card prices come in US dollars. Pick your own currency to see them converted at today’s rate.'
                 : `Prices are tracked in US dollars and shown in ${currency} at today’s exchange rate (updated daily), on every device you sign in to.`}
@@ -275,7 +275,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           >
             <Trash2 size={12} />Delete account
           </button>
-          <a href="/privacy" target="_blank" rel="noopener" className="mx-auto -mt-3 text-[11px] text-slate-500 hover:text-ink">Privacy Policy</a>
+          <a href="/privacy" target="_blank" rel="noopener" className="mx-auto -mt-3 text-[0.6875rem] text-slate-500 hover:text-ink">Privacy Policy</a>
         </div>
       </div>
     </div>,

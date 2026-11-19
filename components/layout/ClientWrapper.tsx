@@ -88,7 +88,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
             the html/body note in globals.css). */}
         {studio ? (
           <main key={currencyKey} className="h-dvh overflow-y-auto overflow-x-hidden overscroll-x-none">
-            <div className="max-w-[1600px] mx-auto w-full px-3 sm:px-6 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+            <div className="max-w-[100rem] mx-auto w-full px-3 sm:px-6 lg:px-8 pb-[calc(env(safe-area-inset-bottom)+24px)]">
               {children}
             </div>
           </main>

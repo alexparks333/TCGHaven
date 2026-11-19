@@ -152,7 +152,7 @@ export function AccountsPage() {
             {id === 'holds' && <Ban size={14} />}
             {label}
             {id === 'holds' && holdsCount > 0 && (
-              <span className={cn('text-[11px] px-1.5 rounded-full', area === id ? 'bg-white/25' : 'bg-red-600/15 text-red-600')}>{holdsCount}</span>
+              <span className={cn('text-[0.6875rem] px-1.5 rounded-full', area === id ? 'bg-white/25' : 'bg-red-600/15 text-red-600')}>{holdsCount}</span>
             )}
           </button>
         ))}
@@ -172,7 +172,7 @@ export function AccountsPage() {
             >
               {danger && <Ban size={13} />}
               {label}
-              <span className="text-[11px] text-slate-500">{count(id) ?? '…'}</span>
+              <span className="text-[0.6875rem] text-slate-500">{count(id) ?? '…'}</span>
             </button>
           ))}
         </div>
@@ -214,14 +214,14 @@ export function StatusPills({ record }: { record: AccountRoleRecord }) {
   const color = titleColor(record)
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
-      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: color + '22', color }}>
+      <span className="inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: color + '22', color }}>
         {record.staffTitle === 'Owner' && <Crown size={10} />}
         {titleLabel(record)}
       </span>
       {(record.suspended || (record.formerCreator && record.role !== 'creator')) && (
-        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-700">Suspended creator</span>
+        <span className="text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-700">Suspended creator</span>
       )}
-      {record.banned && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-600 text-white">Banned</span>}
+      {record.banned && <span className="text-[0.625rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-600 text-white">Banned</span>}
     </span>
   )
 }
@@ -230,7 +230,7 @@ function AccountTable({ rows, dateLabel, onManage }: { rows: AccountRow[]; dateL
   const creatorDate = dateLabel === 'Creator since'
   return (
     <div>
-      <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_130px_90px] gap-4 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-800">
+      <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_130px_90px] gap-4 px-4 py-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500 border-b border-slate-800">
         <span>Account</span><span>Title</span><span>{dateLabel}</span><span />
       </div>
       {rows.map((r) => (
@@ -296,12 +296,12 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
           <Avatar seed={profile.uid} name={name} photoURL={profile.photoURL} size={48} />
           <div className="min-w-0 flex-1">
             <div className="text-lg font-bold text-ink truncate">{name}</div>
-            <div className="text-sm text-slate-500 truncate">{profile.username ? `@${profile.username}` : ''} <span className="text-[11px] text-slate-600">· {profile.uid}</span></div>
+            <div className="text-sm text-slate-500 truncate">{profile.username ? `@${profile.username}` : ''} <span className="text-[0.6875rem] text-slate-600">· {profile.uid}</span></div>
             <div className="mt-1.5 flex items-center gap-2 flex-wrap">
               <StatusPills record={record} />
-              {record.creatorSince && <span className="text-[11px] text-slate-500">Creator since {fmtDate(record.creatorSince)}</span>}
+              {record.creatorSince && <span className="text-[0.6875rem] text-slate-500">Creator since {fmtDate(record.creatorSince)}</span>}
               {profile.username && (
-                <a href={profilePath(profile.uid, profile.username)} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-violet-700 inline-flex items-center gap-0.5 hover:underline">
+                <a href={profilePath(profile.uid, profile.username)} target="_blank" rel="noreferrer" className="text-[0.6875rem] font-semibold text-violet-700 inline-flex items-center gap-0.5 hover:underline">
                   Open their Haven <ArrowUpRight size={11} />
                 </a>
               )}
@@ -341,9 +341,9 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: ROLE_COLORS[r] }} />
                 <span className="text-sm font-bold text-ink">{ROLE_LABELS[r]}</span>
-                {record.role === r && <span className="ml-auto text-[10px] font-bold uppercase text-slate-500">Current</span>}
+                {record.role === r && <span className="ml-auto text-[0.625rem] font-bold uppercase text-slate-500">Current</span>}
               </div>
-              <div className="text-[11px] text-slate-500 mt-1 leading-snug">{ROLE_HINTS[r]}</div>
+              <div className="text-[0.6875rem] text-slate-500 mt-1 leading-snug">{ROLE_HINTS[r]}</div>
             </button>
           ))}
         </div>
@@ -426,7 +426,7 @@ function ManageAccount({ row, onClose, onChanged }: { row: AccountRow; onClose: 
         </>)}
 
         <div className="mt-6 pt-4 border-t border-slate-800">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2"><History size={13} />History</div>
+          <div className="flex items-center gap-1.5 text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-2"><History size={13} />History</div>
           {!history ? (
             <Loader2 size={15} className="animate-spin text-slate-500" />
           ) : history.length === 0 ? (

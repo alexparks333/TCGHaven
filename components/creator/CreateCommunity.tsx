@@ -33,7 +33,7 @@ export function CommunityCard({ c, big = false }: { c: Community; big?: boolean 
         {(c.games?.length ?? 0) > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {c.games!.map((g) => (
-              <span key={g} className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>
+              <span key={g} className="rounded-full px-2 py-0.5 text-[0.6875rem] font-bold text-white" style={{ background: GAME_COLORS[g] }}>{GAME_LABELS[g]}</span>
             ))}
           </div>
         )}
@@ -178,7 +178,7 @@ export function CreateCommunity({ uid, creatorName, onLaunched }: { uid: string;
 
       {/* It filling in, live */}
       <div className="lg:sticky lg:top-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 mb-2">Preview</p>
+        <p className="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-slate-500 mb-2">Preview</p>
         <CommunityCard c={c} big />
       </div>
     </div>

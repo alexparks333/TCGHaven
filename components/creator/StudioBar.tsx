@@ -20,8 +20,8 @@ export function StudioBar({ unsaved = false }: { unsaved?: boolean }) {
       <div className="h-14 flex items-center gap-3">
         <span className="haven-medallion w-8 h-8 shrink-0"><Wand2 size={15} /></span>
         <div className="min-w-0 leading-tight">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-500">TCG Haven</p>
-          <p className="pinbook-serif text-[15px] font-bold text-ink truncate">Creator Studio</p>
+          <p className="text-[0.625rem] font-bold uppercase tracking-[0.22em] text-slate-500">TCG Haven</p>
+          <p className="pinbook-serif text-[0.9375rem] font-bold text-ink truncate">Creator Studio</p>
         </div>
         <button type="button" onClick={exit}
           className="haven-chip ml-auto shrink-0 inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-ink hover:text-[#7a5230]">

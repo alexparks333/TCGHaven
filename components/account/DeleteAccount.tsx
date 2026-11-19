@@ -39,7 +39,7 @@ function WhatGoes() {
   return (
     <div className="rounded-2xl border border-red-600/30 bg-red-100/10 p-4 text-sm text-slate-300">
       <p className="font-semibold text-red-600 mb-2">This deletes everything, for good. It can’t be undone.</p>
-      <ul className="list-disc pl-5 space-y-1 text-[13px]">
+      <ul className="list-disc pl-5 space-y-1 text-[0.8125rem]">
         <li>Your collection{dataLoading ? '' : ` — ${cards.toLocaleString()} card${cards === 1 ? '' : 's'}${sold ? `, ${sold.toLocaleString()} sold` : ''} —`} and your collections</li>
         <li>Your profile{me ? ` and @${me.username}` : ''}, badges and Pin Display</li>
         <li>Your friends and friend requests</li>
@@ -105,7 +105,7 @@ export function RequestDelete({ onCancel, onClose }: { onCancel: () => void; onC
             <Mail size={20} className="shrink-0 text-slate-400 mt-0.5" />
             <div className="text-sm text-slate-300">
               <p className="font-semibold text-ink">Check your email</p>
-              <p className="mt-1 text-[13px]">
+              <p className="mt-1 text-[0.8125rem]">
                 We sent a confirmation link to <b className="text-ink">{maskEmail(user.email ?? '')}</b>. Open it
                 on <b className="text-ink">this device</b> within an hour — you’ll confirm with your
                 {user.providerData.some((p) => p.providerId === 'password') ? ' password' : ' Google sign-in'} there.
@@ -199,7 +199,7 @@ export function ConfirmDelete() {
 
   const busy = !!step
   return (
-    <div className="mx-auto w-full max-w-[440px] pt-4 md:pt-10 flex flex-col gap-4">
+    <div className="mx-auto w-full max-w-[27.5rem] pt-4 md:pt-10 flex flex-col gap-4">
       <h1 className="text-xl font-bold text-ink">Delete your account</h1>
       {problem === undefined ? (
         <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" />Checking your link…</div>
@@ -242,7 +242,7 @@ function Sheet({ label, onBackdrop, children }: { label: string; onBackdrop: () 
       <div
         role="dialog"
         aria-label={label}
-        className="add-card-panel relative w-full md:max-w-[440px] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl overflow-hidden"
+        className="add-card-panel relative w-full md:max-w-[27.5rem] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl overflow-hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="md:hidden mx-auto mt-2 mb-1 w-10 h-1 rounded-full bg-slate-700" />

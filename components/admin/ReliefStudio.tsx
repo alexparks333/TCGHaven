@@ -601,7 +601,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
           <div className="absolute pointer-events-none rounded-full border-2 border-amber-400 bg-amber-400/10 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
             style={{ left: brush.x - brush.r, top: brush.y - brush.r, width: brush.r * 2, height: brush.r * 2 }} />
         )}
-        {kit && brush.on && <p className="absolute top-14 left-0 right-0 text-center text-[11px] text-amber-300 pointer-events-none">Click and drag to paint the selection · hold Alt to erase · scroll or [ ] to resize</p>}
+        {kit && brush.on && <p className="absolute top-14 left-0 right-0 text-center text-[0.6875rem] text-amber-300 pointer-events-none">Click and drag to paint the selection · hold Alt to erase · scroll or [ ] to resize</p>}
         {kit && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 flex gap-1 p-1 rounded-xl bg-black/50 backdrop-blur">
             {(['art', 'pieces', 'levels', 'normals'] as const).map((v) => (
@@ -635,14 +635,14 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                 <p className="text-sm text-slate-400">Where should the AI make this pin&rsquo;s 3D maps?</p>
                 <GpuButtons gpu={gpu} busy={server === null && !!gpu} onPick={(w) => pickGpu(w, true)} />
                 {gpu === 'local' && server === false && <LocalHelp />}
-                {gpuProblem && <p className="text-[11px] text-amber-500">{gpuProblem}</p>}
+                {gpuProblem && <p className="text-[0.6875rem] text-amber-500">{gpuProblem}</p>}
               </div>
             ) : (
               <p className="text-sm text-slate-500 max-w-xs text-center">{server === false ? 'The analysis server isn’t running — start it to analyze this art.' : 'Waiting for the pin art’s analysis…'}</p>
             )}
           </div>
         )}
-        {kit && <p className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-slate-500 pointer-events-none">Drag to turn · scroll to zoom · click a piece to select it (Ctrl/Shift for more) · hold Tab to paint a selection · Esc deselects · Ctrl+Z undo</p>}
+        {kit && <p className="absolute bottom-3 left-0 right-0 text-center text-[0.6875rem] text-slate-500 pointer-events-none">Drag to turn · scroll to zoom · click a piece to select it (Ctrl/Shift for more) · hold Tab to paint a selection · Esc deselects · Ctrl+Z undo</p>}
         {aiRun && <ReliefAnalyzing kind={aiRun.kind} startedAt={aiRun.startedAt} artUrl={badgeAsset(badge.imageUrl)} saving={status === 'Saving the kit…'} />}
         {status && !aiRun && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -687,7 +687,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                     <div className="rounded-xl border border-amber-700/50 bg-amber-900/20 p-3 text-xs text-amber-200 flex flex-col gap-2">
                       This relief ranks its levels the old way, by each piece&apos;s depth over the whole pin.
                       <button onClick={() => set({ levelRule: 'borders', pieces: {}, off: [] })} className="btn-secondary !py-1.5 text-xs self-start">Rank by borders instead</button>
-                      <span className="text-[11px] text-amber-200/70">Usually far better: each piece is ranked against the pieces around it. Clears this relief&apos;s per-piece level moves.</span>
+                      <span className="text-[0.6875rem] text-amber-200/70">Usually far better: each piece is ranked against the pieces around it. Clears this relief&apos;s per-piece level moves.</span>
                     </div>
                   )}
                   {composed && composed.rankArea.length > 0 && (
@@ -702,14 +702,14 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                             <span className={cn(off && 'line-through')}>Level {r + 1}{r === 0 ? ' · lowest' : r === composed.rankArea.length - 1 ? ' · highest' : ''}</span>
                             <span className="ml-auto tabular-nums text-slate-500">{Math.round(composed.rankArea[r] * 100)}%</span>
                             <button type="button" onClick={() => { const ps = onLevel(); if (ps.length) { setSelected(ps[0]); setOthers(ps.slice(1)); anchor.current = ps[0] } }}
-                              title="Select every piece on this level" className="px-1.5 rounded text-[11px] text-slate-400 hover:text-ink hover:bg-slate-700">Select</button>
+                              title="Select every piece on this level" className="px-1.5 rounded text-[0.6875rem] text-slate-400 hover:text-ink hover:bg-slate-700">Select</button>
                             <button type="button" onClick={() => toggleLevel(r)} title={off ? 'Switch this level on' : 'Switch this level off'} aria-label={off ? 'Switch on' : 'Switch off'} className="text-slate-400 hover:text-ink">
                               {off ? <EyeOff size={13} /> : <Eye size={13} />}
                             </button>
                           </div>
                         )
                       })}
-                      <span className="text-[11px] text-slate-500">Switch a level off and its pieces join the nearest level still on. The Levels view shows which is which.</span>
+                      <span className="text-[0.6875rem] text-slate-500">Switch a level off and its pieces join the nearest level still on. The Levels view shows which is which.</span>
                     </div>
                   )}
                 </>
@@ -745,7 +745,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                       </span>
                       <input type="range" min={range.min} max={range.max} step={stepped ? 1 : 0.1} value={offset}
                         onChange={(e) => setRaise(Number(e.target.value))} className="w-full accent-amber-500" />
-                      <span className="block text-[11px] text-slate-500">
+                      <span className="block text-[0.6875rem] text-slate-500">
                         {stepped ? (composed && composed.natural[selected] >= 0 ? levelName(pieceLevel) : 'Not on a level') : 'In tenths of the full height'} · type 0 for as analyzed
                         {stepped && selection.length > 1 && ' · moves every selected piece to this level, together'}
                       </span>
@@ -756,9 +756,9 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                       hint="Eases this piece's edges into what's around it" />
                   </>
                 ) : (
-                  <span className="text-[11px] text-slate-500">Click part of the pin — a face, a gem, the frame — to raise, lower or smooth just that piece. The Pieces view shows them all.</span>
+                  <span className="text-[0.6875rem] text-slate-500">Click part of the pin — a face, a gem, the frame — to raise, lower or smooth just that piece. The Pieces view shows them all.</span>
                 )}
-                {moved > 0 && <button onClick={() => set({ pieces: {}, soft: {}, flat: {} })} className="text-[11px] text-slate-400 underline self-start"><RotateCcw size={11} className="inline mr-1" />Reset every piece</button>}
+                {moved > 0 && <button onClick={() => set({ pieces: {}, soft: {}, flat: {} })} className="text-[0.6875rem] text-slate-400 underline self-start"><RotateCcw size={11} className="inline mr-1" />Reset every piece</button>}
               </div>
 
               <details className="rounded-xl border border-slate-800 p-3 text-xs">
@@ -770,7 +770,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                     {connect && !gpu ? 'Pick where the AI runs' : server === null ? 'Checking the analysis server…' : server ? `${gpu === 'cloud' ? 'Cloud GPU' : 'Server'} ready (${new URL(reliefServerUrl()).host})` : gpu === 'cloud' ? 'The cloud GPU isn’t answering' : 'Analysis server not running'}
                     {server === false && <button onClick={() => (connect && gpu ? pickGpu(gpu) : reliefServerUp().then(setServer))} className="ml-auto underline text-slate-400">Retry</button>}
                   </div>
-                  {gpuProblem && <p className="text-[11px] leading-snug text-amber-500">{gpuProblem}</p>}
+                  {gpuProblem && <p className="text-[0.6875rem] leading-snug text-amber-500">{gpuProblem}</p>}
                   {server === false && gpu !== 'cloud' && <LocalHelp />}
                   <input ref={fileInput} type="file" accept="image/png,image/webp,image/jpeg" className="file:mr-2 file:rounded-lg file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-slate-300" />
                   <div className="flex gap-2">
@@ -785,8 +785,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                     <input type="checkbox" checked={settings.artHoles} onChange={(e) => set({ artHoles: e.target.checked })} />
                     Use transparency channel
                   </label>
-                  <span className="text-[11px] text-slate-500">On: transparent areas inside the art become holes. Off: only the outside is cut out. Analyze again after changing it.</span>
-                  <span className="text-[11px] text-slate-500">Starts over: piece edits belong to one analysis.</span>
+                  <span className="text-[0.6875rem] text-slate-500">On: transparent areas inside the art become holes. Off: only the outside is cut out. Analyze again after changing it.</span>
+                  <span className="text-[0.6875rem] text-slate-500">Starts over: piece edits belong to one analysis.</span>
                 </div>
               </details>
             </fieldset>
@@ -794,7 +794,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
 
           {tab === 'normals' && (
             <fieldset disabled={!kit} className={cn('flex flex-col gap-4', !kit && 'opacity-40')}>
-              <p className="text-[11px] leading-snug text-slate-500">
+              <p className="text-[0.6875rem] leading-snug text-slate-500">
                 The normal map is which way every spot of the pin faces, so it catches the light: your sculpted shape (steps, raises, softening),
                 with the fine surface detail the AI read from the art on top. The pin shows it as colours while this tab is open — blue faces you, red leans right, green leans up.
               </p>
@@ -802,11 +802,11 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                 hint="How much of the AI's fine detail: 0% = the sculpted shape alone · 100% = as analyzed · more = exaggerated" />
               <div className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
                 <span className="text-xs font-semibold text-slate-300">Recalculate Normals</span>
-                <span className="text-[11px] leading-snug text-slate-500">Reads the normals from this pin’s picture again — for a kit whose normals came out weak or wrong. The shape, pieces and finishes stay as they are. About a minute on the GPU.</span>
+                <span className="text-[0.6875rem] leading-snug text-slate-500">Reads the normals from this pin’s picture again — for a kit whose normals came out weak or wrong. The shape, pieces and finishes stay as they are. About a minute on the GPU.</span>
                 <button onClick={recalcNormals} disabled={!server || !!status} className="btn-secondary justify-center text-xs disabled:opacity-50">
                   <Sparkles size={14} />Recalculate Normals
                 </button>
-                {server === false && <span className="text-[11px] text-amber-500">The relief server isn’t running.</span>}
+                {server === false && <span className="text-[0.6875rem] text-amber-500">The relief server isn’t running.</span>}
               </div>
             </fieldset>
           )}
@@ -815,15 +815,15 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
             <fieldset disabled={!kit} className={cn('flex flex-col gap-4', !kit && 'opacity-40')}>
               <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Metal</span>
-                  <span className="text-[11px] text-slate-500">the pin’s sides, back and metal walls</span>
+                  <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-300">Metal</span>
+                  <span className="text-[0.6875rem] text-slate-500">the pin’s sides, back and metal walls</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Metal">
                   {METALS.map((m) => {
                     const on = settings.metalColor.toLowerCase() === m.color
                     return (
                       <button key={m.color} role="radio" aria-checked={on} onClick={() => set({ metalColor: m.color })}
-                        className={cn('flex flex-col items-center gap-1 rounded-lg border p-1.5 text-[11px] font-semibold transition-colors',
+                        className={cn('flex flex-col items-center gap-1 rounded-lg border p-1.5 text-[0.6875rem] font-semibold transition-colors',
                           on ? 'border-amber-500 bg-amber-500/15 text-ink' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200')}>
                         <span className="w-full h-6 rounded-md ring-1 ring-black/30" style={{ background: `linear-gradient(135deg, ${m.color}99, ${m.color} 45%, #ffffffaa 55%, ${m.color} 70%)` }} />
                         {m.name}
@@ -834,23 +834,23 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                 <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
                   Colour
                   <input type="color" value={settings.metalColor} onChange={(e) => set({ metalColor: e.target.value })} className="h-7 w-12 cursor-pointer rounded border border-slate-700 bg-transparent" />
-                  <span className="tabular-nums text-[11px] font-normal text-slate-500">{settings.metalColor}</span>
+                  <span className="tabular-nums text-[0.6875rem] font-normal text-slate-500">{settings.metalColor}</span>
                 </label>
                 <Slider label="Roughness" value={settings.metalRough} min={0} max={1} step={0.01} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(metalRough) => set({ metalRough })}
                   hint="Mirror-polished ← → brushed and satin" />
                 {(settings.metalColor.toLowerCase() !== DEFAULT_METAL.color || settings.metalRough !== DEFAULT_METAL.rough) && (
-                  <button onClick={() => set({ metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough })} className="self-start text-[11px] text-slate-400 underline">Back to the original gold</button>
+                  <button onClick={() => set({ metalColor: DEFAULT_METAL.color, metalRough: DEFAULT_METAL.rough })} className="self-start text-[0.6875rem] text-slate-400 underline">Back to the original gold</button>
                 )}
               </div>
               <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Backing</span>
-                  <span className="text-[11px] text-slate-500">the pin’s body behind the art</span>
+                  <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-300">Backing</span>
+                  <span className="text-[0.6875rem] text-slate-500">the pin’s body behind the art</span>
                 </div>
                 <Slider label="Depth" value={settings.backing} min={0.02} max={0.15} step={0.001} fmt={(v) => `${Math.round((v / DEFAULT_BACKING) * 100)}%`} onChange={(backing) => set({ backing })}
                   hint="Thinner ← → thicker. Only the back moves — the relief’s own depth is on the Relief tab." />
                 {settings.backing !== DEFAULT_BACKING && (
-                  <button onClick={() => set({ backing: DEFAULT_BACKING })} className="self-start text-[11px] text-slate-400 underline">Back to the original thickness</button>
+                  <button onClick={() => set({ backing: DEFAULT_BACKING })} className="self-start text-[0.6875rem] text-slate-400 underline">Back to the original thickness</button>
                 )}
               </div>
             </fieldset>
@@ -861,18 +861,18 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
               {/* 1 · pick pieces of the pin, put them in a layer */}
               <section className="flex flex-col gap-2 rounded-xl border border-slate-800 p-3">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Picked</span>
-                  <span className="text-[11px] text-slate-500">{selection.length ? `${selection.length} piece${selection.length > 1 ? 's' : ''} of the pin` : 'nothing yet'}</span>
-                  {selection.length > 0 && <button onClick={() => pick(0)} className="ml-auto text-[11px] text-slate-400 underline">Clear</button>}
+                  <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-300">Picked</span>
+                  <span className="text-[0.6875rem] text-slate-500">{selection.length ? `${selection.length} piece${selection.length > 1 ? 's' : ''} of the pin` : 'nothing yet'}</span>
+                  {selection.length > 0 && <button onClick={() => pick(0)} className="ml-auto text-[0.6875rem] text-slate-400 underline">Clear</button>}
                 </div>
                 {selection.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button onClick={newLayer} className="btn-secondary !py-1 text-xs"><Plus size={13} />New layer</button>
                     {cur && <button onClick={() => addToLayer(cur.id)} className="btn-secondary !py-1 text-xs max-w-full truncate">Add to “{cur.name || layerLook(cur)}”</button>}
-                    {selection.some((p) => layerOf(p)) && <button onClick={takeOutOfLayers} className="text-[11px] text-slate-400 underline">Take out of layers</button>}
+                    {selection.some((p) => layerOf(p)) && <button onClick={takeOutOfLayers} className="text-[0.6875rem] text-slate-400 underline">Take out of layers</button>}
                   </div>
                 ) : (
-                  <span className="text-[11px] leading-snug text-slate-500">Click pieces of the pin (Ctrl/⌘ or Shift-click for more, or hold Tab and drag), then make a layer of them or add them to one. Everything in a layer shares its look.</span>
+                  <span className="text-[0.6875rem] leading-snug text-slate-500">Click pieces of the pin (Ctrl/⌘ or Shift-click for more, or hold Tab and drag), then make a layer of them or add them to one. Everything in a layer shares its look.</span>
                 )}
               </section>
 
@@ -880,8 +880,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
               <section className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <span className="field-label !mb-0">Layers</span>
-                  <span className="text-[11px] text-slate-500">{finishLayers.length}</span>
-                  <button onClick={newLayer} className="ml-auto inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-ink"><Plus size={12} />{selection.length ? 'New from picked' : 'New layer'}</button>
+                  <span className="text-[0.6875rem] text-slate-500">{finishLayers.length}</span>
+                  <button onClick={newLayer} className="ml-auto inline-flex items-center gap-1 text-[0.6875rem] text-slate-400 hover:text-ink"><Plus size={12} />{selection.length ? 'New from picked' : 'New layer'}</button>
                 </div>
                 <div className="rounded-xl border border-slate-800 divide-y divide-slate-800" onMouseLeave={() => setHoverPieces([])}>
                   {finishLayers.map((l) => {
@@ -899,7 +899,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                         </span>
                         <span className={cn('flex-1 min-w-0', l.hidden && 'opacity-50')}>
                           <span className="block truncate text-xs font-semibold text-ink">{l.name || layerLook(l)}</span>
-                          <span className="block truncate text-[11px] text-slate-500">{layerLook(l)} · {l.pieces.length} piece{l.pieces.length === 1 ? '' : 's'}</span>
+                          <span className="block truncate text-[0.6875rem] text-slate-500">{layerLook(l)} · {l.pieces.length} piece{l.pieces.length === 1 ? '' : 's'}</span>
                         </span>
                         {selection.length > 0 && (
                           <button onClick={(e) => { e.stopPropagation(); addToLayer(l.id) }} title="Add the picked pieces to this layer"
@@ -910,7 +910,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                       </div>
                     )
                   })}
-                  {!finishLayers.length && <p className="p-3 text-[11px] text-slate-500">No layers yet — pick pieces of the pin and make one.</p>}
+                  {!finishLayers.length && <p className="p-3 text-[0.6875rem] text-slate-500">No layers yet — pick pieces of the pin and make one.</p>}
                 </div>
               </section>
 
@@ -922,7 +922,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                       className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-ink placeholder:text-slate-400 outline-none border-b border-slate-700 focus:border-slate-500" />
                     {cur.pieces.length > 0 && (
                       <button onClick={() => { setSelected(cur.pieces[0]); setOthers(cur.pieces.slice(1)); anchor.current = cur.pieces[0] }}
-                        title="Select this layer's pieces on the pin — e.g. to raise them together on the Relief tab" className="text-[11px] text-slate-400 underline shrink-0">Select pieces</button>
+                        title="Select this layer's pieces on the pin — e.g. to raise them together on the Relief tab" className="text-[0.6875rem] text-slate-400 underline shrink-0">Select pieces</button>
                     )}
                     <div className="grid grid-cols-2 gap-1 p-0.5 rounded-lg bg-slate-800 text-xs" role="group" aria-label="Compare">
                       {([false, true] as const).map((o) => (
@@ -934,8 +934,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                   {/* 1 · the finish: what the surface is */}
                   <div className="flex flex-col gap-2.5 rounded-xl border border-slate-800 p-3">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Finish</span>
-                      <span className="text-[11px] text-slate-500">what the surface is made of</span>
+                      <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-300">Finish</span>
+                      <span className="text-[0.6875rem] text-slate-500">what the surface is made of</span>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Finish">
                       {BASE_FINISH_IDS.map((fid) => {
@@ -943,7 +943,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                         const on = finish === fid
                         return (
                           <button key={fid} role="radio" aria-checked={on} title={f.hint} onClick={() => setMaterial(fid)}
-                            className={cn('flex flex-col items-center gap-1 rounded-lg border p-1.5 text-[11px] font-semibold transition-colors',
+                            className={cn('flex flex-col items-center gap-1 rounded-lg border p-1.5 text-[0.6875rem] font-semibold transition-colors',
                               on ? 'border-amber-500 bg-amber-500/15 text-ink' : 'border-slate-800 text-slate-400 hover:border-slate-600 hover:text-slate-200')}>
                             <span className="w-full h-7 rounded-md ring-1 ring-black/30" style={{ background: FINISH_SWATCH[fid] }} />
                             {f.name}
@@ -951,7 +951,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                         )
                       })}
                     </div>
-                    <span className="text-[11px] text-slate-500">{finishDef?.hint}</span>
+                    <span className="text-[0.6875rem] text-slate-500">{finishDef?.hint}</span>
                     {finishDef?.params.map((prm) => prm.options ? (
                       <label key={prm.key} className="block">
                         <span className="text-xs font-semibold text-slate-300">{prm.label}</span>
@@ -959,7 +959,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                           className="input-field !py-1.5 text-sm mt-1">
                           {prm.options.map((o, i) => <option key={o} value={i}>{o}</option>)}
                         </select>
-                        {prm.hint && <span className="block text-[11px] text-slate-500 mt-0.5">{prm.hint}</span>}
+                        {prm.hint && <span className="block text-[0.6875rem] text-slate-500 mt-0.5">{prm.hint}</span>}
                       </label>
                     ) : (
                       <Slider key={prm.key} label={prm.label} value={cur.opts[prm.key] ?? prm.def} min={0} max={1}
@@ -972,8 +972,8 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                   {/* 2 · details: effects layered on top of the finish, any mix */}
                   <div className={cn('flex flex-col gap-2 rounded-xl border border-slate-800 p-3', finish === FINISH_HOLE && 'opacity-40 pointer-events-none')}>
                     <div className="flex items-baseline gap-2">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Details</span>
-                      <span className="text-[11px] text-slate-500">{finish === FINISH_HOLE ? 'a hole has none' : 'effects on top of the finish — mix any'}</span>
+                      <span className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-300">Details</span>
+                      <span className="text-[0.6875rem] text-slate-500">{finish === FINISH_HOLE ? 'a hole has none' : 'effects on top of the finish — mix any'}</span>
                     </div>
                     {[...DETAILS].reverse().map((d) => {
                       const st = detailState(d.kind)
@@ -983,7 +983,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                             <span className="w-8 h-8 shrink-0 rounded-md ring-1 ring-black/30" style={{ background: DETAIL_SWATCH[d.kind] }} />
                             <span className="flex-1 min-w-0">
                               <span className="block text-xs font-semibold text-ink">{d.name}</span>
-                              <span className="block text-[11px] leading-snug text-slate-500">{d.hint}</span>
+                              <span className="block text-[0.6875rem] leading-snug text-slate-500">{d.hint}</span>
                             </span>
                             <span className={cn('relative w-8 h-[18px] shrink-0 rounded-full transition-colors', st === 'on' ? 'bg-amber-500' : 'bg-slate-700')}>
                               <span className={cn('absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all', st === 'on' ? 'left-[16px]' : 'left-[2px]')} />
@@ -998,7 +998,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                                     className="input-field !py-1.5 text-sm mt-1">
                                     {prm.options.map((o, i) => <option key={o} value={i}>{o}</option>)}
                                   </select>
-                                  {prm.hint && <span className="block text-[11px] text-slate-500 mt-0.5">{prm.hint}</span>}
+                                  {prm.hint && <span className="block text-[0.6875rem] text-slate-500 mt-0.5">{prm.hint}</span>}
                                 </label>
                               ) : (
                                 <Slider key={prm.key} label={prm.label} value={detailValue(d.kind, prm.key)} min={0} max={1}
@@ -1018,10 +1018,10 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                             <input value={lentSet.name} onChange={(e) => setLentSet(lentSetIndex, { name: e.target.value })} placeholder={`Set ${lentSetIndex + 1}`}
                               className="flex-1 min-w-0 bg-transparent text-xs text-ink outline-none border-b border-slate-700 focus:border-slate-500" aria-label="Set name" />
                             {settings.lenticularSets.length > 1 && (
-                              <button onClick={() => deleteLentSet(lentSetIndex)} className="text-[11px] text-slate-400 hover:text-red-500 underline">Delete set</button>
+                              <button onClick={() => deleteLentSet(lentSetIndex)} className="text-[0.6875rem] text-slate-400 hover:text-red-500 underline">Delete set</button>
                             )}
                           </div>
-                          <span className="text-[11px] text-slate-500">{lenticularPictures(settings, artUrl)[lentSetIndex].length} of {LENTICULAR_MAX_PER_SET} pictures, left to right · {lentTotal} of {LENTICULAR_MAX_TOTAL} across all sets</span>
+                          <span className="text-[0.6875rem] text-slate-500">{lenticularPictures(settings, artUrl)[lentSetIndex].length} of {LENTICULAR_MAX_PER_SET} pictures, left to right · {lentTotal} of {LENTICULAR_MAX_TOTAL} across all sets</span>
                           <label className="flex items-center gap-2 text-xs text-slate-300">
                             <input type="checkbox" checked={lentSet.useArt} onChange={(e) => setLentSet(lentSetIndex, { useArt: e.target.checked })} className="accent-amber-500" />
                             Use pin art as picture 1
@@ -1031,15 +1031,15 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                               <div className="relative">
                                 {/* eslint-disable-next-line @next/next/no-img-element -- a small preview */}
                                 <img src={badgeAsset(artUrl)} alt="Picture 1: the pin art" className="w-full aspect-square rounded bg-black/40 object-contain ring-1 ring-amber-500/60" />
-                                <span className="absolute top-0.5 left-1 text-[10px] font-bold text-white drop-shadow">1</span>
-                                <span className="absolute inset-x-0 bottom-0 text-center text-[9px] font-semibold text-white bg-black/50 rounded-b">Pin art</span>
+                                <span className="absolute top-0.5 left-1 text-[0.625rem] font-bold text-white drop-shadow">1</span>
+                                <span className="absolute inset-x-0 bottom-0 text-center text-[0.5625rem] font-semibold text-white bg-black/50 rounded-b">Pin art</span>
                               </div>
                             )}
                             {lentSet.frames.map((u, i) => (
                               <div key={u} className="relative group">
                                 {/* eslint-disable-next-line @next/next/no-img-element -- a small preview */}
                                 <img src={badgeAsset(u)} alt={`Picture ${i + 1}`} className="w-full aspect-square rounded bg-black/40 object-contain" />
-                                <span className="absolute top-0.5 left-1 text-[10px] font-bold text-white drop-shadow">{i + 1 + (lentSet.useArt && artUrl ? 1 : 0)}</span>
+                                <span className="absolute top-0.5 left-1 text-[0.625rem] font-bold text-white drop-shadow">{i + 1 + (lentSet.useArt && artUrl ? 1 : 0)}</span>
                                 <div className="absolute inset-x-0 bottom-0 hidden group-hover:flex justify-between p-0.5 bg-black/50 rounded-b text-white">
                                   <button onClick={() => moveFrame(i, -1)} disabled={i === 0} aria-label="Move left" className="disabled:opacity-30"><ChevronLeft size={12} /></button>
                                   <button onClick={() => setLentSet(lentSetIndex, { frames: lentSet.frames.filter((_, j) => j !== i) })} aria-label="Remove"><X size={12} /></button>
@@ -1055,7 +1055,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                             )}
                           </div>
                           <input ref={frameInput} type="file" accept="image/png,image/webp,image/jpeg" multiple hidden onChange={(e) => addFrames(e.target.files)} />
-                          <span className="text-[11px] text-slate-500">Each picture is the whole pin, framed exactly like the pin art — this layer shows its own area of each. Any number of layers can use the same set.</span>
+                          <span className="text-[0.6875rem] text-slate-500">Each picture is the whole pin, framed exactly like the pin art — this layer shows its own area of each. Any number of layers can use the same set.</span>
                         </div>
                               )}
                             </div>
@@ -1072,7 +1072,7 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
                   )}
                 </section>
               ) : finishLayers.length > 0 && (
-                <p className="text-[11px] text-slate-500">Click a layer to edit its look.</p>
+                <p className="text-[0.6875rem] text-slate-500">Click a layer to edit its look.</p>
               )}
             </fieldset>
           )}
@@ -1080,9 +1080,9 @@ export default function ReliefStudio({ badge, onApply, onClose, storage = staffS
 
         <div className="px-4 py-3 border-t border-slate-800 flex flex-col gap-2">
           {error && <span className="text-xs text-red-500">{error}</span>}
-          {badge.model && <span className="text-[11px] text-amber-500">This badge has a 3D model, which the viewer shows instead of a relief. Remove it in the editor.</span>}
+          {badge.model && <span className="text-[0.6875rem] text-amber-500">This badge has a 3D model, which the viewer shows instead of a relief. Remove it in the editor.</span>}
           <button onClick={apply} disabled={!kit || !!status} className="btn-primary justify-center disabled:opacity-50"><Check size={15} />Save relief to badge</button>
-          <span className="text-[11px] text-slate-500 text-center">
+          <span className="text-[0.6875rem] text-slate-500 text-center">
             {kit && unsaved ? <><span className="text-amber-400">● Unsaved changes</span> — kept on this computer until you save. </> : null}
             Saves the badge too — live for everyone straight away.
           </span>
@@ -1121,7 +1121,7 @@ function Slider({ label, value, min, max, step, fmt, onChange, hint }: {
     <label className="block">
       <span className="flex items-center text-xs font-semibold text-slate-300">{label}<span className="ml-auto tabular-nums text-slate-400">{fmt(value)}</span></span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-amber-500" />
-      {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
+      {hint && <span className="block text-[0.6875rem] text-slate-500">{hint}</span>}
     </label>
   )
 }
@@ -1583,7 +1583,7 @@ function GpuButtons({ gpu, busy, onPick }: { gpu: ReliefGpu | null; busy: boolea
 
 function LocalHelp() {
   return (
-    <p className="text-[11px] leading-snug text-slate-500">
+    <p className="text-[0.6875rem] leading-snug text-slate-500">
       HavenRelief isn&rsquo;t running on this computer. On the GPU PC: <code className="text-slate-300">cd tools\havenrelief</code> then{' '}
       <code className="text-slate-300">.venv\Scripts\python server.py</code> — from the live site, start it with{' '}
       <code className="text-slate-300">HAVENRELIEF_ORIGINS=https://www.tcghaven.org</code>.

@@ -3,7 +3,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, createContext, useContext } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { GamePicker } from '@/components/GamePicker'
-import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye } from 'lucide-react'
+import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye, Check } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, CONDITION_LABELS, CONDITION_SHORT, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
@@ -458,7 +458,7 @@ export interface ZoomVersion {
   printing?: string
   marketPrice: number
   priceEstimated?: boolean      // Cardmarket backup price (raw)
-  conditionNote?: string        // a raw copy below Near Mint: "Lightly Played — 90% of the Near Mint price"
+  conditionNote?: string        // a raw copy below Near Mint: its condition ("Lightly Played") — never the pricing math
   priceSource?: { label: string; url: string }  // priced from PriceCharting → the credit link
   rawEstimate?: boolean         // a slab with no sales for its grade: valued at the raw price
 }
@@ -494,7 +494,7 @@ export function ownedVersions(
       // the printing is added only when raw copies come in more than one (below)
       const cond = conditionFactor(rep) !== 1 ? CONDITION_SHORT[rep.condition] : ''
       const extra = [rep.isFoil && !printing ? 'Foil' : '', printing ?? ''].filter(Boolean).join(' · ')
-      const conditionNote = cond ? `${CONDITION_LABELS[rep.condition]} — ${Math.round(conditionFactor(rep) * 100)}% of the Near Mint price` : undefined
+      const conditionNote = cond ? CONDITION_LABELS[rep.condition] : undefined
       const v: ZoomVersion = { label: cond ? `Raw · ${cond}` : 'Raw', quantity, printing, marketPrice: rep.currentPrice ?? conditionPrice(rawPrice, rep), priceEstimated: rawEstimated, conditionNote }
       return { score: -1, v, extra }
     })
@@ -590,7 +590,7 @@ export function SlabTileOverlay({ slab }: { slab: SlabInfo }) {
         }}
       />
       <div
-        className="absolute top-[3px] inset-x-[3px] flex items-center justify-between px-1.5 rounded-t-[6px] font-black leading-none pointer-events-none transition-all duration-200 opacity-60 backdrop-blur-[2px] group-hover:opacity-100"
+        className="absolute top-[0.1875rem] inset-x-[0.1875rem] flex items-center justify-between px-1.5 rounded-t-[0.375rem] font-black leading-none pointer-events-none transition-all duration-200 opacity-60 backdrop-blur-[2px] group-hover:opacity-100"
         style={{
           height: '14%',
           fontSize: 'clamp(8px, 9cqw, 14px)',
@@ -1293,22 +1293,13 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
                 category level collapses into a single-line select instead of its own list. */}
             {!setsLoading && (
               <div className="mb-6">
-                {/* Category dropdown */}
-                <div className="relative inline-block mb-3">
-                  <select
-                    value={activeCategoryLabel}
-                    onChange={(e) => selectCategory(e.target.value)}
-                    className="appearance-none bg-slate-900 border rounded-lg pl-3 pr-8 py-2 text-sm font-medium outline-none cursor-pointer"
-                    style={{ borderColor: gameColor + '55', color: gameColor }}
-                  >
-                    {categories.map((group) => (
-                      <option key={group.label} value={group.label} className="bg-slate-900 text-ink">
-                        {group.label} ({group.sets.length})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronRight size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none opacity-70" style={{ color: gameColor }} />
-                </div>
+                {/* Category picker (SetGroupPicker below) */}
+                <SetGroupPicker
+                  groups={categories}
+                  active={activeCategoryLabel}
+                  onPick={selectCategory}
+                  color={gameColor}
+                />
 
                 {/* Sets within the active category */}
                 <div className="flex gap-2 flex-wrap">
@@ -1386,7 +1377,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
                       key={r}
                       onClick={() => toggleRarity(r)}
                       className={cn(
-                        'px-2.5 py-1 rounded-full text-[11px] font-medium border transition-all',
+                        'px-2.5 py-1 rounded-full text-[0.6875rem] font-medium border transition-all',
                         !active && 'bg-slate-900/50 text-slate-600 border-slate-800 line-through',
                       )}
                       style={active ? { backgroundColor: color + '22', borderColor: color + '55', color } : {}}
@@ -1396,7 +1387,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
                   )
                 })}
                 {hiddenRarities.size > 0 && (
-                  <button onClick={() => setHiddenRarities(new Set())} className="text-[11px] text-slate-500 hover:text-ink px-1">
+                  <button onClick={() => setHiddenRarities(new Set())} className="text-[0.6875rem] text-slate-500 hover:text-ink px-1">
                     Reset
                   </button>
                 )}
@@ -1437,7 +1428,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
                           )}
                           <span className="text-xs text-slate-500 shrink-0">{group.cards.length} {group.cards.length === 1 ? 'card' : 'cards'}</span>
                         </div>
-                        <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+                        <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] md:grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] min-[1700px]:grid-cols-[repeat(auto-fill,minmax(6.2222rem,1fr))]">
                           {group.cards.map((card) => {
                             const idx = i++
                             return (
@@ -1507,7 +1498,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
 
             {/* Catalog-backed card grid */}
             {!catalogPending && !isSpecial && filteredEnriched.length > 0 && (
-              <div className={cn('grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]', artPending && 'hidden')}>
+              <div className={cn('grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] md:grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] min-[1700px]:grid-cols-[repeat(auto-fill,minmax(6.2222rem,1fr))]', artPending && 'hidden')}>
                 {filteredEnriched.map((card, i) => (
                   <CardTile
                     key={card.id}
@@ -1641,7 +1632,7 @@ function SpecialBucket({ cards, gameColor, game, searchQuery, hiddenRarities, on
             <span className="text-sm font-bold text-ink">{setName}</span>
             <span className="text-xs text-slate-500">{setCards.length} card{setCards.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(96px,1fr))] md:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]">
+          <div className="grid gap-2 md:gap-3 grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] md:grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] min-[1700px]:grid-cols-[repeat(auto-fill,minmax(6.2222rem,1fr))]">
             {setCards.map((card) => (
               <InventoryCardTile
                 key={card.id}
@@ -1802,7 +1793,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
         {/* A slab's grade banner owns the top edge, so its owned badge drops to the bottom corner */}
         {card.owned && !pick && (
           card.quantity > 1 ? (
-            <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none', card.slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
+            <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[0.5625rem] font-black text-white leading-none', card.slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
               ×{card.quantity > 99 ? '99+' : card.quantity}
             </div>
           ) : (
@@ -1814,7 +1805,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
           )
         )}
 
-        <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1 py-0.5 text-[8px] font-bold text-white/80 leading-none">
+        <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1 py-0.5 text-[0.5rem] font-bold text-white/80 leading-none">
           #{card.number}
         </div>
       </div>
@@ -1824,21 +1815,21 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] mx-auto truncate"><CardName name={card.name} /></div>
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[8.75rem] mx-auto truncate"><CardName name={card.name} /></div>
             {/* Pokemon catalog cards carry no rarity field — omit the chip rather than show it empty */}
-            {card.rarity && <div className="text-[10px] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
+            {card.rarity && <div className="text-[0.625rem] mt-0.5 font-medium" style={{ color: rarityColor }}>{rarityLabel.replace('_', ' ')}</div>}
             {/* Always the card's raw (ungraded) price — a slab's own price is in the zoom view */}
             {card.marketPrice > 0 && (
-              <div className="text-[10px] text-slate-400 mt-0.5">
+              <div className="text-[0.625rem] text-slate-400 mt-0.5">
                 ${card.marketPrice.toFixed(2)}{card.priceSource === 'cardmarket' && <span className="ml-1 font-semibold">Est.</span>}
                 {card.owned && card.slab && <span className="ml-1 text-slate-500">raw</span>}
               </div>
             )}
             {pick ? null : card.owned
-              ? <div className="text-[10px] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
-              : <div className="text-[10px] text-slate-500 mt-0.5">not collected</div>}
+              ? <div className="text-[0.625rem] text-emerald-600 mt-0.5">✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}</div>
+              : <div className="text-[0.625rem] text-slate-500 mt-0.5">not collected</div>}
             {!pick && card.owned && card.slab && (
-              <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{versions()?.map((v) => v.label).join(' · ')}</div>
+              <div className="text-[0.625rem] text-amber-600 mt-0.5 font-semibold">{versions()?.map((v) => v.label).join(' · ')}</div>
             )}
           </div>
           <div className="w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45 mx-auto -mt-1" />
@@ -1913,7 +1904,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         {slab && <SlabTileOverlay slab={slab} />}
 
         {card.quantity > 1 ? (
-          <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[9px] font-black text-white leading-none', slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
+          <div className={cn('absolute right-1 rounded-full px-1.5 py-0.5 text-[0.5625rem] font-black text-white leading-none', slab ? 'bottom-1' : 'top-1')} style={{ backgroundColor: gameColor }}>
             ×{card.quantity > 99 ? '99+' : card.quantity}
           </div>
         ) : (
@@ -1925,7 +1916,7 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         )}
 
         {card.number && (
-          <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1 py-0.5 text-[8px] font-bold text-white/80 leading-none">
+          <div className="absolute bottom-1 left-1 bg-black/70 rounded px-1 py-0.5 text-[0.5rem] font-bold text-white/80 leading-none">
             #{card.number}
           </div>
         )}
@@ -1936,10 +1927,10 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
         // instead, so this never renders there — even if a touch somehow sets the hover state.
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 pointer-events-none [@media(hover:none)]:hidden">
           <div className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-center shadow-xl whitespace-nowrap">
-            <div className="text-xs font-semibold text-ink leading-tight max-w-[140px] mx-auto truncate"><CardName name={card.name} /></div>
-            {card.gradingCompany && <div className="text-[10px] text-amber-600 mt-0.5 font-semibold">{card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}</div>}
-            {showPrinting(printingText(card), card.rarity) && <div className="text-[10px] text-amber-600 mt-0.5">{printingText(card)}</div>}
-            <div className="text-[10px] text-emerald-600 mt-0.5">
+            <div className="text-xs font-semibold text-ink leading-tight max-w-[8.75rem] mx-auto truncate"><CardName name={card.name} /></div>
+            {card.gradingCompany && <div className="text-[0.625rem] text-amber-600 mt-0.5 font-semibold">{card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}</div>}
+            {showPrinting(printingText(card), card.rarity) && <div className="text-[0.625rem] text-amber-600 mt-0.5">{printingText(card)}</div>}
+            <div className="text-[0.625rem] text-emerald-600 mt-0.5">
               ✓ {card.quantity > 1 ? `×${card.quantity} owned` : 'owned'}
             </div>
           </div>
@@ -2189,6 +2180,104 @@ export function preloadFullCard(url?: string) {
 // timing this is tuned to match.
 // Also used by a profile's Cardex showcase (ProfilePage.tsx).
 // `viewOnly` (a profile's showcase): just the card and its details — no owned count or eBay link.
+/** "{n} sets" — the count chip on the set-group picker and its menu */
+function SetCount({ n, color, solid }: { n: number; color: string; solid: boolean }) {
+  return (
+    <span
+      className="inline-flex items-baseline gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-bold tabular-nums whitespace-nowrap"
+      style={solid
+        ? { background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff', boxShadow: `0 1px 6px -1px ${color}88` }
+        : { backgroundColor: color + '1a', color }}
+    >
+      {n}<span className="font-semibold opacity-85">{n === 1 ? 'set' : 'sets'}</span>
+    </span>
+  )
+}
+
+/** The Cardex's set-group picker ("Main Sets · 5 sets") — its own button and menu in the game's colour
+ *  (the browser's plain <select> list looked out of place, 2026-11-19). Closes on a pick, a click
+ *  outside or Escape; the arrow keys move through the groups. */
+function SetGroupPicker({ groups, active, onPick, color }: {
+  groups: { label: string; sets: unknown[] }[]
+  active: string
+  onPick: (label: string) => void
+  color: string
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const current = groups.find((g) => g.label === active)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent | TouchEvent) => { if (!rootRef.current?.contains(e.target as Node)) setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('touchstart', onDown)
+    document.addEventListener('keydown', onKey)
+    // Focus the picked group so the arrow keys start from it
+    requestAnimationFrame(() => listRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus())
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('touchstart', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+  const onListKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])
+    const i = items.indexOf(document.activeElement as HTMLButtonElement)
+    items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus()
+  }
+  return (
+    <div ref={rootRef} className="relative inline-block mb-3">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="group inline-flex items-center gap-2.5 bg-slate-900 border rounded-xl pl-3.5 pr-3 py-2 shadow-sm transition-shadow hover:shadow-md outline-none focus-visible:ring-2"
+        style={{ borderColor: color + '55', ['--tw-ring-color' as string]: color + '55' }}
+      >
+        <span className="text-sm font-semibold" style={{ color }}>{active}</span>
+        <SetCount n={current?.sets.length ?? 0} color={color} solid />
+        <ChevronRight size={14} className={cn('opacity-70 transition-transform duration-200', open ? '-rotate-90' : 'rotate-90')} style={{ color }} />
+      </button>
+      {open && (
+        <div
+          ref={listRef}
+          role="listbox"
+          aria-label="Set group"
+          onKeyDown={onListKey}
+          className="set-group-menu absolute left-0 top-full mt-2 z-40 min-w-full w-max max-w-[min(22rem,calc(100vw-2rem))] max-h-[min(26rem,60vh)] overflow-y-auto overscroll-contain bg-slate-900 border rounded-xl p-1.5 shadow-xl flex flex-col gap-0.5"
+          style={{ borderColor: color + '44', boxShadow: `0 18px 40px -12px rgba(40,22,8,0.45), 0 0 0 1px ${color}14` }}
+        >
+          {groups.map((g) => {
+            const on = g.label === active
+            return (
+              <button
+                key={g.label}
+                type="button"
+                role="option"
+                aria-selected={on}
+                onClick={() => { setOpen(false); if (!on) onPick(g.label) }}
+                className="flex items-center justify-between gap-4 rounded-lg px-3 py-2 text-left text-sm font-semibold outline-none transition-colors hover:bg-[var(--hover)] focus-visible:bg-[var(--hover)]"
+                style={{ color: on ? color : undefined, backgroundColor: on ? color + '14' : undefined, ['--hover' as string]: color + '1f' }}
+              >
+                <span className="flex items-center gap-2 text-ink" style={on ? { color } : undefined}>
+                  <span className="w-3.5 flex justify-center">{on && <Check size={14} strokeWidth={2.75} />}</span>
+                  {g.label}
+                </span>
+                <SetCount n={g.sets.length} color={color} solid={on} />
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: ZoomCardData | null; onClose: () => void; viewOnly?: boolean }) {
   const [visible, setVisible] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -2325,12 +2414,64 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   // one rises in from the other side, settling with a slight overshoot — like flipping through a
   // stack. Down the list = the card leaves upward.
   const dir = swapDir.current
+  // Only transforms on the swap layer: opacity or a filter on an ancestor of the 3D card makes the
+  // browser flatten it while they run — the raw card lost its rounded corners mid-swap and a slab's
+  // edges / shine showed as a glare on its left, then both snapped back when the effect ended
+  // (2026-11-19). So the fade is on each face (faceFade) and the flash is a light inside the face.
   const swapStyle: React.CSSProperties = swap === 'out'
-    ? { transform: `translateY(${-dir * 22}px) rotateX(${dir * 32}deg) scale(0.84)`, opacity: 0, filter: 'blur(3px) brightness(1.7)', transition: `transform ${SWAP_OUT_MS}ms cubic-bezier(.55,0,1,.45), opacity ${SWAP_OUT_MS}ms ease-in, filter ${SWAP_OUT_MS}ms ease-in` }
+    ? { transform: `translateY(${-dir * 22}px) rotateX(${dir * 32}deg) scale(0.84)`, transition: `transform ${SWAP_OUT_MS}ms cubic-bezier(.55,0,1,.45)` }
     : swap === 'pre'
-    ? { transform: `translateY(${dir * 30}px) rotateX(${-dir * 32}deg) scale(0.84)`, opacity: 0, filter: 'blur(3px) brightness(1.7)', transition: 'none' }
-    : { transform: 'none', opacity: 1, filter: 'none', transition: `transform ${SWAP_IN_MS}ms cubic-bezier(.34,1.56,.64,1), opacity ${SWAP_IN_MS * 0.6}ms ease-out, filter ${SWAP_IN_MS}ms ease-out` }
+    ? { transform: `translateY(${dir * 30}px) rotateX(${-dir * 32}deg) scale(0.84)`, transition: 'none' }
+    : { transform: 'none', transition: `transform ${SWAP_IN_MS}ms cubic-bezier(.34,1.56,.64,1)` }
+  const faceFade: React.CSSProperties = swap === 'out'
+    ? { opacity: 0, transition: `opacity ${SWAP_OUT_MS}ms ease-in` }
+    : swap === 'pre'
+    ? { opacity: 0, transition: 'none' }
+    : { opacity: 1, transition: `opacity ${SWAP_IN_MS * 0.6}ms ease-out` }
+  // The flash of light as the card leaves and arrives (was brightness(1.7) on the whole layer)
+  const swapFlash = (
+    <div
+      aria-hidden
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background: 'radial-gradient(circle at 50% 45%, rgba(255,255,255,0.75), rgba(255,255,255,0.25) 60%, rgba(255,255,255,0) 85%)',
+        opacity: swap === 'idle' ? 0 : 0.7,
+        transition: swap === 'out' ? `opacity ${SWAP_OUT_MS}ms ease-in` : swap === 'pre' ? 'none' : `opacity ${SWAP_IN_MS}ms ease-out`,
+      }}
+    />
+  )
   const fadeStyle: React.CSSProperties = { opacity: swap === 'idle' ? 1 : 0.25, transition: 'opacity 180ms ease' }
+
+  // The owned-version bubbles (tap to swap) — placed beside the card on a computer, beside the info
+  // panel on a phone
+  const versionBubbles = (place: string) => (
+    <div role="tablist" aria-label="Your copies of this card" aria-orientation="vertical" className={cn('card-zoom-versions flex-col gap-1.5', place)}>
+            {versions!.map((ver, i) => {
+              const on = i === picked
+              return (
+                <button
+                  key={i}
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setVi(i)}
+                  title={ver.slab ? `Your ${ver.label} slab` : `Your ${ver.label.toLowerCase()} cop${ver.quantity > 1 ? 'ies' : 'y'}`}
+                  className={cn(
+                    'whitespace-nowrap text-[0.6875rem] font-bold leading-none px-2.5 py-1.5 rounded-full border shadow-lg backdrop-blur-md transition-all duration-200',
+                    on ? 'scale-105' : 'hover:scale-105 hover:brightness-125',
+                  )}
+                  style={{
+                    animationDelay: `${120 + i * 60}ms`,
+                    ...(on
+                      ? { background: 'linear-gradient(135deg, #f3cf72, #d39b2c)', color: '#2a1a05', borderColor: '#fbe7a8', boxShadow: '0 4px 16px -2px rgba(211,155,44,0.6)' }
+                      : { background: 'rgba(18,14,10,0.72)', color: '#f1e6d2', borderColor: 'rgba(255,255,255,0.16)' }),
+                  }}
+                >
+                  {ver.label}{ver.quantity > 1 ? ` ×${ver.quantity}` : ''}
+                </button>
+              )
+            })}
+    </div>
+  )
 
   return (
     <div
@@ -2381,10 +2522,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               return (
                 <div
                   key={i}
-                  className={cn('absolute inset-0 pointer-events-none', slab ? 'rounded-[18px]' : 'rounded-2xl')}
+                  className={cn('absolute inset-0 pointer-events-none', slab ? 'rounded-[1.125rem]' : 'rounded-2xl')}
                   style={slab
-                    ? { transform: `translateZ(${z}px)`, border: '1.5px solid rgba(220,232,246,0.3)' }
-                    : { transform: `translateZ(${z}px)`, backgroundColor: '#1b1b22' }}
+                    ? { transform: `translateZ(${z}px)`, border: '1.5px solid rgba(220,232,246,0.3)', ...faceFade }
+                    : { transform: `translateZ(${z}px)`, backgroundColor: '#1b1b22', ...faceFade }}
                 />
               )
             })}
@@ -2394,20 +2535,21 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 file), rather than "revealing" full color/brightness on zoom. */}
             {slab ? (
               <div
-                className="card-zoom-face absolute inset-0 rounded-[18px]"
-                style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)` }}
+                className="card-zoom-face absolute inset-0 rounded-[1.125rem]"
+                style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)`, ...faceFade }}
               >
                 <FullSlab slab={slab} name={d.name} number={d.number} setName={d.setName}>
                   {d.imageUrl
                     ? <ZoomImage url={d.imageUrl} alt={d.name} />
                     : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
                 </FullSlab>
-                <div className="card-zoom-glint absolute inset-0 rounded-[18px] pointer-events-none" />
+                <div className="card-zoom-glint absolute inset-0 rounded-[1.125rem] pointer-events-none" />
+                <div className="absolute inset-0 rounded-[1.125rem] overflow-hidden pointer-events-none">{swapFlash}</div>
               </div>
             ) : (
             <div
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
-              style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` }}
+              style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`, ...faceFade }}
             >
               {d.imageUrl ? (
                 <ZoomImage url={d.imageUrl} alt={d.name} filter={d.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
@@ -2415,12 +2557,13 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 <img src={NO_CARD_IMAGE} alt={d.name} className="w-full h-full object-cover" style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }} />
               )}
               <div className="card-zoom-glint absolute inset-0 pointer-events-none" />
+              {swapFlash}
             </div>
             )}
             {/* Back face — a generic card back (no real per-game back art exists), briefly visible
                 twice mid-flip since it never actually shows for more than an instant */}
             <div
-              className={cn('card-zoom-face card-zoom-face-back absolute inset-0 overflow-hidden flex items-center justify-center', slab ? 'rounded-[18px]' : 'rounded-2xl')}
+              className={cn('card-zoom-face card-zoom-face-back absolute inset-0 overflow-hidden flex items-center justify-center', slab ? 'rounded-[1.125rem]' : 'rounded-2xl')}
               style={{
                 transform: `rotateY(180deg) translateZ(${(slab ? SLAB_DEPTH : CARD_DEPTH) / 2}px)`,
                 background: `radial-gradient(circle at 50% 40%, ${d.glowColor}33, #0a0a0f 70%)`,
@@ -2436,42 +2579,12 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           </div>
 
           {/* Your versions of this card — a small column of bubbles off the card's bottom-right
-              corner (over it on a phone, where there's no room beside it). Tap one to swap. */}
-          {visible && many && (
-            <div
-              role="tablist"
-              aria-label="Your copies of this card"
-              aria-orientation="vertical"
-              className="card-zoom-versions absolute z-20 bottom-3 right-3 sm:right-auto sm:left-full sm:ml-4 sm:bottom-2 flex flex-col items-end sm:items-start gap-1.5"
-            >
-              {versions!.map((ver, i) => {
-                const on = i === picked
-                return (
-                  <button
-                    key={i}
-                    role="tab"
-                    aria-selected={on}
-                    onClick={() => setVi(i)}
-                    title={ver.slab ? `Your ${ver.label} slab` : `Your ${ver.label.toLowerCase()} cop${ver.quantity > 1 ? 'ies' : 'y'}`}
-                    className={cn(
-                      'whitespace-nowrap text-[11px] font-bold leading-none px-2.5 py-1.5 rounded-full border shadow-lg backdrop-blur-md transition-all duration-200',
-                      on ? 'scale-105' : 'hover:scale-105 hover:brightness-125',
-                    )}
-                    style={{
-                      animationDelay: `${120 + i * 60}ms`,
-                      ...(on
-                        ? { background: 'linear-gradient(135deg, #f3cf72, #d39b2c)', color: '#2a1a05', borderColor: '#fbe7a8', boxShadow: '0 4px 16px -2px rgba(211,155,44,0.6)' }
-                        : { background: 'rgba(18,14,10,0.72)', color: '#f1e6d2', borderColor: 'rgba(255,255,255,0.16)' }),
-                    }}
-                  >
-                    {ver.label}{ver.quantity > 1 ? ` ×${ver.quantity}` : ''}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+              corner on a computer. On a phone there's no room beside the card, so they sit beside
+              the info panel instead (below) — never over the card. Tap one to swap. */}
+          {visible && many && versionBubbles('hidden sm:flex absolute z-20 left-full ml-4 bottom-2 items-start')}
+
           {visible && (
-            <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', slab ? 'rounded-[18px]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
+            <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', slab ? 'rounded-[1.125rem]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
           )}
         </div>
 
@@ -2487,21 +2600,23 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             bled THROUGH the translucent background from behind. Using a fully opaque background
             here instead (not `.card-glass`) blocks that regardless of how large the glow grows. */}
         {visible && (
-          <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs">
+          // On a phone the version bubbles sit to the right of this panel (sm and up: beside the card)
+          <div className="flex items-center gap-2.5 max-w-full">
+          <div className="card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs min-w-0">
             <div className="text-base font-bold text-ink leading-tight"><CardName name={d.name} /></div>
             {d.setName && <div className="text-xs font-medium text-slate-400">{d.setName}</div>}
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-xs text-slate-500">#{d.number}</span>
               {d.rarityLabel && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: d.rarityColor + '22', color: d.rarityColor }}>
+                <span className="text-[0.6875rem] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: d.rarityColor + '22', color: d.rarityColor }}>
                   {d.rarityLabel}
                 </span>
               )}
               {showPrinting(printing, d.rarityLabel) && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700">{printing}</span>
+                <span className="text-[0.6875rem] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700">{printing}</span>
               )}
               {slab && (
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 border border-amber-500/30">
+                <span className="text-[0.6875rem] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 border border-amber-500/30">
                   {slab.company}{slab.grade ? ` ${slab.grade}` : ''}
                 </span>
               )}
@@ -2510,7 +2625,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               <div className="text-sm font-semibold text-ink" style={fadeStyle}>
                 ${price.toFixed(2)}
                 {priceEstimated && (
-                  <span className="ml-1.5 text-[11px] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
+                  <span className="ml-1.5 text-[0.6875rem] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
                     Est.
                   </span>
                 )}
@@ -2518,10 +2633,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             )}
             {price > 0 && priceSource && <span style={fadeStyle}><PriceChartingCredit label={priceSource.label} url={priceSource.url} /></span>}
             {price > 0 && v?.conditionNote && (
-              <div className="text-[11px] text-slate-500" style={fadeStyle}>{v.conditionNote}</div>
+              <div className="text-[0.6875rem] text-slate-500" style={fadeStyle}>{v.conditionNote}</div>
             )}
             {price > 0 && slab && rawEstimate && (
-              <div className="text-[11px] text-slate-500" style={fadeStyle}>Raw est. — no {slabLabel} sales on PriceCharting yet</div>
+              <div className="text-[0.6875rem] text-slate-500" style={fadeStyle}>Raw est. — no {slabLabel} sales on PriceCharting yet</div>
             )}
             {!viewOnly && (
               <>
@@ -2530,12 +2645,14 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 </div>
                 <button
                   onClick={() => openEbaySearch(ebayCard)}
-                  className="mt-1 text-[11px] text-slate-500 hover:text-ink underline underline-offset-2"
+                  className="mt-1 text-[0.6875rem] text-slate-500 hover:text-ink underline underline-offset-2"
                 >
                   Search Recently Sold Listings
                 </button>
               </>
             )}
+          </div>
+          {many && versionBubbles('flex sm:hidden shrink-0 relative z-10 items-start')}
           </div>
         )}
       </div>

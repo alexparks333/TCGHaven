@@ -108,15 +108,15 @@ export default function SoldPage() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-2 md:gap-3 mb-6">
           <div className="card-glass px-3 py-3 md:px-4 md:py-4 min-w-0">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1 truncate">Amount Sold</div>
+            <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-1 truncate">Amount Sold</div>
             <div className="text-base md:text-xl font-bold text-ink truncate">{formatCurrency(stats.totalRevenue)}</div>
           </div>
           <div className="card-glass px-3 py-3 md:px-4 md:py-4 min-w-0">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1 truncate">Cards Sold</div>
+            <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-1 truncate">Cards Sold</div>
             <div className="text-base md:text-xl font-bold text-ink truncate">{stats.totalCards}</div>
           </div>
           <div className="card-glass px-3 py-3 md:px-4 md:py-4 min-w-0">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1 truncate">Total P&L</div>
+            <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-1 truncate">Total P&L</div>
             <div className={`text-base md:text-xl font-bold truncate ${stats.totalPnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {stats.totalPnl >= 0 ? '+' : ''}{formatCurrency(stats.totalPnl)}
             </div>
@@ -197,19 +197,19 @@ export default function SoldPage() {
                   <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[60px] md:w-10 md:h-14 object-contain rounded-md" />
+                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[3.75rem] md:w-10 md:h-14 object-contain rounded-md" />
                       ) : (
-                        <div className="w-11 h-[60px] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                        <div className="w-11 h-[3.75rem] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
-                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[18px] text-center text-[9px] font-bold leading-none px-1 py-[3px] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-ink text-[15px] md:text-sm truncate"><CardName name={card.name} /></div>
+                      <div className="font-semibold text-ink text-[0.9375rem] md:text-sm truncate"><CardName name={card.name} /></div>
                       <div className="md:hidden text-xs text-slate-500 truncate">
                         {card.set} · {conditionLabel(card)}
                       </div>
                       <div className="hidden md:block text-xs text-slate-500">#{card.number}</div>
-                      <div className="text-[10px] text-slate-600 mt-0.5">
+                      <div className="text-[0.625rem] text-slate-600 mt-0.5">
                         Sold {card.soldDate}<span className="md:hidden"> · paid {formatCurrency(card.purchasePrice * card.quantity)}</span>
                       </div>
                     </div>
@@ -219,7 +219,7 @@ export default function SoldPage() {
                   <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice * card.quantity)}</div>
                   {/* Sold for — on mobile the P&L sits under it, like Inventory's value + P&L */}
                   <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
-                    <span className="text-[15px] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(card.soldPrice)}</span>
+                    <span className="text-[0.9375rem] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(card.soldPrice)}</span>
                     <span className={`md:hidden text-xs font-medium ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                     </span>

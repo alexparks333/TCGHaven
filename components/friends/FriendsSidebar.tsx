@@ -41,7 +41,7 @@ export function FriendsSidebarSection() {
           <Users size={14} className="text-slate-400 group-hover/card:text-ink transition-colors" />
           <span className="text-xs font-bold uppercase tracking-wider text-slate-400 group-hover/card:text-ink transition-colors">Friends</span>
           {friends.length > 0 && (
-            <span className="text-[10px] font-bold text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded-full leading-none">{friends.length}</span>
+            <span className="text-[0.625rem] font-bold text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded-full leading-none">{friends.length}</span>
           )}
           <ChevronRight size={12} className="text-slate-500 opacity-0 -translate-x-1 group-hover/card:opacity-100 group-hover/card:translate-x-0 transition-all" />
         </div>
@@ -86,7 +86,7 @@ export function FriendsSidebarSection() {
           </span>
           <span className="min-w-0">
             <span className="block text-xs font-semibold text-ink">Invite your friends</span>
-            <span className="block text-[10px] text-slate-500">Collecting is better together</span>
+            <span className="block text-[0.625rem] text-slate-500">Collecting is better together</span>
           </span>
         </button>
       ) : (
@@ -100,12 +100,12 @@ export function FriendsSidebarSection() {
               <Avatar seed={e.uid} name={e.profile?.displayName ?? ''} photoURL={e.profile?.photoURL} size={26} />
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-semibold text-ink truncate">{e.profile?.displayName ?? '…'}</span>
-                {e.profile?.username && <span className="block text-[10px] text-slate-500 truncate leading-tight">@{e.profile.username}</span>}
+                {e.profile?.username && <span className="block text-[0.625rem] text-slate-500 truncate leading-tight">@{e.profile.username}</span>}
               </span>
             </button>
           ))}
           {friends.length > SHOWN && (
-            <div className="w-full flex items-center justify-center gap-1 mt-0.5 py-1 rounded-lg text-[11px] font-semibold text-slate-500 group-hover/card:text-ink transition-colors">
+            <div className="w-full flex items-center justify-center gap-1 mt-0.5 py-1 rounded-lg text-[0.6875rem] font-semibold text-slate-500 group-hover/card:text-ink transition-colors">
               See all {friends.length}
               <ChevronRight size={12} />
             </div>

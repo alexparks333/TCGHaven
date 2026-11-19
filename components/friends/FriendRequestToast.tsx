@@ -67,7 +67,7 @@ export function FriendRequestToast() {
 
   return (
     <div
-      className="fixed z-[80] right-3 left-3 md:left-auto md:right-5 md:w-[360px] flex flex-col gap-2 pointer-events-none"
+      className="fixed z-[80] right-3 left-3 md:left-auto md:right-5 md:w-[22.5rem] flex flex-col gap-2 pointer-events-none"
       style={{ top: 'calc(env(safe-area-inset-top) + 12px)' }}
       aria-live="polite"
     >

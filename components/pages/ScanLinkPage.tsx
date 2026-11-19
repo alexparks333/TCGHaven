@@ -38,7 +38,7 @@ export default function ScanLinkPage() {
 
   return (
     <div className="min-h-[70dvh] flex items-center justify-center px-5">
-      <div className="card-glass rounded-2xl w-full max-w-[420px] p-6 text-center">
+      <div className="card-glass rounded-2xl w-full max-w-[26.25rem] p-6 text-center">
         <div className="mx-auto w-14 h-14 rounded-2xl bg-violet-600 text-white flex items-center justify-center">
           <ScanLine size={28} />
         </div>

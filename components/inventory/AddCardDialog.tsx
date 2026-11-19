@@ -6,7 +6,7 @@ import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS, hasPrintings, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
-import { conditionPrice, conditionFactor } from '@/lib/pricing'
+import { conditionPrice } from '@/lib/pricing'
 import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
@@ -491,8 +491,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       <div className="add-card-backdrop absolute inset-0 bg-black/60 backdrop-blur-sm touch-none" onClick={onClose} />
       {/* The dialog stays centred; the chosen card's view slides out to its right (xl screens —
           the room beside a centred dialog) */}
-      <div className="relative w-full max-w-[592px]">
-      <div className="add-card-panel scroll-themed relative w-full max-w-[592px] min-w-0 card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
+      <div className="relative w-full max-w-[37rem]">
+      <div className="add-card-panel scroll-themed relative w-full max-w-[37rem] min-w-0 card-glass rounded-2xl p-5 md:p-6 max-h-[92dvh] overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
@@ -540,7 +540,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
               {/* English and Japanese Pokémon are separate catalogs — different sets, numbers and
                   prices — so the search targets one at a time. */}
               {form.game === 'pokemon' && !editCard && (
-                <div className="flex mb-1.5 rounded-lg border border-slate-800 overflow-hidden text-[11px] font-medium flex-shrink-0">
+                <div className="flex mb-1.5 rounded-lg border border-slate-800 overflow-hidden text-[0.6875rem] font-medium flex-shrink-0">
                   {([['en', 'English'], ['ja', 'Japanese']] as const).map(([lang, label]) => (
                     <button
                       key={lang}
@@ -590,7 +590,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                     className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-800 transition-colors text-left border-b border-slate-800 last:border-0"
                   >
                     {result.imageUrl ? (
-                      <div className="w-16 h-[88px] rounded-lg bg-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
+                      <div className="w-16 h-[5.5rem] rounded-lg bg-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
                         <img
                           src={cardImage(result.imageUrl, 'thumb')}
                           alt={result.name}
@@ -598,7 +598,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                         />
                       </div>
                     ) : (
-                      <div className="w-16 h-[88px] bg-slate-800 rounded-lg flex-shrink-0 flex items-center justify-center text-slate-600 text-xs">
+                      <div className="w-16 h-[5.5rem] bg-slate-800 rounded-lg flex-shrink-0 flex items-center justify-center text-slate-600 text-xs">
                         ?
                       </div>
                     )}
@@ -748,11 +748,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                 return (
                   <>
                     <span className="text-emerald-600 font-medium">{formatCurrency(mp)}</span>
-                    {conditionFactor(form) !== 1 && (
-                      <span className="text-[11px] text-slate-500">{CONDITION_LABELS[form.condition]} — {Math.round(conditionFactor(form) * 100)}% of Near Mint ({formatCurrency(catalogMarketPrice())})</span>
-                    )}
                     {gradedOn && quoteKey && gradedQuote?.key === quoteKey && (
-                      <span className="text-[11px] text-slate-500">Raw est. — no {form.gradingCompany} {form.grade} sales on PriceCharting yet</span>
+                      <span className="text-[0.6875rem] text-slate-500">Raw est. — no {form.gradingCompany} {form.grade} sales on PriceCharting yet</span>
                     )}
                   </>
                 )
@@ -793,7 +790,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             const edition = (form.edition ?? defaultEdition(vp)) as Edition
             const editions = editionsOf(vp) as Edition[]
             const finishes = finishesOf(vp, edition) as Finish[]
-            const priceTag = (p: number) => p > 0 ? <span className="block text-[10px] opacity-80">{formatCurrency(p)}</span> : <span className="block text-[10px] opacity-60">no price</span>
+            const priceTag = (p: number) => p > 0 ? <span className="block text-[0.625rem] opacity-80">{formatCurrency(p)}</span> : <span className="block text-[0.625rem] opacity-60">no price</span>
             const chip = (active: boolean) => cn(
               'flex-1 py-1.5 px-2 rounded-lg text-xs font-medium transition-all border leading-tight',
               active ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-ink hover:border-slate-700',
@@ -964,13 +961,13 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                           />
                         </div>
                         {invalid && grader && (
-                          <p className="text-[11px] text-red-600 mt-1.5">
+                          <p className="text-[0.6875rem] text-red-600 mt-1.5">
                             {grader.name} doesn&apos;t give a {form.grade}
                             {form.gradingCompany.toUpperCase() === 'PSA' || form.gradingCompany.toUpperCase() === 'TAG' ? ' — half grades only go up to 8.5, never 9.5' : ''}.
                           </p>
                         )}
                         {form.grade && !invalid && (
-                          <p className="text-[11px] text-slate-500 mt-1.5 uppercase tracking-wide font-semibold">{gradeWord(form.gradingCompany, form.grade, form.gradeTier)}</p>
+                          <p className="text-[0.6875rem] text-slate-500 mt-1.5 uppercase tracking-wide font-semibold">{gradeWord(form.gradingCompany, form.grade, form.gradeTier)}</p>
                         )}
                       </div>
                       {/* A 10's label: Beckett Pristine (gold) or Black Label; CGC / SGC / TAG Gem Mint or Pristine */}
@@ -997,7 +994,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                           <div className="grid grid-cols-4 gap-1.5">
                             {SUBGRADE_KEYS.map((k) => (
                               <label key={k} className="block">
-                                <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-1 text-center">{k}</span>
+                                <span className="block text-[0.625rem] font-semibold uppercase tracking-wide text-slate-500 mb-1 text-center">{k}</span>
                                 <input
                                   type="text"
                                   inputMode="decimal"
@@ -1052,13 +1049,13 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                   return (
                     <div className="haven-label">
                       <div className="flex-1 min-w-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 truncate">{form.set || 'Set'}</div>
-                        <div className="text-[13px] font-bold uppercase tracking-wide text-ink leading-tight truncate">{form.name || 'Card name'}</div>
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mt-0.5 truncate">{form.gradingCompany}{form.gradeTier === 'black' ? ' · Black Label' : ''}{form.number ? ` · #${form.number}` : ''}{form.certNumber ? ` · ${form.certNumber}` : ''}</div>
+                        <div className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-slate-500 truncate">{form.set || 'Set'}</div>
+                        <div className="text-[0.8125rem] font-bold uppercase tracking-wide text-ink leading-tight truncate">{form.name || 'Card name'}</div>
+                        <div className="text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-slate-500 mt-0.5 truncate">{form.gradingCompany}{form.gradeTier === 'black' ? ' · Black Label' : ''}{form.number ? ` · #${form.number}` : ''}{form.certNumber ? ` · ${form.certNumber}` : ''}</div>
                       </div>
                       <div className="text-right shrink-0 pl-3 border-l border-slate-700/60">
-                        {word && <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{word}</div>}
-                        <div className="text-[26px] font-bold text-ink leading-none mt-1 tabular-nums">{form.grade || '—'}</div>
+                        {word && <div className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{word}</div>}
+                        <div className="text-[1.625rem] font-bold text-ink leading-none mt-1 tabular-nums">{form.grade || '—'}</div>
                       </div>
                     </div>
                   )
@@ -1075,18 +1072,18 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                 <div className="text-sm font-medium text-ink"><CardName name={form.name} /></div>
                 <div className="text-xs text-slate-500">{form.set}{form.number ? ` · #${form.number}` : ''}</div>
                 {form.game === 'riftbound' && form.nexus && (
-                  <span className="mt-1 inline-block text-[10px] font-bold uppercase text-blue-600 border border-blue-300 rounded px-1 py-0.5">Nexus</span>
+                  <span className="mt-1 inline-block text-[0.625rem] font-bold uppercase text-blue-600 border border-blue-300 rounded px-1 py-0.5">Nexus</span>
                 )}
                 {hasPrintings(form.game) && (japanese || (variantPrices && (form.edition !== 'unlimited' || form.finish === 'reverse'))) && (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {variantPrices && form.edition && form.edition !== 'unlimited' && (
-                      <span className="text-[10px] font-bold uppercase text-amber-700 border border-amber-400 rounded px-1 py-0.5">{EDITION_LABELS[form.edition]}</span>
+                      <span className="text-[0.625rem] font-bold uppercase text-amber-700 border border-amber-400 rounded px-1 py-0.5">{EDITION_LABELS[form.edition]}</span>
                     )}
                     {variantPrices && form.finish === 'reverse' && (
-                      <span className="text-[10px] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">Reverse Holo</span>
+                      <span className="text-[0.625rem] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">Reverse Holo</span>
                     )}
                     {japanese && (
-                      <span className="text-[10px] font-bold uppercase text-red-600 border border-red-300 rounded px-1 py-0.5">Japanese</span>
+                      <span className="text-[0.625rem] font-bold uppercase text-red-600 border border-red-300 rounded px-1 py-0.5">Japanese</span>
                     )}
                   </div>
                 )}
@@ -1118,10 +1115,10 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       {/* Wide screens: the chosen card on display beside the form — a framed stand with the card
           (in its slab when it's graded) and a brass nameplate */}
       {form.imageUrl && (
-      <aside key={form.imageUrl} className="card-stage-wrap hidden xl:block absolute left-full top-1/2 ml-7 w-[290px]">
+      <aside key={form.imageUrl} className="card-stage-wrap hidden xl:block absolute left-full top-1/2 ml-7 w-[18.125rem]">
         <div className="showcase-frame">
           <div className="showcase-inner px-5 pt-4 pb-5 flex flex-col items-center gap-4">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <div className="flex items-center gap-2 text-[0.625rem] font-semibold uppercase tracking-[0.16em] text-slate-500">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GAME_COLORS[form.game] }} />
               {GAME_LABELS[form.game]}{japanese ? ' · Japanese' : ''}
             </div>
@@ -1148,8 +1145,8 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
             </div>
             <div className="haven-plate w-full text-center">
               {/* The name with its printing (Charizard - Reverse Holo) and that printing's price */}
-              <div className="text-[13px] font-semibold text-ink leading-snug line-clamp-2"><CardName name={nameWithPrinting(form.name, form)} /></div>
-              <div className="text-[11px] text-slate-500 mt-0.5 truncate">{[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}</div>
+              <div className="text-[0.8125rem] font-semibold text-ink leading-snug line-clamp-2"><CardName name={nameWithPrinting(form.name, form)} /></div>
+              <div className="text-[0.6875rem] text-slate-500 mt-0.5 truncate">{[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}</div>
               {catalogMarketPrice() > 0 && (
                 <div className="mt-1 text-sm font-semibold text-emerald-600">{formatCurrency(gradedMarket ? gradedMarket.price : conditionPrice(catalogMarketPrice(), form))}</div>
               )}

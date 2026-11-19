@@ -121,13 +121,13 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
       <div className="relative">
         <CommunityHeader community={community} className="rounded-3xl shadow-[0_24px_50px_-28px_rgba(40,25,10,0.8)]" />
         {/* The community's emblem, half over the header's bottom edge in a frosted frame */}
-        <div className="absolute left-5 md:left-9 bottom-0 translate-y-1/2 z-[5] w-[104px] h-[104px] md:w-[136px] md:h-[136px] rounded-[32px] p-2 md:p-2.5 bg-[#3a2a1a]/25 backdrop-blur-md ring-1 ring-white/35 shadow-[0_16px_34px_-12px_rgba(30,18,8,0.65)]">
+        <div className="absolute left-5 md:left-9 bottom-0 translate-y-1/2 z-[5] w-[6.5rem] h-[6.5rem] md:w-[8.5rem] md:h-[8.5rem] rounded-[2rem] p-2 md:p-2.5 bg-[#3a2a1a]/25 backdrop-blur-md ring-1 ring-white/35 shadow-[0_16px_34px_-12px_rgba(30,18,8,0.65)]">
           {community.page?.emblem ? (
             // the creator's own picture (Studio → Page details → Community picture)
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={badgeArt(community.page.emblem, 400)} alt="" className="w-full h-full rounded-[24px] object-cover shadow-[0_2px_6px_rgba(0,0,0,0.25)]" />
+            <img src={badgeArt(community.page.emblem, 400)} alt="" className="w-full h-full rounded-[1.5rem] object-cover shadow-[0_2px_6px_rgba(0,0,0,0.25)]" />
           ) : (
-            <div className="w-full h-full rounded-[24px] flex items-center justify-center pinbook-serif text-5xl md:text-6xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.25)]"
+            <div className="w-full h-full rounded-[1.5rem] flex items-center justify-center pinbook-serif text-5xl md:text-6xl font-bold text-white shadow-[inset_0_-6px_12px_rgba(0,0,0,0.25),inset_0_2px_0_rgba(255,255,255,0.25)]"
               style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${community.color} 82%, white), ${community.color} 55%, color-mix(in srgb, ${community.color} 70%, black))` }}>
               {(community.name.trim()[0] || '★').toUpperCase()}
             </div>
@@ -140,10 +140,10 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
         <div className="min-w-0 lg:col-start-1 lg:row-start-1 px-2 md:px-4">
           {/* beside the emblem (below it on a phone) */}
           {/* clear of the book on the right (phones and tablets) */}
-          <div className={cn('pt-16 sm:pt-4 sm:pl-[124px] md:pl-[164px]', book && 'pr-[128px] sm:pr-[180px] lg:pr-0')}>
+          <div className={cn('pt-16 sm:pt-4 sm:pl-[7.75rem] md:pl-[10.25rem]', book && 'pr-[8rem] sm:pr-[11.25rem] lg:pr-0')}>
             <div className="min-w-0">
-              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#8a6420]">Community</p>
-              <h1 className="pinbook-serif text-3xl md:text-[40px] font-bold text-ink leading-[1.05] mt-0.5">{community.name}</h1>
+              <p className="text-[0.6875rem] font-bold uppercase tracking-[0.22em] text-[#8a6420]">Community</p>
+              <h1 className="pinbook-serif text-3xl md:text-[2.5rem] font-bold text-ink leading-[1.05] mt-0.5">{community.name}</h1>
               {community.tagline && <p className="mt-1.5 text-base md:text-lg italic text-slate-500" style={{ fontFamily: 'Georgia, serif' }}>{community.tagline}</p>}
             </div>
           </div>
@@ -161,10 +161,10 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
           </div>
           {(community.games ?? []).length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8a6420]">Collects</span>
+              <span className="mr-1 text-[0.625rem] font-bold uppercase tracking-[0.2em] text-[#8a6420]">Collects</span>
               {(community.games ?? []).map((g) => (
                 // a tag in the game's own colour: a solid edge on the left, its colour washed behind the name
-                <span key={g} className="inline-flex items-center rounded-[5px] pl-2 pr-2.5 py-[3px] text-[11px] font-bold uppercase tracking-[0.08em] border-l-[3px]"
+                <span key={g} className="inline-flex items-center rounded-[0.3125rem] pl-2 pr-2.5 py-[0.1875rem] text-[0.6875rem] font-bold uppercase tracking-[0.08em] border-l-[3px]"
                   style={{ borderColor: GAME_COLORS[g], background: `color-mix(in srgb, ${GAME_COLORS[g]} 16%, #fbf6ea)`, color: `color-mix(in srgb, ${GAME_COLORS[g]} 65%, #2b2014)` }}>
                   {GAME_LABELS[g]}
                 </span>
@@ -195,9 +195,9 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
                 const on = (current?.id ?? 'home') === t.id
                 return (
                   <button key={t.id} type="button" onClick={() => pick(t.id)}
-                    className={cn('relative shrink-0 px-4 md:px-5 py-2.5 pinbook-serif text-[15px] font-bold transition-colors whitespace-nowrap', on ? 'text-ink' : 'text-slate-500 hover:text-ink')}>
+                    className={cn('relative shrink-0 px-4 md:px-5 py-2.5 pinbook-serif text-[0.9375rem] font-bold transition-colors whitespace-nowrap', on ? 'text-ink' : 'text-slate-500 hover:text-ink')}>
                     {t.title || 'Untitled'}
-                    <span className={cn('absolute left-3 right-3 -bottom-px h-[3px] rounded-full transition-colors', on ? 'bg-[#7a5230]' : 'bg-transparent')} />
+                    <span className={cn('absolute left-3 right-3 -bottom-px h-[0.1875rem] rounded-full transition-colors', on ? 'bg-[#7a5230]' : 'bg-transparent')} />
                   </button>
                 )
               })}
@@ -230,7 +230,7 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
                 <MembersColumn community={uid} book={book} members={members} look={community.page?.members} />
                 <button type="button" onClick={() => builder.onSelect(MEMBERS_ID)} className="absolute inset-0 z-10 cursor-pointer" style={{ borderRadius: 'inherit' }} aria-label="Edit Members" />
                 <div className={cn('absolute -top-3.5 left-4 right-4 z-20 flex items-center gap-1 transition-opacity', builder.selected === MEMBERS_ID ? 'opacity-100' : 'opacity-0 group-hover/blk:opacity-100')}>
-                  <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[11px] font-bold shadow">Members</span>
+                  <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[0.6875rem] font-bold shadow">Members</span>
                   <span className="flex-1" />
                   <button type="button" onClick={() => builder.onStyle(MEMBERS_ID)} className="rounded-full bg-[#f6eedb] border border-[#c4ae83] shadow p-1.5 text-[#7a5230] hover:text-ink" aria-label="Style Members — colours and fonts" title="Style — colours and fonts"><Palette size={13} /></button>
                 </div>
@@ -292,7 +292,7 @@ function BlockBuilder({ blocks, ctx, builder }: { blocks: Block[]; ctx: BlockCon
               {/* clicks select the block (the block's own links and buttons are for fans) */}
               <button type="button" onClick={() => builder.onSelect(b.id)} style={radius} className="absolute inset-0 z-10 cursor-pointer" aria-label={`Edit ${blockName(b.type)}`} />
               <div className={cn('absolute -top-3.5 left-4 right-4 z-20 flex items-center gap-1 transition-opacity', on ? 'opacity-100' : 'opacity-0 group-hover/blk:opacity-100')}>
-                <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[11px] font-bold shadow">{blockName(b.type)}</span>
+                <span className="rounded-full bg-[#7a5230] text-[#fbf6ea] px-2.5 py-0.5 text-[0.6875rem] font-bold shadow">{blockName(b.type)}</span>
                 <span className="flex-1" />
                 <span className="flex items-center rounded-full bg-[#f6eedb] border border-[#c4ae83] shadow">
                   <button type="button" onClick={() => builder.onStyle(b.id)} className="p-1.5 pl-2 text-[#7a5230] hover:text-ink" aria-label="Style this block — colours and fonts" title="Style — colours and fonts"><Palette size={13} /></button>
@@ -329,7 +329,7 @@ function ShowcaseBook({ book, onOpen, coverRef, straight, away }: {
         onPointerMove={(e) => { if (e.pointerType !== 'mouse') return; const r = e.currentTarget.getBoundingClientRect(); setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }) }}
         onPointerLeave={() => setTilt(null)}
         style={away ? { visibility: 'hidden' } : undefined}
-        className="relative w-[118px] sm:w-[170px] lg:w-[280px] aspect-[0.71] outline-none [perspective:1100px] cursor-pointer">
+        className="relative w-[7.375rem] sm:w-[10.625rem] lg:w-[17.5rem] aspect-[0.71] outline-none [perspective:1100px] cursor-pointer">
         {/* its shadow on the page, moving opposite the tilt */}
         <span aria-hidden className="absolute left-[8%] right-[2%] bottom-[-7%] h-[12%] rounded-[50%] bg-[#2b1a0c]/40 blur-xl transition-transform duration-200"
           style={{ transform: `translateX(${(-ry - 18) * 0.6}px) scaleX(${t ? 0.92 : 1})` }} />
@@ -338,7 +338,7 @@ function ShowcaseBook({ book, onOpen, coverRef, straight, away }: {
           <BookThickness look={book.book.coverStyle} />
           <span className="absolute inset-0"><BookCover set={book.book} badges={null} defs={book.badges} /></span>
           {/* the light catching the cover as it turns */}
-          <span aria-hidden className="absolute inset-0 rounded-[10px] pointer-events-none mix-blend-overlay transition-opacity duration-200"
+          <span aria-hidden className="absolute inset-0 rounded-[0.625rem] pointer-events-none mix-blend-overlay transition-opacity duration-200"
             style={{ opacity: t ? 1 : straight ? 0 : 0.35, background: `linear-gradient(${105 + (t ? (t.x - 0.5) * 60 : 0)}deg, transparent 25%, rgba(255,255,255,0.6) ${45 + (t ? (t.x - 0.5) * 30 : 0)}%, transparent 65%)` }} />
         </span>
       </button>
@@ -426,16 +426,16 @@ export function MembersColumn({ community, book, members, sample, look }: { comm
                   {top && (place !== null ? (
                     <span className="w-8 shrink-0 flex justify-center"><Medal place={place} style={o.medalStyle} art={o.medalArt?.[place] || undefined} shine={o.shine} size={place === 0 ? 32 : 28} /></span>
                   ) : (
-                    <span className="w-8 shrink-0 text-center pinbook-serif text-[14px] font-bold tabular-nums text-[color:var(--b-muted)]">{m.hidden ? '–' : i + 1}</span>
+                    <span className="w-8 shrink-0 text-center pinbook-serif text-[0.875rem] font-bold tabular-nums text-[color:var(--b-muted)]">{m.hidden ? '–' : i + 1}</span>
                   ))}
-                  <span className="shrink-0 rounded-[9px] p-[2px]" style={{ background: metal ? `linear-gradient(150deg, ${metal.hi}, ${metal.mid} 55%, ${metal.lo})` : 'transparent', borderRadius: o.round ? 999 : 9 }}>
+                  <span className="shrink-0 rounded-[0.5625rem] p-[0.125rem]" style={{ background: metal ? `linear-gradient(150deg, ${metal.hi}, ${metal.mid} 55%, ${metal.lo})` : 'transparent', borderRadius: o.round ? 999 : 9 }}>
                     <Avatar seed={m.uid} name={name} photoURL={m.profile?.photoURL} size={30} className={o.round ? '!rounded-full' : '!rounded-md'} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold truncate text-[color:var(--b-title)] group-hover:underline underline-offset-2 decoration-[color:var(--b-accent)]">{name}</span>
-                    {line && <span className="block text-[11px] truncate text-[color:var(--b-muted)]">{line}</span>}
+                    {line && <span className="block text-[0.6875rem] truncate text-[color:var(--b-muted)]">{line}</span>}
                     {o.bars && total > 0 && !m.hidden && (
-                      <span className="mt-1 block h-[3px] rounded-full overflow-hidden bg-[color:var(--b-hair)]">
+                      <span className="mt-1 block h-[0.1875rem] rounded-full overflow-hidden bg-[color:var(--b-hair)]">
                         <span className="block h-full rounded-full bg-[color:var(--b-accent)]" style={{ width: `${Math.min(100, (m.badges / total) * 100)}%` }} />
                       </span>
                     )}

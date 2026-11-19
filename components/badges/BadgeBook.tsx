@@ -469,13 +469,13 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       {open && interactive && (
         <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
           <span className="block text-sm font-bold text-ink leading-tight">{def.name}</span>
-          <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
+          <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
             {tier ? <><Check size={10} />{TIER_NAMES[tier]}{toNext ? ` · ${toNext} more ${def.slotNoun} for ${TIER_NAMES[nextTier(def, badges?.progress[def.id])]}` : ''}</> : <><Lock size={10} />Not earned yet{toNext ? ` · ${toNext} more ${def.slotNoun} to unlock` : ''}</>}
           </span>
-          <span className="block text-[11px] text-slate-400 mt-2 leading-snug">{def.description}</span>
+          <span className="block text-[0.6875rem] text-slate-400 mt-2 leading-snug">{def.description}</span>
           {tier < 3 && (
             <span className="block mt-2">
-              <span className="flex justify-between text-[10px] font-semibold text-slate-500 mb-1">
+              <span className="flex justify-between text-[0.625rem] font-semibold text-slate-500 mb-1">
                 <span>{next ? `To ${TIER_NAMES[next]}` : isMe ? 'Your progress' : 'Progress'}</span>
                 <span>{have} / {next ? needNext : total} {def.slotNoun}</span>
               </span>
@@ -508,7 +508,7 @@ function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: num
           </span>
         ))}
       </span>
-      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[9px] font-semibold uppercase tracking-wider text-slate-500">
+      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[0.5625rem] font-semibold uppercase tracking-wider text-slate-500">
         {on.map((k) => (
           <span key={k} className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: TIER_BAR[k] }} />

@@ -119,7 +119,7 @@ function Panel({ uid }: { uid: string }) {
     : f.status === 'accepted' ? 'Friends ✓'
     : f.fromMe ? 'You sent her a request' : 'She sent you a request'
 
-  const position = 'left-3 md:left-[288px]'
+  const position = 'left-3 md:left-[18rem]'
   const bottom = { bottom: 'calc(env(safe-area-inset-bottom) + 84px)' }
 
   if (!open) {
@@ -134,7 +134,7 @@ function Panel({ uid }: { uid: string }) {
     )
   }
 
-  const btn = 'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-semibold transition-colors disabled:opacity-50 text-left'
+  const btn = 'w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[0.8125rem] font-semibold transition-colors disabled:opacity-50 text-left'
 
   return (
     <div
@@ -155,7 +155,7 @@ function Panel({ uid }: { uid: string }) {
       <div className="flex gap-1 p-1.5 pb-0">
         {([['general', 'Friends & badges'], ['community', 'Community']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={cn('flex-1 rounded-lg py-1.5 text-[11px] font-bold transition-colors', tab === k ? 'bg-slate-800 text-ink' : 'text-slate-500 hover:text-ink')}>{label}</button>
+            className={cn('flex-1 rounded-lg py-1.5 text-[0.6875rem] font-bold transition-colors', tab === k ? 'bg-slate-800 text-ink' : 'text-slate-500 hover:text-ink')}>{label}</button>
         ))}
       </div>
 
@@ -165,8 +165,8 @@ function Panel({ uid }: { uid: string }) {
           <div className="flex gap-1.5">
             <input value={earnerName} onChange={(e) => setEarnerName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addEarner() }}
               placeholder="Name (blank = random)" maxLength={40}
-              className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-2 text-[13px] text-ink placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-slate-600" />
-            <button onClick={addEarner} className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-3 text-[13px] font-semibold">Earn</button>
+              className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-2 text-[0.8125rem] text-ink placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-slate-600" />
+            <button onClick={addEarner} className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-3 text-[0.8125rem] font-semibold">Earn</button>
           </div>
           <button onClick={addBurst} disabled={burst} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
             {burst ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
@@ -180,8 +180,8 @@ function Panel({ uid }: { uid: string }) {
           <div className="flex gap-1.5">
             <input value={memberName} onChange={(e) => setMemberName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addMember() }}
               placeholder="Name (blank = random)" maxLength={40}
-              className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-2 text-[13px] text-ink placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-slate-600" />
-            <button onClick={addMember} className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-3 text-[13px] font-semibold">Join</button>
+              className="min-w-0 flex-1 rounded-xl bg-slate-800 px-3 py-2 text-[0.8125rem] text-ink placeholder:text-slate-500 outline-none focus:ring-1 focus:ring-slate-600" />
+            <button onClick={addMember} className="shrink-0 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-3 text-[0.8125rem] font-semibold">Join</button>
           </div>
           <button onClick={() => { for (let i = 0; i < 5; i++) sendDevMember(); setMessage('Five members joined.') }} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
             <UserPlus size={15} />Five members join
@@ -198,8 +198,8 @@ function Panel({ uid }: { uid: string }) {
           <Link href={`/c/${uid}`} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink mt-2')}>
             <ExternalLink size={15} />Open my community page
           </Link>
-          <span className="text-[10px] text-slate-500 px-1">Fake earners get a random badge from your book; fake members a random number of your badges and cards. Only on this device — nothing is saved, a reload clears them.</span>
-          {message && <div className="text-[11px] text-slate-400 px-1 pt-1">{message}</div>}
+          <span className="text-[0.625rem] text-slate-500 px-1">Fake earners get a random badge from your book; fake members a random number of your badges and cards. Only on this device — nothing is saved, a reload clears them.</span>
+          {message && <div className="text-[0.6875rem] text-slate-400 px-1 pt-1">{message}</div>}
         </div>
       ) : (
       <div className="p-3 flex flex-col gap-1.5">
@@ -228,7 +228,7 @@ function Panel({ uid }: { uid: string }) {
         <button onClick={() => call('toggle-cardex')} disabled={!!busy || !status?.exists} className={cn(btn, 'bg-slate-800 hover:bg-slate-700 text-ink')}>
           {busy === 'toggle-cardex' ? <Loader2 size={15} className="animate-spin" /> : <BookOpen size={15} />}
           <span className="flex-1">Tess shares her Cardex</span>
-          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', status?.cardex ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>
+          <span className={cn('text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full', status?.cardex ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>
             {status?.cardex ? 'ON' : 'OFF'}
           </span>
         </button>
@@ -241,17 +241,17 @@ function Panel({ uid }: { uid: string }) {
           <button onClick={() => setDevBadgePct(badgePct === null ? 100 : null)} className="flex items-center gap-2 text-sm text-ink">
             <Award size={15} />
             <span className="flex-1 text-left">Preview badge progress</span>
-            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', badgePct !== null ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>{badgePct !== null ? `${badgePct}%` : 'OFF'}</span>
+            <span className={cn('text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full', badgePct !== null ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300')}>{badgePct !== null ? `${badgePct}%` : 'OFF'}</span>
           </button>
           {badgePct !== null && (
             <>
               <input type="range" min={0} max={100} step={1} value={badgePct} onChange={(e) => setDevBadgePct(Number(e.target.value))} className="w-full accent-emerald-500" aria-label="Badge progress %" />
               <div className="flex gap-1">
                 {[0, 50, 75, 90, 100].map((v) => (
-                  <button key={v} onClick={() => setDevBadgePct(v)} className={cn('flex-1 rounded-md py-0.5 text-[11px] font-semibold', badgePct === v ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:text-ink')}>{v}%</button>
+                  <button key={v} onClick={() => setDevBadgePct(v)} className={cn('flex-1 rounded-md py-0.5 text-[0.6875rem] font-semibold', badgePct === v ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:text-ink')}>{v}%</button>
                 ))}
               </div>
-              <span className="text-[10px] text-slate-500">Every badge as if this much of it were collected — this device only</span>
+              <span className="text-[0.625rem] text-slate-500">Every badge as if this much of it were collected — this device only</span>
             </>
           )}
         </div>
@@ -259,7 +259,7 @@ function Panel({ uid }: { uid: string }) {
           <BellRing size={15} />Replay request popups
         </button>
 
-        {message && <div className="text-[11px] text-slate-400 px-1 pt-1">{message}</div>}
+        {message && <div className="text-[0.6875rem] text-slate-400 px-1 pt-1">{message}</div>}
       </div>
       )}
     </div>

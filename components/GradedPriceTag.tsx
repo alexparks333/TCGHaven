@@ -37,7 +37,7 @@ export function GradedPriceTag({ card, className = '' }: { card: SlabCard; class
     return (
       <span
         title={`No ${s.slab} sales on PriceCharting yet, so this is TCGplayer's ungraded price — a graded copy is usually worth more.`}
-        className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded border border-dashed border-slate-500/50 text-slate-500 whitespace-nowrap ${className}`}
+        className={`inline-flex items-center text-[0.625rem] font-semibold px-1.5 py-0.5 rounded border border-dashed border-slate-500/50 text-slate-500 whitespace-nowrap ${className}`}
       >
         Raw est.
       </span>
@@ -50,7 +50,7 @@ export function GradedPriceTag({ card, className = '' }: { card: SlabCard; class
       rel="noopener noreferrer"
       onClick={stop}
       title={`PriceCharting's ${s.label} price — from recent sales, estimated where there are few. Opens this card on PriceCharting.`}
-      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/30 hover:bg-amber-500/20 whitespace-nowrap transition-colors ${className}`}
+      className={`inline-flex items-center gap-1 text-[0.625rem] font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/30 hover:bg-amber-500/20 whitespace-nowrap transition-colors ${className}`}
     >
       {s.label} · PriceCharting <ExternalLink size={10} aria-hidden />
     </a>
@@ -91,7 +91,7 @@ export function PriceChartingCredit({ label, url, className = '' }: { label: str
       rel="noopener noreferrer"
       onClick={stop}
       title={`PriceCharting's ${label} price — from recent sales, estimated where there are few. Opens this card on PriceCharting.`}
-      className={`inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 hover:underline ${className}`}
+      className={`inline-flex items-center gap-1 text-[0.6875rem] font-semibold text-amber-700 hover:underline ${className}`}
     >
       {label} · PriceCharting <ExternalLink size={11} aria-hidden />
     </a>

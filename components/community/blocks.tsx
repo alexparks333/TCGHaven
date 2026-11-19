@@ -276,7 +276,7 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
         : shown.length === 0 ? <p className="text-sm text-[color:var(--b-muted)]">No one has earned a badge yet — collect the cards and be the first.</p>
         : (
           <div className="-mx-1">
-            {lo.headers && <div className={cn(cols, 'px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--b-muted)] border-b border-[color:var(--b-line)]')}>
+            {lo.headers && <div className={cn(cols, 'px-3 pb-1.5 text-[0.625rem] font-bold uppercase tracking-[0.2em] text-[color:var(--b-muted)] border-b border-[color:var(--b-line)]')}>
               <span>Collector</span><span>Badge</span><span className="text-right">Earned</span>
             </div>}
             <ol>
@@ -296,8 +296,8 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
                       const who = (<>
                       <span className="shrink-0"><Avatar seed={a.member} name={name} photoURL={a.profile?.photoURL} size={26} className="!rounded-md" /></span>
                       <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-semibold text-[color:var(--b-title)] group-hover:underline underline-offset-2 decoration-[color:var(--b-accent)]">{name}</span>
-                        <span className="sm:hidden block truncate [font-family:var(--b-title-font)] text-[11px] font-bold text-[color:var(--b-accent)]">{def.name}</span>
+                        <span className="block truncate text-[0.8125rem] font-semibold text-[color:var(--b-title)] group-hover:underline underline-offset-2 decoration-[color:var(--b-accent)]">{name}</span>
+                        <span className="sm:hidden block truncate [font-family:var(--b-title-font)] text-[0.6875rem] font-bold text-[color:var(--b-accent)]">{def.name}</span>
                       </span>
                       </>)
                       // Every real member's name opens their profile (fake dev earners have none)
@@ -308,9 +308,9 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
                       <span className={cn('relative shrink-0 flex items-center justify-center', how === 'arrive' && 'board-pin-pop')} style={{ width: lo.pin + 2, height: Math.min(lo.pin + 6, 44) }}>
                         <BadgePin art={def.art} imageUrl={def.imageUrl} size={lo.pin} />
                       </span>
-                      <span className="hidden sm:block truncate [font-family:var(--b-title-font)] text-[13px] font-bold text-[color:var(--b-accent)]">{def.name}</span>
+                      <span className="hidden sm:block truncate [font-family:var(--b-title-font)] text-[0.8125rem] font-bold text-[color:var(--b-accent)]">{def.name}</span>
                     </span>
-                    <span className={cn('relative text-right text-[11px] tabular-nums whitespace-nowrap', i === 0 && lo.highlight ? 'font-semibold' : 'text-[color:var(--b-muted)]')}
+                    <span className={cn('relative text-right text-[0.6875rem] tabular-nums whitespace-nowrap', i === 0 && lo.highlight ? 'font-semibold' : 'text-[color:var(--b-muted)]')}
                       style={i === 0 && lo.highlight ? { color: hl } : undefined}>
                       <span className="hidden sm:inline">{timeAgo(a.earnedAt)}</span><span className="sm:hidden">{shortAgo(a.earnedAt)}</span>
                     </span>
@@ -355,7 +355,7 @@ function Announcements({ block, ctx }: { block: Extract<Block, { type: 'announce
                       className="p-1 text-[color:var(--b-muted)] hover:text-[#b8402f]"><Trash2 size={14} /></button>
                   </span>
                 )}
-                <span className="shrink-0 text-[11px] text-[color:var(--b-muted)]">{new Date(a.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                <span className="shrink-0 text-[0.6875rem] text-[color:var(--b-muted)]">{new Date(a.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
               </div>
               {a.body && <p className="mt-1.5 text-sm text-[color:var(--b-text)] whitespace-pre-line leading-relaxed">{a.body}</p>}
             </article>
@@ -488,7 +488,7 @@ function HighlightedCards({ block, ctx }: { block: Extract<Block, { type: 'cards
                 </span>
                 {o.names !== false && <>
                 <span className="mt-2 block text-sm font-bold text-[color:var(--b-title)] truncate">{s.label}</span>
-                <span className="block text-[11px] text-[color:var(--b-muted)] truncate">{c?.setName}{c?.number ? ` · #${c.number}` : ''}{g ? ` · ${GAME_LABELS[g]}` : ''}</span>
+                <span className="block text-[0.6875rem] text-[color:var(--b-muted)] truncate">{c?.setName}{c?.number ? ` · #${c.number}` : ''}{g ? ` · ${GAME_LABELS[g]}` : ''}</span>
                 </>}
               </button>
               {ctx.owner && isLive && (

@@ -120,7 +120,7 @@ function LorcanaReviewRow({
       <div className="flex items-center gap-2 mb-2">
         <ChevronRight size={14} className="text-violet-600" />
         <span className="text-sm font-medium text-ink">{set.setName}</span>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">Lorcana</span>
+        <span className="text-[0.625rem] uppercase tracking-wide text-slate-500">Lorcana</span>
       </div>
       <div className="flex flex-wrap gap-3 items-center text-xs text-slate-400 mb-3">
         <label className="flex items-center gap-1.5">
@@ -158,8 +158,8 @@ function RiftboundReviewRow({
       <div className="flex items-center gap-2 mb-2">
         <ChevronRight size={14} className="text-cyan-600" />
         <span className="text-sm font-medium text-ink">{set.setName}</span>
-        <span className="text-[10px] uppercase tracking-wide text-slate-500">Riftbound</span>
-        <span className="text-[10px] text-slate-600">{set.cardCount} cards</span>
+        <span className="text-[0.625rem] uppercase tracking-wide text-slate-500">Riftbound</span>
+        <span className="text-[0.625rem] text-slate-600">{set.cardCount} cards</span>
       </div>
       <div className="flex flex-wrap gap-3 items-center text-xs text-slate-400 mb-3">
         <label className="flex items-center gap-1.5">

@@ -70,7 +70,7 @@ export function FriendsDialog() {
                 key={id}
                 onClick={() => setTab(id)}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all',
+                  'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[0.8125rem] font-semibold transition-all',
                   tab === id ? 'bg-slate-800 text-ink shadow-sm' : 'text-slate-500 hover:text-ink',
                 )}
               >
@@ -78,7 +78,7 @@ export function FriendsDialog() {
                 <span className="whitespace-nowrap">{label}</span>
                 {badge !== undefined && (
                   <span className={cn(
-                    'text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none',
+                    'text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full leading-none',
                     id === 'requests' ? 'bg-red-500 text-white' : 'bg-slate-700/70 text-slate-300',
                   )}>{badge}</span>
                 )}
@@ -149,7 +149,7 @@ function MyCard() {
                 <X size={14} />
               </button>
             </div>
-            {error && <div className="text-[11px] text-red-600 mt-1">{error}</div>}
+            {error && <div className="text-[0.6875rem] text-red-600 mt-1">{error}</div>}
           </form>
         ) : (
           <button
@@ -213,7 +213,7 @@ function EmptyState({ icon: Icon, title, body, action }: { icon: typeof Users; t
         <Icon size={26} />
       </div>
       <div className="text-sm font-bold text-ink">{title}</div>
-      <div className="text-xs text-slate-500 mt-1 max-w-[260px]">{body}</div>
+      <div className="text-xs text-slate-500 mt-1 max-w-[16.25rem]">{body}</div>
       {action && <div className="mt-4">{action}</div>}
     </div>
   )
@@ -418,7 +418,7 @@ function RequestsTabView() {
           <div className="flex flex-col gap-0.5">
             {outgoing.map((e) => (
               <PersonRow key={e.uid} uid={e.uid} profile={e.profile}>
-                <span className="hidden sm:flex items-center gap-1 text-[11px] text-slate-500"><Clock size={11} />Pending</span>
+                <span className="hidden sm:flex items-center gap-1 text-[0.6875rem] text-slate-500"><Clock size={11} />Pending</span>
                 <button
                   onClick={() => run(e.uid, () => removeFriendship(me, e.uid))}
                   disabled={busy === e.uid}
@@ -437,7 +437,7 @@ function RequestsTabView() {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{children}</div>
+  return <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{children}</div>
 }
 
 // ── Add Friends tab ─────────────────────────────────────────────────────────────────────────
@@ -605,7 +605,7 @@ function InviteLinkCard() {
       {showQr && link && (
         <div className="mt-3 flex flex-col items-center gap-2">
           <InviteQrCode link={link} />
-          <span className="text-[11px] text-slate-500">Have your friend scan this to open your Haven and add you.</span>
+          <span className="text-[0.6875rem] text-slate-500">Have your friend scan this to open your Haven and add you.</span>
         </div>
       )}
     </section>

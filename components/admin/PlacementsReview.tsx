@@ -504,10 +504,10 @@ function BatchNode({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: GAME_COLORS[game] }}>{GAME_LABEL[game]}</span>
+            <span className="text-[0.625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: GAME_COLORS[game] }}>{GAME_LABEL[game]}</span>
             {complete
-              ? <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1"><Check size={12} /> Done</span>
-              : <span className="text-[11px] font-semibold" style={{ color: ACCENT }}>{list.length - done} to review</span>}
+              ? <span className="text-[0.6875rem] font-semibold text-emerald-700 flex items-center gap-1"><Check size={12} /> Done</span>
+              : <span className="text-[0.6875rem] font-semibold" style={{ color: ACCENT }}>{list.length - done} to review</span>}
           </div>
           <div className="text-ink font-semibold mt-1.5 flex items-center gap-1.5"><Clock size={13} className="text-slate-500" /> Sync · {syncTime(at)}</div>
           <div className="text-xs text-slate-500 mt-0.5">
@@ -697,7 +697,7 @@ function ReviewBoard({
           </button>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: GAME_COLORS[game] }}>{GAME_LABEL[game]}</span>
+              <span className="text-[0.625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-white" style={{ background: GAME_COLORS[game] }}>{GAME_LABEL[game]}</span>
               <h2 className="text-lg font-bold text-ink">Sync · {syncTime(at)}</h2>
             </div>
             <div className="text-xs text-slate-500">Accept what’s right · Ignore to decide next sync · Deny to never see it again</div>
@@ -736,7 +736,7 @@ function ReviewBoard({
                 onClick={() => setTab(key)}
                 className={cn('rounded-lg px-2 py-1.5 text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors', tab === key ? 'bg-[#f3e8d2] text-ink shadow-sm' : 'text-slate-400 hover:text-ink')}
               >
-                {label} <span className="text-[11px] font-semibold text-slate-500">{n}</span>
+                {label} <span className="text-[0.6875rem] font-semibold text-slate-500">{n}</span>
               </button>
             ))}
           </div>
@@ -747,7 +747,7 @@ function ReviewBoard({
                 {destinations.map((d, i) => (
                   <div key={d.key} className="contents lg:block">
                     {d.category && d.category !== destinations[i - 1]?.category && (
-                      <div className="hidden lg:block text-[10px] uppercase tracking-wider text-slate-500 px-2 pt-3 pb-1">{d.category}</div>
+                      <div className="hidden lg:block text-[0.625rem] uppercase tracking-wider text-slate-500 px-2 pt-3 pb-1">{d.category}</div>
                     )}
                     <DestinationButton active={filter === d.key} onClick={() => setFilter(d.key)} label={d.label} count={counts.get(d.key) ?? 0} warn={d.key === LEFT_OUT} />
                   </div>
@@ -759,7 +759,7 @@ function ReviewBoard({
                 {(['accepted', 'ignored', 'denied'] as const).map((st) => (
                   <DestinationButton key={st} active={statusFilter === st} onClick={() => setStatusFilter(st)} label={STATUS_LABEL[st]} count={statusCounts[st]} muted={st !== 'accepted'} />
                 ))}
-                <div className="hidden lg:block text-[11px] text-slate-500 px-2 pt-3 leading-snug">Newest decision first. Open a card to change its decision, or bring it back to review.</div>
+                <div className="hidden lg:block text-[0.6875rem] text-slate-500 px-2 pt-3 leading-snug">Newest decision first. Open a card to change its decision, or bring it back to review.</div>
               </>
             )}
           </div>
@@ -924,7 +924,7 @@ function DestinationButton({ active, onClick, label, count, warn, muted }: { act
       style={active ? { background: ACCENT } : undefined}
     >
       <span className="truncate">{label}</span>
-      <span className={cn('text-[11px] font-semibold rounded-full px-1.5 min-w-[1.5rem] text-center', active ? 'bg-white/25' : 'bg-slate-800 text-slate-400')}>{count}</span>
+      <span className={cn('text-[0.6875rem] font-semibold rounded-full px-1.5 min-w-[1.5rem] text-center', active ? 'bg-white/25' : 'bg-slate-800 text-slate-400')}>{count}</span>
     </button>
   )
 }
@@ -959,17 +959,17 @@ function CardTile({
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={image} alt={name} loading="lazy" className={cn('w-full h-full object-cover', denied ? 'grayscale opacity-50' : p.ignored ? 'opacity-50' : p.reviewed && 'opacity-60')} />
-        <span className="absolute left-1.5 bottom-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-sm">
+        <span className="absolute left-1.5 bottom-1.5 text-[0.625rem] font-semibold px-1.5 py-0.5 rounded-md bg-black/60 text-white backdrop-blur-sm">
           {sourceLabel(p)}
         </span>
         {denied && (
           <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
-            <span className="px-2.5 py-1 rounded-full bg-red-700/90 text-white text-[11px] font-bold uppercase tracking-wide flex items-center gap-1 shadow"><Ban size={11} /> Denied</span>
+            <span className="px-2.5 py-1 rounded-full bg-red-700/90 text-white text-[0.6875rem] font-bold uppercase tracking-wide flex items-center gap-1 shadow"><Ban size={11} /> Denied</span>
           </span>
         )}
         {p.ignored && (
           <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
-            <span className="px-2.5 py-1 rounded-full bg-slate-700/90 text-white text-[11px] font-bold uppercase tracking-wide flex items-center gap-1 shadow"><Clock size={11} /> Next sync</span>
+            <span className="px-2.5 py-1 rounded-full bg-slate-700/90 text-white text-[0.6875rem] font-bold uppercase tracking-wide flex items-center gap-1 shadow"><Clock size={11} /> Next sync</span>
           </span>
         )}
         {p.reviewed && !denied && (
@@ -996,7 +996,7 @@ function CardTile({
             disabled={busy}
             onClick={(e) => { e.stopPropagation(); onBringBack() }}
             title="Bring back — undecided, back in To review"
-            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
+            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg bg-white/90 text-ink text-[0.6875rem] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
           >
             <Undo2 size={12} /> Bring back
           </button>
@@ -1007,7 +1007,7 @@ function CardTile({
             disabled={busy}
             onClick={(e) => { e.stopPropagation(); onApprove() }}
             title="Accept — it's in the right set"
-            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg text-white text-[11px] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
+            className="absolute top-1.5 right-1.5 h-7 px-2 rounded-lg text-white text-[0.6875rem] font-semibold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shadow disabled:opacity-50"
             style={{ background: ACCENT }}
           >
             <Check size={12} /> Accept
@@ -1018,12 +1018,12 @@ function CardTile({
         <div className="text-sm font-medium text-ink leading-tight line-clamp-2" title={name}>
           {name}{p.displayName && <Pencil size={10} className="inline ml-1 text-slate-500" />}
         </div>
-        <div className="flex items-center justify-between gap-2 mt-0.5 text-[11px] text-slate-500">
+        <div className="flex items-center justify-between gap-2 mt-0.5 text-[0.6875rem] text-slate-500">
           <span className="truncate">{p.number}{denied && p.previousSetName ? ` · was ${p.previousSetName}` : showSet ? ` · ${p.setName ?? 'Couldn’t place'}` : ''}</span>
           {!!price && <span className="font-semibold text-slate-400 shrink-0">{formatCurrency(price)}</span>}
         </div>
         {decided && (
-          <div className={cn('mt-1 text-[11px] font-semibold', denied ? 'text-red-700' : p.ignored ? 'text-slate-500' : 'text-emerald-700')}>{decided}</div>
+          <div className={cn('mt-1 text-[0.6875rem] font-semibold', denied ? 'text-red-700' : p.ignored ? 'text-slate-500' : 'text-emerald-700')}>{decided}</div>
         )}
       </div>
     </div>
@@ -1040,7 +1040,7 @@ function SetChoices({
         const list = sets.filter((s) => s.cardexGroup === cat)
         return (
           <div key={cat}>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">{cat}</div>
+            <div className="text-[0.625rem] uppercase tracking-wider text-slate-500 mb-1.5">{cat}</div>
             <div className="flex flex-wrap gap-1.5">
               {list.length === 0 && (
                 // An empty category (just created) — start its first set right here
@@ -1158,7 +1158,7 @@ function FocusViewer({
             <div className="w-full max-w-[280px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={cardImage(image, 'full') ?? image} alt={name} className={cn('w-full aspect-[5/7] object-cover rounded-2xl shadow-[0_18px_40px_-14px_rgba(60,40,20,0.6)]', denied && 'grayscale opacity-60')} />
-              <div className="text-[11px] text-slate-500 text-center mt-2">On the site: {pictureLabel}{p.image ? '' : ' (automatic)'}</div>
+              <div className="text-[0.6875rem] text-slate-500 text-center mt-2">On the site: {pictureLabel}{p.image ? '' : ' (automatic)'}</div>
             </div>
             {/* Picture: which one the site shows */}
             <div className="mt-4 w-full max-w-[280px]">
@@ -1184,12 +1184,12 @@ function FocusViewer({
                       alt=""
                       className="w-full aspect-[5/7] object-cover rounded-lg"
                     />
-                    <div className={cn('text-[10px] mt-1 leading-tight', using === o.key ? 'font-semibold text-ink' : 'text-slate-500')}>{o.label}</div>
+                    <div className={cn('text-[0.625rem] mt-1 leading-tight', using === o.key ? 'font-semibold text-ink' : 'text-slate-500')}>{o.label}</div>
                   </button>
                 ))}
               </div>
               {p.image && (
-                <button disabled={busy} onClick={() => onImage('auto')} className="mt-2 w-full text-[11px] text-slate-500 underline hover:text-ink">
+                <button disabled={busy} onClick={() => onImage('auto')} className="mt-2 w-full text-[0.6875rem] text-slate-500 underline hover:text-ink">
                   Back to automatic (TCGplayer’s photo{game === 'riftbound' ? ' when there is one, else Riot’s art' : ''})
                 </button>
               )}
@@ -1198,7 +1198,7 @@ function FocusViewer({
 
           {/* Details + decision */}
           <div className="min-w-0 flex flex-col">
-            <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: ACCENT }}>{sourceLabel(p)}</div>
+            <div className="text-[0.6875rem] font-semibold uppercase tracking-wider" style={{ color: ACCENT }}>{sourceLabel(p)}</div>
             <NameEditor key={p.productId} name={name} tcgplayerName={p.name} custom={!!p.displayName} busy={busy} onSave={onRename} />
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500 mt-1.5">
               <span>#{p.number}</span>
@@ -1260,7 +1260,7 @@ function FocusViewer({
                 )}
               </div>
               {!denied && (
-                <div className="mt-2 text-[11px] text-slate-500 leading-snug">
+                <div className="mt-2 text-[0.6875rem] text-slate-500 leading-snug">
                   <b>Ignore</b> = not sure yet: hidden for now, back in the next sync’s review. <b>Deny</b> = never use it.
                 </div>
               )}
@@ -1303,7 +1303,7 @@ function NameEditor({
           onBlur={commit}
           className="input-field !text-xl !font-bold"
         />
-        <div className="text-[11px] text-slate-500 mt-1">The name shown on the website. Enter to save, Esc to cancel. Leave empty for the default.</div>
+        <div className="text-[0.6875rem] text-slate-500 mt-1">The name shown on the website. Enter to save, Esc to cancel. Leave empty for the default.</div>
       </div>
     )
   }
@@ -1313,7 +1313,7 @@ function NameEditor({
         <h3 className="text-2xl font-bold text-ink leading-tight inline">{name}</h3>
         <Pencil size={14} className="inline ml-2 -mt-1 text-slate-400 group-hover/name:text-ink" />
       </button>
-      <div className="text-[11px] text-slate-500 mt-0.5">
+      <div className="text-[0.6875rem] text-slate-500 mt-0.5">
         {custom ? (
           <>Renamed · TCGplayer calls it “{tcgplayerName}” · <button disabled={busy} onClick={() => onSave('')} className="underline hover:text-ink">Reset</button></>
         ) : (
@@ -1365,7 +1365,7 @@ function NewSetDialog({
           className="input-field mb-3"
         />
         {game === 'pokemon' || game === 'onepiece' ? (
-          <p className="text-[11px] text-slate-500 mb-3">Shown in the Cardex under {game === 'pokemon' ? POKEMON_CUSTOM_GROUP : 'Special Sets'}.</p>
+          <p className="text-[0.6875rem] text-slate-500 mb-3">Shown in the Cardex under {game === 'pokemon' ? POKEMON_CUSTOM_GROUP : 'Special Sets'}.</p>
         ) : (<>
         <label className="block text-xs text-slate-400 mb-1">Cardex category</label>
         <select
@@ -1389,7 +1389,7 @@ function NewSetDialog({
               placeholder="e.g. Collector Bundles"
               className="input-field mb-1"
             />
-            <p className={cn('text-[11px] mb-3', taken ? 'text-red-600' : 'text-slate-500')}>
+            <p className={cn('text-[0.6875rem] mb-3', taken ? 'text-red-600' : 'text-slate-500')}>
               {taken ? 'That category already exists — pick it from the list.' : 'Shown in the Cardex after the existing categories.'}
             </p>
           </>

@@ -141,7 +141,7 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
             {c?.imageUrl
               // eslint-disable-next-line @next/next/no-img-element
               ? <img src={cardImage(c.imageUrl, 'full') ?? c.imageUrl} alt={c.name} draggable={false} className="block w-full aspect-[63/88] object-cover rounded-[4.5%]" />
-              : <div className="w-full aspect-[63/88] rounded-[4.5%] bg-[#2b2014]/30 flex items-center justify-center text-[11px] font-bold text-white/80">Pick a card</div>}
+              : <div className="w-full aspect-[63/88] rounded-[4.5%] bg-[#2b2014]/30 flex items-center justify-center text-[0.6875rem] font-bold text-white/80">Pick a card</div>}
             {/* the plastic: a sheen across it, the open top a touch brighter */}
             <span className="absolute inset-0 rounded-[7px] pointer-events-none" style={{ background: `linear-gradient(118deg, rgba(255,255,255,${sl.sheen}) 0%, rgba(255,255,255,${sl.sheen / 4}) 30%, transparent 31%, transparent 64%, rgba(255,255,255,${sl.sheen / 2}) 65%, transparent 74%)` }} />
             <span className="absolute inset-x-0 top-0 h-[4%] rounded-t-[7px] bg-white/30 pointer-events-none" />
@@ -164,7 +164,7 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
             <BadgePin art={b.art} imageUrl={b.imageUrl} size={full ? 300 : 190} />
           </span>
         ) : <div className="w-[70%] aspect-square rounded-full border-2 border-dashed border-white/70 flex items-center justify-center text-xs font-bold text-white/80">Pick a badge</div>}
-        {b && <span className="-mt-1 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#3b2a10] bg-[#d6b168] border border-[#8a6a2a]/50 rounded-[2px]">{b.name}</span>}
+        {b && <span className="-mt-1 px-2.5 py-0.5 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-[#3b2a10] bg-[#d6b168] border border-[#8a6a2a]/50 rounded-[2px]">{b.name}</span>}
         {children}
       </article>
     )
@@ -207,7 +207,7 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
             )
           })}
         </div>
-        {poll && <p className="mt-1.5 text-right text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: pen, opacity: 0.55 }}>{total} vote{total === 1 ? '' : 's'}</p>}
+        {poll && <p className="mt-1.5 text-right text-[0.625rem] font-semibold uppercase tracking-[0.12em]" style={{ color: pen, opacity: 0.55 }}>{total} vote{total === 1 ? '' : 's'}</p>}
         {children}
       </article>
     )
@@ -248,7 +248,7 @@ export function NoteCard({ post, holder, pinColor, tilt = 0, full, edit, onClick
           {post.image
             // eslint-disable-next-line @next/next/no-img-element
             ? <img src={badgeArt(post.image, full ? 1600 : 800)} alt="" className={cn('block w-full', whole ? 'h-auto' : 'h-full object-cover')} />
-            : <div className="aspect-square flex items-center justify-center text-[11px] font-semibold uppercase tracking-[0.14em] text-white/30">No photo yet</div>}
+            : <div className="aspect-square flex items-center justify-center text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-white/30">No photo yet</div>}
         </div>
         {/* the deep bottom strip: always at least a polaroid's share of the width, taller if the caption needs it */}
         <div className="grid">
@@ -479,13 +479,13 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                   <div className="flex items-center gap-2.5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {look.card.imageUrl && <img src={cardImage(look.card.imageUrl, 'thumb') ?? look.card.imageUrl} alt="" className="w-9 aspect-[63/88] object-cover rounded-[3px]" />}
-                    <div className="flex-1 min-w-0"><p className="text-sm font-bold truncate">{look.card.name}</p><p className="text-[11px] text-[#5c4a35] truncate">{look.card.setName}{look.card.number ? ` · #${look.card.number}` : ''}</p></div>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-bold truncate">{look.card.name}</p><p className="text-[0.6875rem] text-[#5c4a35] truncate">{look.card.setName}{look.card.number ? ` · #${look.card.number}` : ''}</p></div>
                     <button type="button" onClick={() => setPicking(true)} className="rounded-md border border-[#2b2014]/20 px-2.5 py-1.5 text-xs font-bold hover:bg-black/5">Change</button>
                   </div>
                 ) : (
                   <button type="button" onClick={() => setPicking(true)} className="w-full rounded-md border border-dashed border-[#2b2014]/30 py-2 text-xs font-bold hover:bg-black/5">Pick a card</button>
                 )}
-                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Sleeve</p>
+                <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Sleeve</p>
                 <Seg value={look.sleeve ?? 'clear'} onPick={(v) => put({ sleeve: v === 'clear' ? undefined : v })} options={SLEEVE_IDS.map((id) => ({ id, name: sleeveName(id) }))} />
                 <button type="button" onClick={() => put({ price: look.price === false ? undefined : false })} className="mt-3 flex items-center gap-2 text-xs font-semibold">
                   <span className={cn('w-9 h-5 rounded-full p-0.5 transition-colors', look.price !== false ? 'bg-[#7a5230]' : 'bg-[#2b2014]/25')}>
@@ -505,7 +505,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                         <button key={b.id} type="button" title={b.name} aria-pressed={on} onClick={() => put({ badge: { id: b.id, name: b.name, art: b.art, ...(b.imageUrl && { imageUrl: b.imageUrl }) } })}
                           className={cn('rounded-md border p-1 flex flex-col items-center gap-0.5', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}>
                           <BadgePin art={b.art} imageUrl={b.imageUrl} size={44} />
-                          <span className="text-[9.5px] font-semibold truncate max-w-full">{b.name}</span>
+                          <span className="text-[0.5938rem] font-semibold truncate max-w-full">{b.name}</span>
                         </button>
                       )
                     })}
@@ -515,7 +515,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
             )}
             {kind === 'poll' && (
               <Part label="Choices">
-                <p className="mb-2 text-[11px] text-[#5c4a35]">Write the question on the card. Members tap a choice to vote — one vote each.</p>
+                <p className="mb-2 text-[0.6875rem] text-[#5c4a35]">Write the question on the card. Members tap a choice to vote — one vote each.</p>
                 <div className="space-y-1.5">
                   {Array.from({ length: Math.min(4, Math.max(2, (look.options ?? []).length)) }, (_, i) => (
                     <div key={i} className="flex gap-1.5">
@@ -533,7 +533,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
             )}
             {kind === 'poll' && (
               <Part label="Look">
-                <p className="mb-1 text-[11px] font-semibold text-[#5c4a35]">Paper</p>
+                <p className="mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Paper</p>
                 <div className="grid grid-cols-4 gap-1.5">
                   {POLL_PAPERS.map((pp) => {
                     const on = (look.paper ?? 'index') === pp.id
@@ -541,12 +541,12 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                       <button key={pp.id} type="button" title={pp.name} aria-pressed={on} onClick={() => put({ paper: pp.id === 'index' ? undefined : pp.id, pen: undefined })}
                         className={cn('rounded-md border p-1 flex flex-col items-center gap-1', on ? 'border-[#7a5230] shadow-[0_0_0_1px_#7a5230]' : 'border-[#2b2014]/20 hover:border-[#a8875c]')}>
                         <span className="block w-full h-8 rounded-[2px] border border-black/10" style={{ ...pp.css, backgroundPosition: '0 0, 0 4px' }} />
-                        <span className="text-[9.5px] font-semibold truncate max-w-full">{pp.name}</span>
+                        <span className="text-[0.5938rem] font-semibold truncate max-w-full">{pp.name}</span>
                       </button>
                     )
                   })}
                 </div>
-                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Pen</p>
+                <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Pen</p>
                 <div className="flex flex-wrap gap-1.5">
                   {POLL_PENS.map((pn) => {
                     const on = (look.pen ?? (POLL_PAPERS.find((x) => x.id === (look.paper ?? 'index'))?.pen ?? 'blue')) === pn.id
@@ -556,7 +556,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                     )
                   })}
                 </div>
-                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Writing</p>
+                <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Writing</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {NOTE_FONTS.map((f) => {
                     const on = (look.font ?? 'hand') === f.id
@@ -568,7 +568,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                   })}
                 </div>
                 <div className="mt-2"><Seg value={look.size ?? 'm'} onPick={(v) => put({ size: v === 'm' ? undefined : v })} options={[{ id: 's', name: 'Small' }, { id: 'm', name: 'Medium' }, { id: 'l', name: 'Large' }]} /></div>
-                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">A member’s vote is marked with</p>
+                <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">A member’s vote is marked with</p>
                 <div className="flex gap-1.5">
                   {VOTE_MARKS.map((m) => {
                     const on = (look.mark ?? 'tick') === m
@@ -580,7 +580,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                     )
                   })}
                 </div>
-                <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Votes show as</p>
+                <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Votes show as</p>
                 <Seg value={look.show ?? 'tally'} onPick={(v) => put({ show: v === 'tally' ? undefined : v })} options={[{ id: 'tally', name: 'Tally marks' }, { id: 'bars', name: 'Bars' }, { id: 'number', name: 'Numbers' }]} />
               </Part>
             )}
@@ -595,13 +595,13 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                     <button type="button" onClick={() => setImage(undefined)} className="rounded-md border border-[#2b2014]/20 px-2.5 text-xs font-bold inline-flex items-center gap-1 hover:bg-black/5" aria-label="Take the picture off"><Trash2 size={13} /></button>
                   </div>
                   {sticker ? (<>
-                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Shape</p>
+                  <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Shape</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {STICKER_SHAPES.map((sh) => {
                       const on = (look.shape ?? 'cutout') === sh.id
                       return (
                         <button key={sh.id} type="button" onClick={() => put({ shape: sh.id === 'cutout' ? undefined : sh.id })} aria-pressed={on} title={sh.name}
-                          className={cn('rounded-md border pt-2 pb-1 px-0.5 flex flex-col items-center gap-1 text-[10px] font-semibold leading-tight', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 text-[#4a3320] hover:bg-black/5')}>
+                          className={cn('rounded-md border pt-2 pb-1 px-0.5 flex flex-col items-center gap-1 text-[0.625rem] font-semibold leading-tight', on ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 text-[#4a3320] hover:bg-black/5')}>
                           {/* the shape itself, drawn from the same outline that cuts the photo */}
                           <span className="h-7 flex items-center justify-center">
                             {sh.id === 'cutout'
@@ -616,36 +616,36 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
                     })}
                   </div>
                   {(look.shape ?? 'cutout') === 'cutout' && (<>
-                    <p className="mt-2 text-[11px] text-[#5c4a35]">Cut out takes away a plain background (like a photo on white). For a busy photo, pick a shape.</p>
-                    <label className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-[#5c4a35]">
+                    <p className="mt-2 text-[0.6875rem] text-[#5c4a35]">Cut out takes away a plain background (like a photo on white). For a busy photo, pick a shape.</p>
+                    <label className="mt-2 flex items-center gap-2 text-[0.6875rem] font-semibold text-[#5c4a35]">
                       <span className="shrink-0">Cut</span>
                       <input type="range" min={10} max={110} step={2} value={look.tol ?? 42} onChange={(e) => put({ tol: Number(e.target.value) })} className="flex-1 accent-[#7a5230]" aria-label="How much background to cut away" />
                       <span className="shrink-0">More</span>
                     </label>
                   </>)}
                   {canPan && (
-                    <label className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-[#5c4a35]">
+                    <label className="mt-3 flex items-center gap-2 text-[0.6875rem] font-semibold text-[#5c4a35]">
                       <span className="shrink-0 w-[44px]">Zoom</span>
                       <input type="range" min={1} max={4} step={0.05} value={look.pan?.z ?? 1} onChange={(e) => put({ pan: { x: look.pan?.x ?? 0, y: look.pan?.y ?? 0, z: Number(e.target.value) } })} className="flex-1 accent-[#7a5230]" aria-label="Zoom the photo inside the shape" />
                     </label>
                   )}
-                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">White border</p>
+                  <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">White border</p>
                   <Seg value={String(look.border ?? 2) as '0' | '1' | '2'} onPick={(v) => put({ border: Number(v) as 0 | 1 | 2 })}
                     options={[{ id: '0', name: 'None' }, { id: '1', name: 'Thin' }, { id: '2', name: 'Thick' }]} />
                   </>) : look.kind === 'polaroid' ? (<>
-                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Photo</p>
+                  <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Photo</p>
                   <Seg value={look.fit ?? 'square'} onPick={(v) => put({ fit: v === 'square' ? undefined : v })}
                     options={[{ id: 'square', name: 'Square, like a polaroid' }, { id: 'whole', name: 'Whole picture' }]} />
                   </>) : (<>
-                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Where it goes</p>
+                  <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Where it goes</p>
                   <Seg value={pic} onPick={(v) => put({ pic: v === 'top' ? undefined : v })} options={[
                     { id: 'top', name: 'Above', icon: <ArrowUp size={13} /> }, { id: 'bottom', name: 'Below', icon: <ArrowDown size={13} /> },
                     { id: 'left', name: 'Left', icon: <ArrowLeft size={13} /> }, { id: 'right', name: 'Right', icon: <ArrowRight size={13} /> },
                   ]} />
-                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Size</p>
+                  <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Size</p>
                   <Seg value={look.picSize ?? (pic === 'left' || pic === 'right' ? 'm' : 'l')} onPick={(v) => put({ picSize: v })}
                     options={[{ id: 's', name: 'Small' }, { id: 'm', name: 'Medium' }, { id: 'l', name: 'Large' }]} />
-                  <p className="mt-3 mb-1 text-[11px] font-semibold text-[#5c4a35]">Edge</p>
+                  <p className="mt-3 mb-1 text-[0.6875rem] font-semibold text-[#5c4a35]">Edge</p>
                   <Seg value={look.frame ?? 'photo'} onPick={(v) => put({ frame: v === 'photo' ? undefined : v })}
                     options={[{ id: 'photo', name: 'Photo border' }, { id: 'line', name: 'Thin line' }, { id: 'none', name: 'None' }]} />
                   </>)}
@@ -662,7 +662,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
               <div className="grid grid-cols-2 gap-1.5">
                 {NOTE_FONTS.map((f) => (
                   <button key={f.id} type="button" onClick={() => put({ font: f.id })} aria-pressed={(look.font ?? (look.kind === 'polaroid' ? 'hand' : 'print')) === f.id}
-                    className={cn('rounded-md border py-1.5 text-[13px]', (look.font ?? (look.kind === 'polaroid' ? 'hand' : 'print')) === f.id ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}
+                    className={cn('rounded-md border py-1.5 text-[0.8125rem]', (look.font ?? (look.kind === 'polaroid' ? 'hand' : 'print')) === f.id ? 'border-[#7a5230] bg-[#7a5230] text-[#fbf6ea]' : 'border-[#2b2014]/20 hover:bg-black/5')}
                     style={{ fontFamily: f.css, fontSize: 13 * f.k }}>{f.name}</button>
                 ))}
               </div>
@@ -721,7 +721,7 @@ export function NoteEditor({ uid, post, startKind, board, boardHolder, badges = 
 function Part({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#7a5a3a] mb-1.5">{label}</p>
+      <p className="text-[0.6875rem] font-bold uppercase tracking-[0.12em] text-[#7a5a3a] mb-1.5">{label}</p>
       {children}
     </div>
   )
@@ -732,7 +732,7 @@ function Seg<T extends string>({ value, onPick, options }: { value: T; onPick: (
     <div className="flex rounded-md border border-[#2b2014]/20 overflow-hidden">
       {options.map((o, i) => (
         <button key={o.id} type="button" onClick={() => onPick(o.id)} aria-pressed={value === o.id} aria-label={o.label}
-          className={cn('flex-1 px-2 py-1.5 text-[11.5px] font-semibold inline-flex items-center justify-center gap-1 whitespace-nowrap', i > 0 && 'border-l border-[#2b2014]/15',
+          className={cn('flex-1 px-2 py-1.5 text-[0.7188rem] font-semibold inline-flex items-center justify-center gap-1 whitespace-nowrap', i > 0 && 'border-l border-[#2b2014]/15',
             value === o.id ? 'bg-[#7a5230] text-[#fbf6ea]' : 'text-[#4a3320] hover:bg-black/5')}>
           {o.icon}{o.name}
         </button>
@@ -781,7 +781,7 @@ function PriceTag({ card }: { card: { id: string; game?: string } }) {
       {/* the tails, behind and a little lower, with a V cut in each end */}
       <span className={cn(tail, '-left-[14px]')} style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 7px 50%)' }} />
       <span className={cn(tail, '-right-[14px]')} style={{ clipPath: 'polygon(0 0, 100% 0, calc(100% - 7px) 50%, 100% 100%, 0 100%)' }} />
-      <span className="relative block px-5 py-1.5 bg-[#b23a2f] text-[#fbf3e0] text-[17px] font-bold tabular-nums tracking-wide shadow-[0_2px_3px_rgba(0,0,0,0.3)]">
+      <span className="relative block px-5 py-1.5 bg-[#b23a2f] text-[#fbf3e0] text-[1.0625rem] font-bold tabular-nums tracking-wide shadow-[0_2px_3px_rgba(0,0,0,0.3)]">
         {formatCurrency(price)}
       </span>
     </span>
@@ -805,7 +805,7 @@ function Tally({ n, color }: { n: number; color: string }) {
           {Array.from({ length: rest }, (_, i) => <path key={i} d={`M${3 + i * 4} 2.5 ${2.6 + i * 4} 13.5`} stroke={color} strokeWidth="1.4" strokeLinecap="round" />)}
         </svg>
       )}
-      {n > 24 && <span className="text-[13px] font-bold" style={{ color, fontFamily: 'var(--font-caveat), cursive' }}>{n}</span>}
+      {n > 24 && <span className="text-[0.8125rem] font-bold" style={{ color, fontFamily: 'var(--font-caveat), cursive' }}>{n}</span>}
     </span>
   )
 }

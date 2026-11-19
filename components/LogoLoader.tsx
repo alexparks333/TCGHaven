@@ -62,7 +62,7 @@ export function LoadingBar({ progress, className = '' }: { progress: LoaderProgr
       >
         <div className="h-full rounded-full bg-violet-700 transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
       </div>
-      <div className="mt-1.5 text-center text-[11px] text-slate-500 tabular-nums">
+      <div className="mt-1.5 text-center text-[0.6875rem] text-slate-500 tabular-nums">
         {progress.done} of {progress.total}{progress.unit ? ` ${progress.unit}` : ''}
       </div>
     </div>

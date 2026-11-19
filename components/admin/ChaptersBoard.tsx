@@ -146,7 +146,7 @@ export default function ChaptersBoard({ catalog, set, persist, onEdit, onNew, on
           return (
             <section key={chapter} className="card-glass overflow-hidden">
               <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800">
-                <span className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-400">Chapter {i + 1}</span>
+                <span className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-[0.6875rem] font-bold text-slate-400">Chapter {i + 1}</span>
                 <input
                   key={chapter}
                   defaultValue={chapter}
@@ -176,7 +176,7 @@ export default function ChaptersBoard({ catalog, set, persist, onEdit, onNew, on
                     const onPage = ids.slice(p * PER_PAGE, p * PER_PAGE + PER_PAGE)
                     return (
                       <div key={p} className="rounded-xl border border-slate-800 bg-slate-950/50 w-[264px] shrink-0 p-2.5">
-                        <div className="text-[11px] font-semibold text-slate-500 mb-2 px-0.5">Page {p + 1}{pageCount > 1 ? ` of ${pageCount}` : ''}</div>
+                        <div className="text-[0.6875rem] font-semibold text-slate-500 mb-2 px-0.5">Page {p + 1}{pageCount > 1 ? ` of ${pageCount}` : ''}</div>
                         <div className="grid grid-cols-2 gap-1.5">
                           {onPage.map((id) => {
                             const b = byId.get(id)
@@ -190,7 +190,7 @@ export default function ChaptersBoard({ catalog, set, persist, onEdit, onNew, on
                     )
                   })}
                 </SortableContext>
-                <div className="w-[120px] shrink-0 rounded-xl border border-dashed border-slate-800 flex flex-col items-center justify-center gap-1 text-center text-[11px] text-slate-500 p-2">
+                <div className="w-[120px] shrink-0 rounded-xl border border-dashed border-slate-800 flex flex-col items-center justify-center gap-1 text-center text-[0.6875rem] text-slate-500 p-2">
                   <BookMarked size={16} />
                   {ids.length > 0 && left === PER_PAGE ? 'Next badge starts a new page' : `${left} spot${left === 1 ? '' : 's'} left on this page`}
                 </div>
@@ -206,7 +206,7 @@ export default function ChaptersBoard({ catalog, set, persist, onEdit, onNew, on
       </DndContext>
 
       <div className="rounded-2xl border-2 border-dashed border-slate-700 p-3 flex items-center gap-2">
-        <span className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-400">Chapter {chapters.length + 1}</span>
+        <span className="shrink-0 rounded-md bg-slate-800 px-2 py-1 text-[0.6875rem] font-bold text-slate-400">Chapter {chapters.length + 1}</span>
         <input value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') add() }}
           placeholder="New chapter name (e.g. Alternative Arts)" className="input-field flex-1" />
         <button onClick={add} disabled={!newName.trim()} className="btn-primary disabled:opacity-50"><Plus size={15} />Add chapter</button>
@@ -264,7 +264,7 @@ function TileFace({ b, lifted }: { b: BadgeDef; lifted?: boolean }) {
       <GripVertical size={12} className="absolute left-0.5 top-1 text-slate-600" />
       {/* a 100%-pin box: Display size grows the pin about its middle, the name stays put */}
       <span className="flex items-center justify-center" style={{ width: 46, height: 46 * 1.12 }}><BadgePin art={b.art} imageUrl={b.imageUrl} size={pinSize(b, 46)} /></span>
-      <span className="max-w-[112px] truncate text-[11px] font-semibold text-ink">{b.name}</span>
+      <span className="max-w-[112px] truncate text-[0.6875rem] font-semibold text-ink">{b.name}</span>
       {!b.slots.length && <span className="absolute left-1.5 bottom-1.5 w-2 h-2 rounded-full bg-amber-500" title="No requirements yet" />}
     </div>
   )

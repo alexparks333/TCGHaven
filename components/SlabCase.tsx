@@ -296,7 +296,7 @@ export function FullSlab({ slab, name, number, setName, children }: {
   const sgcInsert = c === 'SGC' || c === 'BGS'
   return (
     <div
-      className="relative w-full h-full rounded-[18px] p-[4%] flex flex-col gap-[3%] overflow-hidden"
+      className="relative w-full h-full rounded-[1.125rem] p-[4%] flex flex-col gap-[3%] overflow-hidden"
       // Clear acrylic: barely-tinted see-through body, with the light caught at the thick polished
       // edges (bright outer rim, a softer inner bevel) the way a real slab reads.
       style={{
@@ -311,14 +311,14 @@ export function FullSlab({ slab, name, number, setName, children }: {
       </div>
       {/* Card window */}
       <div
-        className="relative flex-1 min-h-0 rounded-[8px] p-[2%] flex items-center justify-center"
+        className="relative flex-1 min-h-0 rounded-[0.5rem] p-[2%] flex items-center justify-center"
         style={sgcInsert
           ? { background: '#0b0b0b', boxShadow: '0 0 0 1px rgba(255,255,255,0.25), inset 0 0 0 1px rgba(255,255,255,0.12), inset 0 2px 10px rgba(0,0,0,0.6)' }
           : { background: 'rgba(200,215,232,0.05)', boxShadow: '0 0 0 1px rgba(255,255,255,0.28), inset 0 0 0 1px rgba(255,255,255,0.55), inset 0 0 0 4px rgba(225,235,248,0.09), inset 0 2px 10px rgba(0,0,0,0.35)' }}
       >
         {/* The card, as big as the window allows either way (5 : 7) */}
         <div className="absolute inset-[2%] flex items-center justify-center" style={{ containerType: 'size' }}>
-          <div className="relative rounded-[6px] overflow-hidden" style={{ width: 'min(100cqw, calc(100cqh * 5 / 7))', aspectRatio: '5 / 7', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>
+          <div className="relative rounded-[0.375rem] overflow-hidden" style={{ width: 'min(100cqw, calc(100cqh * 5 / 7))', aspectRatio: '5 / 7', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}>
             {children}
           </div>
         </div>

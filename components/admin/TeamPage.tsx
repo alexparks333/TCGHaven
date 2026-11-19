@@ -153,7 +153,7 @@ export function TeamPage() {
 function Stat({ icon: Icon, label, value, live }: { icon: typeof Users; label: string; value: number | string; live?: boolean }) {
   return (
     <div className="card-glass p-4">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <div className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">
         <Icon size={13} className={live ? 'text-emerald-600' : undefined} />
         <span className="truncate">{label}</span>
       </div>
@@ -185,12 +185,12 @@ function MemberCard({ m, presence, online, now, addedByName, isYou, onRetitle, o
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="font-bold text-ink truncate">{m.name || m.email}</span>
-            {isYou && <span className="text-[10px] font-semibold text-slate-500">(you)</span>}
+            {isYou && <span className="text-[0.625rem] font-semibold text-slate-500">(you)</span>}
           </div>
           <div className="text-xs text-slate-500 truncate">{m.email}</div>
           <div className="mt-2">
             {m.role === 'owner' ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: color + '22', color }}>
+              <span className="inline-flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ backgroundColor: color + '22', color }}>
                 <Crown size={11} />Owner
               </span>
             ) : (
@@ -199,12 +199,12 @@ function MemberCard({ m, presence, online, now, addedByName, isYou, onRetitle, o
                   value={m.title}
                   onChange={(e) => onRetitle(e.target.value as StaffTitle)}
                   aria-label={`${m.name}'s title`}
-                  className="appearance-none cursor-pointer text-[11px] font-bold uppercase tracking-wider pl-2 pr-6 py-0.5 rounded-full border-0 outline-none"
+                  className="appearance-none cursor-pointer text-[0.6875rem] font-bold uppercase tracking-wider pl-2 pr-6 py-0.5 rounded-full border-0 outline-none"
                   style={{ backgroundColor: color + '22', color }}
                 >
                   {ASSIGNABLE.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <span className="pointer-events-none absolute right-2 text-[9px]" style={{ color }}>▼</span>
+                <span className="pointer-events-none absolute right-2 text-[0.5625rem]" style={{ color }}>▼</span>
               </label>
             )}
           </div>
@@ -217,7 +217,7 @@ function MemberCard({ m, presence, online, now, addedByName, isYou, onRetitle, o
       </div>
       <div className="mt-auto grid grid-cols-2 gap-px bg-slate-800/40 border-t border-slate-800">
         <div className="bg-[#e9dcc0]/60 px-4 py-2.5">
-          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500"><Clock size={11} />Status</div>
+          <div className="flex items-center gap-1 text-[0.625rem] font-semibold uppercase tracking-wide text-slate-500"><Clock size={11} />Status</div>
           <div className={cn('text-xs font-semibold mt-0.5', online ? 'text-emerald-700' : 'text-slate-400')}>
             {m.mustChangePassword && !presence ? 'Hasn’t signed in yet'
               : online ? <>Online · {presence?.page || 'Portal'}</>
@@ -226,7 +226,7 @@ function MemberCard({ m, presence, online, now, addedByName, isYou, onRetitle, o
           </div>
         </div>
         <div className="bg-[#e9dcc0]/60 px-4 py-2.5">
-          <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500"><CalendarPlus size={11} />Joined</div>
+          <div className="flex items-center gap-1 text-[0.625rem] font-semibold uppercase tracking-wide text-slate-500"><CalendarPlus size={11} />Joined</div>
           <div className="text-xs font-semibold text-slate-400 mt-0.5 truncate">
             {fmtJoined(m.addedAt)}{addedByName && <span className="font-normal text-slate-500"> · by {addedByName.split(' ')[0]}</span>}
           </div>

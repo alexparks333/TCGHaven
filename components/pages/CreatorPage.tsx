@@ -126,7 +126,7 @@ function Body() {
     <>{entrance}<div className={cn('pb-6', opening && 'studio-reveal')}>
       <StudioHero uid={user.uid} community={community} book={book} since={since} tab={tab} onTab={goTab} dirtyTabs={dirty} />
       {/* The parchment panel the tabs open onto (both halves stay mounted, so nothing's lost switching) */}
-      <div className="rounded-b-[22px] rounded-tr-[22px] bg-slate-950 border border-slate-800 p-4 md:p-6">
+      <div className="rounded-b-[1.375rem] rounded-tr-[1.375rem] bg-slate-950 border border-slate-800 p-4 md:p-6">
         <div hidden={tab === 'community'}>
           <BookTab uid={user.uid} creatorName={creatorName} saved={book} view={tab === 'cover' ? 'cover' : 'pages'} onView={goTab} onDirty={onDirty} guard={guard} />
         </div>
@@ -402,7 +402,7 @@ function StartBook({ creatorName, onCreate, onOpened }: {
     <div className="card-glass overflow-hidden grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] max-w-5xl mx-auto">
       {/* The stage: a spotlight in the book's leather, gold sparks drifting up, the book tilting to you */}
       <div
-        className="relative min-h-[420px] md:min-h-[520px] flex items-center justify-center overflow-hidden"
+        className="relative min-h-[26.25rem] md:min-h-[32.5rem] flex items-center justify-center overflow-hidden"
         style={{ background: `radial-gradient(ellipse at 50% 45%, ${l.from}55 0%, ${l.to}cc 45%, #0d0a08 100%)`, transition: 'background 0.6s' }}
         onPointerMove={(e) => {
           const r = e.currentTarget.getBoundingClientRect()
@@ -423,7 +423,7 @@ function StartBook({ creatorName, onCreate, onOpened }: {
           >
             <BookThickness />
             {/* The first page, under the cover — what the cover swings open onto */}
-            <div className="absolute inset-0 rounded-[12px] overflow-hidden flex flex-col items-center justify-center text-center p-[12%]"
+            <div className="absolute inset-0 rounded-[0.75rem] overflow-hidden flex flex-col items-center justify-center text-center p-[12%]"
               style={{ background: 'radial-gradient(ellipse at 50% 40%, #2c2240 0%, #1a1427 60%, #0f0b18 100%)' }}>
               <div className="absolute inset-[6%] rounded-md border" style={{ borderColor: f.color + 'aa' }} />
               <p className="pinbook-serif text-[9cqw] uppercase tracking-[0.18em]" style={{ color: f.color }}>Chapter One</p>
@@ -434,20 +434,20 @@ function StartBook({ creatorName, onCreate, onOpened }: {
               style={{ transform: phase === 'opening' ? 'rotateY(-158deg)' : 'rotateY(0deg)', transition: 'transform 1s cubic-bezier(.5,.05,.25,1)', transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}>
               <BookCover set={sample} badges={null} defs={[]} emptyLabel="First edition" />
               {/* The moving shine */}
-              <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay"
+              <span className="absolute inset-0 rounded-[0.875rem] pointer-events-none mix-blend-overlay"
                 style={{ background: `linear-gradient(${105 + tilt.y * 5}deg, transparent 32%, rgba(255,255,255,0.45) 48%, transparent 64%)` }} />
               {/* The gold foil stamp sweeping across as it's made */}
-              {phase !== 'idle' && <span className="creator-foil absolute inset-0 rounded-[14px] pointer-events-none" style={{ ['--foil' as string]: f.color }} />}
+              {phase !== 'idle' && <span className="creator-foil absolute inset-0 rounded-[0.875rem] pointer-events-none" style={{ ['--foil' as string]: f.color }} />}
             </div>
           </div>
         </div>
-        <p className="absolute bottom-4 inset-x-0 text-center text-[11px] text-white/50">Move your mouse over it</p>
+        <p className="absolute bottom-4 inset-x-0 text-center text-[0.6875rem] text-white/50">Move your mouse over it</p>
       </div>
 
       {/* Name it, dress it, make it */}
       <form onSubmit={create} className="p-6 md:p-9 flex flex-col">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 flex items-center gap-1.5"><Sparkles size={13} />Your Creator Book</p>
-        <h2 className="text-2xl md:text-[28px] font-bold text-ink mt-2 leading-tight">Make a pin book for your community</h2>
+        <p className="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-violet-700 flex items-center gap-1.5"><Sparkles size={13} />Your Creator Book</p>
+        <h2 className="text-2xl md:text-[1.75rem] font-bold text-ink mt-2 leading-tight">Make a pin book for your community</h2>
         <p className="text-sm text-slate-400 mt-2 leading-relaxed">Your art, your cards to collect. Followers fill your book by collecting — and every badge they earn shows up in their own pin book.</p>
 
         <label className="mt-6 block">
@@ -475,7 +475,7 @@ function StartBook({ creatorName, onCreate, onOpened }: {
           {[['1', 'Design the cover'], ['2', 'Add badges to its pages'], ['3', 'Fans collect them']].map(([n, t]) => (
             <div key={n} className="rounded-xl border border-slate-800 bg-slate-950/40 px-2 py-3">
               <span className="mx-auto w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-black" style={{ background: f.color }}>{n}</span>
-              <p className="text-[11px] font-semibold text-slate-400 mt-1.5 leading-tight">{t}</p>
+              <p className="text-[0.6875rem] font-semibold text-slate-400 mt-1.5 leading-tight">{t}</p>
             </div>
           ))}
         </div>
@@ -489,25 +489,25 @@ function CoverStage({ book, badges, onOpen, dirty }: { book: BadgeSet; badges: B
   const [tilt, setTilt] = useState({ x: 0, y: 0 })
   return (
     <div
-      className="haven-panel haven-grain relative overflow-hidden min-h-[520px] md:min-h-[600px] flex flex-col items-center justify-center gap-7 !py-10"
+      className="haven-panel haven-grain relative overflow-hidden min-h-[32.5rem] md:min-h-[37.5rem] flex flex-col items-center justify-center gap-7 !py-10"
       onPointerMove={(e) => {
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: ((e.clientY - r.top) / r.height - 0.5) * -12, y: ((e.clientX - r.left) / r.width - 0.5) * 18 })
       }}
       onPointerLeave={() => setTilt({ x: 0, y: 0 })}
     >
-      <div className="absolute inset-[6px] rounded-[10px] border border-[#d6c49f] pointer-events-none" />
+      <div className="absolute inset-[0.375rem] rounded-[0.625rem] border border-[#d6c49f] pointer-events-none" />
       <Corners inset={12} size={44} />
       {/* No picture yet: the book is plain tan until one's added */}
-      {!book.coverImage && <span className="haven-plate absolute top-4 right-4 !py-1 text-[11px] font-semibold text-[#a8452a] inline-flex items-center gap-1.5"><ImagePlus size={13} />Add your cover picture →</span>}
-      {dirty && <span className="haven-plate absolute top-4 left-4 !py-1 text-[11px] font-semibold text-slate-500 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" />Preview — not saved yet</span>}
-      <div className="absolute bottom-[16%] w-[40%] max-w-[260px] h-5 rounded-[50%] bg-[#5a3c1e]/30 blur-lg" />
+      {!book.coverImage && <span className="haven-plate absolute top-4 right-4 !py-1 text-[0.6875rem] font-semibold text-[#a8452a] inline-flex items-center gap-1.5"><ImagePlus size={13} />Add your cover picture →</span>}
+      {dirty && <span className="haven-plate absolute top-4 left-4 !py-1 text-[0.6875rem] font-semibold text-slate-500 inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#a8452a]" />Preview — not saved yet</span>}
+      <div className="absolute bottom-[16%] w-[40%] max-w-[16.25rem] h-5 rounded-[50%] bg-[#5a3c1e]/30 blur-lg" />
       <button type="button" onClick={onOpen} className="relative w-[min(340px,70vw)] aspect-[0.71] [perspective:1100px] outline-none" aria-label={`Open ${book.name}`}>
         <div className="absolute inset-0 transition-transform duration-200 ease-out"
           style={{ transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`, transformStyle: 'preserve-3d', containerType: 'inline-size' }}>
           <BookThickness look={book.coverStyle} />
           <span className="absolute inset-0"><BookCover set={book} badges={null} defs={badges} /></span>
-          <span className="absolute inset-0 rounded-[14px] pointer-events-none mix-blend-overlay opacity-60"
+          <span className="absolute inset-0 rounded-[0.875rem] pointer-events-none mix-blend-overlay opacity-60"
             style={{ background: `linear-gradient(${110 + tilt.y * 4}deg, transparent 30%, rgba(255,255,255,0.4) 48%, transparent 62%)` }} />
         </div>
       </button>
@@ -533,7 +533,7 @@ function Preview({ book, badges, onClose }: { book: BadgeSet; badges: BadgeDef[]
         <button type="button" onClick={onClose} className="ml-auto p-2 rounded-full bg-white/10 hover:bg-white/20" aria-label="Close the preview"><X size={18} /></button>
       </div>
       <div className="flex-1 overflow-auto px-3 pb-6 flex items-start justify-center">
-        <div className="w-full max-w-[1100px]">
+        <div className="w-full max-w-[68.75rem]">
           <BadgeBook set={book} defs={badges.filter(isLive) /* drafts aren't shown to fans */} badges={null} isMe={false} />
         </div>
       </div>
