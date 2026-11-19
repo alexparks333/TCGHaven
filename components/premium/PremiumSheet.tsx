@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Award, Check, Crown, Download, LineChart, Loader2, ScanLine, Sparkles, X } from 'lucide-react'
+import { Award, Check, Download, LineChart, Loader2, ScanLine, Sparkles, Tag, X } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { db } from '@/lib/firebase/config'
 import { loadPremiumConfig, yearlySaving, DEFAULT_PREMIUM, type PremiumConfig } from '@/lib/premium'
@@ -32,7 +32,7 @@ const FEATURES: Array<{ icon: typeof ScanLine; label: string; reason: PremiumRea
   { icon: Sparkles, label: 'Full-colour badges, 3D pins & Pin Display', reason: 'badge-full' },
   { icon: LineChart, label: 'Portfolio over time, profit & analytics', reason: 'portfolio-time' },
   { icon: Download, label: 'Export your collection', reason: 'export' },
-  { icon: Crown, label: 'The gold Premium title on your profile', reason: 'general' },
+  { icon: Tag, label: 'The gold Premium tag next to your name', reason: 'general' },
 ]
 
 const money = (n: number) => `$${n.toFixed(2)}`
@@ -73,9 +73,8 @@ export function PremiumSheet({ reason, onClose }: { reason: PremiumReason; onClo
       <div className="add-card-panel relative w-full md:max-w-[28rem] max-h-[92dvh] overflow-y-auto bg-slate-900 border border-slate-800 rounded-t-3xl md:rounded-2xl shadow-xl">
         <div className="relative px-6 pt-7 pb-5 text-center" style={{ background: 'linear-gradient(180deg, rgba(184,134,43,0.16), rgba(184,134,43,0))' }}>
           <button onClick={onClose} aria-label="Close" className="absolute right-3 top-3 p-2 rounded-full text-slate-500 hover:text-ink hover:bg-slate-800/60"><X size={18} /></button>
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full shadow-md" style={{ background: `radial-gradient(circle at 35% 30%, #f3d58a, ${GOLD} 70%)` }}>
-            <Crown size={22} className="text-white drop-shadow" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" className="mx-auto mb-2 h-20 w-20 object-contain drop-shadow-md" />
           <h2 className="text-xl font-bold text-ink">{head.title}</h2>
           <p className="mt-1 text-sm text-slate-400">{head.sub}</p>
         </div>
