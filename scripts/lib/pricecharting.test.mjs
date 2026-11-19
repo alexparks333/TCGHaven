@@ -113,6 +113,36 @@ assert.equal(pcVariantOf('X [Mosaic Rare 1st Edition]'), null)
   const { entries } = matchCatalog([{ id: 'c1', tcgProductId: 777 }], new Map([[777, e]]))
   assert.deepEqual(entries[0].v, e.variants, 'versions travel with the catalog entry')
 }
+// Versions filed under another TCGplayer id (Base Set's Shadowless product) join the card whose
+// plain row has the same set, name and number
+{
+  const mk = (id, name, psa10, tcg, set = 'Pokemon Base Set') => ({ id, 'console-name': set, 'product-name': name, 'manual-only-price': String(psa10), 'tcg-id': String(tcg) })
+  const { byTcg, ambiguous } = pickByTcgId([
+    mk('1', 'Charizard #4', 32940, 42382),
+    mk('2', 'Charizard [1st Edition] #4', 466431, 106999),   // both under the Shadowless product
+    mk('3', 'Charizard [Shadowless] #4', 24808, 106999),
+    mk('4', 'Alakazam #1', 3365, 42346),
+    mk('5', 'Alakazam [1st Edition] #1', 23790, 42346),      // under the card's own product
+    mk('6', 'Alakazam [Shadowless] #1', 9785, 106996),       // alone under its own
+    mk('7', 'Alakazam [1st Edition] #1', 1, 555),            // a second 1st Edition row elsewhere: not used
+    mk('8', 'Abra #43', 178, 42386),
+    mk('9', 'Abra #43', 999, 1),                             // two plain rows → can't tell which
+    mk('10', 'Abra [1st Edition] #43', 834, 107040),
+    mk('11', 'Charizard [1st Edition] #4', 5, 2, 'Pokemon Base Set 2'),   // another set: never joins
+  ])
+  const zard = byTcg.get(42382)
+  assert.equal(zard.prices.psa10, 32940)
+  assert.deepEqual(zard.variants, {
+    '1st': { p: { psa10: 466431 }, u: 'https://www.pricecharting.com/game/2' },
+    shadowless: { p: { psa10: 24808 }, u: 'https://www.pricecharting.com/game/3' },
+  })
+  const ala = byTcg.get(42346)
+  assert.equal(ala.variants['1st'].p.psa10, 23790, "the card's own 1st Edition row stays")
+  assert.equal(ala.variants.shadowless.p.psa10, 9785)
+  assert.equal(byTcg.get(42386).variants, undefined, 'two plain Abra rows: not attached')
+  assert.ok(!ambiguous.some((a) => a.tcgId === 106999), 'a fully attached id is no longer reported')
+}
+
 const vars = { foil: { p: {} }, '1st': { p: {} }, reverse: { p: {} } }
 assert.equal(gradedVariantKey({}, vars), '')
 assert.equal(gradedVariantKey({ isFoil: true }, vars), 'foil')

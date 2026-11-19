@@ -101,7 +101,7 @@ _Started 2026-11-11. Who is a Creator (titles, suspensions, the sidebar tab) is 
   bottom strip with a marker caption, the photo square (or `fit: 'whole'`) recessed with a sheen — `.polaroid` CSS).
   Three more Kinds (all kept in `post.look`, no rules change): **Card** — a catalog card (picked with the Badge
   Maker's `CardPicker`, `look.card` incl. its game) in a sleeve (clear / matte / black / gold, `look.sleeve`) with its
-  **live price** on a string tag (read from `catalog/{game}/cards/{id}` through `catalogPrice()`, once per card per
+  **live price** on a string tag (read from `catalog/{game}/cards/{id}` through `nearMintPrice()`, once per card per
   visit, in the viewer's currency; `look.price: false` hides it). **Badge pin** — one of the community's own live
   badges (`look.badge`), stuck straight in with a brass nameplate, no holder. **Poll** — an index card (ruled,
   red margin) with the question in pen (the post's text) and 2–4 choices (`look.options`); members tap a choice to

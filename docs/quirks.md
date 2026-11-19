@@ -209,7 +209,7 @@ each card; that's gone — every card's price comes from the shared catalog. Old
 `priceLocked` are now priced from the catalog like any other (the flag is ignored and cleared on
 edit); only cards with no catalog match (no `apiId`) keep their own stored price.
 
-**One pricing rule:** `lib/pricing.ts` `catalogPrice()` (foil choice, Riftbound foil-only variants,
+**The pricing rules:** `lib/pricing.ts` `nearMintPrice()` (a card) / `copyPrice()` (a copy) (foil choice, Riftbound foil-only variants,
 always TCGplayer market price — there's no price-mode toggle; the catalog's `lowPriceNM*` fields are
 lowest listings in any condition, damaged included, and are never used) is used by the five price routes, the Cardex (client-side from the raw fields
 `/api/cardex` returns), Personalized Collections and the history API — so they can't disagree.

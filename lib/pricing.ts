@@ -3,18 +3,24 @@ import { riftboundVariantFlags } from './utils'
 import { variantPrice } from '@/scripts/lib/pokemon-variants.mjs'
 import { gradedPriceFor, gradedVariantKey } from '@/scripts/lib/pricecharting.mjs'
 
-// THE one rule for "what is this card worth" — used by every place a price is shown, so the
-// Cardex, Personalized Collections, Inventory and Portfolio can never disagree:
-//  - app/api/prices/{game}/route.ts (the live price PriceAutoUpdater lays over users' cards)
-//  - CardexPage.tsx (catalog grid + zoom view, computed client-side from the catalog fields
-//    /api/cardex returns)
-//  - PersonalCollectionsView.tsx (via the same price routes)
-//  - app/api/price-history (shared history)
-// Every input is a catalog card's own price fields, refreshed twice a day by the scheduled sync.
-// There's one price per card — TCGplayer market price — no user-selectable price mode. A graded
-// card can instead get PriceCharting's sold price for its grade (docs/PriceCharting.md). A raw
-// copy's price is that Near Mint price times its condition's discount (CONDITION_MULTIPLIER) —
-// everywhere a copy is valued; the Cardex grid (a card, not a copy) shows the Near Mint price.
+// THE pricing rules — two kinds of price, two functions, so a caller always says which it means:
+//
+//  1. nearMintPrice(game, card, printing) — what a CARD is worth: TCGplayer's (Near Mint) market
+//     price for a printing. Only for showing a card nobody's copy is being valued: the Cardex grid
+//     (and its hover), a wall note's card.
+//  2. copyPrice(game, card, copy) — what a COPY someone owns is worth (one copy, one price):
+//       a slab → PriceCharting's sold price for its grade and version (docs/PriceCharting.md),
+//                or the Near Mint price when there isn't one ("Raw est." in the UI);
+//       raw    → the Near Mint price × its condition's discount (CONDITION_MULTIPLIER).
+//     `copy` must state both `condition` and `grading` (either may be undefined) — so no caller
+//     can value a copy and forget its condition or grade. Used by the price routes
+//     (app/api/prices/*, lib/api/tcgplayerGameRoutes.ts) and price history (lib/api/priceHistory.ts);
+//     Inventory, Portfolio, Analytics, profiles, the Cardex zoom, Add Card all get their prices
+//     from those.
+//
+// Stored data is only what the sources give: TCGplayer's Near Mint prices on the catalog cards,
+// PriceCharting's graded prices in graded_prices/{catalog}. Condition prices are never stored —
+// they're computed here, so they can't drift. Prices refresh twice a day (catalog) / daily (graded).
 
 export interface CatalogPriceFields {
   marketPrice?: number
@@ -37,6 +43,20 @@ export interface GradingChoice {
   company?: string
   grade?: string
   tier?: 'pristine' | 'black' | null
+}
+
+/** Which printing of a card (the parts of a copy that pick a TCGplayer price) */
+export interface Printing {
+  isFoil?: boolean
+  edition?: Edition
+  finish?: Finish
+}
+
+/** A copy someone owns, for copyPrice(): its printing plus — always stated, even when undefined —
+ *  its condition and its slab */
+export interface CopyChoice extends Printing {
+  condition: Condition | undefined          // a raw copy's condition (undefined = Near Mint)
+  grading: GradingChoice | undefined        // a slab's grade (undefined = raw) — gradingOf(card)
 }
 
 export interface PrintingChoice {
@@ -74,18 +94,20 @@ export function gradedPrice(_game: Game, card: CatalogPriceFields, { isFoil, edi
   return gradedPriceFor(key ? card.gradedVariants?.[key]?.p : card.graded, grading)
 }
 
-export function catalogPrice(game: Game, card: CatalogPriceFields, choice: PrintingChoice = {}): number {
-  // A graded card: its grade's sold price from PriceCharting when there is one; otherwise the raw
-  // Near Mint price (an estimate for a slab — the UI says so). A raw copy: the Near Mint price
-  // times its condition's discount.
-  const graded = gradedPrice(game, card, choice)
-  if (graded > 0) return graded
-  const nm = nearMintPrice(game, card, choice)
-  return choice.grading?.company ? nm : conditionPrice(nm, { condition: choice.condition })
+/** What a copy someone owns is worth — see the rules at the top of this file */
+export function copyPrice(game: Game, card: CatalogPriceFields, copy: CopyChoice): number {
+  // A slab: its grade's sold price from PriceCharting when there is one; otherwise the raw Near
+  // Mint price (an estimate — the UI says "Raw est."). A raw copy: Near Mint × its condition.
+  if (copy.grading?.company) {
+    const graded = gradedPrice(game, card, copy)
+    return graded > 0 ? graded : nearMintPrice(game, card, copy)
+  }
+  return conditionPrice(nearMintPrice(game, card, copy), { condition: copy.condition })
 }
 
-/** TCGplayer's (Near Mint) market price for the printing chosen */
-function nearMintPrice(game: Game, card: CatalogPriceFields, { isFoil = false, edition, finish }: PrintingChoice = {}): number {
+/** What a card is worth: TCGplayer's (Near Mint) market price for a printing. Never a copy's value
+ *  — that's copyPrice() (its condition and grade change it). */
+export function nearMintPrice(game: Game, card: CatalogPriceFields, { isFoil = false, edition, finish }: Printing = {}): number {
 
   // A card added with an explicit edition/finish (Pokémon, Yu-Gi-Oh!) is priced as exactly that printing.
   if (hasPrintings(game) && (edition || finish)) {

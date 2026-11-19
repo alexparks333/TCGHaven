@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       rarity:     c.rarity ?? '',
       imageUrl:   c.imageUrl,
       // All the raw price fields, not one pre-picked price: the Cardex computes the shown price
-      // client-side with lib/pricing.ts's catalogPrice() — the exact rule the price routes use
+      // client-side with lib/pricing.ts's nearMintPrice() — the exact rule the price routes use
       // for Inventory/Portfolio — since only the client knows the viewer's price mode and
       // whether their copy is foil.
       marketPrice:     c.marketPrice ?? 0,

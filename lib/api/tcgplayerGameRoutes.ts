@@ -4,7 +4,7 @@
 // allowed names — CLAUDE.md rule 24).
 import { NextResponse } from 'next/server'
 import { loadCatalog, invalidateCatalogCache } from './catalog'
-import { catalogPrice, gradingOf } from '../pricing'
+import { copyPrice, gradingOf } from '../pricing'
 import { gradedFor, withGraded, noteGradedSource, priceReply, type GradingInput, type GradedSource } from './gradedPrices'
 import { invalidateSetsCache } from './search'
 import { invalidateTcgplayerGameSetsCache } from './tcgplayerGames'
@@ -33,7 +33,7 @@ export async function tcgplayerGamePrices(game: TcgplayerSourcedGame, req: Reque
     if (!raw) continue
     const cat = withGraded(raw, graded)
     const choice = { isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card), condition: card.condition }
-    const price = catalogPrice(game, cat, choice)
+    const price = copyPrice(game, cat, choice)
     if (price > 0) results[card.id] = price
     noteGradedSource(sources, card.id, game, cat, choice, graded)
   }

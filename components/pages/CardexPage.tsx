@@ -12,7 +12,7 @@ import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { catalogPrice, conditionFactor, conditionPrice } from '@/lib/pricing'
+import { nearMintPrice, conditionFactor, conditionPrice } from '@/lib/pricing'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
@@ -1125,7 +1125,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
       // Picker: everything shown in full (it's for choosing, not tracking)
       const owned = picker ? { owned: true, quantity: 0, ownedFoil: false } : getOwnedInfo(cc, gameCards, baseGame)
       // A friend's Cardex too: a card's market price is the shared catalog's, never what they paid
-      return { ...cc, ...owned, marketPrice: catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
+      return { ...cc, ...owned, marketPrice: nearMintPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
     }),
     [catalogCards, gameCards, baseGame, picker],
   )
@@ -1174,7 +1174,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
     for (const cc of gameCardsReady) {
       if (RARITY_TOGGLE_GAMES.has(baseGame) && hiddenRarities.has(cc.rarity)) continue
       const owned = picker ? { owned: true, quantity: 0, ownedFoil: false } : getOwnedInfo(cc, gameCards, baseGame)
-      const card = { ...cc, ...owned, marketPrice: catalogPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
+      const card = { ...cc, ...owned, marketPrice: nearMintPrice(baseGame, cc, { isFoil: owned.ownedFoil }) }
       const list = bySet.get(cc.setName)
       if (list) list.push(card)
       else bySet.set(cc.setName, [card])

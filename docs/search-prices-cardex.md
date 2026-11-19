@@ -80,7 +80,7 @@ TCGplayer's market price (what tcgcsv gives us) is the **Near Mint** price, and 
 per-condition prices (TCGplayer's own API has them per SKU, but new API keys aren't issued). So a
 raw copy is valued at the Near Mint price × its condition's discount — `CONDITION_MULTIPLIER` in
 `lib/types.ts`: Mint / Near Mint 1.0, Lightly Played 0.9, Moderately Played 0.65, Heavily Played
-0.45. Applied inside `catalogPrice()` (`PrintingChoice.condition`), so every copy's price agrees:
+0.45. Applied inside `copyPrice()` (its `copy` argument must state `condition` and `grading`), so every copy's price agrees — a card that is not anyone's copy uses `nearMintPrice()`:
 
 - the price routes (copies send `condition` — `PriceAutoUpdater` `priceBody`), and so Inventory,
   Portfolio, Analytics, profiles, the Cardex zoom's "Raw · LP" bubble and Add Card's Market Price;

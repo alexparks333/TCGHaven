@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice, gradingOf } from '@/lib/pricing'
+import { copyPrice, gradingOf } from '@/lib/pricing'
 import { gradedFor, withGraded, noteGradedSource, priceReply, type GradingInput, type GradedSource } from '@/lib/api/gradedPrices'
 import type { Edition, Finish } from '@/lib/types'
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (!raw) continue
     const cat = withGraded(raw, graded)
     const choice = { isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card), condition: card.condition }
-    const price = catalogPrice('yugioh', cat, choice)
+    const price = copyPrice('yugioh', cat, choice)
     if (price > 0) results[card.id] = price
     noteGradedSource(sources, card.id, 'yugioh', cat, choice, graded)
   }

@@ -146,7 +146,46 @@ export function pickByTcgId(rows) {
     }
     byTcg.set(tcgId, Object.keys(variants).length ? { ...base, variants } : base)
   }
-  return { byTcg, ambiguous }
+
+  // A version PriceCharting files under a DIFFERENT TCGplayer id than the card's — Base Set's
+  // "Charizard [1st Edition] #4" and "[Shadowless] #4" sit under TCGplayer's separate Base Set
+  // (Shadowless) product (no plain row there → "ambiguous"), while "Alakazam [Shadowless] #1" is
+  // alone under its own. Our catalog card only knows the main product, so these never matched: a
+  // 1st Edition Charizard PSA 10 got no graded price (2026-11-19). Each such row is attached to
+  // the card whose plain row has the same set, name and number on PriceCharting ("Charizard #4" in
+  // "Pokemon Base Set") — only when exactly one plain row and one row of that version match.
+  const keyOf = (g) => `${g.console}|${g.name.replace(/\[[^\]]*\]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()}`
+  const plainByKey = new Map()
+  for (const list of groups.values()) for (const g of list) {
+    if (/\[[^\]]*\]/.test(g.name)) continue
+    const k = keyOf(g)
+    plainByKey.set(k, plainByKey.has(k) ? null : g)   // null = two plain rows: can't tell which
+  }
+  const attached = new Set()
+  const orphans = new Map()   // `${baseTcgId}|${version}` → rows
+  for (const [tcgId, list] of groups) {
+    const own = byTcg.get(tcgId)
+    for (const g of list) {
+      const key = pcVariantOf(g.name)
+      if (!GRADED_VARIANTS.includes(key)) continue
+      if (own && own !== g && (own.variants?.[key]?.u === g.url)) continue   // already its own card's version
+      const plain = plainByKey.get(keyOf(g))
+      if (!plain || plain.tcgId === tcgId) continue
+      const k = `${plain.tcgId}|${key}`
+      if (!orphans.has(k)) orphans.set(k, [])
+      orphans.get(k).push(g)
+    }
+  }
+  for (const [k, rows] of orphans) {
+    if (rows.length !== 1) continue
+    const [baseId, key] = k.split('|')
+    const card = byTcg.get(Number(baseId))
+    if (!card || card.variants?.[key]) continue   // the card's own product already has this version
+    byTcg.set(Number(baseId), { ...card, variants: { ...card.variants, [key]: { p: rows[0].prices, u: rows[0].url } } })
+    attached.add(rows[0])
+  }
+  // An "ambiguous" id whose rows all found their card isn't a skip any more
+  return { byTcg, ambiguous: ambiguous.filter((a) => !groups.get(a.tcgId).every((g) => attached.has(g))) }
 }
 
 // The versions of a card PriceCharting lists separately under one TCGplayer id, by their [tag]

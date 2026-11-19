@@ -17,7 +17,7 @@ import { STICKER_SHAPES, makeSticker, shapeBox } from '@/lib/stickerCut'
 import { cn, formatCurrency } from '@/lib/utils'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
-import { catalogPrice } from '@/lib/pricing'
+import { nearMintPrice } from '@/lib/pricing'
 import { cardImage } from '@/lib/cardImage'
 import { BadgePin } from '@/components/badges/BadgePin'
 import type { Game } from '@/lib/types'
@@ -762,7 +762,7 @@ function useCardPrice(card?: { id: string; game?: string }) {
     const key = `${card.game}/${card.id}`
     if (!prices.has(key)) {
       prices.set(key, getDoc(doc(db, 'catalog', card.game, 'cards', card.id))
-        .then((d) => (d.exists() ? catalogPrice(card.game as Game, d.data() as never) || null : null)).catch(() => null))
+        .then((d) => (d.exists() ? nearMintPrice(card.game as Game, d.data() as never) || null : null)).catch(() => null))
     }
     let live = true
     prices.get(key)!.then((p) => { if (live) setPrice(p) })

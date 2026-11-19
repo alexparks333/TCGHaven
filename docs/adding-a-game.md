@@ -321,7 +321,7 @@ without the new game. Work from this list, then **grep** (5.3) — the grep is t
 |---|---|
 | `lib/types.ts` | add to `Game`; `GAME_LABELS`; `GAME_COLORS`; `catalogKeyFor()` if a language catalog |
 | `lib/utils.ts` | `RARITY_LABELS_BY_GAME` (rarity → short label); any per-game display helper |
-| `lib/pricing.ts` | `catalogPrice()` — the one pricing rule; make sure the game's printings price right |
+| `lib/pricing.ts` | `nearMintPrice()` (a card) and `copyPrice()` (a copy) — the pricing rules; make sure the game's printings price right |
 | `lib/cardImage.ts` | image host size rewrite if not TCGplayer's CDN |
 | `next.config.js` | `images.remotePatterns` for any new image host |
 | `lib/api/registry.ts` | `SetRegistry` type + `EMPTY_REGISTRY` entry (rule 22: merge over it) |

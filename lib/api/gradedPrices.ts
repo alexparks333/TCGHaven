@@ -120,7 +120,7 @@ export async function gradedFor(key: CatalogKey, cards: GradingInput[]): Promise
  *  citation the licence asks for. key = the graded column (psa10, g9 …), url = the card's page. */
 export interface GradedSource { key: string; url: string }
 
-/** Records the source when this card was priced from PriceCharting (call after catalogPrice) */
+/** Records the source when this card was priced from PriceCharting (call after copyPrice) */
 export function noteGradedSource(
   sources: Record<string, GradedSource>, cardId: string, game: Game,
   cat: CatalogPriceFields & { id: string }, choice: PrintingChoice, graded: Map<string, GradedEntry> | null,
@@ -140,7 +140,7 @@ export function priceReply(body: { withSources?: boolean } | null, prices: Recor
   return NextResponse.json(body?.withSources ? { prices, graded: sources, gradedOn: gradedPricesEnabled() } : prices)
 }
 
-/** The catalog card with its graded prices laid on, for catalogPrice() */
+/** The catalog card with its graded prices laid on, for copyPrice() */
 export function withGraded<T extends { id: string }>(cat: T, graded: Map<string, GradedEntry> | null): T & Pick<CatalogPriceFields, 'graded' | 'gradedVariants'> {
   const e = graded?.get(cat.id)
   return e ? { ...cat, graded: e.p, ...(e.v && { gradedVariants: e.v }) } : cat

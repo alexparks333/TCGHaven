@@ -1,7 +1,7 @@
 import { collection, doc, documentId, getDoc, getDocs, query, where, type Timestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase/config'
 import { loadCatalog } from '@/lib/api/catalog'
-import { catalogPrice, gradedPrice, type GradingChoice } from '@/lib/pricing'
+import { copyPrice, gradedPrice, type GradingChoice } from '@/lib/pricing'
 import { catalogKeyFor, type CatalogKey, type Edition, type Finish, type Game, type Language } from '@/lib/types'
 import {
   PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, setKeyOf, monthDocId, dayDocId, tupleToFields, decodePriceChunks, gunzip,
@@ -251,7 +251,10 @@ type PriceOf = (game: Game, item: HistoryItem, prices: PriceMap, card?: CardFiel
 const rawPriceOf: PriceOf = (game, item, prices, card) => {
   const tuple = prices[item.apiId]
   if (!tuple) return null
-  const price = catalogPrice(game, { ...tupleToFields(tuple), rarity: card?.rarity, publicCode: card?.publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish, condition: item.gradingCompany ? undefined : item.condition })
+  const price = copyPrice(game, { ...tupleToFields(tuple), rarity: card?.rarity, publicCode: card?.publicCode }, {
+    isFoil: item.isFoil, edition: item.edition, finish: item.finish,
+    condition: item.condition, grading: item.gradingCompany ? gradingOfItem(item) : undefined,
+  })
   return price > 0 ? price : null
 }
 const gradingOfItem = (item: HistoryItem): GradingChoice => ({ company: item.gradingCompany, grade: item.grade, tier: item.gradeTier ?? null })

@@ -9,7 +9,7 @@
  * sync would write (planPokemonCatalog() / planOnePieceCatalog(), plus Pokémon's backup-price step
  * with its cache save disabled), then compares every card they own: does its catalog card still
  * exist and stay visible, with the same name / set / number / picture / rarity, and what's it worth
- * (catalogPrice(), the app's one pricing rule) before vs after.
+ * (the app's Near Mint price — lib/pricing.ts nearMintPrice()) before vs after.
  *
  * Writes NOTHING.
  */
@@ -42,7 +42,7 @@ const { getApps } = await import('firebase/app')
 const db = getFirestore(getApps()[0])
 await ensureSignedIn()
 
-// catalogPrice() from lib/pricing.ts — duplicated across the runtime boundary like the sync's other
+// nearMintPrice() from lib/pricing.ts — duplicated across the runtime boundary like the sync's other
 // shared helpers (kept identical; compare when lib/pricing.ts changes)
 function catalogPrice(game, card, { isFoil = false, edition, finish } = {}) {
   if ((game === 'pokemon' || game === 'yugioh' || game === 'fab') && (edition || finish)) {

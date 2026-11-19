@@ -159,7 +159,7 @@ Snorlax showed $445.14 (1st Ed) instead of $164.03 (Unlimited), ~840 cards acros
   editions existed is priced exactly as before — just no longer at the 1st Edition price.
 - **Base Set:** Unlimited is TCGplayer group "Base Set"; 1st Edition and Shadowless are in "Base
   Set (Shadowless)", whose "Unlimited" rows mean *Shadowless* (`EDITION_GROUPS`).
-- **Inventory card:** `edition`/`finish` (saved when picked from catalog prices) — `catalogPrice()`
+- **Inventory card:** `edition`/`finish` (saved when picked from catalog prices) — `copyPrice()` / `nearMintPrice()`
   (`lib/pricing.ts`) prices exactly that printing; a printing TCGplayer has no price for returns 0
   (the card keeps its own stored price) rather than borrowing another printing's.
 - **Identity:** `cardIdentityKey()` keeps a non-Unlimited edition and a Reverse Holo in their own

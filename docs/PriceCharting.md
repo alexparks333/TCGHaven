@@ -102,7 +102,7 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
 1. **Pure logic** — `scripts/lib/pricecharting.mjs` (tests: `npm run test:pricecharting`, in CI): CSV
    parsing by header name, the column map above, matching `tcg-id` → our card (`tcgProductId`, or the id
    `tcg-{n}` / `jp-{n}`), grade → column (`gradedPriceKey()`), the citation link (`pcIdUrl()`: `/game/{productId}`, which always redirects to the exact card page — the old name-built address hit a search page for names with "&" or brackets, 2026-11-19).
-   Several PriceCharting rows on one TCGplayer id: the plain-named row is the card (or, with none, a lone "[Holo]"), else skipped; its **versions** — "[Foil]", "[1st Edition]", "[Limited]", "[Shadowless]", "[Reverse Holo]" — are kept beside it (`v`) and `gradedVariantKey()` picks the one a copy is (2026-11-19: Magic 1,515, Lorcana 352, Yu-Gi-Oh! 8,114, Pokémon 11,836 reverse + 826 1st Edition; before, a 1st Edition Alakazam PSA 10 showed the raw $323 instead of $23,790). A version with no listing → Raw est. History keeps versions as `{id}~{version}`. Chunks are written to alternating slots (`a0…`/`b0…`, meta `slot`) so a reader never mixes two days. One TCGplayer
+   Several PriceCharting rows on one TCGplayer id: the plain-named row is the card (or, with none, a lone "[Holo]"), else skipped; its **versions** — "[Foil]", "[1st Edition]", "[Limited]", "[Shadowless]", "[Reverse Holo]" — are kept beside it (`v`) and `gradedVariantKey()` picks the one a copy is (2026-11-19: Magic 1,515, Lorcana 352, Yu-Gi-Oh! 8,114, Pokémon 11,836 reverse + 826 1st Edition; before, a 1st Edition Alakazam PSA 10 showed the raw $323 instead of $23,790). A version PriceCharting files under *another* TCGplayer id (Base Set's 1st Edition / Shadowless sit under TCGplayer's separate Shadowless product) joins the card whose plain row has the same set, name and number — only when exactly one plain row and one row of that version match (2026-11-19: Pokémon 1st Edition 826 → 3,935, Shadowless 0 → 77; 1st Edition Charizard PSA 10 $466,431 instead of a $100,000 raw est.). A version with no listing → Raw est. History keeps versions as `{id}~{version}`. Chunks are written to alternating slots (`a0…`/`b0…`, meta `slot`) so a reader never mixes two days. One TCGplayer
    id on several of our cards (One Piece Normal/Foil pairs): skipped.
 2. **Daily job** — `npm run pricecharting-sync` (`scripts/pricecharting-sync.mjs`; `--file x.csv`,
    `--dry-run`, `--only pokemon-jp,onepiece`) and `.github/workflows/sync-graded-prices.yml` (manual
@@ -112,7 +112,7 @@ sales for its grade; with none, it keeps its TCGplayer price (shown as "raw est.
    `asOf`) + `chunks/{n}` — **not** the catalog cards: a card's new `updatedAt` would read as a staff
    edit and the next catalog sync would skip it. Never deletes; a match count that halves keeps the
    last run's prices.
-3. **Pricing** — `lib/pricing.ts`: `catalogPrice()` takes `grading` and returns the graded price first
+3. **Pricing** — `lib/pricing.ts`: `copyPrice()` takes `grading` and returns the graded price first
    when there is one (`gradedPrice()`; Pokémon: only the ordinary printing, not 1st Edition / Shadowless /
    Reverse). Every price route lays the prices on with `withGraded()` from `lib/api/gradedPrices.ts`
    (30-minute cache, read only when a graded card is asked about); `PriceAutoUpdater` sends each card's
