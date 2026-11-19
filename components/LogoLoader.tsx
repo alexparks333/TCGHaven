@@ -1,8 +1,8 @@
 // The one loading state used everywhere in the app — the TCGHaven logo + wordmark with a short
 // label underneath. Deliberately the same everywhere (full-page data load, Cardex sets, a set's
 // cards, Pack Analysis prices, ...) so a user never sees a blank/$0/"0 cards" screen and
-// wonders whether their collection was lost. Still images for now; this is the single place to
-// swap in an animated logo later.
+// wonders whether their collection was lost. The logo is animated (cards flying out of the
+// doorway); rebuild it with `node scripts/logo-animation.mjs "<AE render folder>"`.
 //
 // `progress` is optional and must be REAL — a count of things that have actually finished
 // (Firestore reads, images), never a timer. Loads with nothing honest to count (a single fast
@@ -36,8 +36,13 @@ export function LogoLoader({
       }
     >
       <div className="flex items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="" className="w-20 h-20 object-contain" />
+        {/* The animated doorway (public/logo-anim.webp, built by scripts/logo-animation.mjs from the
+            After Effects render); the still logo for anyone who has asked for reduced motion */}
+        <picture>
+          <source media="(prefers-reduced-motion: reduce)" srcSet="/logo.png" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-anim.webp" alt="" className="w-24 h-24 object-contain" />
+        </picture>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-text.png" alt="TCGHaven" className="w-48 h-auto object-contain" />
       </div>

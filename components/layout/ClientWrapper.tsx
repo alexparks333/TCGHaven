@@ -17,6 +17,7 @@ import { FriendsDialog } from '@/components/friends/FriendsDialog'
 import { FriendRequestToast } from '@/components/friends/FriendRequestToast'
 import { DevPanel } from '@/components/dev/DevPanel'
 import { PremiumProvider } from '@/components/premium/PremiumProvider'
+import { SplashIntro } from './SplashIntro'
 import { hideLaunchScreen, inApp, onScanLink } from '@/lib/nativeApp'
 
 // Prices in the collector's currency (lib/currency.ts): today's rates fetched once a visit, and
@@ -113,6 +114,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
           </div>
         </div>
         )}
+        <SplashIntro />
         <CardUnlockToast />
         <PriceAutoUpdater />
         <UsageTracker />

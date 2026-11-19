@@ -211,6 +211,13 @@ service cloud.firestore {
       allow write: if isBot();
     }
 
+    // Whether an account has Haven Premium ({ active, expiresAt }) — the crown beside their name,
+    // so any signed-in collector can read it. Never how they pay. Only the server writes it.
+    match /premium_public/{uid} {
+      allow read: if signedIn();
+      allow write: if isBot();
+    }
+
     // Free accounts' scans this month (lib/premiumServer.ts countFreeScan) — counted by the server.
     match /scan_usage/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;

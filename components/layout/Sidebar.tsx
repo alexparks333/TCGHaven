@@ -6,6 +6,7 @@ import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUse
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
+import { TitleTag } from '@/components/premium/TitleTag'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
@@ -34,7 +35,8 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
   const { me } = useFriends()
-  const creator = canUseCreatorStudio(useAccountRole(user?.uid).record)
+  const myRole = useAccountRole(user?.uid).record
+  const creator = canUseCreatorStudio(myRole)
   const studioLinks = useStudioLinks() // the Creator Studio is computers-only — no link in the app
   const owned = useCommunity(user?.uid).community // the community you run, if any
 
@@ -50,12 +52,17 @@ export function Sidebar() {
     <>
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
-        <div className="flex items-center gap-1.5 px-1 mb-6">
+        {/* The logo goes home; hovering it plays the doorway backwards then forwards on loop
+            (.logo-hover in globals.css — frames from public/logo-sprite-sm.webp) */}
+        <Link href="/" className="logo-hover flex items-center gap-1.5 px-1 mb-6 rounded-xl" aria-label="TCGHaven — home">
+          <span className="relative w-[4.5rem] h-[4.5rem] shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="" className="logo-still absolute inset-0 w-full h-full object-contain" />
+            <span className="logo-sprite absolute inset-0" style={{ backgroundImage: 'url(/logo-sprite-sm.webp)' }} />
+          </span>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="w-[4.5rem] h-[4.5rem] object-contain shrink-0" />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-text.png" alt="TCGHaven" className="min-w-0 flex-1 h-auto object-contain" />
-        </div>
+          <img src="/logo-text.png" alt="" className="min-w-0 flex-1 h-auto object-contain" />
+        </Link>
 
         <nav className="flex flex-col gap-1">
           {nav.map(({ href, label, icon: Icon }) => (
@@ -109,7 +116,10 @@ export function Sidebar() {
               >
                 <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? user.email ?? ''} photoURL={user.photoURL ?? ''} size={34} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</div>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-xs font-semibold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</span>
+                    <TitleTag uid={user.uid} record={myRole} />
+                  </div>
                   <div className="text-[0.625rem] text-slate-500 truncate">{me ? `@${me.username}` : 'Your profile'}</div>
                 </div>
                 <ChevronRight size={14} className="text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />

@@ -61,6 +61,12 @@ everything open on a server (CI's real-scan check uses it, and it doubles as an 
   - Open question: a friend's profile has to know whether *its owner* has Premium. Entitlements
     are private, so that needs a public "has Premium" flag the server writes.
 
+**The title tag** (`components/premium/TitleTag.tsx`): "Premium" / "Creator" / "Staff" / "Owner"
+beside the name on profiles, in the sidebar's friends list and on your own card. Someone with
+Premium from paying or a promo code shows as Premium too, through `premium_public/{uid}`
+(`{ active, expiresAt }`, server-written, readable by any signed-in collector; never how they pay).
+(A crown was tried on 2026-11-19 and dropped — the Owner preferred the tag.)
+
 **Buying (`lib/premiumPurchase.ts`, the sheet in `components/premium/PremiumSheet.tsx`, the page
 `/premium`):**
 - **Website:**

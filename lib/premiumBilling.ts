@@ -168,8 +168,13 @@ export async function syncEntitlement(uid: string): Promise<Entitlement | null> 
     active: next.active, source: next.source, plan: next.plan, expiresAt: next.expiresAt,
     willRenew: next.willRenew, trial: next.trial, updatedAt: serverTimestamp(),
   }, { merge: true })
+  await setDoc(doc(db, 'premium_public', uid), publicMark(next))
   return { ...next, updatedAt: Date.now() }
 }
+
+/** premium_public/{uid}: the only part of someone's Premium others may see — whether they have it
+ *  (and until when), for the crown beside their name. Never how they pay. */
+const publicMark = (e: Pick<Entitlement, 'active' | 'expiresAt'>) => ({ active: e.active, expiresAt: e.expiresAt, updatedAt: serverTimestamp() })
 
 // ── Stripe alone (before RevenueCat is set up) ──────────────────────────────────────────────
 
@@ -358,6 +363,7 @@ export async function redeemPromo(uid: string, email: string | null, raw: string
 
     tx.update(codeRef, { uses: promo.uses + 1 })
     tx.set(entRef, { active: true, source: 'promo', plan: null, expiresAt: until.getTime(), willRenew: false, trial: false, updatedAt: serverTimestamp() }, { merge: true })
+    tx.set(doc(db, 'premium_public', uid), publicMark({ active: true, expiresAt: until.getTime() }))
     usedRefs.forEach((ref, i) => {
       const h = history[i]
       tx.set(ref, {

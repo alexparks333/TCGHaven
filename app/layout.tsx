@@ -41,9 +41,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <head>
+        {/* The phone intro's frames (components/layout/SplashIntro.tsx), fetched up front */}
+        <link rel="preload" as="image" href="/logo-sprite.webp" type="image/webp" media="(max-width: 767px)" />
         {/* LogoLoader (components/LogoLoader.tsx) is the app's loading screen — fetched up front
             so the logo is already there the first time a loader appears, not drawn in late. */}
-        <link rel="preload" as="image" href="/logo.png" />
+        <link rel="preload" as="image" href="/logo-anim.webp" type="image/webp" />
         <link rel="preload" as="image" href="/logo-text.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

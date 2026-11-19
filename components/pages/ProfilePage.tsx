@@ -22,6 +22,7 @@ import { useCommunity, type Community } from '@/lib/creatorBooks'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
+import { shownTitle, usePaidPremium } from '@/components/premium/TitleTag'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
 import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
 import { BannerPins } from '@/components/badges/BannerPins'
@@ -187,7 +188,8 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   const mine = useAccountRole(isMe ? profile.uid : null).record
   const [theirs, setTheirs] = useState<AccountRoleRecord>(REGULAR)
   useEffect(() => { if (!isMe) getAccountRole(profile.uid).then(setTheirs) }, [isMe, profile.uid])
-  const title = isMe ? mine : theirs
+  // A Regular account that pays (or used a promo code) shows as Premium (TitleTag.tsx)
+  const title = shownTitle(isMe ? mine : theirs, usePaidPremium(profile.uid))
   useEffect(() => {
     if (!isMe) return
     const params = new URLSearchParams(window.location.search)

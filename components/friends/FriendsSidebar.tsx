@@ -5,6 +5,7 @@ import { UserPlus, Users, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useFriends, type FriendsTab } from './FriendsProvider'
 import { Avatar } from './Avatar'
+import { TitleTag } from '@/components/premium/TitleTag'
 
 const SHOWN = 4
 
@@ -99,7 +100,10 @@ export function FriendsSidebarSection() {
             >
               <Avatar seed={e.uid} name={e.profile?.displayName ?? ''} photoURL={e.profile?.photoURL} size={26} />
               <span className="min-w-0 flex-1">
-                <span className="block text-xs font-semibold text-ink truncate">{e.profile?.displayName ?? '…'}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-semibold text-ink truncate">{e.profile?.displayName ?? '…'}</span>
+                  <TitleTag uid={e.uid} />
+                </span>
                 {e.profile?.username && <span className="block text-[0.625rem] text-slate-500 truncate leading-tight">@{e.profile.username}</span>}
               </span>
             </button>
