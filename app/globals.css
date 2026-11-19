@@ -1452,22 +1452,3 @@
 }
 .inv-row-lit { animation: inv-row-lit 2.6s ease-out both; }
 
-/* The animated logo as a frame strip (public/logo-sprite*.webp, built by scripts/logo-animation.mjs):
-   21 frames side by side, stepped through with background-position. Frame 0 = door shut,
-   frame 20 = every card out (the still logo). */
-.logo-sprite { background-repeat: no-repeat; background-size: 2100% 100%; background-position: 100% 0; }
-@keyframes logo-frames { from { background-position: 0% 0; } to { background-position: 100% 0; } }
-/* Sidebar logo hover: from the still (last frame) backwards to the shut door, then forwards, on loop */
-.logo-hover:hover .logo-sprite, .logo-hover:focus-visible .logo-sprite { animation: logo-frames 0.7s steps(20, jump-none) infinite alternate-reverse; }
-.logo-hover .logo-still { transition: none; }
-.logo-hover:hover .logo-still, .logo-hover:focus-visible .logo-still { opacity: 0; }
-.logo-hover .logo-sprite { opacity: 0; }
-.logo-hover:hover .logo-sprite, .logo-hover:focus-visible .logo-sprite { opacity: 1; }
-/* Phone intro (components/layout/SplashIntro.tsx): plays forwards once */
-.logo-intro { background-position: 0% 0; }
-.logo-intro.play { animation: logo-frames 0.7s steps(20, jump-none) forwards; }
-@media (prefers-reduced-motion: reduce) {
-  .splash-intro { display: none; }
-  .logo-hover:hover .logo-sprite { animation: none; opacity: 0; }
-  .logo-hover:hover .logo-still { opacity: 1; }
-}

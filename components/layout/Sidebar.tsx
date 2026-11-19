@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LogoHover } from './LogoHover'
 import { usePathname } from 'next/navigation'
 import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -52,17 +53,7 @@ export function Sidebar() {
     <>
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
-        {/* The logo goes home; hovering it plays the doorway backwards then forwards on loop
-            (.logo-hover in globals.css — frames from public/logo-sprite-sm.webp) */}
-        <Link href="/" className="logo-hover flex items-center gap-1.5 px-1 mb-6 rounded-xl" aria-label="TCGHaven — home">
-          <span className="relative w-[4.5rem] h-[4.5rem] shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="" className="logo-still absolute inset-0 w-full h-full object-contain" />
-            <span className="logo-sprite absolute inset-0" style={{ backgroundImage: 'url(/logo-sprite-sm.webp)' }} />
-          </span>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-text.png" alt="" className="min-w-0 flex-1 h-auto object-contain" />
-        </Link>
+        <LogoHover />
 
         <nav className="flex flex-col gap-1">
           {nav.map(({ href, label, icon: Icon }) => (
