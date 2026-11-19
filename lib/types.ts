@@ -131,10 +131,18 @@ export type TcgplayerSourcedGame = typeof TCGPLAYER_SOURCED_GAMES[number]
 export const isTcgplayerSourced = (game: string): game is TcgplayerSourcedGame =>
   (TCGPLAYER_SOURCED_GAMES as readonly string[]).includes(game)
 
+// A raw copy's share of the Near Mint price (TCGplayer's market price is the Near Mint one, and
+// tcgcsv has no per-condition prices) — lib/pricing.ts conditionPrice(). A slab's grade is its
+// condition, so slabs never use these. Mint is priced as Near Mint.
 export const CONDITION_MULTIPLIER: Record<Condition, number> = {
   mint: 1.0,
-  near_mint: 0.9,
-  lightly_played: 0.75,
-  moderately_played: 0.6,
-  heavily_played: 0.4,
+  near_mint: 1.0,
+  lightly_played: 0.9,
+  moderately_played: 0.65,
+  heavily_played: 0.45,
+}
+
+// Short names for a condition (the Cardex zoom's "Raw · LP")
+export const CONDITION_SHORT: Record<Condition, string> = {
+  mint: 'M', near_mint: 'NM', lightly_played: 'LP', moderately_played: 'MP', heavily_played: 'HP',
 }

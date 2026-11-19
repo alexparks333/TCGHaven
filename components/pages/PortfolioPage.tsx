@@ -11,6 +11,7 @@ import { passesSlabFilter, type PortfolioSort } from '@/lib/firebase/preferences
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
+import { conditionPrice } from '@/lib/pricing'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
@@ -34,7 +35,7 @@ const BASELINE_KEY = { '1d': 'd1', '7d': 'd7', '30d': 'd30', '365d': 'd365' } as
 export default function PortfolioPage() {
   const {
     cards, priceBaselines, gradedSources, priceStatus, priceLoad,
-    soldCards, calcFloor, slabFilter, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
+    soldCards, calcFloor, slabFilter, setSlabFilter, activeGames: filterGames, trackedGames, timeFrame, setTimeFrame,
     hiddenGroups, portfolioSort: sort, setPortfolioSort: setSort, includeSold, setIncludeSold,
     showFilters, setShowFilters,
   } = useStore()
@@ -53,7 +54,7 @@ export default function PortfolioPage() {
     const baselineKey = timeFrame !== 'entry' ? BASELINE_KEY[timeFrame] : null
 
     return cards
-      .filter((c) => activeGames.includes(c.game) && (!c.group || !hiddenGroups.includes(c.group)) && passesSlabFilter(c, slabFilter))
+      .filter((c) => activeGames.includes(c.game) && (!c.group || !hiddenGroups.includes(c.group)))
       .map((c) => {
         const currentPrice = c.currentPrice ?? c.purchasePrice
         const currentVal = currentPrice * c.quantity
@@ -71,7 +72,8 @@ export default function PortfolioPage() {
         const gradedPriced = Boolean(gradedSources[c.id])
         if (timeFrame === 'entry') {
           // Baseline = market price when card was first added, or what was paid if unknown
-          const baseline = gradedPriced ? c.purchasePrice : (c.priceAtEntry ?? c.purchasePrice)
+          // (priceAtEntry is the Near Mint price — discounted for the copy's condition, like its price)
+          const baseline = gradedPriced ? c.purchasePrice : (c.priceAtEntry != null ? conditionPrice(c.priceAtEntry, c) : c.purchasePrice)
           pnl = (currentPrice - baseline) * c.quantity
           pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
           periodStartVal = baseline * c.quantity
@@ -110,7 +112,7 @@ export default function PortfolioPage() {
         if (sort === 'nameDesc')   return b.name.localeCompare(a.name)
         return a.name.localeCompare(b.name)
       })
-  }, [cards, sort, activeGames, timeFrame, priceBaselines, gradedSources, hiddenGroups, slabFilter])
+  }, [cards, sort, activeGames, timeFrame, priceBaselines, gradedSources, hiddenGroups])
 
   // Apply calculation floor
   const filtered = useMemo(() => {
@@ -205,22 +207,23 @@ export default function PortfolioPage() {
           (c) =>
             c.game === game &&
             (!c.group || !hiddenGroups.includes(c.group)) &&
-            passesSlabFilter(c, slabFilter) &&
             (calcFloor === 0 || (c.currentPrice ?? c.purchasePrice) >= calcFloor),
         )
         const value = gc.reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0)
         return { name: GAME_LABELS[game], value, color: GAME_COLORS[game], count: gc.length, game }
       })
-  }, [cards, calcFloor, activeGames, hiddenGroups, slabFilter])
+  }, [cards, calcFloor, activeGames, hiddenGroups])
 
   // Top Performers' game picker: "All Games" or one game the collection has cards in. Works
   // together with the time frame (groupedRows already carries the window's P&L).
   const [performerGame, setPerformerGame] = useState<Game | 'all'>('all')
   const performerGames = useMemo(() => byGame.filter((g) => g.count > 0), [byGame])
   const shownGame = performerGame !== 'all' && performerGames.some((g) => g.game === performerGame) ? performerGame : 'all'
+  // …and with All Cards / Graded / Raw — only Top Performers: a slab moves by tens or hundreds of
+  // dollars a day and would crowd every raw card out of the list. The rest of the page counts all.
   const performerRows = useMemo(
-    () => (shownGame === 'all' ? groupedRows : groupedRows.filter((c) => c.game === shownGame)),
-    [groupedRows, shownGame],
+    () => groupedRows.filter((c) => (shownGame === 'all' || c.game === shownGame) && passesSlabFilter(c, slabFilter)),
+    [groupedRows, shownGame, slabFilter],
   )
 
   const router = useRouter()
@@ -263,7 +266,7 @@ export default function PortfolioPage() {
             >
               <SlidersHorizontal size={15} />
               Filters
-              {(calcFloor > 0 || slabFilter !== 'all') && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
+              {calcFloor > 0 && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
             </button>
           </div>
           <div className="flex items-center gap-2">
@@ -347,7 +350,8 @@ export default function PortfolioPage() {
 
         {/* Time frame — drives Top Performers' per-card P&L below; Collection Value above is
             never affected, since that's just current market value with no time dimension. */}
-        <div className="flex items-center gap-1.5 lg:gap-2 mb-4">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-4">
+        <div className="flex items-center gap-1.5 lg:gap-2 min-w-0 lg:flex-1">
           <span className="shrink-0 whitespace-nowrap text-xs text-slate-500 uppercase tracking-wide font-semibold mr-1">Time Frame</span>
           {TIME_FRAME_OPTIONS.map(({ value, label, short }) => (
             <button
@@ -365,6 +369,34 @@ export default function PortfolioPage() {
             </button>
           ))}
         </div>
+        {/* Sort — orders Top Performers and the All Cards list alike, so it sits above both, on the
+            right under the stat tiles (it was in the All Cards header, 2026-11-19) */}
+        <label className="flex items-center gap-2 self-end lg:self-auto shrink-0">
+          <span className="whitespace-nowrap text-xs text-slate-500 uppercase tracking-wide font-semibold">Sort</span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as PortfolioSort)}
+            className="bg-slate-900 border border-slate-700 rounded-xl pl-4 pr-9 py-2 text-sm font-medium text-ink shadow-[0_2px_4px_rgba(90,60,20,0.12)] hover:border-slate-600 focus:outline-none focus:border-violet-500/60 cursor-pointer"
+          >
+              <optgroup label="P&amp;L $">
+                <option value="pnl">Best P&amp;L $</option>
+                <option value="pnlAsc">Worst P&amp;L $</option>
+              </optgroup>
+              <optgroup label="P&amp;L %">
+                <option value="pnlPct">Best P&amp;L %</option>
+                <option value="pnlPctAsc">Worst P&amp;L %</option>
+              </optgroup>
+              <optgroup label="Value">
+                <option value="value">Highest Value</option>
+                <option value="valueAsc">Lowest Value</option>
+              </optgroup>
+              <optgroup label="Name">
+                <option value="name">Name A → Z</option>
+                <option value="nameDesc">Name Z → A</option>
+              </optgroup>
+          </select>
+        </label>
+        </div>
 
         {/* Circle chart: the collection's value by game (it replaced the By Game cards, 2026-11-15) —
             beside Top Performers on wide screens, above it on phones */}
@@ -381,8 +413,22 @@ export default function PortfolioPage() {
               Top Performers
               {showHistoryNote && <span className="ml-2 text-[10px] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
               {calcFloor > 0 && <span className="ml-2 text-[10px] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
-              {slabFilter !== 'all' && <span className="ml-2 text-[10px] text-amber-700 font-semibold normal-case">{slabFilter === 'graded' ? 'graded only' : 'raw only'}</span>}
             </h3>
+            <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
+            {/* All Cards / Graded / Raw */}
+            <div role="radiogroup" aria-label="Top performers: which cards" className="flex items-center rounded-full border border-slate-700 bg-slate-900 p-0.5">
+              {([['all', 'All Cards'], ['graded', 'Graded'], ['raw', 'Raw']] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  role="radio"
+                  aria-checked={slabFilter === value}
+                  onClick={() => setSlabFilter(value)}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${slabFilter === value ? 'bg-violet-600/20 text-violet-700' : 'text-slate-500 hover:text-ink'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {performerGames.length > 0 && (
               <select
                 value={shownGame}
@@ -394,6 +440,7 @@ export default function PortfolioPage() {
                 {performerGames.map((g) => <option key={g.game} value={g.game}>{g.name}</option>)}
               </select>
             )}
+            </div>
           </div>
           <div className="flex flex-col gap-3">
             {performerRows.filter((c) => c.hasPeriodData).slice(0, 5).map((c) => (
@@ -467,24 +514,6 @@ export default function PortfolioPage() {
                   </span>
                 )}
               </div>
-              <select value={sort} onChange={(e) => setSort(e.target.value as PortfolioSort)} className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none">
-              <optgroup label="P&amp;L $">
-                <option value="pnl">Best P&amp;L $</option>
-                <option value="pnlAsc">Worst P&amp;L $</option>
-              </optgroup>
-              <optgroup label="P&amp;L %">
-                <option value="pnlPct">Best P&amp;L %</option>
-                <option value="pnlPctAsc">Worst P&amp;L %</option>
-              </optgroup>
-              <optgroup label="Value">
-                <option value="value">Highest Value</option>
-                <option value="valueAsc">Lowest Value</option>
-              </optgroup>
-              <optgroup label="Name">
-                <option value="name">Name A → Z</option>
-                <option value="nameDesc">Name Z → A</option>
-              </optgroup>
-            </select>
             </div>
             {/* Search box */}
             <div className="relative">

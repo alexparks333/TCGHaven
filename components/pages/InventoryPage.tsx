@@ -1051,6 +1051,7 @@ export default function InventoryPage() {
                   <div className="bg-slate-800/40 rounded-xl p-3 border border-slate-700/30">
                     <div className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Market Value</div>
                     <div className="text-ink font-semibold text-sm">{market > 0 ? formatCurrency(market) : '—'}</div>
+                    {market > 0 && <GradedPriceTag card={sellCard} className="mt-1" />}
                   </div>
                 </div>
 

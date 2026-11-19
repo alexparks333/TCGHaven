@@ -6,13 +6,13 @@ import { GamePicker } from '@/components/GamePicker'
 import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
+import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, CONDITION_LABELS, CONDITION_SHORT, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
 import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText, cardIdentityKey } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
-import { catalogPrice } from '@/lib/pricing'
+import { catalogPrice, conditionFactor, conditionPrice } from '@/lib/pricing'
 import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import type { CardSearchResult } from '@/lib/api/search'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
@@ -96,6 +96,8 @@ export interface ZoomCardData {
   // A slab valued from PriceCharting's sales for its grade — the credit + link shown under the price
   // (the licence requires it beside every graded price; components/GradedPriceTag.tsx)
   priceSource?: { label: string; url: string }
+  // A slab valued at the raw price (no PriceCharting sales for its grade) — says "Raw est."
+  rawEstimate?: boolean
   owned: boolean
   quantity: number
   isFoil?: boolean
@@ -456,6 +458,7 @@ export interface ZoomVersion {
   printing?: string
   marketPrice: number
   priceEstimated?: boolean      // Cardmarket backup price (raw)
+  conditionNote?: string        // a raw copy below Near Mint: "Lightly Played — 90% of the Near Mint price"
   priceSource?: { label: string; url: string }  // priced from PriceCharting → the credit link
   rawEstimate?: boolean         // a slab with no sales for its grade: valued at the raw price
 }
@@ -487,16 +490,19 @@ export function ownedVersions(
         }
         return { score: slabScore(rep), v }
       }
-      // Just "Raw" — the printing is added only when raw copies come in more than one (below)
+      // "Raw", or "Raw · LP" for a copy below Near Mint (worth less: lib/pricing.ts conditionPrice);
+      // the printing is added only when raw copies come in more than one (below)
+      const cond = conditionFactor(rep) !== 1 ? CONDITION_SHORT[rep.condition] : ''
       const extra = [rep.isFoil && !printing ? 'Foil' : '', printing ?? ''].filter(Boolean).join(' · ')
-      const v: ZoomVersion = { label: 'Raw', quantity, printing, marketPrice: price, priceEstimated: rawEstimated }
+      const conditionNote = cond ? `${CONDITION_LABELS[rep.condition]} — ${Math.round(conditionFactor(rep) * 100)}% of the Near Mint price` : undefined
+      const v: ZoomVersion = { label: cond ? `Raw · ${cond}` : 'Raw', quantity, printing, marketPrice: rep.currentPrice ?? conditionPrice(rawPrice, rep), priceEstimated: rawEstimated, conditionNote }
       return { score: -1, v, extra }
     })
     .sort((a, b) => b.score - a.score)
     .map((x, _i, all) => {
       // Two raw versions (a normal and a foil copy — priced differently) are told apart by printing
       const raws = all.filter((y) => !y.v.slab)
-      if (!x.v.slab && raws.length > 1 && 'extra' in x && x.extra) return { ...x.v, label: `Raw · ${x.extra}` }
+      if (!x.v.slab && raws.length > 1 && 'extra' in x && x.extra) return { ...x.v, label: `${x.v.label} · ${x.extra}` }
       return x.v
     })
 }
@@ -665,7 +671,8 @@ export interface CardexPicker {
 
 export default function CardexPage(props: { viewer?: CardexViewer; picker?: CardexPicker } = {}) {
   const v = props.viewer
-  const graded = useMemo(() => (v ? { sources: v.graded ?? {}, on: v.gradedOn ?? false } : null), [v])
+  // Only a friend's view brings its own sources; your own (profile or Cardex) reads the store's
+  const graded = useMemo(() => (v?.graded ? { sources: v.graded, on: v.gradedOn ?? false } : null), [v])
   return <ViewerGraded.Provider value={graded}><CardexPageBody {...props} /></ViewerGraded.Provider>
 }
 
@@ -1847,6 +1854,12 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   card: Card; gameColor: string; isHovered: boolean; onHover: () => void; onLeave: () => void
   onZoom: (el: HTMLElement, data: Omit<ZoomCardData, 'originRect'>) => void
 }) {
+  // A slab here is worth its grade's PriceCharting price — the zoom shows the credit (or Raw est.)
+  const ownSources = useStore((s) => s.gradedSources)
+  const ownOn = useStore((s) => s.gradedOn)
+  const viewerGraded = useContext(ViewerGraded)
+  const gradedSources = viewerGraded ? viewerGraded.sources : ownSources
+  const gradedOn = viewerGraded ? viewerGraded.on : ownOn
   const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#7a6a55') : '#7a6a55'
   const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '', cert: card.certNumber, tier: card.gradeTier ?? null, subgrades: card.subgrades, printing: printingText(card) || undefined } : undefined
 
@@ -1868,6 +1881,9 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
           rarityLabel: card.rarity ?? '',
           rarityColor,
           marketPrice: card.currentPrice ?? 0,
+          ...(slab && gradedOn && card.apiId && (gradedSources[card.id]
+            ? { priceSource: { label: gradedLabel(gradedSources[card.id].key), url: gradedSources[card.id].url } }
+            : { rawEstimate: true })),
           owned: true,
           quantity: card.quantity,
           isFoil: card.isFoil,
@@ -2300,6 +2316,8 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   const price = v ? v.marketPrice : d.marketPrice
   const priceEstimated = v ? v.priceEstimated : d.priceEstimated
   const priceSource = v ? v.priceSource : d.priceSource
+  const rawEstimate = v ? v.rawEstimate : d.rawEstimate
+  const slabLabel = v?.label ?? (slab ? `${slab.company}${slab.grade ? ` ${slab.grade}` : ''}` : '')
   const printing = v ? v.printing : d.printing
   const quantity = v ? v.quantity : d.quantity
   const ebayCard = v ? { ...d.ebayCard, gradingCompany: v.slab?.company, grade: v.slab?.grade } : d.ebayCard
@@ -2499,8 +2517,11 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               </div>
             )}
             {price > 0 && priceSource && <span style={fadeStyle}><PriceChartingCredit label={priceSource.label} url={priceSource.url} /></span>}
-            {price > 0 && v?.rawEstimate && (
-              <div className="text-[11px] text-slate-500" style={fadeStyle}>Raw est. — no {v.label} sales on PriceCharting yet</div>
+            {price > 0 && v?.conditionNote && (
+              <div className="text-[11px] text-slate-500" style={fadeStyle}>{v.conditionNote}</div>
+            )}
+            {price > 0 && slab && rawEstimate && (
+              <div className="text-[11px] text-slate-500" style={fadeStyle}>Raw est. — no {slabLabel} sales on PriceCharting yet</div>
             )}
             {!viewOnly && (
               <>

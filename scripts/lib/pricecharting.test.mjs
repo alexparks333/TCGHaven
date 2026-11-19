@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import {
   parsePcPrice, penniesToUsd, parsePcCsv, gradedFromRow, pickByTcgId, productIdOf, matchCatalog,
-  gradedPriceKey, gradedPriceFor, pcProductUrl, pcIdUrl,
+  gradedPriceKey, gradedPriceFor, pcProductUrl, pcIdUrl, pcVariantOf, gradedVariantKey,
 } from './pricecharting.mjs'
 import { GRADED_ORDER, gradedTuple, tupleToGraded, buildGradedHistory } from './graded-history.mjs'
 import { gunzip } from './price-history.mjs'
@@ -73,7 +73,7 @@ const shared = new Map([...byTcg, [777, { pcId: '1', url: 'x', prices: { g9: 1 }
 const { entries, sharedProductIds } = matchCatalog(catalog, shared)
 assert.deepEqual(entries.map((e) => e.id), ['jp-42382', 'tcg-600001'])
 assert.equal(sharedProductIds, 1)
-assert.deepEqual(entries[0], { id: 'jp-42382', pc: '6910', u: zard.url, p: zard.prices })
+assert.deepEqual(entries[0], { id: 'jp-42382', pc: '6910', u: zard.url, p: zard.prices, v: { '1st': { p: { g9: 9000 }, u: 'https://www.pricecharting.com/game/6911' } } }, 'the 1st Edition listing kept as a version')
 
 // Grade → column
 const cases = [
@@ -91,6 +91,38 @@ assert.equal(gradedPriceFor(zard.prices, { company: 'PSA', grade: '10' }), 12000
 assert.equal(gradedPriceFor(zard.prices, { company: 'CGC', grade: '10' }), 0, 'no CGC 10 sales → 0 (raw fallback)')
 assert.equal(gradedPriceFor(undefined, { company: 'PSA', grade: '10' }), 0)
 
+// Versions PriceCharting lists separately under one TCGplayer id (seen 2026-11-19: Magic 1,862 and
+// Lorcana 352 "[Foil]" rows, Yu-Gi-Oh! 8,253 "[1st Edition]" rows; Pokémon "[Holo]"/"[Reverse Holo]")
+assert.equal(pcVariantOf('Alice - Savvy Sailor #161'), '')
+assert.equal(pcVariantOf('Baymax - Armored Companion  [Foil] #157'), 'foil')
+assert.equal(pcVariantOf('Blue-Eyes White Dragon [1ST Edition] LOB-001'), '1st')
+assert.equal(pcVariantOf('Absol [Reverse Holo] #97'), 'reverse')
+assert.equal(pcVariantOf('Absol [Holo] #97'), 'holo')
+assert.equal(pcVariantOf('Accesscode Talker [Ultimate Rare] RA02-EN044'), null, 'a rarity version can not be matched')
+assert.equal(pcVariantOf('X [Mosaic Rare 1st Edition]'), null)
+{
+  const mk = (id, name, psa10) => ({ id, 'console-name': 'Set', 'product-name': name, 'manual-only-price': String(psa10), 'tcg-id': '777' })
+  const { byTcg, ambiguous } = pickByTcgId([mk('1', 'Elsa #1', 30), mk('2', 'Elsa [Foil] #1', 40), mk('3', 'Elsa [Extended Art] #1', 99)])
+  assert.equal(ambiguous.length, 0)
+  const e = byTcg.get(777)
+  assert.equal(e.prices.psa10, 30, 'the plain listing is the card')
+  assert.deepEqual(e.variants, { foil: { p: { psa10: 40 }, u: 'https://www.pricecharting.com/game/2' } }, 'its [Foil] kept beside it; unmatchable versions dropped')
+  const holo = pickByTcgId([mk('4', 'Absol [Holo] #97', 10), mk('5', 'Absol [Reverse Holo] #97', 25)]).byTcg.get(777)
+  assert.equal(holo.prices.psa10, 10, 'no plain listing: the [Holo] one is the card')
+  assert.equal(holo.variants.reverse.p.psa10, 25)
+  const { entries } = matchCatalog([{ id: 'c1', tcgProductId: 777 }], new Map([[777, e]]))
+  assert.deepEqual(entries[0].v, e.variants, 'versions travel with the catalog entry')
+}
+const vars = { foil: { p: {} }, '1st': { p: {} }, reverse: { p: {} } }
+assert.equal(gradedVariantKey({}, vars), '')
+assert.equal(gradedVariantKey({ isFoil: true }, vars), 'foil')
+assert.equal(gradedVariantKey({ isFoil: true }, {}), '', 'a foil with no [Foil] listing uses the plain one (foil-only product)')
+assert.equal(gradedVariantKey({ edition: '1st' }, vars), '1st')
+assert.equal(gradedVariantKey({ edition: 'shadowless' }, vars), null, 'a version with no listing gets no graded price')
+assert.equal(gradedVariantKey({ edition: 'unlimited' }, vars), '')
+assert.equal(gradedVariantKey({ finish: 'reverse' }, vars), 'reverse')
+assert.equal(gradedVariantKey({ finish: 'reverse' }, {}), null)
+
 // Graded history (graded-history.mjs): the slot order is append-only — stored history depends on it
 assert.deepEqual(GRADED_ORDER.slice(0, 3), ['g1', 'g2', 'g3'], 'GRADED_ORDER must never be reordered')
 assert.equal(GRADED_ORDER.indexOf('psa10'), 10)
@@ -102,14 +134,14 @@ assert.deepEqual(tupleToGraded(undefined), {})
 {
   const when = new Date('2026-11-18T10:30:00Z')
   const { day, months } = await buildGradedHistory(
-    [{ id: 'a', p: { psa10: 100 } }, { id: 'b', p: { g9: 5 } }, { id: 'c', p: {} }],
+    [{ id: 'a', p: { psa10: 100 }, v: { '1st': { p: { psa10: 900 } } } }, { id: 'b', p: { g9: 5 } }, { id: 'c', p: {} }],
     new Map([['a', { setCode: 'OP01' }], ['b', { setCode: 'OP02' }]]), when)
   assert.equal(day.day, '2026-11-18')
-  assert.deepEqual(Object.keys(day.prices).sort(), ['a', 'b'], 'cards with no graded price are not kept')
+  assert.deepEqual(Object.keys(day.prices).sort(), ['a', 'a~1st', 'b'], 'cards with no graded price are not kept; versions kept as {id}~{version}')
   assert.deepEqual([...months.keys()].sort(), ['OP01__2026-11', 'OP02__2026-11'])
   const m = months.get('OP01__2026-11')
   assert.equal(m.dd, '18')
-  assert.deepEqual(JSON.parse(await gunzip(m.gz)), { t: when.toISOString(), p: { a: gradedTuple({ psa10: 100 }) } })
+  assert.deepEqual(JSON.parse(await gunzip(m.gz)), { t: when.toISOString(), p: { a: gradedTuple({ psa10: 100 }), 'a~1st': gradedTuple({ psa10: 900 }) } })
 }
 
 console.log('pricecharting: all tests passed')

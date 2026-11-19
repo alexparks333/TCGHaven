@@ -5,6 +5,9 @@ import { useAuth } from '@/components/auth/AuthProvider'
 import { useStore } from '@/lib/store'
 import { authFetch } from '@/lib/firebase/authFetch'
 import { loadPriceStatus } from '@/lib/api/priceStatus'
+import { doc, getDoc, type Timestamp } from 'firebase/firestore'
+import { db } from '@/lib/firebase/config'
+import { catalogKeyFor } from '@/lib/types'
 import type { Card, Game } from '@/lib/types'
 import type { GradedSource } from '@/lib/api/gradedPrices'
 
@@ -48,7 +51,7 @@ const PRICE_ROUTES: Record<Game, { url: string; payload: (c: Card) => object }> 
 // A graded card's slab, sent with every game's payload: the routes price it from PriceCharting's
 // sales for its grade when there are any (lib/api/gradedPrices.ts — off unless GRADED_PRICES=on).
 // withSources: the routes also say which slabs got a PriceCharting price ({ prices, graded, gradedOn }).
-const slab = (c: Card) => (c.gradingCompany ? { gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier } : {})
+const slab = (c: Card) => (c.gradingCompany ? { gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier } : { condition: c.condition })
 const priceBody = (game: Game, cards: Card[]) =>
   JSON.stringify({ withSources: true, cards: cards.map((c) => ({ ...PRICE_ROUTES[game].payload(c), ...slab(c) })) })
 
@@ -56,7 +59,7 @@ interface PriceReply { prices: Record<string, number>; graded: Record<string, Gr
 interface SavedPrices { prices: Record<string, number>; baselines: never; graded?: Record<string, GradedSource>; gradedOn?: boolean }
 
 // Everything that decides a card's price — a change to any of these reloads prices.
-const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}:${c.gradingCompany ?? ''}:${c.grade ?? ''}:${c.gradeTier ?? ''}`
+const priceKey = (c: Card) => `${c.id}:${c.apiId}:${c.isFoil ? 1 : 0}:${c.edition ?? ''}:${c.finish ?? ''}:${c.language ?? ''}:${c.gradingCompany ?? ''}:${c.grade ?? ''}:${c.gradeTier ?? ''}:${c.condition ?? ''}`
 
 // The last successful load, saved per account on this device (see the first-load note in check())
 const savedKey = (uid: string) => `tcghaven-prices:${uid}`
@@ -71,6 +74,19 @@ function readSavedPrices(uid: string): SavedPrices | null {
 function savePrices(uid: string, data: { prices: Record<string, number>; baselines: unknown; graded: Record<string, GradedSource>; gradedOn: boolean }) {
   try { localStorage.setItem(savedKey(uid), JSON.stringify({ ...data, at: Date.now() })) } catch { /* full or blocked: fine */ }
 }
+
+// When the daily PriceCharting job last wrote graded prices for the catalogs your slabs are in
+// (graded_prices/{key}.asOf) — it runs at 10:30 UTC, apart from the catalog syncs, so a slab's new
+// graded price must trigger a reload of its own. 0 = no slabs, or unknown.
+async function latestGradedAt(cards: Card[]): Promise<number> {
+  const keys = Array.from(new Set(cards.filter((c) => c.gradingCompany && c.apiId).map((c) => catalogKeyFor(c.game, c.language))))
+  const times = await Promise.all(keys.map((k) => getDoc(doc(db, 'graded_prices', k))
+    .then((d) => (d.data()?.asOf as Timestamp | undefined)?.toMillis() ?? 0).catch(() => 0)))
+  return Math.max(0, ...times)
+}
+// The server re-reads graded prices at most every 30 minutes, so a load this soon after the job
+// can still get yesterday's — that load doesn't count as having the new ones.
+const GRADED_SETTLE_MS = 35 * 60 * 1000
 
 /** Today's prices for many cards at once — a friend's whole shared Cardex, whose copies carry no
  *  prices. One request per game, in parallel, through the same price routes as your own cards, so a
@@ -133,7 +149,7 @@ export function PriceAutoUpdater() {
   const again = useRef(false)
   const checkRef = useRef<() => void>(() => {})
   // What the last successful load was based on — reload only when one of these changes.
-  const loadedFor = useRef<{ syncAt: number; cardsKey: string } | null>(null)
+  const loadedFor = useRef<{ syncAt: number; cardsKey: string; gradedAt: number } | null>(null)
 
   // Only cards priced from the catalog take part; unmatched cards keep their own.
   const cardsKey = cards.filter((c) => c.apiId).map(priceKey).sort().join('|')
@@ -148,6 +164,7 @@ export function PriceAutoUpdater() {
       const key = eligible.map(priceKey).sort().join('|')
       const prev = loadedFor.current
       const statusPromise = loadPriceStatus(trackedGames)
+      const gradedAtPromise = latestGradedAt(eligible)
 
       // Opening the app: show the prices and baselines saved on this device last time straight
       // away, then refresh them in the background (no loader) — the fresh load can take seconds on
@@ -168,7 +185,8 @@ export function PriceAutoUpdater() {
       if (prev) {
         const status = await statusPromise
         setPriceStatus(status)
-        if (prev.syncAt === (status.latestSyncAt?.getTime() ?? 0) && prev.cardsKey === key) return
+        const gradedAt = await gradedAtPromise
+        if (prev.syncAt === (status.latestSyncAt?.getTime() ?? 0) && prev.cardsKey === key && prev.gradedAt >= gradedAt) return
       }
 
       // Real progress for the logo loader on Portfolio/Analytics: one step per game's live prices,
@@ -190,6 +208,8 @@ export function PriceAutoUpdater() {
         const prices: Record<string, number> = {}
         const graded: Record<string, GradedSource> = {}
         let gradedOn = false
+        let anyAnswered = false
+        const failedGames = new Set<Game>()
         await Promise.all(gamesToLoad.map(async (game) => {
           const { url } = PRICE_ROUTES[game]
           try {
@@ -198,17 +218,27 @@ export function PriceAutoUpdater() {
               headers: { 'Content-Type': 'application/json' },
               body: priceBody(game, eligible.filter((c) => c.game === game)),
             })
-            if (!res.ok) { failed = true; return }
+            if (!res.ok) { failed = true; failedGames.add(game); return }
             const reply = (await res.json()) as PriceReply
             Object.assign(prices, reply.prices)
             Object.assign(graded, reply.graded)
             gradedOn ||= reply.gradedOn
+            anyAnswered = true
           } catch {
             failed = true
+            failedGames.add(game)
           } finally {
             step()
           }
         }))
+        // A game whose prices didn't come back keeps its cards' last prices (withLivePrice) — so its
+        // slabs keep their last sources too, or a graded price would show as "Raw est."
+        const before = useStore.getState()
+        for (const c of eligible) {
+          if (failedGames.has(c.game) && before.gradedSources[c.id]) graded[c.id] = before.gradedSources[c.id]
+          if (failedGames.has(c.game) && before.livePrices[c.id] != null) prices[c.id] = before.livePrices[c.id]
+        }
+        if (!anyAnswered) gradedOn = before.gradedOn
         applyLivePrices(prices)
         setGradedSources(graded, gradedOn)
         Object.assign(fresh, { prices, graded, gradedOn })
@@ -223,7 +253,7 @@ export function PriceAutoUpdater() {
             body: JSON.stringify({
               mode: 'baselines',
               // Slabs send their grade: one valued at PriceCharting's graded price gets graded baselines
-              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language, gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined })),
+              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language, gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined, condition: c.condition })),
             }),
           })
           if (res.ok) { fresh.baselines = await res.json(); setPriceBaselines(fresh.baselines as Parameters<typeof setPriceBaselines>[0]) }
@@ -241,7 +271,12 @@ export function PriceAutoUpdater() {
       // Only remember this load as complete if everything came back; otherwise the next check
       // retries instead of leaving some cards on stale data.
       if (!failed) {
-        loadedFor.current = { syncAt: status.latestSyncAt?.getTime() ?? 0, cardsKey: key }
+        const gradedAt = await gradedAtPromise
+        loadedFor.current = {
+          syncAt: status.latestSyncAt?.getTime() ?? 0, cardsKey: key,
+          // Too soon after the job: the server may still have served the old graded prices — retry
+          gradedAt: Date.now() - gradedAt > GRADED_SETTLE_MS ? gradedAt : (prev?.gradedAt ?? 0),
+        }
         if (status.latestSyncAt) setLastPriceRefresh(status.latestSyncAt.toISOString())
         savePrices(user.uid, fresh)
       }

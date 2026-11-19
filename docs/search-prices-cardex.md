@@ -74,6 +74,25 @@ numbered 9, hiding the rest), so the old scorer was replaced, not patched:
 
 ## Price Data
 
+### A raw copy's condition (2026-11-18)
+
+TCGplayer's market price (what tcgcsv gives us) is the **Near Mint** price, and tcgcsv has no
+per-condition prices (TCGplayer's own API has them per SKU, but new API keys aren't issued). So a
+raw copy is valued at the Near Mint price × its condition's discount — `CONDITION_MULTIPLIER` in
+`lib/types.ts`: Mint / Near Mint 1.0, Lightly Played 0.9, Moderately Played 0.65, Heavily Played
+0.45. Applied inside `catalogPrice()` (`PrintingChoice.condition`), so every copy's price agrees:
+
+- the price routes (copies send `condition` — `PriceAutoUpdater` `priceBody`), and so Inventory,
+  Portfolio, Analytics, profiles, the Cardex zoom's "Raw · LP" bubble and Add Card's Market Price;
+- price history (`rawPriceOf` discounts each day), so 24h–1y changes match the copy's price;
+- `priceAtEntry` is saved as the Near Mint price and discounted when compared (`conditionPrice()`),
+  so a later condition edit moves both together.
+
+Not discounted: slabs (the grade is the condition — PriceCharting or the Near Mint "Raw est."),
+and the **Cardex grid hover** (a card, not a copy: Near Mint). Copies below Near Mint get their
+own Inventory / Portfolio row and profile tile (`cardIdentityKey` adds the condition). A friend's
+copies carry their condition once their app re-shares their Cardex (`SHARED_FIELDS`).
+
 **As of the price-refresh redesign (see [§18](#cron-driven-price-sync)), live external price
 fetches for all four games happen in exactly one place: the 6-hourly cron-driven catalog sync.**
 Nothing else — not Portfolio's "Refresh Prices" button — ever calls

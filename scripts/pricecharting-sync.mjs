@@ -180,15 +180,19 @@ async function main() {
         failed = true
         continue
       }
+      // Two slots, a and b, taking turns: today's chunks go into the slot the app isn't reading,
+      // then the meta doc points at it — so a server never reads half yesterday's, half today's.
+      // Each slot is overwritten in place every other day; nothing is deleted.
+      const slot = prev.exists() && prev.data().slot === 'a' ? 'b' : 'a'
       const chunks = []
       for (let i = 0; i < entries.length; i += CHUNK) chunks.push(entries.slice(i, i + CHUNK))
       for (let i = 0; i < chunks.length; i += 400) {
         const batch = writeBatch(db)
-        chunks.slice(i, i + 400).forEach((c, j) => batch.set(doc(db, 'graded_prices', key, 'chunks', String(i + j)), { cards: JSON.stringify(c) }))
+        chunks.slice(i, i + 400).forEach((c, j) => batch.set(doc(db, 'graded_prices', key, 'chunks', `${slot}${i + j}`), { cards: JSON.stringify(c) }))
         await batch.commit()
       }
       await setDoc(metaRef, {
-        chunkCount: chunks.length, matched: entries.length, source: 'pricecharting', asOf: serverTimestamp(),
+        chunkCount: chunks.length, slot, matched: entries.length, source: 'pricecharting', asOf: serverTimestamp(),
       })
       console.log(`${line} — written`)
       // Today's graded prices into the kept history (graded-history.mjs). After the prices: a

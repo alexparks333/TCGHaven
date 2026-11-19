@@ -6,6 +6,7 @@ import { useStore } from '@/lib/store'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { newCardRef, saveCard, editCard as editCardInFirestore } from '@/lib/firebase/db'
 import { CONDITION_LABELS, GAME_LABELS, GAME_COLORS, hasPrintings, type Game, type Card, type Condition, type Edition, type Finish, type Language } from '@/lib/types'
+import { conditionPrice, conditionFactor } from '@/lib/pricing'
 import {
   EDITION_LABELS, FINISH_LABELS, editionsOf, finishesOf, defaultEdition, defaultFinish, variantPrice,
 } from '@/scripts/lib/pokemon-variants.mjs'
@@ -373,7 +374,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
     // Prices come from the shared catalog only. A card with no catalog price (a custom card, or one
     // TCGplayer doesn't price) keeps the price it already had.
-    const catalogPrice = gradedMarket ? gradedMarket.price : catalogMarketPrice()
+    const catalogPrice = gradedMarket ? gradedMarket.price : conditionPrice(catalogMarketPrice(), form)
     const resolvedMarketPrice = catalogPrice > 0 ? catalogPrice : (editCard?.currentPrice ?? 0)
 
     const now = new Date().toISOString()
@@ -418,7 +419,11 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
       ...(resolvedMarketPrice > 0 && {
         currentPrice: resolvedMarketPrice,
         priceUpdatedAt: editCard?.priceUpdatedAt ?? now,
-        ...(!editCard && { priceAtEntry: resolvedMarketPrice }),
+        // Always the raw price — a slab's "since added" is measured against what was paid while
+        // it's graded-priced, and against this raw price if it ever falls back to raw (a graded
+        // entry price there would fake a loss of the whole graded premium)
+        // (the Near Mint price — Portfolio discounts it for the copy's condition, like its price)
+        ...(!editCard && { priceAtEntry: catalogMarketPrice() > 0 ? catalogMarketPrice() : resolvedMarketPrice }),
       }),
     }
 
@@ -738,11 +743,14 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
                     </>
                   )
                 }
-                const mp = catalogMarketPrice()
+                const mp = conditionPrice(catalogMarketPrice(), form)
                 if (!(mp > 0)) return <span className="text-slate-500">No market price yet</span>
                 return (
                   <>
                     <span className="text-emerald-600 font-medium">{formatCurrency(mp)}</span>
+                    {conditionFactor(form) !== 1 && (
+                      <span className="text-[11px] text-slate-500">{CONDITION_LABELS[form.condition]} — {Math.round(conditionFactor(form) * 100)}% of Near Mint ({formatCurrency(catalogMarketPrice())})</span>
+                    )}
                     {gradedOn && quoteKey && gradedQuote?.key === quoteKey && (
                       <span className="text-[11px] text-slate-500">Raw est. — no {form.gradingCompany} {form.grade} sales on PriceCharting yet</span>
                     )}
@@ -1143,7 +1151,7 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
               <div className="text-[13px] font-semibold text-ink leading-snug line-clamp-2"><CardName name={nameWithPrinting(form.name, form)} /></div>
               <div className="text-[11px] text-slate-500 mt-0.5 truncate">{[form.set, form.number && `#${form.number}`].filter(Boolean).join(' · ')}</div>
               {catalogMarketPrice() > 0 && (
-                <div className="mt-1 text-sm font-semibold text-emerald-600">{formatCurrency(catalogMarketPrice())}</div>
+                <div className="mt-1 text-sm font-semibold text-emerald-600">{formatCurrency(gradedMarket ? gradedMarket.price : conditionPrice(catalogMarketPrice(), form))}</div>
               )}
             </div>
           </div>

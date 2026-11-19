@@ -27,6 +27,7 @@ import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
 import { BannerPins } from '@/components/badges/BannerPins'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
+import { conditionFactor } from '@/lib/pricing'
 import {
   getProfile, resolveUsername, profilePath, updateProfileDetails, loadFriendCardex, sendFriendRequest, acceptFriendRequest, removeFriendship,
   BIO_MAX, type Profile, type ProfilePrivacy, type Friendship,
@@ -620,6 +621,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
   const prices = useRef(new Map<string, { price: number; source?: GradedSource }>())
   // Your own slabs' PriceCharting sources (their price is already the graded one) — for the credit
   const gradedSources = useStore((s) => s.gradedSources)
+  const gradedOn = useStore((s) => s.gradedOn)
   const opened = useRef('')
   const canView = isMe || profile.privacy.cardex || isFriend
 
@@ -655,7 +657,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
     const src = [...(isMe ? ownCards : friendPriced)].sort((a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0))
     const groups = new Map<string, Card[]>()
     for (const c of src) {
-      const grade = c.gradingCompany ? `|${c.gradingCompany}|${c.grade ?? ''}|${c.gradeTier ?? ''}` : ''
+      const grade = c.gradingCompany ? `|${c.gradingCompany}|${c.grade ?? ''}|${c.gradeTier ?? ''}` : conditionFactor(c) !== 1 ? `|${c.condition}` : ''
       const key = `${c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`}|${printingOf(c)}${grade}`
       const list = groups.get(key)
       if (list) list.push(c)
@@ -715,6 +717,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       rarityColor: RARITY_COLORS[c.rarity ?? ''] ?? '#7a6a55',
       marketPrice: isMe ? c.currentPrice ?? 0 : known?.price ?? 0,
       priceSource: credit(isMe ? gradedSources[c.id] : known?.source),
+      rawEstimate: Boolean(c.slab && c.apiId && (isMe ? gradedOn && !gradedSources[c.id] : known && friendPrices?.gradedOn && !known.source)),
       owned: true,
       quantity: c.copies,
       isFoil: c.isFoil,
@@ -730,7 +733,7 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
       fetchCardPrice(c, c.slab).then((r) => {
         prices.current.set(c.id, r)
         // still the card on screen: show its price as soon as it arrives
-        if (r.price > 0 && opened.current === c.id) setZoom((z) => (z ? { ...z, marketPrice: r.price, priceSource: credit(r.source) } : z))
+        if (r.price > 0 && opened.current === c.id) setZoom((z) => (z ? { ...z, marketPrice: r.price, priceSource: credit(r.source), rawEstimate: Boolean(c.slab && gradedOn && !r.source) } : z))
       })
     }
   }

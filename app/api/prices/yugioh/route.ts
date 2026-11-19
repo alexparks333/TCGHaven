@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const raw = card.apiId ? byId.get(card.apiId) : undefined
     if (!raw) continue
     const cat = withGraded(raw, graded)
-    const choice = { isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card) }
+    const choice = { isFoil: card.isFoil, edition: card.edition, finish: card.finish, grading: gradingOf(card), condition: card.condition }
     const price = catalogPrice('yugioh', cat, choice)
     if (price > 0) results[card.id] = price
     noteGradedSource(sources, card.id, 'yugioh', cat, choice, graded)

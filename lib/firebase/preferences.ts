@@ -36,7 +36,7 @@ const VALID_TIME_FRAMES: TimeFrame[] = ['entry', '1d', '7d', '30d', '365d']
 export const PORTFOLIO_SORTS = ['pnl', 'pnlAsc', 'pnlPct', 'pnlPctAsc', 'value', 'valueAsc', 'name', 'nameDesc'] as const
 export type PortfolioSort = typeof PORTFOLIO_SORTS[number]
 
-// Portfolio's "Cards" filter: everything, only slabs, or only raw copies — slabs move by tens or
+// Top Performers' All Cards / Graded / Raw toggle (Portfolio) — slabs move by tens or
 // hundreds of dollars a day and would otherwise crowd raw cards out of Top Performers.
 export const SLAB_FILTERS = ['all', 'graded', 'raw'] as const
 export type SlabFilter = typeof SLAB_FILTERS[number]

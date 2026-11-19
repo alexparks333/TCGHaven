@@ -162,7 +162,8 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           imageUrl: result.imageUrl || '',
           apiId: result.id,
           ...(result.rarity && { rarity: result.rarity }),
-          // Read off the slab's label (prices stay the raw card's — graded prices aren't tracked yet)
+          // Read off the slab's label. Saved with the raw price; Inventory's price load then values
+          // it at its grade's PriceCharting price (docs/PriceCharting.md)
           ...(row.slab?.company && row.slab.grade && { gradingCompany: row.slab.company, grade: row.slab.grade }),
           ...(row.slab?.company && row.slab.cert && { certNumber: row.slab.cert }),
           ...(match.game === 'riftbound' && { nexus: false }),
@@ -308,6 +309,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
                       </div>
                       <div className="mt-2 text-lg font-bold text-ink tabular-nums">
                         {price > 0 ? formatCurrency(price) : <span className="text-slate-500 text-sm font-medium">No price yet</span>}
+                        {price > 0 && row.slab?.company && row.slab.grade && <span className="ml-2 text-[11px] font-medium text-slate-500" title="The ungraded price — once added, the slab is valued at its grade's PriceCharting price">raw · graded price once added</span>}
                         {row.quantity > 1 && price > 0 && <span className="ml-2 text-xs font-medium text-slate-400">× {row.quantity} = {formatCurrency(price * row.quantity)}</span>}
                       </div>
                       {cr === 'loading' && <Loader2 size={14} className="animate-spin text-slate-400 mt-1" />}

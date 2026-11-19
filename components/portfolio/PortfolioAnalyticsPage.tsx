@@ -9,9 +9,9 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { useStore, portfolioGames } from '@/lib/store'
-import { passesSlabFilter } from '@/lib/firebase/preferences'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
+import { conditionPrice } from '@/lib/pricing'
 import { authFetch } from '@/lib/firebase/authFetch'
 import { LogoLoader } from '@/components/LogoLoader'
 
@@ -64,18 +64,17 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceBaselines, gradedSources, priceLoad, activeGames: filterGames, trackedGames, calcFloor, slabFilter } = useStore()
+  const { cards, priceBaselines, gradedSources, priceLoad, activeGames: filterGames, trackedGames, calcFloor } = useStore()
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // Apply the same filters as PortfolioPage so numbers line up exactly
   const filteredCards = useMemo(() => {
     return cards.filter((c) => {
       if (!activeGames.includes(c.game)) return false
-      if (!passesSlabFilter(c, slabFilter)) return false
       if (calcFloor > 0 && (c.currentPrice ?? c.purchasePrice) < calcFloor) return false
       return true
     })
-  }, [cards, activeGames, calcFloor, slabFilter])
+  }, [cards, activeGames, calcFloor])
 
   // Daily portfolio value comes from the shared, catalog-level price history, summed on the
   // server (app/api/price-history, mode "portfolio") — only one number per day is downloaded.
@@ -85,7 +84,7 @@ export default function PortfolioAnalyticsPage() {
     () => filteredCards.filter((c) => !c.apiId).reduce((s, c) => s + (c.currentPrice ?? c.purchasePrice) * c.quantity, 0),
     [filteredCards],
   )
-  const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}:${c.gradingCompany ?? ''}${c.grade ?? ''}${c.gradeTier ?? ''}`).join('|')
+  const requestKey = catalogCards.map((c) => `${c.id}:${c.quantity}:${c.isFoil ? 1 : 0}:${c.gradingCompany ?? ''}${c.grade ?? ''}${c.gradeTier ?? ''}:${c.condition ?? ''}`).join('|')
   const [dailyValues, setDailyValues] = useState<{ day: string; value: number }[]>([])
   // Which request the current dailyValues answer — the page waits behind the loader until the
   // timeline for the current cards has actually come back.
@@ -102,6 +101,7 @@ export default function PortfolioAnalyticsPage() {
         items: catalogCards.map((c) => ({
           key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language,
           gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined, // a graded-priced slab's days are its graded prices
+          condition: c.condition, // a raw copy's days are discounted for its condition
           qty: c.quantity, fallback: c.currentPrice ?? c.purchasePrice,
         })),
       }),
@@ -122,7 +122,7 @@ export default function PortfolioAnalyticsPage() {
     const entryBase = filteredCards.reduce(
       // A slab valued at PriceCharting's graded price: since added = against what was paid, as on
       // Portfolio (its priceAtEntry is the ungraded price it was added at)
-      (s, c) => s + (gradedSources[c.id] ? c.purchasePrice : (c.priceAtEntry ?? priceBaselines[c.id]?.first ?? c.purchasePrice)) * c.quantity,
+      (s, c) => s + (gradedSources[c.id] ? c.purchasePrice : (c.priceAtEntry != null ? conditionPrice(c.priceAtEntry, c) : priceBaselines[c.id]?.first ?? c.purchasePrice)) * c.quantity,
       0,
     )
     return dailyValues.map(({ day, value: catalogValue }) => {

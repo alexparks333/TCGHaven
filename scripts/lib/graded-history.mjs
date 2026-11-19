@@ -54,12 +54,17 @@ export async function buildGradedHistory(entries, cardsById, when = new Date()) 
   const prices = {}
   const bySet = new Map()
   for (const e of entries) {
-    const tuple = gradedTuple(e.p)
-    if (!tuple) continue
-    prices[e.id] = tuple
     const setKey = setKeyOf(cardsById.get(e.id) ?? {})
-    if (!bySet.has(setKey)) bySet.set(setKey, {})
-    bySet.get(setKey)[e.id] = tuple
+    // The plain listing under the card's id, each other version (pricecharting.mjs GRADED_VARIANTS)
+    // under "{id}~{version}" — a 1st Edition slab's history is the 1st Edition's prices
+    const rows = [[e.id, e.p], ...Object.entries(e.v ?? {}).map(([k, x]) => [`${e.id}~${k}`, x.p])]
+    for (const [id, p] of rows) {
+      const tuple = gradedTuple(p)
+      if (!tuple) continue
+      prices[id] = tuple
+      if (!bySet.has(setKey)) bySet.set(setKey, {})
+      bySet.get(setKey)[id] = tuple
+    }
   }
   const months = new Map()
   for (const [setKey, p] of bySet) {

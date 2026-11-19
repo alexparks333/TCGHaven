@@ -133,10 +133,53 @@ export function pickByTcgId(rows) {
   for (const [tcgId, list] of groups) {
     if (list.length === 1) { byTcg.set(tcgId, list[0]); continue }
     const plain = list.filter((g) => !/\[[^\]]*\]/.test(g.name))
-    if (plain.length === 1) byTcg.set(tcgId, plain[0])
-    else ambiguous.push({ tcgId, names: list.map((g) => g.name) })
+    // No plain listing, but one "[Holo]" (Pokémon's holo / reverse holo pair) — the holo is the card
+    const holo = plain.length ? [] : list.filter((g) => pcVariantOf(g.name) === 'holo')
+    const base = plain.length === 1 ? plain[0] : holo.length === 1 ? holo[0] : null
+    if (!base) { ambiguous.push({ tcgId, names: list.map((g) => g.name) }); continue }
+    // The card's other versions PriceCharting lists under the same TCGplayer id — "[Foil]",
+    // "[1st Edition]", "[Reverse Holo]" … — each with its own graded prices (gradedVariantKey picks)
+    const variants = {}
+    for (const key of GRADED_VARIANTS) {
+      const rowsOf = list.filter((g) => g !== base && pcVariantOf(g.name) === key)
+      if (rowsOf.length === 1) variants[key] = { p: rowsOf[0].prices, u: rowsOf[0].url }
+    }
+    byTcg.set(tcgId, Object.keys(variants).length ? { ...base, variants } : base)
   }
   return { byTcg, ambiguous }
+}
+
+// The versions of a card PriceCharting lists separately under one TCGplayer id, by their [tag]
+export const GRADED_VARIANTS = ['foil', '1st', 'limited', 'shadowless', 'reverse']
+
+/** A PriceCharting listing's version from its [tag]: '' = the plain listing, 'foil' / '1st' /
+ *  'limited' / 'shadowless' / 'reverse' / 'holo', or null for anything else (a rarity or art
+ *  version — "[Ultimate Rare]", "[Extended Art Foil]" — that can't be matched to our card) */
+export function pcVariantOf(name) {
+  const tags = [...String(name ?? '').matchAll(/\[([^\]]+)\]/g)].map((m) => m[1].trim().toLowerCase().replace(/\s+/g, ' '))
+  if (!tags.length) return ''
+  if (tags.length > 1) return null
+  const t = tags[0]
+  if (t === 'foil') return 'foil'
+  if (t === '1st edition') return '1st'
+  if (t === 'limited' || t === 'limited edition') return 'limited'
+  if (t === 'shadowless') return 'shadowless'
+  if (t === 'reverse holo') return 'reverse'
+  if (t === 'holo') return 'holo'
+  return null
+}
+
+/** Which of a card's PriceCharting listings prices this copy: '' = the plain one, a GRADED_VARIANTS
+ *  key, or null = the version this copy is has no listing → no graded price (the raw price, "Raw
+ *  est."). A 1st Edition / Shadowless / Limited / Reverse Holo copy needs its own listing (they're
+ *  worth very different amounts); a foil copy uses the "[Foil]" one when there is one, else the
+ *  plain listing (a foil-only product, or one PriceCharting doesn't split). */
+export function gradedVariantKey({ isFoil, edition, finish } = {}, variants = {}) {
+  const v = variants ?? {}
+  if (edition === '1st' || edition === 'shadowless' || edition === 'limited') return v[edition] ? edition : null
+  if (finish === 'reverse') return v.reverse ? 'reverse' : null
+  if (isFoil && v.foil) return 'foil'
+  return ''
 }
 
 /** A catalog card's TCGplayer product id: `tcgProductId`; else built into the id (`tcg-123`,
@@ -172,7 +215,7 @@ export function matchCatalog(cards, byTcg) {
     const g = byTcg.get(pid)
     if (!g) continue
     if (ids.length > 1) { sharedProductIds++; continue }
-    entries.push({ id: ids[0], pc: g.pcId, u: g.url, p: g.prices })
+    entries.push({ id: ids[0], pc: g.pcId, u: g.url, p: g.prices, ...(g.variants && { v: g.variants }) })
   }
   entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   return { entries, withProductId, sharedProductIds }

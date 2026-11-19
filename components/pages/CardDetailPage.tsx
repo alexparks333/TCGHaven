@@ -38,13 +38,13 @@ export default function CardDetailPage() {
     authFetch('/api/price-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil, edition: card.edition, finish: card.finish, language: card.language, gradingCompany: card.gradingCompany, grade: card.grade, gradeTier: card.gradeTier ?? undefined }] }),
+      body: JSON.stringify({ mode: 'series', days: 730, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil, edition: card.edition, finish: card.finish, language: card.language, gradingCompany: card.gradingCompany, grade: card.grade, gradeTier: card.gradeTier ?? undefined, condition: card.condition }] }),
     })
       .then((r) => (r.ok ? r.json() : {}))
       .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
       .catch(() => {})
     return () => { stale = true }
-  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.gradingCompany, card?.grade, card?.gradeTier, gradedPriced])
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.gradingCompany, card?.grade, card?.gradeTier, card?.condition, gradedPriced])
 
   const chartData = useMemo(() => {
     if (!card) return []

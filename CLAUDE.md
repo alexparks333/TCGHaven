@@ -116,6 +116,7 @@ npm run test:realscans -- http://localhost:3000   # the scanner on 64 real phone
 37. Star Wars: Unlimited / Gundam / Flesh and Blood / Digimon / Palworld / Cyberpunk: one shared TCGplayer engine, a settings block per game (`tcgplayer-games.mjs` `TCGPLAYER_GAMES`, `npm run tcgplayer-games-report`) — add the next TCGplayer-only game there, don't copy.
 38. The scanner's picture AI: the model and the fingerprint index are published together (`npm run scanner-index -- publish`, same model for both); the picture never adds a card on its own (`decide.ts`); never commit models or indexes (`docs/scanner-ai.md`).
 39. PriceCharting adds graded prices only — TCGplayer stays the truth for cards, images, numbers and raw prices; graded prices live in `graded_prices/{catalog}` (history: `graded_history/{catalog}`, `GRADED_ORDER` append-only), never on catalog cards; one copy, one price — a graded-priced slab uses graded prices and graded history everywhere (Cardex hover = raw); never show one without the PriceCharting citation link (`docs/PriceCharting.md`).
+40. A raw copy = the Near Mint price × its condition's discount (`CONDITION_MULTIPLIER`, applied in `catalogPrice()` via `condition`) everywhere a copy is valued, history and `priceAtEntry` included; slabs and the Cardex grid hover stay Near Mint (`docs/search-prices-cardex.md`).
 35. One Piece: every card = one TCGplayer product (`tcgProductId`); existing cards never change what they show (`onepiece-tcgplayer.mjs`, `npm run onepiece-source-report`).
 
 ## Badges & the Relief Studio — the essentials

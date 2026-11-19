@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
+import { collection, doc, documentId, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config'
 import { gradedPrice, gradingOf, type CatalogPriceFields, type PrintingChoice } from '../pricing'
-import { gradedPriceKey } from '@/scripts/lib/pricecharting.mjs'
-import { catalogKeyFor, type CatalogKey, type Edition, type Finish, type Game, type Language } from '../types'
+import { gradedPriceKey, gradedVariantKey } from '@/scripts/lib/pricecharting.mjs'
+import { catalogKeyFor, type CatalogKey, type Condition, type Edition, type Finish, type Game, type Language } from '../types'
 
 /**
  * PriceCharting graded prices for the price routes — docs/PriceCharting.md. Written once a day by
@@ -21,6 +21,7 @@ export interface GradedEntry {
   pc: string                    // PriceCharting product id
   u: string                     // the card's PriceCharting page — the required citation link
   p: Record<string, number>     // graded key (psa10, g9 …) → USD
+  v?: Record<string, { p: Record<string, number>; u?: string }>  // other versions ("[Foil]", "[1st Edition]" …)
 }
 
 export const gradedPricesEnabled = () => process.env.GRADED_PRICES === 'on'
@@ -41,10 +42,15 @@ async function read(key: CatalogKey, have?: { asOf: number; byId: Map<string, Gr
   const byId = new Map<string, GradedEntry>()
   const count = Number(meta.exists() ? meta.data().chunkCount : 0) || 0
   if (!count) return { asOf, byId }
-  // Only chunks 0..count-1 belong to the latest write; higher-numbered leftovers are ignored.
-  const snap = await getDocs(collection(db, 'graded_prices', key, 'chunks'))
+  // The latest write's chunks: slot "a" or "b" (a0, a1 …; pricecharting-sync.mjs writes the other
+  // slot, then points the meta at it), or plain 0, 1 … from before slots. Only 0..count-1 count.
+  const slot = meta.exists() ? String(meta.data().slot ?? '') : ''
+  const chunksRef = collection(db, 'graded_prices', key, 'chunks')
+  const snap = await getDocs(slot
+    ? query(chunksRef, where(documentId(), '>=', `${slot}0`), where(documentId(), '<=', `${slot}~`))
+    : chunksRef)
   for (const d of snap.docs) {
-    const n = Number(d.id)
+    const n = Number(slot ? d.id.slice(slot.length) : d.id)
     if (!Number.isInteger(n) || n >= count) continue
     const raw = d.data().cards as string | undefined
     if (!raw) continue
@@ -79,12 +85,13 @@ export interface GradingInput {
   gradingCompany?: string
   grade?: string
   gradeTier?: 'pristine' | 'black'
+  condition?: Condition   // a raw copy's condition (its price is discounted from Near Mint)
 }
 
 /** Which of these items are valued at PriceCharting's graded price today (the same test the price
  *  routes use) — their history is then the graded history (lib/api/priceHistory.ts). */
 export async function gradedPricedKeys(
-  items: (GradingInput & { key: string; game: Game; apiId: string; language?: Language; edition?: Edition; finish?: Finish })[],
+  items: (GradingInput & { key: string; game: Game; apiId: string; language?: Language; isFoil?: boolean; edition?: Edition; finish?: Finish })[],
 ): Promise<Set<string>> {
   const out = new Set<string>()
   const slabs = items.filter((i) => i.gradingCompany)
@@ -97,8 +104,8 @@ export async function gradedPricedKeys(
   await Promise.all(Array.from(byCatalog.entries()).map(async ([key, list]) => {
     const graded = await loadGradedPrices(key)
     for (const it of list) {
-      const p = graded.get(it.apiId)?.p
-      if (p && gradedPrice(it.game, { graded: p }, { edition: it.edition, finish: it.finish, grading: gradingOf(it) }) > 0) out.add(it.key)
+      const e = graded.get(it.apiId)
+      if (e && gradedPrice(it.game, { graded: e.p, gradedVariants: e.v }, { isFoil: it.isFoil, edition: it.edition, finish: it.finish, grading: gradingOf(it) }) > 0) out.add(it.key)
     }
   }))
   return out
@@ -122,7 +129,9 @@ export function noteGradedSource(
   const g = choice.grading
   if (!entry || !g?.company || gradedPrice(game, cat, choice) <= 0) return
   const key = gradedPriceKey(g.company, g.grade, g.tier)
-  if (key) sources[cardId] = { key, url: entry.u }
+  // The page of the version this copy is priced from ("[1st Edition]" …), else the card's own
+  const variant = gradedVariantKey(choice, entry.v)
+  if (key) sources[cardId] = { key, url: (variant && entry.v?.[variant]?.u) || entry.u }
 }
 
 /** A price route's answer. Callers that ask `withSources` (PriceAutoUpdater) get
@@ -132,7 +141,7 @@ export function priceReply(body: { withSources?: boolean } | null, prices: Recor
 }
 
 /** The catalog card with its graded prices laid on, for catalogPrice() */
-export function withGraded<T extends { id: string }>(cat: T, graded: Map<string, GradedEntry> | null): T & { graded?: Record<string, number> } {
-  const p = graded?.get(cat.id)?.p
-  return p ? { ...cat, graded: p } : cat
+export function withGraded<T extends { id: string }>(cat: T, graded: Map<string, GradedEntry> | null): T & Pick<CatalogPriceFields, 'graded' | 'gradedVariants'> {
+  const e = graded?.get(cat.id)
+  return e ? { ...cat, graded: e.p, ...(e.v && { gradedVariants: e.v }) } : cat
 }

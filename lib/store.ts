@@ -33,7 +33,7 @@ interface TCGStore {
   // Shared price-update health for Portfolio's "Prices updated …" line; not persisted.
   priceStatus: PriceStatus | null
   calcFloor: number
-  slabFilter: SlabFilter   // Portfolio: all cards / only slabs / only raw (lib/firebase/preferences.ts)
+  slabFilter: SlabFilter   // Top Performers: all cards / only slabs / only raw (lib/firebase/preferences.ts)
   showFilters: boolean
   activeGames: Game[]
   // The games this user has chosen to track (Inventory's game tabs + "+" picker). Inventory,
@@ -151,10 +151,18 @@ export const useStore = create<TCGStore>()(
   addCard: (card) =>
     set((state) => ({ cards: [...state.cards, withLivePrice(card, state.livePrices)] })),
 
+  // A change to what the card is (its grade, printing or catalog card) makes its live price and
+  // PriceCharting source stale — they'd show the old grade's price and credit until the reload the
+  // change triggers (PriceAutoUpdater) answers. So they're dropped and the saved price shows.
   updateCard: (id, updates) =>
-    set((state) => ({
-      cards: state.cards.map((c) => (c.id === id ? withLivePrice({ ...c, ...updates }, state.livePrices) : c)),
-    })),
+    set((state) => {
+      const identity = (['apiId', 'isFoil', 'edition', 'finish', 'language', 'gradingCompany', 'grade', 'gradeTier', 'condition'] as const)
+        .some((k) => k in updates && updates[k] !== state.cards.find((c) => c.id === id)?.[k])
+      if (!identity) return { cards: state.cards.map((c) => (c.id === id ? withLivePrice({ ...c, ...updates }, state.livePrices) : c)) }
+      const { [id]: _price, ...livePrices } = state.livePrices
+      const { [id]: _source, ...gradedSources } = state.gradedSources
+      return { livePrices, gradedSources, cards: state.cards.map((c) => (c.id === id ? { ...c, ...updates } : c)) }
+    }),
 
   deleteCard: (id) =>
     set((state) => ({ cards: state.cards.filter((c) => c.id !== id) })),

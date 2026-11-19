@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { isTcgplayerSourced, type Card, type Game } from './types'
+import { isTcgplayerSourced, CONDITION_MULTIPLIER, type Card, type Game } from './types'
 import { displayCurrency } from './currency'
 
 export function cn(...inputs: ClassValue[]) {
@@ -60,9 +60,12 @@ export function cardIdentityKey(card: Card): string {
   // Reverse Holo) are priced differently and never share a row. Cards from before editions
   // existed have neither field and keep their old key.
   const printingPart = card.edition || card.finish ? `::${card.edition ?? ''}::${card.finish ?? ''}` : ''
+  // A raw copy below Near Mint is worth less (lib/pricing.ts conditionPrice) — its own row. Near
+  // Mint and Mint (same price) keep the old key.
+  const condPart = !card.gradingCompany && (CONDITION_MULTIPLIER[card.condition] ?? 1) !== 1 ? `::${card.condition}` : ''
   const langPart = card.language === 'ja' ? '::ja' : ''
-  if (card.apiId) return `${card.game}${langPart}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${printingPart}${gradePart}${nexusPart}`
-  return `${card.game}${langPart}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${printingPart}${gradePart}${nexusPart}`
+  if (card.apiId) return `${card.game}${langPart}::${card.apiId}::${card.isFoil ? 'foil' : 'normal'}${printingPart}${gradePart}${condPart}${nexusPart}`
+  return `${card.game}${langPart}::${card.name}::${card.set}::${card.number}::${card.isFoil ? 'foil' : 'normal'}${printingPart}${gradePart}${condPart}${nexusPart}`
 }
 
 // Whether `newCard` is the first copy of this exact print the user has ever added — same

@@ -7,6 +7,7 @@ import {
   PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, setKeyOf, monthDocId, dayDocId, tupleToFields, decodePriceChunks, gunzip,
 } from '@/scripts/lib/price-history.mjs'
 import { GRADED_HISTORY_COLLECTION, tupleToGraded } from '@/scripts/lib/graded-history.mjs'
+import { GRADED_VARIANTS } from '@/scripts/lib/pricecharting.mjs'
 import { gradedPricedKeys, type GradingInput } from '@/lib/api/gradedPrices'
 
 // Server-side reader for the shared price history (format: scripts/lib/price-history.mjs), and for
@@ -244,16 +245,25 @@ const LOOKBACK_DAYS = 3
 // An item's price from a stored tuple — the raw history's tuple through the one pricing rule
 // (lib/pricing.ts), or the graded history's through the slab's grade. Null = no price.
 type CardFields = { rarity?: string; publicCode?: string }
-type PriceOf = (game: Game, item: HistoryItem, tuple: number[] | undefined, card?: CardFields) => number | null
-const rawPriceOf: PriceOf = (game, item, tuple, card) => {
+// `prices` is one day's map (catalog id → tuple); the graded history also keeps a card's other
+// versions under "{id}~{version}" (graded-history.mjs).
+type PriceOf = (game: Game, item: HistoryItem, prices: PriceMap, card?: CardFields) => number | null
+const rawPriceOf: PriceOf = (game, item, prices, card) => {
+  const tuple = prices[item.apiId]
   if (!tuple) return null
-  const price = catalogPrice(game, { ...tupleToFields(tuple), rarity: card?.rarity, publicCode: card?.publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish })
+  const price = catalogPrice(game, { ...tupleToFields(tuple), rarity: card?.rarity, publicCode: card?.publicCode }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish, condition: item.gradingCompany ? undefined : item.condition })
   return price > 0 ? price : null
 }
 const gradingOfItem = (item: HistoryItem): GradingChoice => ({ company: item.gradingCompany, grade: item.grade, tier: item.gradeTier ?? null })
-const gradedPriceOf: PriceOf = (game, item, tuple) => {
+const gradedPriceOf: PriceOf = (game, item, prices) => {
+  const tuple = prices[item.apiId]
   if (!tuple) return null
-  const price = gradedPrice(game, { graded: tupleToGraded(tuple) }, { edition: item.edition, finish: item.finish, grading: gradingOfItem(item) })
+  const gradedVariants: Record<string, { p: Record<string, number> }> = {}
+  for (const v of GRADED_VARIANTS) {
+    const t = prices[`${item.apiId}~${v}`]
+    if (t) gradedVariants[v] = { p: tupleToGraded(t) }
+  }
+  const price = gradedPrice(game, { graded: tupleToGraded(tuple), gradedVariants }, { isFoil: item.isFoil, edition: item.edition, finish: item.finish, grading: gradingOfItem(item) })
   return price > 0 ? price : null
 }
 
@@ -303,10 +313,10 @@ async function baselinesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[
 
     for (const item of gameItems) {
       const card = byId.get(item.apiId)
-      const b: Baseline = { d1: null, d7: null, d30: null, d365: null, first: priceOf(game, item, firsts[item.apiId], card) }
+      const b: Baseline = { d1: null, d7: null, d30: null, d365: null, first: priceOf(game, item, firsts, card) }
       for (const { name, files } of windows) {
         for (const file of files) {
-          const price = priceOf(game, item, file.prices[item.apiId], card)
+          const price = priceOf(game, item, file.prices, card)
           if (price !== null) { b[name] = price; break }
         }
       }
@@ -355,7 +365,7 @@ async function seriesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[], 
         for (const entry of Array.from(monthDoc.values())) {
           if (new Date(entry.t).getTime() < fromMs) continue
           for (const { item, card } of rows) {
-            const price = priceOf(game, item, entry.p[item.apiId], card)
+            const price = priceOf(game, item, entry.p, card)
             if (price === null) continue
             if (!result.has(item.key)) result.set(item.key, [])
             result.get(item.key)!.push({ date: entry.t, price })
