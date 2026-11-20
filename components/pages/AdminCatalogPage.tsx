@@ -128,6 +128,12 @@ const SYNC_GAMES: { game: SyncJob; label: string }[] = [
   { game: 'cyberpunk', label: 'Cyberpunk' },
 ]
 
+// "Sync all" (top right of the Sync page): every game but Magic — Magic already syncs daily on its
+// own (.github/workflows/sync-mtg.yml) and is by far the heaviest run (~4.5 min, its own button).
+// A few at a time, Pokémon first (the longest), so the syncs don't all hit TCGplayer and Firestore at once.
+const SYNC_ALL_GAMES = SYNC_GAMES.filter((g) => g.game !== 'mtg').map((g) => g.game)
+const SYNC_ALL_AT_ONCE = 3
+
 // Relative "how long ago" for a sync_status timestamp — short-form since it sits inline next to
 // a small status line, not a full date picker.
 function timeAgo(iso: string): string {
@@ -140,7 +146,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)}d ago`
 }
 
-export function SyncPanel() {
+export function SyncPanel({ heading }: { heading?: React.ReactNode }) {
   // The staff portal only renders for staff, so this is always true here; kept as a guard.
   const isAdmin = !!useStaff().member
   const [state, setState] = useState<Record<SyncJob, GameSyncState>>({
@@ -160,7 +166,24 @@ export function SyncPanel() {
     getSyncStatus('mtg-new-set-check').then(setMtgCheck).catch(() => {})
   }, [isAdmin])
 
+  const [allProgress, setAllProgress] = useState<{ done: number; total: number } | null>(null)
+
   if (!isAdmin) return null
+
+  async function syncAll() {
+    if (allProgress) return
+    const queue = SYNC_ALL_GAMES.filter((g) => state[g].status !== 'running')
+    let done = 0
+    setAllProgress({ done, total: queue.length })
+    const worker = async () => {
+      for (let g = queue.shift(); g; g = queue.shift()) {
+        await runSync(g)
+        setAllProgress((p) => (p ? { ...p, done: ++done } : p))
+      }
+    }
+    await Promise.all(Array.from({ length: SYNC_ALL_AT_ONCE }, worker))
+    setAllProgress(null)
+  }
 
   async function runSync(game: SyncJob) {
     setState((s) => ({ ...s, [game]: { status: 'running' } }))
@@ -179,6 +202,22 @@ export function SyncPanel() {
   }
 
   return (
+    <>
+    <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+      <div>{heading}</div>
+      <button
+        onClick={syncAll}
+        disabled={!!allProgress}
+        title="Sync every game except Magic (it syncs daily on its own — use its button below), a few at a time"
+        className={cn(
+          'shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all',
+          allProgress ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-violet-600 text-white hover:bg-violet-500',
+        )}
+      >
+        {allProgress ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+        {allProgress ? `Syncing… ${allProgress.done}/${allProgress.total}` : 'Sync all'}
+      </button>
+    </div>
     <div className="card-glass p-5 mb-6">
       <h2 className="text-ink font-semibold mb-1">Sync Card Data</h2>
       <p className="text-slate-400 text-sm mb-4">
@@ -314,6 +353,7 @@ export function SyncPanel() {
         })}
       </div>
     </div>
+    </>
   )
 }
 
