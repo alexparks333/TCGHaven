@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
+import { badgeTier, pinDrawSize, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { loadBadges, type SharedBadges } from '@/lib/firebase/badges'
 import { useFriends } from '@/components/friends/FriendsProvider'
@@ -18,9 +18,14 @@ import { useTrimmedArt } from './trimmedArt'
 // across it — the same light-catching tilt as the pin book (BadgeBook.tsx BadgeSpot). Click: the
 // 3D inspect view for visitors, the picker for the owner. The silhouette shadow and the drop
 // shadow sit on parts that don't tilt (a filter on the tilting element blurs it, see BadgeSpot).
-function BannerPin({ def, size, box, grayscale, title, onClick }: {
+const BANNER_ZOOM = 1.25
+
+function BannerPin({ def, size, base, box, grayscale, title, onClick }: {
   def: BadgeDef
+  /** the banner's height: no pin is drawn taller */
   size: number
+  /** a 100% pin's size here (BannerPins: the biggest pinned one fills the banner's height) */
+  base: number
   box: { width: number; height: number }
   grayscale: boolean
   title: string
@@ -29,7 +34,17 @@ function BannerPin({ def, size, box, grayscale, title, onClick }: {
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
   const art = useTrimmedArt(def.imageUrl) // the glint is masked to the pin's own shape
   useEffect(() => { preloadPinInspector() }, []) // so a click opens the 3D view at once
-  const drawn = Math.min(size, pinSize(def, size)) // never past the banner's height, whatever the Display size
+  // Its Display size, in the SAME ratio to the other pins as in the book (pinDrawSize — the book's
+  // rule): the biggest pinned one fills the banner's height, the others smaller by as much as in the
+  // book. Each used to be capped at the banner's height on its own, so a pin set bigger than another
+  // (Banned vs the Crystal Rose) came out the same size here (2026-11-20).
+  // ×BANNER_ZOOM: a pin's art leaves room round it inside its box, so at its slot's size it looked
+  // small in its slot (next to the empty spots' circles) — every pin a quarter bigger, together, so the
+  // ratio holds; it may reach past its box (the slots keep their spacing) — 2026-11-20
+  // …but never taller than the banner (`size` = its height): the art is drawn to its own shape in a
+  // 1 × 1.12 box (BadgePin), so its height is size × min(1.12, its aspect) — kept within, or the
+  // banner (overflow hidden) clips its top and bottom
+  const drawn = Math.min(pinDrawSize(def, base) * BANNER_ZOOM, size / Math.min(1.12, art?.aspect ?? 1.12))
   return (
     <button
       type="button"
@@ -140,6 +155,9 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
   }
 
   const spots = shown.map((def, i) => ({ def, i })).filter((s) => isMe || s.def)
+  // One scale for every pinned pin: the biggest Display size among them fills the banner's height
+  const biggest = Math.max(1, ...spots.flatMap(({ def }) => (def ? [pinDrawSize(def, 1)] : [])))
+  const base = size / biggest
   const box = { width: size * 1.02, height: size * 1.12 }
 
   return (
@@ -152,6 +170,7 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
             key={i}
             def={def}
             size={size}
+            base={base}
             box={box}
             grayscale={tierOf(def) === 1}
             title={isMe ? `${def.name} — change or take off` : `${def.name} — view in 3D`}
@@ -206,6 +225,7 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
           earnedAt={badges.earned[inspect.id]}
           progress={badges.progress[inspect.id]}
           onClose={() => setInspect(null)}
+          cardsFor={{ isMe }}
         />
       )}
     </>

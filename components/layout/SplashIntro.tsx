@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { signedInOnlyPath } from './Sidebar'
 import { hideLaunchScreen } from '@/lib/nativeApp'
+import { LOGO_FRAMES, LOGO_FRAME_MS, splashFrame } from '@/lib/logoFrames'
 
 // Phones only, once per visit — a splash screen, not a loader: the big doorway animation plays all
 // the way through (cards fly out) over the parchment with the TCGHaven wordmark below, rests on its
@@ -28,10 +29,8 @@ import { hideLaunchScreen } from '@/lib/nativeApp'
 // slow start went parchment → half a logo → the plain loader → Sign In. Now: nothing but parchment
 // until the frames are in, and no fade until the page underneath is the real one.
 const SEEN = 'haven:intro'
-const FRAMES = 21
-/** Frame i's picture — 720px, sharp at this size on a 3× iPhone screen (scripts/logo-animation.mjs) */
-export const splashFrame = (i: number) => `/splash/frame-${String(i).padStart(2, '0')}.webp`
-const FRAME_MS = 33 // 30 fps, as rendered
+const FRAMES = LOGO_FRAMES
+const FRAME_MS = LOGO_FRAME_MS
 const PLAY_MS = FRAMES * FRAME_MS + 60 // every frame, the last one included
 const REST_MS = 800 // on the finished logo before the fade (2s felt frozen — 2026-11-20)
 const WAIT_FOR_FRAMES_MS = 3000 // a very slow connection: give up on the animation, not on the hold

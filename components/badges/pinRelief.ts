@@ -197,7 +197,13 @@ export function cleanRelief(img: HTMLImageElement, maxAnisotropy: number, alpha:
     alphaTest: 0.5,
     roughnessMap: toTexture(ormMap(classes, rgba, true)), metalnessMap: null, roughness: 1, metalness: 1,
     emissiveMap: emissiveTex, emissive: new THREE.Color(0xffffff), emissiveIntensity: 0.5,
-    side: THREE.FrontSide,
+    // Both sides. The relief is one thin sheet: the gold skirt only rises as high as its EDGE, and
+    // under the raised art there's nothing (a hollow over the cap). Turned edge-on, you look at the
+    // raised parts from below — their back — and drawn front-only they vanished: you saw straight
+    // into the pin (the far side of the skirt, the bumps behind). Its back is drawn as solid gold
+    // metal (installWallShader: a back face is all wall), so from any angle the pin reads as one
+    // cast piece. (2026-11-20 — the "see-through edge" bug.)
+    side: THREE.DoubleSide,
   })
   faceMaterial.metalnessMap = faceMaterial.roughnessMap
   const finishUniforms = installWallShader(faceMaterial)
@@ -1397,7 +1403,18 @@ function installWallShader(mat: THREE.MeshPhysicalMaterial) {
         'material.transmission = transmission;',
         'material.transmission = transmission * ((fin > 2.5 && fin < 3.5) ? finB * finCov * (1.0 - vWall) : 0.0);'))
   }
-  mat.customProgramCacheKey = () => 'relief-walls-finish'
+  // A back face (the relief's underside, seen edge-on — the face is drawn double-sided, buildRelief)
+  // is all wall: solid gold, no art, no finish. vWall is read-only in a fragment shader, so every use
+  // reads pinWall instead.
+  const compile = mat.onBeforeCompile
+  mat.onBeforeCompile = (s, r) => {
+    compile.call(mat, s, r)
+    s.fragmentShader = s.fragmentShader
+      .replace(/\bvWall\b/g, 'pinWall')
+      .replace('varying float pinWall;', 'varying float vWall;')
+      .replace('void main() {', 'void main() {\nfloat pinWall = gl_FrontFacing ? vWall : 1.0;')
+  }
+  mat.customProgramCacheKey = () => 'relief-walls-finish-2sided'
   return uniforms
 }
 

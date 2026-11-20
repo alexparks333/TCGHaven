@@ -621,7 +621,13 @@ export function AddCardDialog({ defaultGame, editCard, prefill, onClose, onSaveE
 
             {showCardResults && cardResults.length === 0 && cardQuery.length >= 2 && !cardSearching && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-3 text-xs text-slate-500 z-50">
-                No results for &quot;{cardQuery}&quot;. Fill in manually below.
+                No results for &quot;{cardQuery}&quot;. Fill in manually below, or{' '}
+                <a
+                  href={`/support?type=missing&game=${form.game}&q=${encodeURIComponent(cardQuery.trim())}&from=add-card`}
+                  className="font-semibold text-slate-400 hover:text-ink underline underline-offset-2"
+                >
+                  report a missing card
+                </a>.
               </div>
             )}
           </div>

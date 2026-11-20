@@ -599,9 +599,9 @@ export default function InventoryPage() {
           }
         />
 
-        {/* Search + Date filter — search gets its own full-width row on phones */}
-        <div className="flex flex-wrap md:flex-nowrap gap-2 mb-4">
-          <div className="relative w-full md:w-auto md:flex-1">
+        {/* Search + Date filter — search gets its own full-width row on phones (a sideways one too). From here to the card lists, wide: (tailwind.config.ts) not md:, so a sideways phone keeps the phone's layout */}
+        <div className="flex flex-wrap wide:flex-nowrap gap-2 mb-4">
+          <div className="relative w-full wide:w-auto wide:flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
@@ -659,6 +659,26 @@ export default function InventoryPage() {
               </div>
             )}
           </div>
+          {/* No day picked: a calendar bubble (an empty date box drew as a long empty bar on a phone,
+              2026-11-20) — tapping it opens the date picker. A day picked: the date box with its ✕. */}
+          {!dateFilter ? (
+            <label
+              title="Show the cards you added on one day"
+              className="relative shrink-0 w-[2.625rem] h-[2.625rem] flex items-center justify-center bg-slate-900 border border-slate-800 rounded-xl text-slate-500 hover:text-ink hover:border-slate-600 cursor-pointer transition-colors"
+            >
+              <CalendarDays size={16} className="pointer-events-none" />
+              <input
+                type="date"
+                value=""
+                max={todayISO()}
+                aria-label="Show the cards you added on one day"
+                onChange={(e) => setDateFilter(e.target.value)}
+                // the picker opens on a click anywhere on it (a computer's browser opens it only from its own icon)
+                onClick={(e) => { try { e.currentTarget.showPicker?.() } catch { /* not allowed here */ } }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </label>
+          ) : (
           <div className="relative flex items-center">
             <CalendarDays size={14} className="absolute left-3 text-slate-500 pointer-events-none z-10" />
             <input
@@ -667,17 +687,17 @@ export default function InventoryPage() {
               max={todayISO()}
               onChange={(e) => setDateFilter(e.target.value)}
               className="bg-slate-900 border border-slate-800 rounded-xl pl-9 py-2.5 text-sm text-ink focus:outline-none focus:border-slate-600 w-[10.625rem] cursor-pointer [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
-              style={dateFilter ? { paddingRight: '1.5rem' } : { paddingRight: '0.5rem' }}
+              style={{ paddingRight: '1.5rem' }}
             />
-            {dateFilter && (
-              <button
-                onClick={() => setDateFilter('')}
-                className="absolute right-2 text-slate-500 hover:text-ink z-10"
-              >
-                <X size={13} />
-              </button>
-            )}
+            <button
+              onClick={() => setDateFilter('')}
+              aria-label="Show every day again"
+              className="absolute right-2 text-slate-500 hover:text-ink z-10"
+            >
+              <X size={13} />
+            </button>
           </div>
+          )}
         </div>
 
         {/* Session summary — shown when a date is selected */}
@@ -742,7 +762,7 @@ export default function InventoryPage() {
         ) : grouped ? (
           /* ── Grouped view (no date filter) ── */
           <div className="card-glass">
-            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <div className="hidden wide:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <span>Card</span><span>Set</span><span>Condition</span><span>Qty</span><span>Total Paid</span><span>Market</span><span></span>
             </div>
 
@@ -758,7 +778,7 @@ export default function InventoryPage() {
                 <div key={key} id={`inv-row-${key}`} className={cn('border-b border-slate-800/50 last:border-0 transition-colors duration-700', litKey === key && 'inv-row-lit')}>
                   {/* Main row */}
                   <div
-                    className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-3.5 wide:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
                     onClick={(e) => {
                       if (e.ctrlKey || e.metaKey) { openEbaySearch(rep); return }
                       if (e.shiftKey) { router.push(cardexHref(rep)); return }
@@ -766,19 +786,19 @@ export default function InventoryPage() {
                     }}
                     title="Click to view card detail · Shift+Click to see it in the Cardex · ⌘/Ctrl+Click to search recently sold listings"
                   >
-                    <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
+                    <div className="flex items-center gap-3 min-w-0 row-span-2 wide:row-span-1">
                       <div className="relative shrink-0">
                         {rep.imageUrl ? (
-                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-11 h-[3.75rem] md:w-10 md:h-14 object-contain rounded-md" />
+                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-11 h-[3.75rem] wide:w-10 wide:h-14 object-contain rounded-md" />
                         ) : (
-                          <div className="w-11 h-[3.75rem] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
+                          <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
                         {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
-                        {totalQty > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
+                        {totalQty > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-ink text-[0.9375rem] md:text-sm"><CardName name={rep.name} /></span>
+                          <span className="font-semibold text-ink text-[0.9375rem] wide:text-sm"><CardName name={rep.name} /></span>
                           {rep.nexus && (
                             <span className="text-[0.625rem] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-600 border border-blue-500/30">
                               Nexus
@@ -787,27 +807,27 @@ export default function InventoryPage() {
                           <PrintingTags card={rep} />
                         </div>
                         {/* Phone: "Set ✨ · $X ea", matching Portfolio's rows; desktop: number + foil + "$X ea" (set/qty have columns) */}
-                        <div className="md:hidden text-xs text-slate-500">
+                        <div className="wide:hidden text-xs text-slate-500">
                           {rep.set}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}
                         </div>
-                        <div className="hidden md:block text-xs text-slate-500">#{rep.number}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
+                        <div className="hidden wide:block text-xs text-slate-500">#{rep.number}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
                         {hasMarket && <GradedPriceTag card={rep} className="mt-1" />}
                         {rep.group && <div className="text-[0.625rem] text-violet-600/70 mt-0.5">{rep.group}</div>}
                       </div>
                     </div>
-                    <div className="text-sm text-slate-300 hidden md:flex items-center">{rep.set}</div>
-                    <div className="text-sm text-slate-300 hidden md:flex items-center">
+                    <div className="text-sm text-slate-300 hidden wide:flex items-center">{rep.set}</div>
+                    <div className="text-sm text-slate-300 hidden wide:flex items-center">
                       {/* lots of a graded card share its grade (cardIdentityKey groups by it), so the slab label never "varies" */}
                       {multiLot && !rep.gradingCompany ? <span className="text-slate-500 text-xs">varies</span> : conditionLabel(rep)}
                     </div>
-                    <div className="text-sm font-semibold text-ink hidden md:flex items-center">×{totalQty}</div>
-                    <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(gPaid)}</div>
-                    <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
+                    <div className="text-sm font-semibold text-ink hidden wide:flex items-center">×{totalQty}</div>
+                    <div className="text-sm text-slate-300 hidden wide:flex items-center">{formatCurrency(gPaid)}</div>
+                    <div className="flex flex-col justify-end wide:justify-center items-end wide:items-start self-end wide:self-auto">
                       {marketTotal !== null ? (
                         <>
-                          <span className="text-[0.9375rem] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
+                          <span className="text-[0.9375rem] wide:text-sm text-ink font-semibold wide:font-medium">{formatCurrency(marketTotal)}</span>
                           {pnl !== null && (
-                            <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            <span className={`text-xs font-medium wide:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                             </span>
                           )}
@@ -821,14 +841,14 @@ export default function InventoryPage() {
                       <button
                         onClick={(e) => { e.stopPropagation(); openSell(lots[0]) }}
                         title="Sell"
-                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-70 hover:opacity-100"
+                        className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden wide:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-70 hover:opacity-100"
                       >
                         <DollarSign size={13} strokeWidth={2.5} />
                       </button>
                     )}
-                    <div className="col-start-2 md:col-start-auto self-start md:self-auto flex items-center gap-0.5 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="col-start-2 wide:col-start-auto self-start wide:self-auto flex items-center gap-0.5 wide:gap-2 justify-end -mr-1.5 wide:mr-0" onClick={(e) => e.stopPropagation()}>
                       {!multiLot && (
-                        <button onClick={() => openSell(lots[0])} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
+                        <button onClick={() => openSell(lots[0])} title="Sell" className="wide:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                           <DollarSign size={14} />
                         </button>
                       )}
@@ -861,7 +881,7 @@ export default function InventoryPage() {
 
                   {/* Expanded lots */}
                   {isExpanded && multiLot && (
-                    <div className="bg-slate-900/50 border-t border-slate-800/50 px-3 md:px-5 pb-2">
+                    <div className="bg-slate-900/50 border-t border-slate-800/50 px-3 wide:px-5 pb-2">
                       {lots.map((lot, i) => (
                         <div
                           key={lot.id}
@@ -900,12 +920,12 @@ export default function InventoryPage() {
                           <button
                             onClick={(e) => { e.stopPropagation(); openSell(lot) }}
                             title="Sell"
-                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-70 hover:opacity-100"
+                            className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-8 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden wide:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-70 hover:opacity-100"
                           >
                             <DollarSign size={12} strokeWidth={2.5} />
                           </button>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <button onClick={() => openSell(lot)} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
+                            <button onClick={() => openSell(lot)} title="Sell" className="wide:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                               <DollarSign size={13} />
                             </button>
                             <button
@@ -933,7 +953,7 @@ export default function InventoryPage() {
         ) : (
           /* ── Individual-lot view (date filter active) ── */
           <div className="card-glass">
-            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <div className="hidden wide:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <span>Card</span><span>Set</span><span>Condition</span><span>Qty</span><span>Paid</span><span>Market</span><span></span>
             </div>
 
@@ -950,20 +970,20 @@ export default function InventoryPage() {
                     router.push(`/portfolio/${card.id}`)
                   }}
                   title="Click to view card detail · Shift+Click to see it in the Cardex · ⌘/Ctrl+Click to search recently sold listings"
-                  className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                  className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-3.5 wide:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
+                  <div className="flex items-center gap-3 min-w-0 row-span-2 wide:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[3.75rem] md:w-10 md:h-14 object-contain rounded-md" />
+                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[3.75rem] wide:w-10 wide:h-14 object-contain rounded-md" />
                       ) : (
-                        <div className="w-11 h-[3.75rem] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                        <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
-                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                      {card.quantity > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-ink text-[0.9375rem] md:text-sm"><CardName name={card.name} /></span>
+                        <span className="font-semibold text-ink text-[0.9375rem] wide:text-sm"><CardName name={card.name} /></span>
                         {card.gradingCompany && (
                           <span className="text-[0.625rem] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                             {card.gradingCompany}{card.grade ? ` ${card.grade}` : ''}
@@ -976,24 +996,24 @@ export default function InventoryPage() {
                         )}
                         <PrintingTags card={card} />
                       </div>
-                      <div className="md:hidden text-xs text-slate-500">
+                      <div className="wide:hidden text-xs text-slate-500">
                         {card.set}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}
                       </div>
-                      <div className="hidden md:block text-xs text-slate-500">#{card.number}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
+                      <div className="hidden wide:block text-xs text-slate-500">#{card.number}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
                       {hasMarket && <GradedPriceTag card={card} className="mt-1" />}
                       {card.group && <div className="text-[0.625rem] text-violet-600/70 mt-0.5">{card.group}</div>}
                     </div>
                   </div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{card.set}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{conditionLabel(card)}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">×{card.quantity}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice)}</div>
-                  <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">{card.set}</div>
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">{conditionLabel(card)}</div>
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">×{card.quantity}</div>
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">{formatCurrency(card.purchasePrice)}</div>
+                  <div className="flex flex-col justify-end wide:justify-center items-end wide:items-start self-end wide:self-auto">
                     {marketTotal !== null ? (
                       <>
-                        <span className="text-[0.9375rem] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(marketTotal)}</span>
+                        <span className="text-[0.9375rem] wide:text-sm text-ink font-semibold wide:font-medium">{formatCurrency(marketTotal)}</span>
                         {pnl !== null && (
-                          <span className={`text-xs font-medium md:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <span className={`text-xs font-medium wide:font-normal ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                             {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                           </span>
                         )}
@@ -1006,12 +1026,12 @@ export default function InventoryPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); openSell(card) }}
                     title="Sell"
-                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden md:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-70 hover:opacity-100"
+                    className="absolute top-1/2 -translate-y-1/2 -right-6 w-6 h-10 rounded-r-xl bg-emerald-200 hover:bg-emerald-500 hidden wide:flex items-center justify-center text-emerald-600 hover:text-white shadow-lg transition-all z-10 opacity-70 hover:opacity-100"
                   >
                     <DollarSign size={13} strokeWidth={2.5} />
                   </button>
-                  <div className="col-start-2 md:col-start-auto self-start md:self-auto flex items-center gap-0.5 md:gap-2 justify-end -mr-1.5 md:mr-0" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => openSell(card)} title="Sell" className="md:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
+                  <div className="col-start-2 wide:col-start-auto self-start wide:self-auto flex items-center gap-0.5 wide:gap-2 justify-end -mr-1.5 wide:mr-0" onClick={(e) => e.stopPropagation()}>
+                    <button onClick={() => openSell(card)} title="Sell" className="wide:hidden p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/40">
                       <DollarSign size={14} />
                     </button>
                     <button onClick={() => setEditCard(card)} className="p-1.5 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-700 transition-colors">

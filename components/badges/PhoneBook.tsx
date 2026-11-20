@@ -10,6 +10,7 @@ import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { buildPages, PinPage, PinholeFilter, ROMAN, type Page } from './BadgeBook'
+import { badgeCardsOpen } from './BadgeCards'
 import { BookCover, BookThickness } from './BadgeLibrary'
 import { haptic } from '@/lib/nativeApp'
 
@@ -41,6 +42,11 @@ import { haptic } from '@/lib/nativeApp'
 // spine, with the camera (a translateX) choosing which half is on screen. The state after every
 // motion is laid out exactly as the motion ends, so nothing ever jumps when it finishes.
 
+// Two-page mode: a page's width as a share of its height (the spread is two of these)
+const DUO_PAGE_ASPECT = 0.72
+// The turn arrows (globals.css .phonebook-arrow is 48px round) and their gap from the book's edge
+const ARROW_PX = 48
+const ARROW_GAP = 10
 const FLY_MS = 560
 const GROW_MS = 240 // the closed book filling the screen (or settling back) in place
 const OPEN_MS = 820 // the cover swinging open — a little grander than a page
@@ -101,12 +107,28 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   // The page area: everything under the top bar
   const areaRef = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState<DOMRect | null>(null)
+  // Two-page mode (a phone turned sideways — the space wider than tall): the page area is the whole
+  // spread, both pages side by side at full height and centred, and every turn turns a page (no pan
+  // between halves). Upright it's a page at a time, as always. Turning the phone just re-measures.
+  // (The computer's book, used sideways before, blinked its pins on every turn — 2026-11-20.)
+  const [duoWidth, setDuoWidth] = useState<number | null>(null)
   useLayoutEffect(() => {
-    const measure = () => { if (areaRef.current) setBox(areaRef.current.getBoundingClientRect()) }
+    const measure = () => {
+      const el = areaRef.current
+      if (!el?.parentElement) return
+      const h = el.getBoundingClientRect().height, pw = el.parentElement.clientWidth
+      const duo = pw > h * 1.1
+      // room either side for the turn arrows, off the book's edges
+      setDuoWidth(duo ? Math.round(2 * Math.min(pw / 2 - (ARROW_PX + ARROW_GAP + 12), h * DUO_PAGE_ASPECT)) : null)
+      setBox(el.getBoundingClientRect())
+    }
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [])
+  // The area's box once its two-page width is applied (or taken off)
+  useLayoutEffect(() => { if (areaRef.current) setBox(areaRef.current.getBoundingClientRect()) }, [duoWidth])
+  const duo = duoWidth != null
 
   // The page behind stays put while the book is open (and its endless shines pause — globals.css)
   useEffect(() => {
@@ -176,18 +198,24 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   }, [anim, box, onClose, PAGES, p, getShelfSpot])
 
   const busy = !!anim
+  // Two-page mode: the spread's right page turns forward, its left page back (so a turn is from them)
+  const rightPage = p % 2 === 0 ? p + 1 : p, leftPage = p % 2 === 1 ? p - 1 : p
+  const canNext = p >= 0 && (duo ? rightPage < N - 1 : p < N - 1)
+  const canPrev = duo ? leftPage > 0 : p > 0
   const next = useCallback(() => {
-    if (busy || p < 0 || p >= N - 1) return
+    if (busy || !canNext) return
     setMenu(false)
     haptic('selection') // a light tick per page in the iPhone app
+    if (duo) { setAnim({ kind: 'turn', dir: 1, to: rightPage + 1, go: false }); return }
     setAnim(p % 2 === 0 ? { kind: 'pan', to: p + 1, go: false } : { kind: 'turn', dir: 1, to: p + 1, go: false })
-  }, [busy, p, N])
+  }, [busy, canNext, duo, rightPage, p])
   const prev = useCallback(() => {
-    if (busy || p <= 0) return
+    if (busy || !canPrev) return
     setMenu(false)
     haptic('selection')
+    if (duo) { setAnim({ kind: 'turn', dir: -1, to: leftPage - 1, go: false }); return }
     setAnim(p % 2 === 1 ? { kind: 'pan', to: p - 1, go: false } : { kind: 'turn', dir: -1, to: p - 1, go: false })
-  }, [busy, p])
+  }, [busy, canPrev, duo, leftPage, p])
   const close = useCallback(() => {
     if (busy || p < 0) return
     setMenu(false)
@@ -197,6 +225,16 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     setMenu(false)
     const t = starts[i]
     if (busy || t === undefined) return
+    if (duo) {
+      // Two pages on screen: a chapter already showing just flashes; the next or previous spread is
+      // a turn; anything further, a jump
+      const spreadOf = (i: number) => Math.floor(i / 2)
+      if (spreadOf(t) === spreadOf(p)) setFlash((f) => ({ chapter: i, n: (f?.n ?? 0) + 1 }))
+      else if (spreadOf(t) === spreadOf(p) + 1) next()
+      else if (spreadOf(t) === spreadOf(p) - 1) prev()
+      else { haptic('selection'); setAnim({ kind: 'jump', to: t, go: false }) }
+      return
+    }
     if (t === p) setFlash((f) => ({ chapter: i, n: (f?.n ?? 0) + 1 }))
     else if (t === p + 1) next()
     else if (t === p - 1) prev()
@@ -205,7 +243,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (inspect) return
+      if (inspect || badgeCardsOpen()) return // a badge's 3D view or card list has the keys
       if (e.key === 'ArrowRight') next()
       if (e.key === 'ArrowLeft') prev()
       if (e.key === 'Escape') close()
@@ -226,7 +264,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   }
   const onTouchEnd = () => { touch.current = null }
 
-  const W = box?.width ?? 0
+  const W = (box?.width ?? 0) / (duo ? 2 : 1) // one page's width (two-page mode: the area holds both)
   const H = box?.height ?? 0
   const pin = Math.max(44, Math.min(200, (W - RIM) * 0.33, (H - RIM * 2) * 0.215))
   // Kept the same between renders, so starting a motion redraws no pins (Half is memoized)
@@ -242,16 +280,19 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   if (anim?.kind === 'turn' && anim.dir === 1) {
     // Turning the right-hand page (or the cover) over to the left: under it, the next spread's
     // right page; the camera glides left to follow the page's back as it lands.
-    give(p, 'front'); give(anim.to, 'back'); give(p - 1, 'flat'); give(anim.to + 1, 'under')
+    // (two-page mode: the turning page is the spread's right page, wherever p stood)
+    const f = duo && p >= 0 ? rightPage : p
+    give(f, 'front'); give(anim.to, 'back'); give(f - 1, 'flat'); give(anim.to + 1, 'under')
     // the pages that were ready the other way stay as they were (a layer dropped and rebuilt
     // mid-turn costs a frame), and the next spread stays drawn
-    give(p - 2, 'ready'); give(p - 3, 'under')
-    for (const i of [p + 3, p + 4]) give(i, 'parked')
+    give(f - 2, 'ready'); give(f - 3, 'under')
+    for (const i of [f + 3, f + 4]) give(i, 'parked')
     camFrom = -W; camTo = 0
   } else if (anim?.kind === 'turn') {
-    give(p, 'front'); give(anim.to, 'back'); give(p + 1, 'flat'); give(anim.to - 1, 'under')
-    give(p + 2, 'ready'); give(p + 3, 'under')
-    for (const i of [p - 3, p - 4]) give(i, 'parked')
+    const f = duo ? leftPage : p // two-page mode: the spread's left page turns back
+    give(f, 'front'); give(anim.to, 'back'); give(f + 1, 'flat'); give(anim.to - 1, 'under')
+    give(f + 2, 'ready'); give(f + 3, 'under')
+    for (const i of [f - 3, f - 4]) give(i, 'parked')
     camFrom = 0; camTo = -W
   } else if (anim?.kind === 'shut') {
     // Closing: the left page (the inside of the cover) swings over onto the right page, landing as
@@ -279,6 +320,17 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
   // The cover, in every state of the open book (never unmounted and redrawn): drawn under everything,
   // so closing the book doesn't draw it mid-swing. give() keeps a role it already has.
   if (p >= 0) give(-1, 'hidden')
+  // Two-page mode: the whole spread is on screen, so the camera stays put — except around the cover,
+  // which opens like the computer's book: the closed book sits centred (the scene half a page to the
+  // left, the cover being the right half), and as the cover swings open the book glides into place at
+  // the same pace, the open spread ending centred; closing is the reverse (2026-11-20 — it went to
+  // the right half first, then opened)
+  if (duo) {
+    const centred = -W / 2
+    if (anim?.kind === 'shut') { camFrom = 0; camTo = centred }
+    else if (p === -1) { camFrom = centred; camTo = anim?.kind === 'turn' ? 0 : centred }
+    else camFrom = camTo = 0
+  }
   const cam = go ? camTo : camFrom
   const moving = go && (anim?.kind === 'turn' || anim?.kind === 'pan' || anim?.kind === 'shut')
   const ease = anim?.kind === 'pan' ? EASE_PAN : EASE_TURN
@@ -351,7 +403,10 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex flex-col bg-[#0b0908]"
+      // Sideways (two pages), the page behind shows blurred either side of the book: transparent here,
+      // the blur on its own layer behind everything below — never on this box, or iPhone draws the
+      // whole book as one flattened group and its pins blink
+      className="fixed inset-0 z-[70] flex flex-col bg-[#0b0908] phoneland:bg-transparent"
       style={{
         opacity: closing && go ? 0 : 1,
         transform: closing && go ? 'scale(0.97)' : undefined,
@@ -364,6 +419,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
     >
       {/* Backdrop for the flights: fades in as the book flies up, out as it flies home */}
       {flying && <div className="absolute inset-0 bg-[#0b0908]" style={{ opacity: atShelf || (anim?.kind === 'fly' && !go) ? 0 : 1, transition: `opacity ${FLY_MS}ms ease` }} />}
+      <div aria-hidden className="hidden phoneland:block absolute inset-0 -z-10 bg-[#0b0908]/80 backdrop-blur-md" />
       <PinholeFilter />
 
       {/* Top bar */}
@@ -412,7 +468,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
         ref={areaRef}
         className="relative flex-1 overflow-hidden"
         // The swipes are ours: without this iPhone could take one as a scroll or a back gesture
-        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)', touchAction: 'none', overscrollBehavior: 'contain' }}
+        style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)', touchAction: 'none', overscrollBehavior: 'contain', ...(duo && { width: duoWidth, alignSelf: 'center', flex: '1 1 auto' }) }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -527,15 +583,38 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           className="absolute inset-x-0 bottom-0 z-30 flex items-center justify-between px-4 pb-4 pointer-events-none transition-opacity duration-300"
           style={{ opacity: opened ? 1 : 0 }}
         >
-          <button onClick={prev} disabled={busy || p <= 0} aria-label="Previous page" className="phonebook-arrow pointer-events-auto disabled:opacity-0">
+          {/* two-page mode: the arrows sit either side of the book instead (below) */}
+          <button onClick={prev} disabled={busy || !canPrev} aria-label="Previous page" className={cn('phonebook-arrow pointer-events-auto disabled:opacity-0', duo && 'invisible')}>
             <ChevronLeft size={24} strokeWidth={2.25} className="-ml-0.5" />
           </button>
           <span className="phonebook-count pinbook-serif">{Math.max(1, shownPage + 1)} / {N}</span>
-          <button onClick={next} disabled={busy || p < 0 || p >= N - 1} aria-label="Next page" className="phonebook-arrow pointer-events-auto disabled:opacity-0">
+          <button onClick={next} disabled={busy || !canNext} aria-label="Next page" className={cn('phonebook-arrow pointer-events-auto disabled:opacity-0', duo && 'invisible')}>
             <ChevronRight size={24} strokeWidth={2.25} className="ml-0.5" />
           </button>
         </div>
       </div>
+
+      {/* Two-page mode: the turn arrows just off the book's left and right edges, halfway up (this
+          box is the whole screen, so the page area's own position places them) */}
+      {duo && box && (
+        <>
+          <button
+            onClick={prev} disabled={busy || !canPrev} aria-label="Previous page"
+            className="phonebook-arrow absolute z-30 disabled:opacity-0"
+            // centred by position, not a transform (its pressed look is a transform: it would jump)
+            style={{ left: box.left - ARROW_PX - ARROW_GAP, top: box.top + box.height / 2 - ARROW_PX / 2, ...(!opened && { opacity: 0 }) }}
+          >
+            <ChevronLeft size={24} strokeWidth={2.25} className="-ml-0.5" />
+          </button>
+          <button
+            onClick={next} disabled={busy || !canNext} aria-label="Next page"
+            className="phonebook-arrow absolute z-30 disabled:opacity-0"
+            style={{ left: box.right + ARROW_GAP, top: box.top + box.height / 2 - ARROW_PX / 2, ...(!opened && { opacity: 0 }) }}
+          >
+            <ChevronRight size={24} strokeWidth={2.25} className="ml-0.5" />
+          </button>
+        </>
+      )}
 
       {/* The closed book between its shelf spot and the page area. It flies in the shelf book's own
           shape — its real size changes, nothing is stretched or scaled, so it looks exactly like the
@@ -543,7 +622,10 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           screen grows to fill it (opening) or settles back from it (closing). */}
       {flying && box && spot && mid && (() => {
         const k = anim?.kind
-        const r = atShelf ? spot : (k === 'grow' && go) || (k === 'shrink' && !go) ? box : mid
+        // the open-ready cover: the page area — in two-page mode one page, centred (where the closed
+        // book sits before it opens, and ends up as it shuts)
+        const full = duo ? new DOMRect(box.left + W / 2, box.top, W, H) : box
+        const r = atShelf ? spot : (k === 'grow' && go) || (k === 'shrink' && !go) ? full : mid
         const curve = k === 'fly' ? 'cubic-bezier(0.22, 0.8, 0.25, 1)' : k === 'flyBack' ? 'cubic-bezier(0.5, 0, 0.3, 1)' : 'cubic-bezier(0.3, 0, 0.2, 1)'
         const dur = k === 'fly' || k === 'flyBack' ? FLY_MS : GROW_MS
         return (
@@ -555,7 +637,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
             }}
           >
             {/* The closed book's thickness and shadow: there while it flies, gone as it fills the screen */}
-            <BookThickness style={{ opacity: r === box ? 0 : 1, transition: k === 'grow' || k === 'shrink' ? `opacity ${GROW_MS}ms ease` : 'none' }} />
+            <BookThickness style={{ opacity: r === full ? 0 : 1, transition: k === 'grow' || k === 'shrink' ? `opacity ${GROW_MS}ms ease` : 'none' }} />
             <BookCover set={set} badges={badges} />
           </div>
         )
@@ -568,6 +650,7 @@ export function PhoneBook({ set, badges, isMe, from, getShelfSpot, onClose }: {
           progress={badges?.progress[inspect.id]}
           mystery={badgeTier(inspect, badges?.progress[inspect.id]) === 0}
           onClose={() => setInspect(null)}
+          cardsFor={{ isMe }}
         />
       )}
     </div>,

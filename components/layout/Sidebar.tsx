@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { LogoHover } from './LogoHover'
 import { usePathname } from 'next/navigation'
-import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2, PanelLeftClose, PanelLeftOpen, LifeBuoy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
@@ -150,6 +150,15 @@ export function Sidebar() {
                   <div className="text-[0.625rem] text-slate-500 truncate">{me ? `@${me.username}` : 'Your profile'}</div>
                 </div>
                 <ChevronRight size={14} className="rail-hide text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
+              </Link>
+              {/* Help: missing cards, account, bugs (components/pages/SupportPage.tsx) */}
+              <Link
+                href="/support"
+                title="Support"
+                className={cn('mt-1.5 mx-auto w-fit flex items-center gap-1 text-[0.625rem] font-medium hover:underline underline-offset-2 transition-colors', pathname === '/support' ? 'text-ink' : 'text-slate-500 hover:text-ink')}
+              >
+                <LifeBuoy size={10} />
+                <span className="rail-hide">Support</span>
               </Link>
             </>
           )}

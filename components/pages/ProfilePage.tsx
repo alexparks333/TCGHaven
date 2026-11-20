@@ -129,8 +129,6 @@ function ProfileBooks({ uid, children }: { uid: string; children: React.ReactNod
 
 // ── Header ──────────────────────────────────────────────────────────────────────────────────
 
-// The banner's gilt rule and flourish along its foot (globals.css .haven-banner) — banner pins
-// stay above it — and the even margin above and below the pins.
 /** The banner's artwork — today the engraved sparkles; one day the collector's own header art. Drawn in the
  *  banner and again inside the photo's ring (lined up), so the ring always shows the same art. */
 function BannerArt() {
@@ -152,8 +150,6 @@ function StatTile({ href, n, label }: { href?: string; n: number | undefined; la
 /** How far below the banner the ring can reach (the banner's look carries on that far, in its bottom tone) */
 const RING_REACH = 160
 
-const BANNER_RULE = 14
-const BANNER_MARGIN = 4
 
 function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   profile: Profile
@@ -223,7 +219,8 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     const el = bannerRef.current
     if (!el) return
     const fit = () => {
-      const tall = (el.clientHeight - BANNER_RULE - 2 * BANNER_MARGIN) / 1.12
+      // the banner's full height: BannerPins keeps each pin's art within it (BannerPin's cap)
+      const tall = el.clientHeight - 2
       // The avatar / Settings room is sized in rem (it grows with the root size on big monitors)
       const r = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
       const wide = (el.clientWidth - (150 + (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) + 16) * r) / 3.3
@@ -296,7 +293,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         <span aria-hidden className="haven-banner-flourish absolute inset-0 pointer-events-none" />
         <BannerArt />
         {bannerPin > 0 && (
-          <div className="absolute top-0 flex items-center" style={{ bottom: BANNER_RULE, right: 12, paddingBlock: BANNER_MARGIN }}>
+          // The whole banner's height, over the gilt rule like pins on a strap (they used to stop above
+          // it with a margin either side, and came out small next to the pin book's — 2026-11-20)
+          <div className="absolute top-0 bottom-0 flex items-center" style={{ right: 12 }}>
             <div className={isMe ? 'mr-[3.25rem] sm:mr-[7.5rem]' : undefined}>
               <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin} />
             </div>

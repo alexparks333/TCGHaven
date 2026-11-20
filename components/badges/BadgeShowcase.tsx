@@ -106,6 +106,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
                       <span aria-hidden className="case-contact absolute pointer-events-none" style={{ width: pin * 0.9, height: pin * 0.22, left: '50%', top: pin * 1.06, transform: 'translate(-50%, -50%)' }} />
                       <BadgeSpot
                         def={def} badges={badges} pin={pin} isMe={isMe} interactive below={i < COLS}
+                        progressRise={false} // what's unlocked, not progress toward the next look
                         onInspect={isMe ? () => setPicking(i) : setInspect}
                       />
                     </>
@@ -147,6 +148,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
           earnedAt={badges.earned[inspect.id]}
           progress={badges.progress[inspect.id]}
           onClose={() => setInspect(null)}
+          cardsFor={{ isMe }}
         />
       )}
     </div>

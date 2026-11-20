@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Cinzel } from 'next/font/google'
 import dynamic from 'next/dynamic'
 import './globals.css'
+import { LOGO_FRAMES, splashFrame } from '@/lib/logoFrames'
 
 const ClientWrapper = dynamic(
   () => import('@/components/layout/ClientWrapper'),
@@ -42,8 +43,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
       <head>
         {/* The phone splash's 21 frames (components/layout/SplashIntro.tsx splashFrame), fetched up front */}
-        {Array.from({ length: 21 }, (_, i) => (
-          <link key={i} rel="preload" as="image" href={`/splash/frame-${String(i).padStart(2, '0')}.webp`} type="image/webp" media="(max-width: 767px)" />
+        {Array.from({ length: LOGO_FRAMES }, (_, i) => (
+          <link key={i} rel="preload" as="image" href={splashFrame(i)} type="image/webp" media="(max-width: 767px)" />
         ))}
         {/* LogoLoader (components/LogoLoader.tsx) is the app's loading screen — fetched up front
             so the logo is already there the first time a loader appears, not drawn in late. */}

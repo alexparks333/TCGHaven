@@ -53,6 +53,18 @@ type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg' | 'yugi
 // language 'ja') everywhere else in the app.
 type CatalogGame = BaseGame | 'pokemon-jp'
 const baseGameOf = (g: CatalogGame): BaseGame => (g === 'pokemon-jp' ? 'pokemon' : g)
+
+/** A search found nothing: report it as a missing card (/support, prefilled with the game and the search) */
+function MissingCardLink({ game, query }: { game: BaseGame; query: string }) {
+  return (
+    <Link
+      href={`/support?type=missing&game=${game}&q=${encodeURIComponent(query.trim())}&from=cardex`}
+      className="mt-3 text-xs font-semibold text-slate-500 hover:text-ink underline underline-offset-2"
+    >
+      Missing a card? Report it
+    </Link>
+  )
+}
 const CARDEX_TAB_LABELS: Record<CatalogGame, string> = {
   pokemon: 'Pokémon', 'pokemon-jp': 'Pokémon (Japanese)', onepiece: 'One Piece', lorcana: 'Lorcana', riftbound: 'Riftbound', mtg: 'Magic', yugioh: 'Yu-Gi-Oh!',
   swu: 'Star Wars: Unlimited', gundam: 'Gundam', fab: 'Flesh and Blood', digimon: 'Digimon', palworld: 'Palworld', cyberpunk: 'Cyberpunk',
@@ -465,6 +477,10 @@ export interface ZoomVersion {
   conditionNote?: string        // a raw copy below Near Mint: its condition ("Lightly Played") — never the pricing math
   priceSource?: { label: string; url: string }  // priced from PriceCharting → the credit link
   rawEstimate?: boolean         // a slab with no sales for its grade: valued at the raw price
+  // A different CARD, not another copy of this one (a badge slot's versions — a regular printing and
+  // its Signature, components/badges/BadgeCards.tsx): its own picture, name, number, rarity and
+  // whether you own it, shown in place of the card's while it's picked
+  card?: { imageUrl: string; name: string; number: string; setName?: string; rarityLabel: string; rarityColor: string; owned: boolean }
 }
 
 const slabScore = (c: Card) => {
@@ -1410,6 +1426,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
                 <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
                   <div className="text-4xl mb-3">🔍</div>
                   <div className="text-slate-400 font-medium">No {CARDEX_TAB_LABELS[catalogGame]} cards match &quot;{searchQuery.trim()}&quot;</div>
+                  <MissingCardLink game={baseGameOf(catalogGame)} query={searchQuery} />
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -1559,6 +1576,7 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
               <div className="card-glass flex flex-col items-center justify-center py-20 text-center">
                 <div className="text-4xl mb-3">🔍</div>
                 <div className="text-slate-400 font-medium">No cards match &quot;{searchQuery}&quot;</div>
+                {searchQuery.trim() && <MissingCardLink game={baseGameOf(catalogGame)} query={searchQuery} />}
               </div>
             )}
             </>)}
@@ -2192,14 +2210,14 @@ export function preloadFullCard(url?: string) {
 // timing this is tuned to match.
 // Also used by a profile's Cardex showcase (ProfilePage.tsx).
 // `viewOnly` (a profile's showcase): just the card and its details — no owned count or eBay link.
-/** "{n} sets" — the count chip on the set-group picker and its menu */
-function SetCount({ n, color, solid }: { n: number; color: string; solid: boolean }) {
+/** "{n} sets" — the count chip on the set-group picker and its menu. Always the soft, parchment-toned
+ *  chip — never filled: the picked group's solid, glowing chip pulled the eye straight to it
+ *  (2026-11-20) */
+function SetCount({ n, color }: { n: number; color: string }) {
   return (
     <span
       className="inline-flex items-baseline gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] font-bold tabular-nums whitespace-nowrap"
-      style={solid
-        ? { background: `linear-gradient(135deg, ${color}, ${color}cc)`, color: '#fff', boxShadow: `0 1px 6px -1px ${color}88` }
-        : { backgroundColor: color + '1a', color }}
+      style={{ backgroundColor: color + '1a', color }}
     >
       {n}<span className="font-semibold opacity-85">{n === 1 ? 'set' : 'sets'}</span>
     </span>
@@ -2252,7 +2270,7 @@ function SetGroupPicker({ groups, active, onPick, color }: {
         style={{ borderColor: color + '55', ['--tw-ring-color' as string]: color + '55' }}
       >
         <span className="text-sm font-semibold" style={{ color }}>{active}</span>
-        <SetCount n={current?.sets.length ?? 0} color={color} solid />
+        <SetCount n={current?.sets.length ?? 0} color={color} />
         <ChevronRight size={14} className={cn('opacity-70 transition-transform duration-200', open ? '-rotate-90' : 'rotate-90')} style={{ color }} />
       </button>
       {open && (
@@ -2280,7 +2298,7 @@ function SetGroupPicker({ groups, active, onPick, color }: {
                   <span className="w-3.5 flex justify-center">{on && <Check size={14} strokeWidth={2.75} />}</span>
                   {g.label}
                 </span>
-                <SetCount n={g.sets.length} color={color} solid={on} />
+                <SetCount n={g.sets.length} color={color} />
               </button>
             )
           })}
@@ -2290,7 +2308,9 @@ function SetGroupPicker({ groups, active, onPick, color }: {
   )
 }
 
-export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: ZoomCardData | null; onClose: () => void; viewOnly?: boolean }) {
+// soldLink: keep "Search Recently Sold Listings" even when viewOnly (a badge's cards — someone hunting
+// a card may want to buy it; BadgeCards.tsx). Other view-only uses leave it out, as before.
+export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = false }: { data: ZoomCardData | null; onClose: () => void; viewOnly?: boolean; soldLink?: boolean }) {
   const [visible, setVisible] = useState(false)
   const [closing, setClosing] = useState(false)
   const moverRef = useRef<HTMLDivElement>(null)
@@ -2429,7 +2449,11 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   const slabLabel = v?.label ?? (slab ? `${slab.company}${slab.grade ? ` ${slab.grade}` : ''}` : '')
   const printing = v ? v.printing : d.printing
   const quantity = v ? v.quantity : d.quantity
-  const ebayCard = v ? { ...d.ebayCard, gradingCompany: v.slab?.company, grade: v.slab?.grade } : d.ebayCard
+  // The card on show: the picked version's own card when it's a different card (ZoomVersion.card)
+  const dc = v?.card ? { ...d, ...v.card } : d
+  const ebayCard = v?.card
+    ? { ...d.ebayCard, name: v.card.name, number: v.card.number, set: v.card.setName ?? d.ebayCard?.set ?? '' }
+    : v ? { ...d.ebayCard, gradingCompany: v.slab?.company, grade: v.slab?.grade } : d.ebayCard
   // The copy on show, in your Inventory — where it's edited or deleted (the Cardex never deletes)
   const editId = viewOnly ? undefined : (v?.cardId ?? d.inventoryId)
   // The swap between versions: the card tips away and fades out with a flash of light, and the next
@@ -2464,8 +2488,8 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   )
   const fadeStyle: React.CSSProperties = { opacity: swap === 'idle' ? 1 : 0.25, transition: 'opacity 180ms ease' }
   const ownedNote = (
-    <span className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
-      {d.owned ? `✓ ${quantity > 1 ? `×${quantity} owned` : 'owned'}` : 'not collected'}
+    <span className="text-xs" style={{ color: dc.owned ? '#4f6a2a' : '#7a654a' }}>
+      {dc.owned ? `✓ ${quantity > 1 ? `×${quantity} owned` : 'owned'}` : 'not collected'}
     </span>
   )
 
@@ -2482,7 +2506,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                   role="tab"
                   aria-selected={on}
                   onClick={(e) => { setVi(i); e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }) }}
-                  title={ver.slab ? `Your ${ver.label} slab` : `Your ${ver.label.toLowerCase()} cop${ver.quantity > 1 ? 'ies' : 'y'}`}
+                  title={ver.card ? `${ver.card.name} · ${ver.label}` : ver.slab ? `Your ${ver.label} slab` : `Your ${ver.label.toLowerCase()} cop${ver.quantity > 1 ? 'ies' : 'y'}`}
                   className={cn(
                     'whitespace-nowrap text-[0.6875rem] font-bold leading-none px-2.5 py-1.5 rounded-full border shadow-lg backdrop-blur-md transition-all duration-200',
                     on ? 'scale-105' : 'hover:scale-105 hover:brightness-125',
@@ -2588,10 +2612,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 className="card-zoom-face absolute inset-0 rounded-[1.125rem]"
                 style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)`, ...faceFade }}
               >
-                <FullSlab slab={slab} name={d.name} number={d.number} setName={d.setName}>
-                  {d.imageUrl
-                    ? <ZoomImage url={d.imageUrl} alt={d.name} />
-                    : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: d.rarityColor + '18', color: d.rarityColor }}>#{d.number}</div>}
+                <FullSlab slab={slab} name={dc.name} number={dc.number} setName={dc.setName}>
+                  {dc.imageUrl
+                    ? <ZoomImage url={dc.imageUrl} alt={dc.name} />
+                    : <div className="w-full h-full flex items-center justify-center text-lg font-bold" style={{ backgroundColor: dc.rarityColor + '18', color: dc.rarityColor }}>#{dc.number}</div>}
                 </FullSlab>
                 <div className="card-zoom-glint absolute inset-0 rounded-[1.125rem] pointer-events-none" />
                 <div className="absolute inset-0 rounded-[1.125rem] overflow-hidden pointer-events-none">{swapFlash}</div>
@@ -2601,10 +2625,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
               style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`, ...faceFade }}
             >
-              {d.imageUrl ? (
-                <ZoomImage url={d.imageUrl} alt={d.name} filter={d.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
+              {dc.imageUrl ? (
+                <ZoomImage url={dc.imageUrl} alt={dc.name} filter={dc.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
               ) : (
-                <img src={NO_CARD_IMAGE} alt={d.name} className="w-full h-full object-cover rounded-[inherit]" style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }} />
+                <img src={NO_CARD_IMAGE} alt={dc.name} className="w-full h-full object-cover rounded-[inherit]" style={{ filter: dc.owned ? 'none' : 'grayscale(1) brightness(0.55)' }} />
               )}
               <div className="card-zoom-glint absolute inset-0 pointer-events-none rounded-[inherit]" />
               {swapFlash}
@@ -2620,10 +2644,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
               }}
             >
-              {/* The back's emblem: the TCGHaven doorway in grey (no circle), about a third of the card — public/logo-card-back.webp,
+              {/* The back's emblem: the TCGHaven doorway in grey (no circle), about a third of the card, faint — a watermark — public/logo-card-back.webp,
                   the animation's last frame at 720px, greyed ahead of time (sharp on a 3× screen) */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-card-back.webp" alt="" draggable={false} className="w-[38%] aspect-square object-contain" style={{ opacity: 0.85 }} />
+              <img src="/logo-card-back.webp" alt="" draggable={false} className="w-[38%] aspect-square object-contain" style={{ opacity: 0.17 }} />
             </div>
           </div>
           </div>
@@ -2675,16 +2699,16 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 <Edit2 size={13} />
               </Link>
             )}
-            <div className="text-base font-bold text-ink leading-tight"><CardName name={d.name} /></div>
-            {d.setName && <div className="text-xs font-medium text-slate-400">{d.setName}</div>}
+            <div className="text-base font-bold text-ink leading-tight"><CardName name={dc.name} /></div>
+            {dc.setName && <div className="text-xs font-medium text-slate-400">{dc.setName}</div>}
             <div className="flex items-center gap-2 flex-wrap justify-center">
-              <span className="text-xs text-slate-500">#{d.number}</span>
-              {d.rarityLabel && (
-                <span className="text-[0.6875rem] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: d.rarityColor + '22', color: d.rarityColor }}>
-                  {d.rarityLabel}
+              <span className="text-xs text-slate-500">#{dc.number}</span>
+              {dc.rarityLabel && (
+                <span className="text-[0.6875rem] font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: dc.rarityColor + '22', color: dc.rarityColor }}>
+                  {dc.rarityLabel}
                 </span>
               )}
-              {showPrinting(printing, d.rarityLabel) && (
+              {showPrinting(printing, dc.rarityLabel) && (
                 <span className="text-[0.6875rem] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700">{printing}</span>
               )}
               {slab && (
@@ -2722,7 +2746,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             </div>
             {!viewOnly && !(price > 0) && ownedNote}
             {/* A copy priced by PriceCharting links to its sales there instead (the credit above) */}
-            {!viewOnly && !(price > 0 && priceSource) && (
+            {(!viewOnly || soldLink) && !(price > 0 && priceSource) && (
               <button
                 onClick={() => openEbaySearch(ebayCard)}
                 className="mt-0.5 sm:mt-1 text-[0.6875rem] text-slate-500 hover:text-ink underline underline-offset-2"

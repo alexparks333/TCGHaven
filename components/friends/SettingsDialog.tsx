@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins, Camera } from 'lucide-react'
+import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins, Camera, LifeBuoy, ChevronRight } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { CURRENCIES, type CurrencyCode } from '@/lib/currency'
 import { saveCurrency } from '@/lib/firebase/preferences'
@@ -264,6 +264,22 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
 
           {/* Notifications: in the app and on the website (lib/push.ts) */}
           <PushSettings uid={user.uid} row={row} />
+
+          {/* Help: a missing card, your account, a bug (components/pages/SupportPage.tsx) — the way to
+              it on a phone, where there's no sidebar */}
+          <button
+            onClick={() => { onClose(); router.push('/support') }}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl border border-slate-800 bg-slate-900 hover:border-slate-700 transition-colors text-left"
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <LifeBuoy size={16} className="text-slate-500 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">Support</span>
+                <span className="block text-xs text-slate-500">Report a missing card, or get help</span>
+              </span>
+            </span>
+            <ChevronRight size={16} className="text-slate-500 shrink-0" />
+          </button>
 
           <button
             onClick={handleSignOut}

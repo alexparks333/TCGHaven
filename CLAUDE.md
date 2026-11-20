@@ -27,6 +27,7 @@ in that area:**
 | Staff portal Statistics & Finances, usage tracking (`usage_days`, `user_stats`, `stats_daily`) | `docs/insights.md` |
 | Push notifications (friend requests / accepted): FCM, `push_devices`, the notify route, the APNs key and service account | `docs/push-notifications.md` |
 | Haven Premium: what it unlocks, the locks, payments (Stripe + RevenueCat), promo codes, Apple's cut, the Small Business Program, automatic costs | `docs/premium-business.md` |
+| The support page (`/support`), support reports and the staff Support tab | `docs/support.md` |
 | Where a file lives | `docs/file-map.md` |
 | The full story behind any gotcha below | `docs/quirks.md` |
 

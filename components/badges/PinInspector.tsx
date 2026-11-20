@@ -12,6 +12,7 @@ import { X, Lock, Check, Move3d } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeTier, nextTier, toNextTier, TIER_NAMES, type BadgeDef } from '@/lib/badges'
 import { badgeAsset } from '@/lib/badgeAssets'
+import { BadgeCards, BadgeCardsIcon } from './BadgeCards'
 import { BadgePin, PIN_SILHOUETTE, PIN_STAR, PIN_RIBBON } from './BadgePin'
 import { buildRelief, disposeRelief, type ReliefLook } from './pinRelief'
 import { reliefBuildKey } from '@/lib/reliefBuild'
@@ -33,8 +34,11 @@ import { haptic } from '@/lib/nativeApp'
 const TEX_W = 1000
 const TEX_H = 1120 // the art's 100 × 112 viewBox
 
-export default function PinInspector({ def, earnedAt, progress, onClose, mystery = false, embedded = false }: {
+export default function PinInspector({ def, earnedAt, progress, onClose, mystery = false, embedded = false, cardsFor }: {
   def: BadgeDef
+  /** Show the card-and-i button (bottom right): the badge's cards (BadgeCards) — whose they are
+   *  decides whether owned ones are marked */
+  cardsFor?: { isMe: boolean }
   earnedAt?: number
   progress?: [number, number]
   onClose: () => void
@@ -47,6 +51,9 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
 }) {
   // Which look: the collector's tier from their progress; no progress (the staff portal's preview) = Full
   const tier = progress ? badgeTier(def, progress) : 3
+  const [cardsOpen, setCardsOpen] = useState(false)
+  const cardsOpenRef = useRef(false)
+  cardsOpenRef.current = cardsOpen
   const mountRef = useRef<HTMLDivElement>(null)
   const artRef = useRef<HTMLDivElement>(null)
   const api = useRef<StageApi | null>(null)
@@ -62,7 +69,8 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
     if (embedded) return
     // Escape closes just this viewer — caught first (capture) and stopped, so a dialog underneath
     // (e.g. the staff portal's badge editor) doesn't close too.
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose() } }
+    // With its card list open, Escape is the list's (it closes first; this viewer stays)
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !cardsOpenRef.current) { e.stopImmediatePropagation(); onClose() } }
     window.addEventListener('keydown', onKey, true)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -88,6 +96,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
         if (disposed) return
         setProg(1)
         setLoading(false)
+        stage.spin()
       }
       if (def.model) {
         // The real pin: download (most of the bar), then assemble it with its back
@@ -129,7 +138,7 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
   return createPortal(
     // The blur lives on this outermost layer: an ancestor that fades in (opacity) cuts a child's
     // backdrop-filter off from the page, so a blur on an inner layer would show the page sharp.
-    <div className="fixed inset-0 z-[90] flex flex-col pin-inspector-in backdrop-blur-xl" role="dialog" aria-label={`${def.name} — 3D view`}>
+    <div className="fixed inset-0 z-[90] flex flex-col pin-inspector-in backdrop-blur-xl" role="dialog" aria-label={`${tier === 0 ? 'A locked badge' : def.name} — 3D view`}>
       {/* The page behind, frosted: blurred and dimmed (darker toward the edges) so the pin and the
           cream text stay readable over the light parchment */}
       <div
@@ -154,21 +163,39 @@ export default function PinInspector({ def, earnedAt, progress, onClose, mystery
         {loading && !error && <PolishingBar value={prog} />}
       </div>
 
-      {/* Name + status */}
-      <div className="relative pointer-events-none pb-[calc(env(safe-area-inset-bottom)+20px)] px-5 text-center">
-        <div className="inline-flex items-center gap-1.5 text-[0.6875rem] text-white/45 mb-2"><Move3d size={13} />Drag to turn it over · scroll to zoom</div>
-        <div className="text-2xl font-black text-[#fbe9c4] tracking-tight">{def.name}</div>
-        <div className={cn('mt-1 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', tier ? 'text-emerald-400' : 'text-white/50')}>
+      {/* Name + status. A sideways phone (phoneland): one compact line over the bottom edge, so the
+          pin gets the whole screen and sits centred (stacked, the text took half the short screen and
+          pushed the pin up — 2026-11-20); the hint and description are left out there */}
+      <div className="relative pointer-events-none pb-[calc(env(safe-area-inset-bottom)+20px)] px-5 text-center phoneland:absolute phoneland:inset-x-0 phoneland:bottom-0 phoneland:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="inline-flex items-center gap-1.5 text-[0.6875rem] text-white/45 mb-2 phoneland:hidden"><Move3d size={13} />Drag to turn it over · scroll to zoom</div>
+        <div className="phoneland:flex phoneland:items-baseline phoneland:justify-center phoneland:gap-3">
+        {/* Not unlocked yet (no Grayscale or Full look): the name stays "? ? ?", as on its nameplate */}
+        <div className={cn('text-2xl phoneland:text-lg font-black tracking-tight', tier === 0 ? 'text-white/45 tracking-[0.2em]' : 'text-[#fbe9c4]')}>{tier === 0 ? '? ? ?' : def.name}</div>
+        <div className={cn('mt-1 phoneland:mt-0 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider', tier ? 'text-emerald-400' : 'text-white/50')}>
           {tier
             ? <><Check size={13} />{TIER_NAMES[tier]}{progress ? ` · ${have} / ${total} ${def.slotNoun}` : ''}</>
             : <><Lock size={13} />Not earned yet · {have} / {total} {def.slotNoun}</>}
         </div>
+        </div>
         {progress && tier > 0 && tier < 3 && (
-          <div className="mt-1 text-xs font-semibold text-white/55">{toNextTier(def, progress)} more {def.slotNoun} for the {TIER_NAMES[nextTier(def, progress)]} pin</div>
+          <div className="mt-1 text-xs font-semibold text-white/55 phoneland:hidden">{toNextTier(def, progress)} more {def.slotNoun} for the {TIER_NAMES[nextTier(def, progress)]} pin</div>
         )}
-        <p className="mt-2 text-sm text-white/60 max-w-md mx-auto">{def.description}</p>
+        <p className="mt-2 text-sm text-white/60 max-w-md mx-auto phoneland:hidden">{def.description}</p>
         {error && <p className="mt-2 text-xs text-red-300">{error}</p>}
       </div>
+
+      {/* Its cards: the card-and-i button, bottom right beside the info (BadgeCards opens over this) */}
+      {cardsFor && def.slots.length > 0 && (
+        <button
+          onClick={() => setCardsOpen(true)}
+          aria-label={tier === 0 ? 'See the cards for this badge' : `See the cards for ${def.name}`}
+          title="See its cards"
+          className="absolute z-10 right-4 bottom-[calc(env(safe-area-inset-bottom)+20px)] phoneland:bottom-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-1.5 pl-2 pr-3 py-2 rounded-full bg-white/10 hover:bg-white/20 text-white/85 text-xs font-semibold"
+        >
+          <BadgeCardsIcon size={20} />Cards
+        </button>
+      )}
+      {cardsOpen && cardsFor && <BadgeCards def={def} isMe={cardsFor.isMe} nameHidden={tier === 0} onClose={() => setCardsOpen(false)} />}
 
     </div>,
     document.body,
@@ -185,6 +212,8 @@ interface StageApi {
   setFaceImage: (url: string) => Promise<void>
   setNormalMap: (url: string) => Promise<void>
   reset: () => void
+  /** Start the slow turn, from face-on — when the pin first shows */
+  spin: () => void
   dispose: () => void
 }
 
@@ -233,9 +262,14 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement, displ
   controls.enablePan = false
   controls.minDistance = 1.3
   controls.maxDistance = 6
-  controls.autoRotate = true
+  // The slow turn starts only once the pin is on screen (spin(), when loading is done): running from
+  // the start, it turned behind the "Polishing badge" bar and the pin appeared side-on or backwards
+  // (2026-11-20)
+  controls.autoRotate = false
   controls.autoRotateSpeed = 1.6
-  controls.addEventListener('start', () => { controls.autoRotate = false })
+  // Turned or zoomed by hand (even while it loads): no more auto-turn, and spin() leaves it be
+  let handled = false
+  controls.addEventListener('start', () => { handled = true; controls.autoRotate = false })
 
   const holder = new THREE.Group()
   scene.add(holder)
@@ -252,7 +286,10 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement, displ
     const size = new THREE.Box3().setFromObject(current).getSize(new THREE.Vector3())
     const extent = Math.max(size.x, size.y, 0.01)
     const view = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * Math.min(1, camera.aspect)
-    const d = extent / (FILL * view)
+    // A sideways phone (wide and short): a little smaller, so the name line over the bottom edge
+    // clears it and the pin stays centred
+    const fill = camera.aspect > 1.3 && mount.clientHeight < 500 ? FILL * 0.86 : FILL
+    const d = extent / (fill * view)
     camera.position.setLength(d)
     controls.minDistance = d * 0.45
     controls.maxDistance = d * 2.2
@@ -310,7 +347,9 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement, displ
     // The mystery look: every surface pitch black and unlit — a pure silhouette you can turn over
     // (its outline changes as it rotates) but with no design, colour, shading or glow to read
     blackout() {
-      const ink = new THREE.MeshBasicMaterial({ color: 0x000000 })
+      // Both sides, like the materials it replaces: the relief is a single sheet, and drawn front-only
+      // its raised parts vanished edge-on — you saw into the pin (pinRelief.ts, 2026-11-20)
+      const ink = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })
       current.traverse((o) => {
         const m = o as THREE.Mesh
         if (!m.isMesh) return
@@ -350,6 +389,13 @@ function createStage(mount: HTMLDivElement, faceCanvas: HTMLCanvasElement, displ
       holder.add(standIn.group)
       current = standIn.group
       controls.reset()
+      handled = false
+      controls.autoRotate = false // spin() starts it once the new pin is showing
+    },
+    spin() {
+      if (handled) return // already being turned by hand — don't snap it back
+      controls.reset() // face on
+      fit()
       controls.autoRotate = true
     },
     dispose() {

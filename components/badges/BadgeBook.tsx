@@ -4,13 +4,14 @@ import { BookBinding } from '@/components/badges/BookBinding'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Lock, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { badgesInSet, insideLook, pagePin, pinDrawSize, badgeTier, chaptersOf, looksOn, nextTier, pinSize, tierFill, tierNeed, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
+import { badgesInSet, insideLook, pagePin, pinDrawSize, badgeTier, chaptersOf, nextTier, pinSize, tierFill, toNextTier, TIER_NAMES, type BadgeDef, type BadgeSet, type BadgeTier } from '@/lib/badges'
 import type { SharedBadges } from '@/lib/firebase/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import { badgeAsset } from '@/lib/badgeAssets'
 import { BadgePin, PIN_SILHOUETTE, PIN_VIEWBOX } from './BadgePin'
 import { useTrimmedArt } from './trimmedArt'
 import { PinInspector, preloadPinInspector } from './pinInspectorLoader'
+import { BadgeCards, BadgeCardsIcon, badgeCardsOpen } from './BadgeCards'
 
 
 // The Haven Badges pin book (a profile's Badges tab) — modelled on the binders Disney pin traders
@@ -125,7 +126,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = bookRef.current
-      if (!el || !el.matches(':hover, :focus-within')) return
+      if (!el || !el.matches(':hover, :focus-within') || badgeCardsOpen()) return // a card list open over it has the keys
       if (e.key === 'ArrowRight') flip(1)
       if (e.key === 'ArrowLeft') flip(-1)
     }
@@ -271,6 +272,7 @@ export function BadgeBook({ set, badges, isMe, full = false, coverRef, coverOnly
       progress={badges?.progress[inspect.id]}
       mystery={badgeTier(inspect, badges?.progress[inspect.id]) === 0}
       onClose={() => setInspect(null)}
+      cardsFor={{ isMe }}
     />
   )
 
@@ -390,8 +392,12 @@ export function PinPage({ page, side, badges, isMe, pin, onInspect, turning, fla
 // `below`: top-row spots open their preview downward so it isn't cut off above the book.
 // Hover: a quick preview. Click (tap on phones): the 3D inspect view. An earned pin tilts toward
 // the pointer and a glint of light moves across it, like a real enamel pin catching the light.
-export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void }) {
+// progressRise: the next look rising through the pin as you collect toward it — the pin book's. A
+// display of what you've unlocked (a profile's Pin Collection) turns it off: the pin shows only the
+// look you have (2026-11-20 — a Grayscale pin showed half its Full colour there)
+export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspect, progressRise = true }: { def: BadgeDef; badges: SharedBadges | null; pin: number; isMe: boolean; interactive: boolean; below: boolean; onInspect: (def: BadgeDef) => void; progressRise?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [cardsOpen, setCardsOpen] = useState(false) // its cards (BadgeCards), from the card-and-i button
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
   // Display size, but at most 150% of the slot for TCG Haven's badges (100% until 2026-11-14);
   // a creator's may grow to 150% (lib/badges.ts pinDrawSize)
@@ -406,9 +412,12 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
   const next = nextTier(def, badges?.progress[def.id])
   // Tiered: how far from this look to the next (not the whole badge) — the ghost fill and the bar
   const fill = tierFill(def, badges?.progress[def.id])
-  const needNext = next ? tierNeed(def, next, total) : total
 
   return (
+    // The badge (a button) and its cards button side by side in one box — not the cards button inside
+    // the badge's: a focusable control inside a button is invalid, and screen readers couldn't reach it
+    // (2026-11-20). `group`: the cards button shows while the badge is hovered.
+    <div className="group relative" style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}>
     <button
       type="button"
       onClick={() => interactive && onInspect(def)}
@@ -419,9 +428,8 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
         const r = e.currentTarget.getBoundingClientRect()
         setTilt({ x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height })
       }}
-      aria-label={`${def.name} — ${tier ? TIER_NAMES[tier] : 'not earned yet'} — view in 3D`}
-      className="relative flex flex-col items-center justify-center outline-none cursor-pointer"
-      style={{ width: pin * 1.25, height: pin * 1.16 + pin * 0.2 }}
+      aria-label={tier ? `${def.name} — ${TIER_NAMES[tier]} — view in 3D` : 'A locked badge — not earned yet — view in 3D'}
+      className="relative w-full h-full flex flex-col items-center justify-center outline-none cursor-pointer"
     >
       {/* A box the size of a 100% pin: a pin drawn bigger or smaller (its Display size) grows or
           shrinks about its middle, so the nameplate below never moves */}
@@ -443,7 +451,7 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
                 exactly and tilt together (flex: no gap under the image; no shrinking a pin drawn
                 bigger than its slot) */}
             <span className={cn('flex [&>*]:shrink-0 [&>img]:max-w-none', tier === 1 && 'pinbook-look-1')}><BadgePin art={def.art} imageUrl={def.imageUrl} size={size} /></span>
-            {next > 0 && fill > 0 && (
+            {progressRise && next > 0 && fill > 0 && (
               <span className="absolute inset-0 pointer-events-none" aria-hidden>
                 <TierRise size={size} imageUrl={def.imageUrl} art={def.art} progress={fill} />
               </span>
@@ -466,57 +474,41 @@ export function BadgeSpot({ def, badges, pin, isMe, interactive, below, onInspec
       {/* Tucked up under the pin: its box is taller than round art, which left a gap */}
       <Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} gap={-pin * 0.02} />
 
+      {/* Hover: a slim one-line progress tag (the big card with the name, description and bar was a
+          lot to pop up — 2026-11-20; that detail is in the 3D view and the Cards list) */}
       {open && interactive && (
-        <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 w-[220px] text-left rounded-xl border border-slate-700 bg-slate-950 shadow-2xl p-3 pointer-events-none', below ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]')}>
-          <span className="block text-sm font-bold text-ink leading-tight">{def.name}</span>
-          <span className={cn('mt-0.5 inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider', earnedAt ? 'text-emerald-700' : 'text-slate-500')}>
-            {tier ? <><Check size={10} />{TIER_NAMES[tier]}{toNext ? ` · ${toNext} more ${def.slotNoun} for ${TIER_NAMES[nextTier(def, badges?.progress[def.id])]}` : ''}</> : <><Lock size={10} />Not earned yet{toNext ? ` · ${toNext} more ${def.slotNoun} to unlock` : ''}</>}
-          </span>
-          <span className="block text-[0.6875rem] text-slate-400 mt-2 leading-snug">{def.description}</span>
-          {tier < 3 && (
-            <span className="block mt-2">
-              <span className="flex justify-between text-[0.625rem] font-semibold text-slate-500 mb-1">
-                <span>{next ? `To ${TIER_NAMES[next]}` : isMe ? 'Your progress' : 'Progress'}</span>
-                <span>{have} / {next ? needNext : total} {def.slotNoun}</span>
-              </span>
-              <TierBar def={def} have={have} total={total} />
-            </span>
-          )}
+        <span className={cn('pinbook-tip absolute left-1/2 -translate-x-1/2 z-40 whitespace-nowrap rounded-full border border-slate-700 bg-slate-950 shadow-lg px-2.5 py-1 text-[0.6875rem] font-semibold pointer-events-none inline-flex items-center gap-1', below ? 'top-[calc(100%+4px)]' : 'bottom-[calc(100%+4px)]')}>
+          {tier === 3
+            ? <span className="inline-flex items-center gap-1 text-emerald-700"><Check size={11} />{TIER_NAMES[3]} · {have} / {total}</span>
+            : <>
+                {tier === 0 && <Lock size={11} className="text-slate-500" />}
+                <span className="text-ink tabular-nums">{have} / {total}</span>
+                {toNext > 0 && <span className="text-slate-500">· {toNext} more {tier === 0 ? 'to unlock' : `for ${TIER_NAMES[next]}`}</span>}
+              </>}
         </span>
       )}
     </button>
-  )
-}
-
-// The colour of each stretch of the hover bar: the look being collected toward in it
-const TIER_BAR = { 1: '#8d8a84', 3: '#c99a42' } as const
-
-// The hover card's bar: the whole badge, split into the stretch toward each look (Grayscale, then
-// Full — Grayscale skipped if it's switched off) in its own colour; the part collected is solid,
-// the rest faint. It ends at the top look (Full): nothing past it to collect toward.
-function TierBar({ def, have, total }: { def: BadgeDef; have: number; total: number }) {
-  const on = looksOn(def)
-  const stops = on.map((k) => tierNeed(def, k, total))
-  const zones = on.map((k, i) => ({ tier: k, from: i ? stops[i - 1] : 0, to: stops[i] }))
-  const shown = zones.filter((z) => z.to > z.from)
-  return (
-    <>
-      <span className="flex h-1.5 gap-px rounded-full overflow-hidden">
-        {shown.map((z) => (
-          <span key={z.tier} className="relative block h-full" style={{ flexGrow: z.to - z.from, flexBasis: 0, background: `${TIER_BAR[z.tier]}33` }}>
-            <span className="absolute inset-y-0 left-0 block" style={{ background: TIER_BAR[z.tier], width: `${Math.max(0, Math.min(1, (have - z.from) / (z.to - z.from))) * 100}%` }} />
-          </span>
-        ))}
+    {/* Its cards: a card-and-i button at the pin's bottom right — on hover with a mouse, always on a
+        phone (no hover there). Placed by an invisible copy of the badge's own column (the pin's box,
+        then its nameplate), so it sits exactly where the pin is. */}
+    {interactive && def.slots.length > 0 && (
+      <span className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="relative" style={{ width: pin, height: pin * 1.12 }}>
+          <button
+            type="button"
+            aria-label={tier ? `See the cards for ${def.name}` : 'See the cards for this badge'}
+            title="See its cards"
+            onClick={() => { setOpen(false); setCardsOpen(true) }}
+            className="pointer-events-auto absolute right-0 bottom-[4%] z-20 flex items-center justify-center rounded-full bg-black/35 hover:bg-black/55 p-1 shadow-md opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+          >
+            <BadgeCardsIcon size={Math.round(Math.max(18, Math.min(26, pin * 0.2)))} />
+          </button>
+        </span>
+        <span aria-hidden className="invisible"><Nameplate size={pin} text={earnedAt ? def.name : '? ? ?'} lit={!!earnedAt} gap={-pin * 0.02} /></span>
       </span>
-      <span className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1.5 text-[0.5625rem] font-semibold uppercase tracking-wider text-slate-500">
-        {on.map((k) => (
-          <span key={k} className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: TIER_BAR[k] }} />
-            {TIER_NAMES[k]} {stops[on.indexOf(k)]}
-          </span>
-        ))}
-      </span>
-    </>
+    )}
+    {cardsOpen && <BadgeCards def={def} isMe={isMe} nameHidden={tier === 0} onClose={() => setCardsOpen(false)} />}
+    </div>
   )
 }
 

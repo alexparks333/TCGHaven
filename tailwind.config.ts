@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import { PHONELAND_QUERY, WIDE_QUERY } from './lib/screens'
 
 // Parchment theme: every bright Tailwind hue the app uses is re-pointed at a muted, earthy
 // palette so no saturated blue/purple/pink ever shows up against the paper background. Each
@@ -40,7 +41,11 @@ const config: Config = {
         // A phone turned on its side: wide but short. Never a computer or tablet (they're taller),
         // so `phoneland:` lays a page out for a sideways phone only (e.g. Portfolio's chart beside
         // Top Performers, as on the web). Listed after lg, so it wins where both match.
-        phoneland: { raw: '(orientation: landscape) and (max-height: 500px)' },
+        phoneland: { raw: PHONELAND_QUERY },
+        // md's width AND taller than a sideways phone: a tablet or computer. For layouts that should
+        // stay the phone's on a phone turned sideways (Inventory's card list: its desktop table was
+        // crushed in landscape, 2026-11-20). Use instead of md: where that's wanted.
+        wide: { raw: WIDE_QUERY },
       },
       colors: {
         // Parchment theme: the whole app was built dark-first on Tailwind's slate scale, so

@@ -16,6 +16,7 @@ import { BadgeBook } from './BadgeBook'
 import { PhoneBook } from './PhoneBook'
 import { BadgePin } from './BadgePin'
 import { badgeAsset } from '@/lib/badgeAssets'
+import { PHONELAND_QUERY, PHONE_UPRIGHT_QUERY } from '@/lib/screens'
 
 // The Badges shelf: every Badge Set is its own closed pin book. Click one and it opens: the closed
 // book flies from the shelf to the middle of the page, and its cover swings open on the spine while
@@ -52,8 +53,11 @@ type View =
   // An upright phone: the book opens full screen, a page at a time (PhoneBook), over the shelf
   | { mode: 'phone'; set: BadgeSet; from: DOMRect | null }
 
-// An upright phone (portrait, narrow): a two-page spread there makes every pin tiny
-const PHONE_QUERY = '(max-width: 767px) and (orientation: portrait)'
+// A phone — upright and narrow, or turned sideways (wide but short): the book opens full screen as
+// the PhoneBook. Upright it shows a page at a time; sideways, both pages of the spread side by side
+// (PhoneBook's two-page mode). The computer's book, drawn sideways on a phone, blinked its pins on
+// every page turn — it redraws pages as new elements, which iPhone reloads mid-motion (2026-11-20).
+const PHONE_QUERY = `${PHONE_UPRIGHT_QUERY}, ${PHONELAND_QUERY}`
 
 // The shelf's collection, remembered on this device (a convenience — Haven Badges when unset)
 const COLLECTION_KEY = 'tcghaven-badge-collection'

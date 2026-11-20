@@ -11,6 +11,7 @@ import { saveSoldCard, deleteSoldCard, saveCard } from '@/lib/firebase/db'
 import { cn } from '@/lib/utils'
 import { cardImage } from '@/lib/cardImage'
 import { CardName } from '@/components/CardName'
+import { GamePicker } from '@/components/GamePicker'
 
 const GAMES: Game[] = ['pokemon', 'lorcana', 'riftbound', 'onepiece', 'mtg', 'yugioh', 'swu', 'gundam', 'fab', 'digimon', 'palworld', 'cyberpunk']
 
@@ -106,69 +107,56 @@ export default function SoldPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-2 md:gap-3 mb-6">
-          <div className="card-glass px-3 py-3 md:px-4 md:py-4 min-w-0">
+        <div className="grid grid-cols-3 gap-2 wide:gap-3 mb-6">
+          <div className="card-glass px-3 py-3 wide:px-4 wide:py-4 min-w-0">
             <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-1 truncate">Amount Sold</div>
-            <div className="text-base md:text-xl font-bold text-ink truncate">{formatCurrency(stats.totalRevenue)}</div>
+            <div className="text-base wide:text-xl font-bold text-ink truncate">{formatCurrency(stats.totalRevenue)}</div>
           </div>
-          <div className="card-glass px-3 py-3 md:px-4 md:py-4 min-w-0">
+          <div className="card-glass px-3 py-3 wide:px-4 wide:py-4 min-w-0">
             <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-1 truncate">Cards Sold</div>
-            <div className="text-base md:text-xl font-bold text-ink truncate">{stats.totalCards}</div>
+            <div className="text-base wide:text-xl font-bold text-ink truncate">{stats.totalCards}</div>
           </div>
-          <div className="card-glass px-3 py-3 md:px-4 md:py-4 min-w-0">
+          <div className="card-glass px-3 py-3 wide:px-4 wide:py-4 min-w-0">
             <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-1 truncate">Total P&L</div>
-            <div className={`text-base md:text-xl font-bold truncate ${stats.totalPnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            <div className={`text-base wide:text-xl font-bold truncate ${stats.totalPnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {stats.totalPnl >= 0 ? '+' : ''}{formatCurrency(stats.totalPnl)}
             </div>
           </div>
         </div>
 
         {/* Time Filter Pills */}
-        <div className="flex gap-1.5 md:gap-2 mb-5">
+        <div className="flex gap-1.5 wide:gap-2 mb-5">
           {timeFilters.map(({ key, label, short }) => (
             <button
               key={key}
               onClick={() => setTimeFilter(key)}
               className={cn(
-                'flex-1 md:flex-none px-2 md:px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap',
+                'flex-1 wide:flex-none px-2 wide:px-3 py-1.5 rounded-full text-xs font-medium transition-all whitespace-nowrap',
                 timeFilter === key
                   ? 'bg-violet-600 text-white'
                   : 'bg-slate-800 text-slate-400 hover:text-ink hover:bg-slate-700'
               )}
             >
-              <span className="md:hidden">{short}</span>
-              <span className="hidden md:inline">{label}</span>
+              <span className="wide:hidden">{short}</span>
+              <span className="hidden wide:inline">{label}</span>
             </button>
           ))}
         </div>
 
-        {/* Game Tabs */}
-        {/* Game Tabs — tracked games, plus any other game you've sold cards from */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {GAMES.filter((g) => trackedGames.includes(g) || gameCounts[g] > 0).map((game) => {
-            const count = gameCounts[game]
-            return (
-              <button
-                key={game}
-                onClick={() => setActiveGame(game)}
-                className={cn(
-                  'px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2',
-                  activeGame === game
-                    ? 'text-ink shadow-lg'
-                    : 'bg-slate-900 text-slate-400 hover:text-ink hover:bg-slate-800'
-                )}
-                style={
-                  activeGame === game
-                    ? { backgroundColor: GAME_COLORS[game] + '33', color: GAME_COLORS[game], borderColor: GAME_COLORS[game] + '55', border: '1px solid' }
-                    : {}
-                }
-              >
-                {GAME_LABELS[game]}
-                <span className="text-xs opacity-60">{count}</span>
-              </button>
-            )
-          })}
-        </div>
+        {/* Game Tabs — tracked games, plus any other game you've sold cards from. The shared row
+            (components/GamePicker.tsx): one sideways-scrolling line on a phone, upright or sideways,
+            like Inventory and the Cardex (it always wrapped into a block, 2026-11-20) */}
+        <GamePicker<Game>
+          options={GAMES.filter((g) => trackedGames.includes(g) || gameCounts[g] > 0).map((game) => ({
+            id: game,
+            label: GAME_LABELS[game],
+            shortLabel: game === 'mtg' ? 'Magic' : undefined,
+            color: GAME_COLORS[game],
+            count: gameCounts[game],
+          }))}
+          active={activeGame}
+          onSelect={setActiveGame}
+        />
 
         {/* Sold Card List */}
         {visibleSold.length === 0 ? (
@@ -181,7 +169,7 @@ export default function SoldPage() {
           </div>
         ) : (
           <div className="card-glass">
-            <div className="hidden md:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <div className="hidden wide:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] gap-4 px-5 py-3 border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase tracking-wide">
               <span>Card</span><span>Set</span><span>Condition</span><span>Paid</span><span>Sold For</span><span>P&L</span><span></span>
             </div>
 
@@ -190,52 +178,52 @@ export default function SoldPage() {
               return (
                 <div
                   key={card.id}
-                  className="relative grid grid-cols-[1fr_auto] md:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center md:items-stretch gap-x-3 gap-y-1 md:gap-4 px-4 md:px-5 py-3.5 md:py-4 border-b border-slate-800/50 last:border-0 cursor-pointer hover:bg-slate-800/20 transition-colors"
+                  className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-3.5 wide:py-4 border-b border-slate-800/50 last:border-0 cursor-pointer hover:bg-slate-800/20 transition-colors"
                   onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
                   title="⌘/Ctrl+Click to search eBay sold listings"
                 >
-                  <div className="flex items-center gap-3 min-w-0 row-span-2 md:row-span-1">
+                  <div className="flex items-center gap-3 min-w-0 row-span-2 wide:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[3.75rem] md:w-10 md:h-14 object-contain rounded-md" />
+                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-11 h-[3.75rem] wide:w-10 wide:h-14 object-contain rounded-md" />
                       ) : (
-                        <div className="w-11 h-[3.75rem] md:w-10 md:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                        <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
-                      {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
+                      {card.quantity > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
-                      <div className="font-semibold text-ink text-[0.9375rem] md:text-sm truncate"><CardName name={card.name} /></div>
-                      <div className="md:hidden text-xs text-slate-500 truncate">
+                      <div className="font-semibold text-ink text-[0.9375rem] wide:text-sm truncate"><CardName name={card.name} /></div>
+                      <div className="wide:hidden text-xs text-slate-500 truncate">
                         {card.set} · {conditionLabel(card)}
                       </div>
-                      <div className="hidden md:block text-xs text-slate-500">#{card.number}</div>
+                      <div className="hidden wide:block text-xs text-slate-500">#{card.number}</div>
                       <div className="text-[0.625rem] text-slate-600 mt-0.5">
-                        Sold {card.soldDate}<span className="md:hidden"> · paid {formatCurrency(card.purchasePrice * card.quantity)}</span>
+                        Sold {card.soldDate}<span className="wide:hidden"> · paid {formatCurrency(card.purchasePrice * card.quantity)}</span>
                       </div>
                     </div>
                   </div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{card.set}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{conditionLabel(card)}</div>
-                  <div className="text-sm text-slate-300 hidden md:flex items-center">{formatCurrency(card.purchasePrice * card.quantity)}</div>
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">{card.set}</div>
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">{conditionLabel(card)}</div>
+                  <div className="text-sm text-slate-300 hidden wide:flex items-center">{formatCurrency(card.purchasePrice * card.quantity)}</div>
                   {/* Sold for — on mobile the P&L sits under it, like Inventory's value + P&L */}
-                  <div className="flex flex-col justify-end md:justify-center items-end md:items-start self-end md:self-auto">
-                    <span className="text-[0.9375rem] md:text-sm text-ink font-semibold md:font-medium">{formatCurrency(card.soldPrice)}</span>
-                    <span className={`md:hidden text-xs font-medium ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <div className="flex flex-col justify-end wide:justify-center items-end wide:items-start self-end wide:self-auto">
+                    <span className="text-[0.9375rem] wide:text-sm text-ink font-semibold wide:font-medium">{formatCurrency(card.soldPrice)}</span>
+                    <span className={`wide:hidden text-xs font-medium ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                     </span>
                   </div>
-                  <div className={`text-sm font-semibold hidden md:flex items-center ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  <div className={`text-sm font-semibold hidden wide:flex items-center ${pnl >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                     {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                   </div>
-                  <div className="col-start-2 row-start-1 md:col-start-auto md:row-start-auto self-start md:self-auto flex items-center justify-end -mr-1.5 md:mr-0">
+                  <div className="col-start-2 row-start-1 wide:col-start-auto wide:row-start-auto self-start wide:self-auto flex items-center justify-end -mr-1.5 wide:mr-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRestore(card) }}
                       disabled={restoringId === card.id}
                       title="Restore to inventory"
-                      className="flex items-center gap-1.5 p-1.5 md:px-2.5 md:py-1.5 rounded-lg text-xs text-slate-500 hover:text-violet-600 hover:bg-violet-100/30 transition-colors disabled:opacity-40"
+                      className="flex items-center gap-1.5 p-1.5 wide:px-2.5 wide:py-1.5 rounded-lg text-xs text-slate-500 hover:text-violet-600 hover:bg-violet-100/30 transition-colors disabled:opacity-40"
                     >
                       <RotateCcw size={14} />
-                      <span className="hidden md:inline">Restore</span>
+                      <span className="hidden wide:inline">Restore</span>
                     </button>
                   </div>
                 </div>

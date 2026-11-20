@@ -463,6 +463,26 @@ service cloud.firestore {
     // Push notifications (lib/push.ts, lib/pushServer.ts): one doc per person — their phones' FCM
     // tokens and which kinds they want. Theirs to read and write; the server reads it to send and
     // drops tokens FCM no longer knows.
+    // Support reports from /support (lib/support.ts): a signed-in account sends its own (right shape,
+    // capped lengths — keep in step with SUPPORT_LIMITS); only staff read them and mark them done.
+    match /support_requests/{id} {
+      function shortStr(d, k) { return !(k in d) || (d[k] is string && d[k].size() <= 120); }
+      allow create: if signedIn() && notBanned()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.kind in ['missing-card', 'general']
+        && request.resource.data.platform in ['app', 'web']
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly(['kind', 'status', 'uid', 'email', 'name', 'message', 'platform', 'createdAt', 'setName', 'cardName', 'number', 'page', 'game', 'topic'])
+        && request.resource.data.message is string && request.resource.data.message.size() <= 4000
+        && shortStr(request.resource.data, 'email') && shortStr(request.resource.data, 'name')
+        && shortStr(request.resource.data, 'setName') && shortStr(request.resource.data, 'cardName')
+        && shortStr(request.resource.data, 'number') && shortStr(request.resource.data, 'page')
+        && shortStr(request.resource.data, 'game')
+        && (!('topic' in request.resource.data) || request.resource.data.topic in ['account', 'bug', 'billing', 'other']);
+      allow read, update, delete: if isStaff();
+    }
+
     match /push_devices/{uid} {
       allow read, delete: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid

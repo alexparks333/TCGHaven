@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { LOGO_FRAMES, LOGO_FRAME_MS } from '@/lib/logoFrames'
 
 // The doorway logo, animated frame by frame from a strip of its 21 frames (built by
 // scripts/logo-animation.mjs): while `playing`, it goes from the last frame (cards out — the
 // still logo) back to the shut door and forwards again (20 → 0 → 20), rests `hold` frames on the
 // last frame, and loops. One exact frame at a time — never a slide between two. Not playing (or
 // reduced motion) = the last frame. Used by the sidebar logo's hover and the sign-in pages.
-const FRAMES = 21
-const FRAME_MS = 33 // 30 fps, as rendered
+const FRAMES = LOGO_FRAMES
+const FRAME_MS = LOGO_FRAME_MS
 
 export function LogoFrames({
   playing, hold = 5, sprite = '/logo-sprite-sm.webp', className = '',

@@ -34,7 +34,10 @@ export async function GET(request: Request) {
   // q= instead of set= → the whole game: every set's cards whose name (or number) matches —
   // the Cardex search box's "All {game}" scope
   const q = (searchParams.get('q') ?? '').trim()
-  if (!game || (!setName && q.length < 2)) return NextResponse.json([])
+  // ids= instead: exactly these cards (comma-separated catalog ids, up to 400) — a badge's
+  // required cards whose picture wasn't saved with it (components/badges/BadgeCards.tsx)
+  const ids = new Set((searchParams.get('ids') ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 400))
+  if (!game || (!setName && q.length < 2 && ids.size === 0)) return NextResponse.json([])
   if (game !== 'lorcana' && game !== 'riftbound' && game !== 'pokemon' && game !== 'onepiece' && game !== 'mtg' && game !== 'yugioh' && !isTcgplayerSourced(game)) return NextResponse.json([])
 
   // loadVisibleCatalog already excludes hidden cards (via the in-memory cache described in
@@ -47,7 +50,9 @@ export async function GET(request: Request) {
   // (Alt Art/Overnumbered/Signature variants share their base card's bare number; see
   // CLAUDE.md §9), so the "a"/"*" suffix is only added afterward, for display. Pokemon numbers
   // never carry that suffix, so riftboundDisplayNumber is a no-op for them (no publicCode field).
-  const picked = setName
+  const picked = ids.size
+    ? visible.filter((c) => ids.has(c.id))
+    : setName
     ? sortCatalogCards(visible.filter((c) => c.setName === setName))
     : searchWholeGame(visible, q)
   const cards = picked

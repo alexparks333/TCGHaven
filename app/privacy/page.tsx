@@ -8,7 +8,7 @@ import Link from 'next/link'
 export const metadata: Metadata = { title: 'Privacy Policy · TCGHaven' }
 
 const CONTACT_EMAIL = 'support@tcghaven.org'
-const UPDATED = 'November 9, 2026'
+const UPDATED = 'November 20, 2026'
 
 export default function Page() {
   return (
@@ -31,6 +31,7 @@ export default function Page() {
             <li><b className="text-ink">Your profile:</b> your @username, bio, privacy choices, the badges you’ve earned and your Pin Display.</li>
             <li><b className="text-ink">Your friends:</b> the friend requests you send and receive.</li>
             <li><b className="text-ink">Your settings:</b> such as filters, so they match on every device.</li>
+            <li><b className="text-ink">Support messages:</b> when you send us a report from the Support page — a missing card or a request for help — what you wrote, the email address to reply to, your name, and whether it came from the app or the website. Only TCGHaven staff can read them, to answer you and fix the problem.</li>
           </ul>
         </Section>
 
