@@ -16,7 +16,12 @@
     </style>
 
 
+    <!-- Launch screen: plain parchment, no logo — the first logo anyone sees is the website's animated
+         splash (components/layout/SplashIntro.tsx). splash.png is solid #d9c6a0; on Android 12+ the
+         system splash would otherwise show the app icon, so its icon is see-through on the same tan. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">#d9c6a0</item>
+        <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
     </style>
 </resources>

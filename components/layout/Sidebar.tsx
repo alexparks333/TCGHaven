@@ -37,13 +37,15 @@ const MOBILE_NAV = [
 // drawn first flashed the main app before the jump (iPhone app start-up, 2026-11-20). Pages a
 // signed-out visitor may open (/u/…, /c/…, /invite, /premium, /scan…) keep it.
 const SIGNED_IN_ONLY = ['/portfolio', '/inventory', '/cardex', '/badges', '/sold', '/profile', '/friends', '/settings', '/creator']
+/** A page that sends a signed-out visitor to Sign In (AuthGuard). Also used by SplashIntro. */
+export const signedInOnlyPath = (pathname: string) =>
+  pathname === '/' || SIGNED_IN_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'))
 function useShowFrame(): boolean {
   const pathname = usePathname() ?? '/'
   const { user, loading } = useAuth()
   if (pathname === '/login' || pathname === '/signup') return false
   if (loading) return false
-  const signedInOnly = pathname === '/' || SIGNED_IN_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'))
-  return !!user || !signedInOnly
+  return !!user || !signedInOnlyPath(pathname)
 }
 
 export function Sidebar() {

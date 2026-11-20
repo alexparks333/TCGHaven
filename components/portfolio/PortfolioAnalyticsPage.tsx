@@ -68,9 +68,8 @@ export default function PortfolioAnalyticsPage() {
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
   // The collection's saved daily values (usePortfolioTimeline — the Portfolio's "Over time" chart
-  // reads the same, so the two always agree): what was actually owned each day, by game. Hidden
-  // groups and the price floor can't apply to past days (a day is saved per game), so the chart
-  // counts every card of the picked games.
+  // reads the same, so the two always agree): what was actually owned each day, under the
+  // Portfolio's filters — the picked games, hidden groups and the price floor.
   const { dailyValues, ready: timelineReady, locked } = usePortfolioTimeline(activeGames)
 
   // P&L and Return against each day's own "since added" baseline (saved with the day): the price

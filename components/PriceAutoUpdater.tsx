@@ -253,7 +253,7 @@ export function PriceAutoUpdater() {
             body: JSON.stringify({
               mode: 'baselines',
               // Slabs send their grade: one valued at PriceCharting's graded price gets graded baselines
-              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language, gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined, condition: c.condition })),
+              items: eligible.map((c) => ({ key: c.id, game: c.game, apiId: c.apiId, isFoil: c.isFoil, edition: c.edition, finish: c.finish, language: c.language, gradingCompany: c.gradingCompany, grade: c.grade, gradeTier: c.gradeTier ?? undefined, condition: c.condition, added: (c.createdAt ?? c.purchaseDate ?? '').slice(0, 10) || undefined })),
             }),
           })
           if (res.ok) { fresh.baselines = await res.json(); setPriceBaselines(fresh.baselines as Parameters<typeof setPriceBaselines>[0]) }

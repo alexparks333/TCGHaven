@@ -25,13 +25,17 @@ users/{uid}/
   collections/{id}      — Personal Collections (§6) — { game, name, cards: [...], createdAt }
   value_months/{YYYY-MM} — The collection's value over time: one real snapshot per (local) day,
                             kept a month to a doc (a year of chart = 12 reads):
-                            { month, days: { 'DD': { [game]: { v: value, c: cost, e: since-added base } } } }.
+                            { month, days: { 'DD': { t: [floors], g: { [game]: { [group|'_']:
+                            { v, c, e, b: { [floor]: [v, c, e] under it } } } } } } }.
                             Written by components/ValueSnapshotter.tsx while the app is open (today's
-                            entry replaced as cards or prices change); read by
+                            entry replaced as cards, prices or the floor change); read by
                             components/portfolio/usePortfolioTimeline.ts (Portfolio "Over time" +
-                            Analytics), summed over the picked games, today always live. Never
+                            Analytics) under the pie chart's filters — games, hidden groups, price
+                            floor (exact for floors saved that day: $0.10–$100 + the one set then;
+                            otherwise the nearest lower). Today always live = the pie's total. Never
                             rebuilt backwards — a card counts from the day it was logged, a sold one
-                            stays in the days it was owned. Started 2026-11-19 (lib/valueHistory.ts)
+                            stays in the days it was owned. Days in the first layout (2026-11-19/20,
+                            game totals only) are skipped. lib/valueHistory.ts
 ```
 
 `game` throughout is `pokemon` | `lorcana` | `riftbound` | `onepiece` | `mtg`. The `catalog*`,

@@ -19,11 +19,13 @@ console.log(`${files.length} frames → ${order.length} in the loop, ${(fs.statS
 
 // Frame strips (all frames side by side) for animations the page steers itself (app/globals.css
 // .logo-sprite): the sidebar logo's hover (backwards then forwards) and the phone intro (SplashIntro).
-for (const [file, size] of [['public/logo-sprite-sm.webp', 144], ['public/logo-sprite.webp', 240]]) {
+// public/logo-splash.webp: the phone splash's big logo (SplashIntro), 720px frames — sharp on a 3×
+// screen at ~18rem, ~1.3MB (quality 66 keeps it there; the other two stay small for their small spots)
+for (const [file, size, quality] of [['public/logo-sprite-sm.webp', 144, 74], ['public/logo-sprite.webp', 240, 74], ['public/logo-splash.webp', 720, 66]]) {
   const cells = await Promise.all(files.map((f) => sharp(path.join(dir, f)).resize(size, size).png().toBuffer()))
   await sharp({ create: { width: size * cells.length, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite(cells.map((input, i) => ({ input, left: i * size, top: 0 })))
-    .webp({ quality: 74, alphaQuality: 85, effort: 6 })
+    .webp({ quality, alphaQuality: 85, effort: 6 })
     .toFile(file)
   console.log(`${file}: ${cells.length} frames at ${size}px, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`)
 }

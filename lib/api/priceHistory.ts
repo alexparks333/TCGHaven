@@ -26,6 +26,7 @@ export interface HistoryItem extends GradingInput {
   edition?: Edition     // Pokémon printing — see lib/pricing.ts
   finish?: Finish
   language?: Language   // 'ja' → the Japanese catalog's history (price_history/pokemon-jp)
+  added?: string        // YYYY-MM-DD the copy was logged — a graded-priced slab's "first" is its graded price that day
 }
 
 export interface PricePoint { date: string; price: number }
@@ -288,8 +289,11 @@ function byCatalogOf(items: HistoryItem[]): Map<CatalogKey, { game: Game; items:
 }
 
 /** Each item's price 24h / 7d / 30d / 1y ago, and its first recorded price — Portfolio's P&L. A
- *  graded-priced slab's come from the graded history (no "first": Portfolio measures a slab
- *  since added against what was paid). */
+ *  graded-priced slab's come from the graded history, and its "first" is its graded price on the
+ *  day it was logged (`added`, up to LOOKBACK_DAYS later if that day is missing): the price saved
+ *  when it was added is TCGplayer's ungraded one, and "what was paid" is $0 when left empty — the
+ *  whole slab showed as gain (2026-11-20). None that day (logged before the graded history began
+ *  on 2026-11-18) → null, and Portfolio falls back to what was paid. */
 export async function loadBaselines(items: HistoryItem[], now = Date.now()): Promise<Record<string, Baseline>> {
   const { raw, graded } = await splitByStore(items)
   const [a, b] = await Promise.all([baselinesFrom(RAW, rawPriceOf, raw, now), baselinesFrom(GRADED, gradedPriceOf, graded, now)])
@@ -313,10 +317,30 @@ async function baselinesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[
       return { name, files }
     }))
     const firsts = store === RAW ? await loadFirsts(key) : {}
+    // Graded: the day files on and just after each slab's logged day (one read per distinct day)
+    const addedFiles = new Map<string, DayFile[]>()
+    if (store !== RAW) {
+      for (const day of Array.from(new Set(gameItems.map((i) => i.added).filter((d): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d))))) {
+        const files: DayFile[] = []
+        for (let ahead = 0; ahead < LOOKBACK_DAYS; ahead++) {
+          const at = Date.parse(`${day}T00:00:00Z`) + ahead * DAY_MS
+          if (at > now) break
+          const file = await loadDay(store, key, new Date(at).toISOString().slice(0, 10))
+          if (file) files.push(file)
+        }
+        addedFiles.set(day, files)
+      }
+    }
 
     for (const item of gameItems) {
       const card = byId.get(item.apiId)
-      const b: Baseline = { d1: null, d7: null, d30: null, d365: null, first: priceOf(game, item, firsts, card) }
+      let first: number | null = null
+      if (store === RAW) first = priceOf(game, item, firsts, card)
+      else for (const file of addedFiles.get(item.added ?? '') ?? []) {
+        const price = priceOf(game, item, file.prices, card)
+        if (price !== null) { first = price; break }
+      }
+      const b: Baseline = { d1: null, d7: null, d30: null, d365: null, first }
       for (const { name, files } of windows) {
         for (const file of files) {
           const price = priceOf(game, item, file.prices, card)

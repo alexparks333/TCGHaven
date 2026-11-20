@@ -30,27 +30,32 @@ export function PortfolioPieChart({ data, games }: { data: Slice[]; games: Game[
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-3 mb-4">
         <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">{mode === 'game' ? 'Value by Game' : 'Value over Time'}</h3>
-        <div role="radiogroup" aria-label="Chart" className="relative inline-flex shrink-0 rounded-full bg-slate-800/70 p-0.5 border border-slate-700/60">
+        {/* One switch: a tap anywhere on it flips to the other chart (no aiming at the right half —
+            2026-11-20). The two icons show where it is. */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={mode === 'time'}
+          aria-label={mode === 'game' ? 'Show value over time' : 'Show value by game'}
+          title={mode === 'game' ? 'Over time' : 'By game'}
+          onClick={() => pick(mode === 'game' ? 'time' : 'game')}
+          className="relative inline-flex shrink-0 rounded-full bg-slate-800/70 p-0.5 border border-slate-700/60 hover:border-slate-600 transition-colors"
+        >
           <span
             aria-hidden
             className="absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-0.125rem)] rounded-full bg-slate-900 shadow transition-transform duration-300 ease-out"
             style={{ transform: mode === 'time' ? 'translateX(100%)' : undefined }}
           />
-          {([['game', 'By game', PieIcon], ['time', 'Over time', TrendingUp]] as const).map(([m, label, Icon]) => (
-            <button
+          {([['game', PieIcon], ['time', TrendingUp]] as const).map(([m, Icon]) => (
+            <span
               key={m}
-              type="button"
-              role="radio"
-              aria-checked={mode === m}
-              aria-label={label}
-              title={label}
-              onClick={() => pick(m)}
-              className={cn('relative z-10 flex items-center justify-center w-8 h-7 rounded-full transition-colors', mode === m ? 'text-ink' : 'text-slate-500 hover:text-slate-300')}
+              aria-hidden
+              className={cn('relative z-10 flex items-center justify-center w-8 h-7 rounded-full transition-colors', mode === m ? 'text-ink' : 'text-slate-500')}
             >
               <Icon size={14} strokeWidth={2.25} />
-            </button>
+            </span>
           ))}
-        </div>
+        </button>
       </div>
       {mode === 'game' ? <ByGame data={data} /> : <OverTime games={games} />}
     </div>

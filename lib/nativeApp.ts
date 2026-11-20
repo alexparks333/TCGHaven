@@ -43,10 +43,23 @@ export async function shareLink(url: string, title?: string): Promise<boolean> {
   }
 }
 
-/** The launch screen stays up (at most a few seconds — capacitor.config.ts) until the site has drawn */
-export function hideLaunchScreen() {
-  if (!inApp()) return
-  import('@capacitor/splash-screen').then(({ SplashScreen }) => SplashScreen.hide({ fadeOutDuration: 250 })).catch(() => {})
+/** The launch screen stays up (at most a few seconds — capacitor.config.ts) until the site has drawn.
+ *  Resolves once it's fully gone (also at once in a browser), so the phone splash
+ *  (components/layout/SplashIntro.tsx) can start its fade-in where it's seen — not behind the
+ *  launch screen, which loading the plugin can keep up longer than any fixed guess (2026-11-20).
+ *  Safe to call more than once: every caller gets the same answer. */
+const LAUNCH_FADE_MS = 200
+let launchGone: Promise<void> | null = null
+export function hideLaunchScreen(): Promise<void> {
+  if (!launchGone) {
+    launchGone = !inApp()
+      ? Promise.resolve()
+      : import('@capacitor/splash-screen')
+        .then(({ SplashScreen }) => SplashScreen.hide({ fadeOutDuration: LAUNCH_FADE_MS }))
+        .then(() => new Promise<void>((done) => setTimeout(done, LAUNCH_FADE_MS)))
+        .catch(() => {})
+  }
+  return launchGone
 }
 
 // Closing a native sign-in sheet rejects with a message like "The user canceled the sign-in flow."

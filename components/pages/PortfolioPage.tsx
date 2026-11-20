@@ -2,7 +2,7 @@
 
 import { PrintingTags } from '@/components/PrintingTags'
 import { GradedPriceTag } from '@/components/GradedPriceTag'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle, SlidersHorizontal } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useStore, portfolioGames } from '@/lib/store'
@@ -11,7 +11,7 @@ import { passesSlabFilter, type PortfolioSort } from '@/lib/firebase/preferences
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
-import { conditionPrice } from '@/lib/pricing'
+import { entryBaseline } from '@/lib/entryBaseline'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cardImage } from '@/lib/cardImage'
@@ -65,19 +65,25 @@ export default function PortfolioPage() {
         let hasPeriodData: boolean
         let periodStartVal: number  // value at period start (for correct total % denominator)
 
-        // A slab valued at PriceCharting's graded price: the price saved when it was added is
-        // TCGplayer's ungraded one, so since added → measured against what was paid. The 24h–1y
-        // windows use the graded history (the baselines come back graded for these slabs) — "—"
-        // until that history reaches back far enough.
-        const gradedPriced = Boolean(gradedSources[c.id])
+        // A slab valued at PriceCharting's graded price: its 24h–1y windows use the graded history
+        // (the baselines come back graded for these slabs) — "—" until that history reaches back
+        // far enough; since added is its graded price the day it was logged (lib/entryBaseline.ts).
         if (timeFrame === 'entry') {
-          // Baseline = market price when card was first added, or what was paid if unknown
-          // (priceAtEntry is the Near Mint price — discounted for the copy's condition, like its price)
-          const baseline = gradedPriced ? c.purchasePrice : (c.priceAtEntry != null ? conditionPrice(c.priceAtEntry, c) : c.purchasePrice)
-          pnl = (currentPrice - baseline) * c.quantity
-          pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
-          periodStartVal = baseline * c.quantity
-          hasPeriodData = true
+          // Since added: lib/entryBaseline.ts (one rule with the charts). A slab priced by
+          // PriceCharting is measured from its graded price the day it was logged; unknown → no
+          // gain shown, never the whole value
+          const baseline = entryBaseline(c, priceBaselines, gradedSources)
+          if (baseline !== null) {
+            pnl = (currentPrice - baseline) * c.quantity
+            pnlPct = baseline > 0 ? ((currentPrice - baseline) / baseline) * 100 : 0
+            periodStartVal = baseline * c.quantity
+            hasPeriodData = true
+          } else {
+            pnl = 0
+            pnlPct = 0
+            periodStartVal = cost
+            hasPeriodData = false
+          }
         } else if (baselineKey) {
           // The card's shared-history price at the start of the window. No fallback to a later
           // point (that would fake a 0% change): no price that far back → no data for this window.
@@ -164,13 +170,15 @@ export default function PortfolioPage() {
     })
   }, [filtered, sort])
 
+  // All Cards' own game picker ("All Games" or one game), like Top Performers' — this list only
+  const [listGame, setListGame] = useState<Game | 'all'>('all')
   const displayRows = useMemo(() => {
     const q = cardSearch.trim().toLowerCase()
-    if (!q) return groupedRows
     return groupedRows.filter((c) =>
-      c.name.toLowerCase().includes(q) || c.set.toLowerCase().includes(q)
+      (listGame === 'all' || c.game === listGame) &&
+      (!q || c.name.toLowerCase().includes(q) || c.set.toLowerCase().includes(q))
     )
-  }, [groupedRows, cardSearch])
+  }, [groupedRows, cardSearch, listGame])
 
   // Totals: for a time period, only count cards that have period data
   const totals = useMemo(() => {
@@ -219,6 +227,9 @@ export default function PortfolioPage() {
   const [performerGame, setPerformerGame] = useState<Game | 'all'>('all')
   const performerGames = useMemo(() => byGame.filter((g) => g.count > 0), [byGame])
   const shownGame = performerGame !== 'all' && performerGames.some((g) => g.game === performerGame) ? performerGame : 'all'
+  const shownListGame = listGame !== 'all' && performerGames.some((g) => g.game === listGame) ? listGame : 'all'
+  // The picked game has no cards here any more (untracked, filtered out): back to All Games
+  useEffect(() => { if (listGame !== shownListGame) setListGame('all') }, [listGame, shownListGame])
   // …and with All Cards / Graded / Raw — only Top Performers: a slab moves by tens or hundreds of
   // dollars a day and would crowd every raw card out of the list. The rest of the page counts all.
   const performerRows = useMemo(
@@ -503,8 +514,8 @@ export default function PortfolioPage() {
         {/* All Cards table */}
         <div className="card-glass overflow-hidden">
           <div className="flex flex-col gap-3 px-5 py-4 border-b border-slate-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
                 <h3 className="text-sm font-semibold text-ink">All Cards</h3>
                 {hiddenCount > 0 && (
                   <span className="text-[0.625rem] font-bold px-2 py-0.5 rounded-full bg-amber-200/40 text-amber-600 border border-amber-300/40">
@@ -517,6 +528,18 @@ export default function PortfolioPage() {
                   </span>
                 )}
               </div>
+              {/* The list's game picker (same look as Top Performers') */}
+              {performerGames.length > 0 && (
+                <select
+                  value={shownListGame}
+                  onChange={(e) => setListGame(e.target.value as Game | 'all')}
+                  aria-label="Show cards for"
+                  className="shrink-0 text-xs font-medium bg-slate-900 border border-slate-700 text-slate-300 rounded-full pl-3 pr-7 py-1.5 focus:outline-none focus:border-violet-500/60"
+                >
+                  <option value="all">All Games</option>
+                  {performerGames.map((g) => <option key={g.game} value={g.game}>{g.name}</option>)}
+                </select>
+              )}
             </div>
             {/* Search box */}
             <div className="relative">
@@ -625,6 +648,8 @@ export default function PortfolioPage() {
             <div className="text-center text-slate-600 py-16 text-sm">
               {cardSearch
                 ? `No cards match "${cardSearch}".`
+                : listGame !== 'all'
+                ? `No ${GAME_LABELS[listGame]} cards here.`
                 : calcFloor > 0
                 ? `No cards above ${formatCurrency(calcFloor)}. Lower your calculation floor or turn off the filter.`
                 : 'No cards in portfolio. Add cards in the Inventory section.'}
