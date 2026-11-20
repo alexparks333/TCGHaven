@@ -1473,3 +1473,14 @@
 .splash-frame:first-child { opacity: 1; }
 @keyframes splash-frame-in { from { opacity: 0; } to { opacity: 1; } }
 .splash-frames.playing .splash-frame:not(:first-child) { animation: splash-frame-in 33ms linear forwards; }
+
+/* Sideways phone (Tailwind's phoneland): the side menu folded to a strip of icons (Sidebar.tsx
+   .is-rail, its fold button). Only with the phone on its side — the class does nothing elsewhere. */
+@media (orientation: landscape) and (max-height: 500px) {
+  aside.is-rail { width: 4.5rem; padding-left: max(0.5rem, env(safe-area-inset-left)); padding-right: 0.5rem; }
+  aside.is-rail .rail-hide { display: none !important; }
+  aside.is-rail .rail-toggle { align-self: center; }
+  aside.is-rail .nav-link,
+  aside.is-rail a[href="/profile"] { justify-content: center; padding-left: 0; padding-right: 0; }
+}
+

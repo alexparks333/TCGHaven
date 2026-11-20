@@ -1264,8 +1264,8 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
         {!readOnly && (
           <div className="mb-6 flex items-center justify-between gap-4">
             <h1 className="text-2xl font-bold text-ink">Cardex</h1>
-            {/* The click shortcuts, top right on one slim line, no taller than the title (computers only) */}
-            <div className="hidden md:flex items-center gap-4 rounded-full border border-slate-800 bg-slate-950/50 pl-1.5 pr-4 py-1 text-xs whitespace-nowrap">
+            {/* The click shortcuts, top right on one slim line, no taller than the title (computers only — not a sideways phone) */}
+            <div className="hidden md:flex phoneland:hidden items-center gap-4 rounded-full border border-slate-800 bg-slate-950/50 pl-1.5 pr-4 py-1 text-xs whitespace-nowrap">
               <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">Shift</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Add card</span></span>
               <span className="w-px h-4 bg-slate-700" />
               <span className="flex items-center gap-1.5"><kbd className="cardex-kbd">{isMac ? '⌘ Cmd' : 'Ctrl'}</kbd><span className="text-slate-500">+ click</span><span className="font-semibold text-ink">Look up price</span></span>
@@ -2529,13 +2529,16 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
 
       {/* Click-through: only the card and the info panel themselves catch clicks, so a click on any
           empty space around or between them reaches the backdrop and closes the view */}
-      <div className={cn('flex flex-col items-center gap-4 pointer-events-none [&>*]:pointer-events-auto', closing && 'card-zoom-content closing')}>
+      {/* A sideways phone (phoneland) splits the screen: the card on the left, its info on the right
+          (stacked, it ran off the top and bottom — 2026-11-20) */}
+      <div className={cn('flex flex-col items-center gap-4 phoneland:flex-row phoneland:items-center phoneland:gap-8 pointer-events-none [&>*]:pointer-events-auto', closing && 'card-zoom-content closing')}>
         {/* The card's spot: as tall as the tallest of this card's copies (a slab, if any), with the
             card centred in it — so swapping slab ↔ raw never moves the bubbles or the panel below.
             --zoom-cap: a little smaller slab on a phone, so the panel fits under it. */}
         <div
-          className="!pointer-events-none flex items-center justify-center [--zoom-cap:calc(56dvh*0.64)] sm:[--zoom-cap:9999px]"
-          style={hasSlabCopy ? { height: `calc(${SLAB_ZOOM_WIDTH} / 0.64)` } : undefined}
+          // Sideways phone: sized by the screen's height (--zoom-*-w), the card filling most of it
+          className="!pointer-events-none flex items-center justify-center [--zoom-cap:calc(56dvh*0.64)] sm:[--zoom-cap:9999px] phoneland:[--zoom-slab-w:calc(88dvh*0.64)] phoneland:[--zoom-raw-w:calc(86dvh*5/7)] phoneland:[--zoom-land-w:min(52vw,calc(80dvh*7/5))]"
+          style={hasSlabCopy ? { height: `calc(var(--zoom-slab-w, ${SLAB_ZOOM_WIDTH}) / 0.64)` } : undefined}
         >
         <div
           ref={moverRef}
@@ -2543,10 +2546,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           style={slab
             // A real slab is the card plus a case: sized so the card inside comes out about as big
             // as a raw card's own zoom (300px), with the label and acrylic border on top of that
-            ? { width: SLAB_ZOOM_WIDTH, aspectRatio: '0.64', perspective: '1200px' }
+            ? { width: `var(--zoom-slab-w, ${SLAB_ZOOM_WIDTH})`, aspectRatio: '0.64', perspective: '1200px' }
             : d.landscape
-            ? { width: 'min(90vw, max(460px, 64vh))', aspectRatio: '7 / 5', perspective: '1200px' }
-            : { width: 'min(80vw, calc(70vh * 5 / 7), max(300px, calc(54vh * 5 / 7)))', aspectRatio: '5 / 7', perspective: '1200px' }}
+            ? { width: 'var(--zoom-land-w, min(90vw, max(460px, 64vh)))', aspectRatio: '7 / 5', perspective: '1200px' }
+            : { width: 'var(--zoom-raw-w, min(80vw, calc(70vh * 5 / 7), max(300px, calc(54vh * 5 / 7))))', aspectRatio: '5 / 7', perspective: '1200px' }}
         >
           {/* Version swap layer (swapStyle) — its own element, so the swap never fights the fly-in
               (the mover), the drag-to-turn (the tilter) or the flip (the flipper) for a transform.
@@ -2617,10 +2620,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
               }}
             >
-              {/* The back's emblem: the TCGHaven doorway, big and grey (no circle) — public/logo-card-back.webp,
+              {/* The back's emblem: the TCGHaven doorway in grey (no circle), about a third of the card — public/logo-card-back.webp,
                   the animation's last frame at 720px, greyed ahead of time (sharp on a 3× screen) */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo-card-back.webp" alt="" draggable={false} className="w-[62%] aspect-square object-contain" style={{ opacity: 0.85 }} />
+              <img src="/logo-card-back.webp" alt="" draggable={false} className="w-[38%] aspect-square object-contain" style={{ opacity: 0.85 }} />
             </div>
           </div>
           </div>
@@ -2630,7 +2633,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               corner on a computer. On a phone there's no room beside the card, so they sit in a
               centred row above the info panel instead (below) — never over the card, never
               pushing the panel off centre. Tap one to swap. */}
-          {visible && many && versionBubbles('hidden sm:flex absolute z-20 left-full ml-4 bottom-2 items-start')}
+          {visible && many && versionBubbles('hidden sm:flex phoneland:hidden absolute z-20 left-full ml-4 bottom-2 items-start')}
 
           {visible && (
             <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', slab ? 'rounded-[1.125rem]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
@@ -2657,7 +2660,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             // w-max + mx-auto inside an overflow box: centred while it fits, scrolls from the first
             // bubble (not clipped on the left) once it doesn't
             // It comes in like the info panel (card-zoom-versions-row, globals.css), just before it
-            <div className="card-zoom-versions-row sm:hidden relative z-10 max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
+            <div className="card-zoom-versions-row sm:hidden phoneland:block relative z-10 max-w-[calc(100vw-1.5rem)] phoneland:max-w-[40vw] overflow-x-auto no-scrollbar">
               {versionBubbles('flex', true)}
             </div>
           )}

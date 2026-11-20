@@ -209,7 +209,8 @@ export function FilterPanel() {
 
       {/* Active-filter banner when panel is closed */}
       {!showFilters && hasActiveFilters && onPortfolio && (
-        <div className="bg-amber-100/40 border-b border-amber-200/40 px-4 sm:px-6 lg:px-8 py-1.5">
+        // Sideways phone: kept clear of the screen's rounded corner / camera on the right (Edit was under it)
+        <div className="bg-amber-100/40 border-b border-amber-200/40 px-4 sm:px-6 lg:px-8 phoneland:pr-[max(1rem,env(safe-area-inset-right))] py-1.5">
           {/* One line at every width — on a phone the extra items scroll sideways instead of
               wrapping into a tall block above every page */}
           <div className="max-w-7xl mx-auto flex items-center gap-3">

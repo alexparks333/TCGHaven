@@ -109,7 +109,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
                 Admin catalog table's own intentional sideways scroll. */}
             <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-x-none">
               {/* Bottom padding on phones clears the fixed bottom nav (plus the iPhone home bar) */}
-              <div className={`${fullWidth ? '' : 'max-w-7xl '}mx-auto w-full px-4 sm:px-6 lg:px-8 pt-5 md:pt-8 pb-[calc(env(safe-area-inset-bottom)+88px)] md:pb-8`}>
+              <div className={`${fullWidth ? '' : 'max-w-7xl '}mx-auto w-full px-4 sm:px-6 lg:px-8 phoneland:pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pt-8 phoneland:pt-4 pb-[calc(env(safe-area-inset-bottom)+88px)] md:pb-8`}>
                 {children}
               </div>
             </main>

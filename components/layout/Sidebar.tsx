@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { LogoHover } from './LogoHover'
 import { usePathname } from 'next/navigation'
-import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2 } from 'lucide-react'
+import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
@@ -36,6 +37,7 @@ const MOBILE_NAV = [
 // on a sign-in-only page to someone signed out: those pages send them to Sign In, and the frame
 // drawn first flashed the main app before the jump (iPhone app start-up, 2026-11-20). Pages a
 // signed-out visitor may open (/u/…, /c/…, /invite, /premium, /scan…) keep it.
+const RAIL_KEY = 'haven:menuRail'
 const SIGNED_IN_ONLY = ['/portfolio', '/inventory', '/cardex', '/badges', '/sold', '/profile', '/friends', '/settings', '/creator']
 /** A page that sends a signed-out visitor to Sign In (AuthGuard). Also used by SplashIntro. */
 export const signedInOnlyPath = (pathname: string) =>
@@ -56,6 +58,11 @@ export function Sidebar() {
   const creator = canUseCreatorStudio(myRole)
   const studioLinks = useStudioLinks() // the Creator Studio is computers-only — no link in the app
   const owned = useCommunity(user?.uid).community // the community you run, if any
+  // A sideways phone can fold the menu to a strip of icons (more room for the page). Remembered on
+  // this device; has no effect anywhere else (the .is-rail rules only apply to phoneland, globals.css).
+  const [rail, setRail] = useState(false)
+  useEffect(() => { try { setRail(localStorage.getItem(RAIL_KEY) === '1') } catch { /* private mode */ } }, [])
+  const toggleRail = () => setRail((r) => { try { localStorage.setItem(RAIL_KEY, r ? '0' : '1') } catch { /* private mode */ } return !r })
 
   const showFrame = useShowFrame()
   if (!showFrame) return null
@@ -70,18 +77,29 @@ export function Sidebar() {
       {/* Desktop Sidebar — also an iPhone on its side (wider than md). It scrolls on its own when the
           tabs don't fit the height (a sideways phone is ~390px tall: the lower tabs were out of
           reach, 2026-11-19), and keeps clear of the notch on the left in landscape. */}
-      <aside className="hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 pl-[max(0.75rem,env(safe-area-inset-left))] py-6 shrink-0 overflow-y-auto overscroll-contain">
-        <LogoHover />
+      <aside className={cn('hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 pl-[max(0.75rem,env(safe-area-inset-left))] py-6 phoneland:py-3 shrink-0 overflow-y-auto overscroll-contain', rail && 'is-rail')}>
+        {/* Sideways phone only: fold the menu to icons / open it again */}
+        <button
+          type="button"
+          onClick={toggleRail}
+          aria-label={rail ? 'Open the menu' : 'Fold the menu away'}
+          title={rail ? 'Open the menu' : 'Fold the menu away'}
+          className="rail-toggle hidden phoneland:flex items-center justify-center self-end w-9 h-9 mb-1 rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800/60 transition-colors"
+        >
+          {rail ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
+        <div className="rail-hide"><LogoHover /></div>
 
         <nav className="flex flex-col gap-1">
           {nav.map(({ href, label, icon: Icon }) => (
             <Link
               key={href}
               href={href}
+              title={label}
               className={cn('nav-link', pathname === href && 'active')}
             >
               <Icon size={16} />
-              {label}
+              <span className="rail-hide">{label}</span>
             </Link>
           ))}
         </nav>
@@ -95,15 +113,15 @@ export function Sidebar() {
                 className={cn('nav-link', pathname.startsWith('/creator') && 'active')}
               >
                 <Wand2 size={16} className="text-violet-600" />
-                Creator
-                <span className="ml-auto text-[0.5625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-violet-600/15 text-violet-700">Studio</span>
+                <span className="rail-hide">Creator</span>
+                <span className="rail-hide ml-auto text-[0.5625rem] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-violet-600/15 text-violet-700">Studio</span>
               </Link>
             )}
             {/* The community you run, straight to its page (where you post, pin notes and arrange the wall) */}
             {owned && (
               <Link href={`/c/${user.uid}`} title={owned.name || 'Your community'} className={cn('nav-link', pathname === `/c/${user.uid}` && 'active')}>
                 <Users size={16} />
-                Community
+                <span className="rail-hide">Community</span>
               </Link>
             )}
           </div>
@@ -111,7 +129,7 @@ export function Sidebar() {
 
         {/* User section */}
         <div className="mt-auto">
-          {user && <FriendsSidebarSection />}
+          {user && <div className="rail-hide"><FriendsSidebarSection /></div>}
           {user && (
             <>
               {/* Your profile — what your friends see (components/pages/ProfilePage.tsx). Sign out
@@ -124,14 +142,14 @@ export function Sidebar() {
                 )}
               >
                 <Avatar seed={user.uid} name={me?.displayName ?? user.displayName ?? user.email ?? ''} photoURL={user.photoURL ?? ''} size={34} />
-                <div className="min-w-0 flex-1">
+                <div className="rail-hide min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="text-xs font-semibold text-ink truncate">{me?.displayName ?? user.displayName ?? 'Collector'}</span>
                     <TitleTag uid={user.uid} record={myRole} />
                   </div>
                   <div className="text-[0.625rem] text-slate-500 truncate">{me ? `@${me.username}` : 'Your profile'}</div>
                 </div>
-                <ChevronRight size={14} className="text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
+                <ChevronRight size={14} className="rail-hide text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
               </Link>
             </>
           )}

@@ -71,11 +71,13 @@ export function GamePicker<T extends string>({ options, active, onSelect, traili
     : undefined
 
   return (
-    <div className="flex items-center md:flex-wrap gap-2 mb-6">
+    // A sideways phone (phoneland) keeps the phone's one scrolling row, not the wrapped block a
+    // tablet-width screen gets (it piled up three lines of games, 2026-11-20)
+    <div className="flex items-center md:flex-wrap phoneland:flex-nowrap gap-2 mb-6">
       <div
         ref={rowRef}
         onScroll={measure}
-        className="relative md:contents flex-1 min-w-0 flex gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative md:contents phoneland:flex flex-1 min-w-0 flex gap-2 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ maskImage: mask, WebkitMaskImage: mask }}
       >
         {options.map(({ id, label, shortLabel, color, icon, count, remove }) => {
@@ -86,16 +88,16 @@ export function GamePicker<T extends string>({ options, active, onSelect, traili
                 onClick={() => onSelect(id)}
                 aria-pressed={on}
                 className={cn(
-                  'h-9 md:h-auto px-3.5 md:px-4 md:py-2 flex items-center gap-1.5 md:gap-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
-                  on ? 'md:shadow-lg' : 'bg-slate-900 border-slate-800 md:border-0 text-slate-400 hover:text-ink hover:bg-slate-800',
+                  'h-9 md:h-auto phoneland:h-9 px-3.5 md:px-4 phoneland:px-3.5 md:py-2 phoneland:py-0 flex items-center gap-1.5 md:gap-2 phoneland:gap-1.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                  on ? 'md:shadow-lg phoneland:shadow-none' : 'bg-slate-900 border-slate-800 md:border-0 phoneland:border text-slate-400 hover:text-ink hover:bg-slate-800',
                 )}
                 style={on ? { backgroundColor: color + '33', borderColor: color + '55', color } : undefined}
               >
                 {icon}
                 {shortLabel ? (
                   <>
-                    <span className="md:hidden">{shortLabel}</span>
-                    <span className="hidden md:inline">{label}</span>
+                    <span className="md:hidden phoneland:inline">{shortLabel}</span>
+                    <span className="hidden md:inline phoneland:hidden">{label}</span>
                   </>
                 ) : label}
                 {count !== undefined && <span className="text-xs opacity-60">{count}</span>}
@@ -105,7 +107,7 @@ export function GamePicker<T extends string>({ options, active, onSelect, traili
                   onClick={remove.onClick}
                   title={remove.title}
                   aria-label={remove.title}
-                  className="hidden md:flex absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-700 text-slate-300 hover:bg-red-500 hover:text-white items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="hidden md:flex phoneland:hidden absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-700 text-slate-300 hover:bg-red-500 hover:text-white items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <X size={10} />
                 </button>

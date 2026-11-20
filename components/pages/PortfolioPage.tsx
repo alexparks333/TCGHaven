@@ -392,8 +392,8 @@ export default function PortfolioPage() {
 
         {/* Time frame — drives Top Performers' per-card P&L below; Collection Value above is
             never affected, since that's just current market value with no time dimension. */}
-        <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-4">
-        <div className="flex items-center gap-1.5 lg:gap-2 min-w-0 lg:flex-1">
+        <div className="flex flex-col lg:flex-row lg:items-center phoneland:flex-row phoneland:items-center gap-3 mb-4">
+        <div className="flex items-center gap-1.5 lg:gap-2 min-w-0 lg:flex-1 phoneland:flex-1">
           <span className="shrink-0 whitespace-nowrap text-xs text-slate-500 uppercase tracking-wide font-semibold mr-1">Time Frame</span>
           {TIME_FRAME_OPTIONS.map(({ value, label, short }) => (
             <button
@@ -411,12 +411,13 @@ export default function PortfolioPage() {
             </button>
           ))}
         </div>
-        {sortControl('hidden lg:flex')}
+        {sortControl('hidden lg:flex phoneland:flex')}
         </div>
 
         {/* Circle chart: the collection's value by game (it replaced the By Game cards, 2026-11-15) —
-            beside Top Performers on wide screens, above it on phones */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(15rem,1fr)_2fr] gap-4 mb-8">
+            beside Top Performers on wide screens and on a phone turned sideways (phoneland), above
+            it on a phone held upright */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(15rem,1fr)_2fr] phoneland:grid-cols-[minmax(14rem,1fr)_1.6fr] gap-4 mb-8">
         <div className="card-glass p-6 flex flex-col">
           {byGame.some((g) => g.value > 0)
             ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} games={activeGames} />
@@ -425,7 +426,7 @@ export default function PortfolioPage() {
                 <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>
               </>}
         </div>
-        {sortControl('lg:hidden justify-self-end')}
+        {sortControl('lg:hidden phoneland:hidden justify-self-end')}
         <div className="card-glass p-6 min-w-0">
           <div className="flex items-start justify-between gap-3 mb-4">
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
@@ -434,7 +435,8 @@ export default function PortfolioPage() {
               {calcFloor > 0 && <span className="ml-2 text-[0.625rem] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
             </h3>
             {/* Phone: the game picker stacks under the toggle (side by side it ran off the screen) */}
-            <div className="shrink-0 flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:flex-wrap sm:justify-end">
+            {/* …and on a sideways phone too, where Top Performers shares the width with the chart */}
+            <div className="shrink-0 flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:flex-wrap sm:justify-end phoneland:flex-col phoneland:items-end">
             {/* All Cards / Graded / Raw */}
             <div role="radiogroup" aria-label="Top performers: which cards" className="flex items-center rounded-full border border-slate-700 bg-slate-900 p-0.5">
               {([['all', 'All Cards'], ['graded', 'Graded'], ['raw', 'Raw']] as const).map(([value, label]) => (
