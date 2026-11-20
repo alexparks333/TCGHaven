@@ -269,7 +269,8 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
     } else if (friendship && friendship.addressee === me) {
       // They sent you a request: accept or deny it right here
       action = (
-        <div className="flex items-center gap-2">
+        // Phone: stacked (beside the photo there's no room for both side by side — Deny was cut off)
+        <div className="flex flex-col items-stretch md:flex-row md:items-center gap-2">
           <button onClick={() => act('accept', () => acceptFriendRequest(me, profile.uid))} disabled={!!busy} className="btn-primary disabled:opacity-60">
             {busy === 'accept' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Accept request
           </button>
@@ -355,16 +356,18 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             )}
           </div>
           {/* Phone: the counts and the community as a line of text (on desktop they're the tiles on the right) */}
-          <div className="md:hidden mt-1 flex gap-4 text-sm font-semibold text-slate-400">
+          {/* wraps: on your own profile this column is narrow (the privacy box is beside it) */}
+          <div className="md:hidden mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm font-semibold text-slate-400">
             {([[isMe ? '/friends' : null, friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
                [isMe ? '/friends#communities' : null, communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([href, n, label]) => {
               const body = <><span className="text-ink font-bold">{n ?? '–'}</span> {label}</>
-              return href ? <Link key={label} href={href} className="hover:text-ink">{body}</Link> : <span key={label}>{body}</span>
+              return href ? <Link key={label} href={href} className="hover:text-ink whitespace-nowrap">{body}</Link> : <span key={label} className="whitespace-nowrap">{body}</span>
             })}
           </div>
           {owned && (
-            <Link href={`/c/${profile.uid}`} className="md:hidden mt-2 inline-flex items-center gap-1.5 text-sm font-bold text-[#7a5230]">
-              <Users size={14} />{isMe ? 'Your community' : `${first}’s community`}: <span className="truncate">{owned.name || 'Open'}</span><ChevronRight size={14} />
+            <Link href={`/c/${profile.uid}`} className="md:hidden mt-2 flex items-start gap-1.5 text-sm font-bold text-[#7a5230] max-w-full">
+              {/* the text wraps inside the narrow column instead of running under the privacy box */}
+              <Users size={14} className="shrink-0 mt-[3px]" /><span className="min-w-0 [overflow-wrap:anywhere]">{isMe ? 'Your community' : `${first}’s community`}: {owned.name || 'Open'}</span><ChevronRight size={14} className="shrink-0 mt-[3px]" />
             </Link>
           )}
         </div>

@@ -495,7 +495,7 @@ export default function InventoryPage() {
           </div>
         )}
         <div className="mb-6">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="text-2xl font-bold text-ink">Inventory</h1>
             <div className="flex items-center gap-2 shrink-0">
               {/* The click shortcuts, like the Cardex's (computers only), left of Scan */}
@@ -689,18 +689,19 @@ export default function InventoryPage() {
               </span>
               <span className="text-xs text-slate-500">{session.count} cards logged</span>
             </div>
-            <div className="grid grid-cols-3 gap-4 mb-3">
+            {/* Phone: smaller figures, cut short rather than spilling into the next column ($1,234.56 didn't fit) */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-3">
               <div>
                 <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-0.5">Market Value</div>
-                <div className="text-xl font-bold text-ink">{formatCurrency(session.market)}</div>
+                <div className="text-base sm:text-xl font-bold text-ink truncate tabular-nums">{formatCurrency(session.market)}</div>
               </div>
               <div>
                 <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-0.5">Paid</div>
-                <div className="text-xl font-bold text-ink">{formatCurrency(session.paid)}</div>
+                <div className="text-base sm:text-xl font-bold text-ink truncate tabular-nums">{formatCurrency(session.paid)}</div>
               </div>
               <div>
                 <div className="text-[0.625rem] text-slate-500 uppercase tracking-wide mb-0.5">Gain / Loss</div>
-                <div className={`text-xl font-bold ${session.market - session.paid >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                <div className={`text-base sm:text-xl font-bold truncate tabular-nums ${session.market - session.paid >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {session.market - session.paid >= 0 ? '+' : ''}{formatCurrency(session.market - session.paid)}
                 </div>
               </div>

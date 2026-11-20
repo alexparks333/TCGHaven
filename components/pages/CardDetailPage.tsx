@@ -132,7 +132,7 @@ export default function CardDetailPage() {
               <Link
                 href={cardexLink}
                 onClick={(e) => e.stopPropagation()}
-                className="btn-secondary w-fit mt-1 whitespace-nowrap"
+                className="btn-secondary w-fit max-w-full mt-1 whitespace-nowrap px-3 sm:px-4"
               >
                 <BookOpen size={14} /> View in Cardex
               </Link>

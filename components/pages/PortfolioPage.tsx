@@ -416,7 +416,8 @@ export default function PortfolioPage() {
               {showHistoryNote && <span className="ml-2 text-[0.625rem] text-violet-600 font-normal normal-case">{periodLabel} change</span>}
               {calcFloor > 0 && <span className="ml-2 text-[0.625rem] text-slate-600 font-normal normal-case">≥ {formatCurrency(calcFloor)}</span>}
             </h3>
-            <div className="shrink-0 flex items-center gap-2 flex-wrap justify-end">
+            {/* Phone: the game picker stacks under the toggle (side by side it ran off the screen) */}
+            <div className="shrink-0 flex flex-col items-end gap-2 sm:flex-row sm:items-center sm:flex-wrap sm:justify-end">
             {/* All Cards / Graded / Raw */}
             <div role="radiogroup" aria-label="Top performers: which cards" className="flex items-center rounded-full border border-slate-700 bg-slate-900 p-0.5">
               {([['all', 'All Cards'], ['graded', 'Graded'], ['raw', 'Raw']] as const).map(([value, label]) => (
