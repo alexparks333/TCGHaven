@@ -7,6 +7,7 @@ import { Mail, Lock, User, KeyRound, AlertCircle, Loader2 } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { afterSignIn, nextQuery } from '@/lib/authRedirect'
 import { friendlyAuthError } from '@/lib/auth-errors'
+import { LogoFrames } from '@/components/LogoFrames'
 
 export default function SignupPage() {
   const { signUp, signInWithGoogle, verifyPasscode } = useAuth()
@@ -68,8 +69,8 @@ export default function SignupPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="" className="w-28 h-28 object-contain mb-3 drop-shadow-xl" />
+          {/* The doorway, looping (20 → 0 → 20, a 1s rest) — components/LogoFrames.tsx */}
+          <LogoFrames playing hold={30} sprite="/logo-sprite.webp" className="w-28 h-28 mb-3 drop-shadow-xl" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <h1><img src="/logo-text.png" alt="TCGHaven" className="w-56 h-auto object-contain" /></h1>
           <p className="text-slate-500 text-sm mt-1">Create your collection account</p>
