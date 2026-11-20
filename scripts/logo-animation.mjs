@@ -18,22 +18,30 @@ await sharp(order.map((i) => frames[i]), { join: { animated: true } })
 console.log(`${files.length} frames → ${order.length} in the loop, ${(fs.statSync('public/logo-anim.webp').size / 1024).toFixed(0)} KB`)
 
 // Frame strips (all frames side by side) for animations the page steers itself (app/globals.css
-// .logo-sprite): the sidebar logo's hover (backwards then forwards) and the phone intro (SplashIntro).
-// public/logo-splash.webp: the phone splash's big logo (SplashIntro), 720px frames — sharp on a 3×
-// screen at ~18rem, ~1.3MB (quality 66). A GRID of 7 columns (not one strip): a 15,120px-wide strip
-// is past what an iPhone keeps as one image, and the splash hitched at the same frame every time.
-// Its frames sit on the splash's tan (#d9c6a0, not see-through), so the splash can blend each frame
-// into the next; the tan comes out within 1/255 of the page's. The other two stay single, see-through rows.
-const TAN = { r: 0xd9, g: 0xc6, b: 0xa0 }
-for (const [file, size, quality, cols, flat] of [['public/logo-sprite-sm.webp', 144, 74, 0, false], ['public/logo-sprite.webp', 240, 74, 0, false], ['public/logo-splash.webp', 720, 70, 7, true]]) {
-  const cells = await Promise.all(files.map((f) => {
-    const img = sharp(path.join(dir, f)).resize(size, size)
-    return (flat ? img.flatten({ background: TAN }) : img).png().toBuffer()
-  }))
-  const perRow = cols || cells.length, rows = Math.ceil(cells.length / perRow)
-  await sharp({ create: { width: size * perRow, height: size * rows, channels: flat ? 3 : 4, background: flat ? TAN : { r: 0, g: 0, b: 0, alpha: 0 } } })
-    .composite(cells.map((input, i) => ({ input, left: (i % perRow) * size, top: Math.floor(i / perRow) * size })))
-    .webp(flat ? { quality, effort: 6, smartSubsample: true } : { quality, alphaQuality: 85, effort: 6 })
+// .logo-sprite): the sidebar logo's hover (backwards then forwards) and the Sign In / Sign Up logo.
+for (const [file, size] of [['public/logo-sprite-sm.webp', 144], ['public/logo-sprite.webp', 240]]) {
+  const cells = await Promise.all(files.map((f) => sharp(path.join(dir, f)).resize(size, size).png().toBuffer()))
+  await sharp({ create: { width: size * cells.length, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(cells.map((input, i) => ({ input, left: i * size, top: 0 })))
+    .webp({ quality: 74, alphaQuality: 85, effort: 6 })
     .toFile(file)
-  console.log(`${file}: ${cells.length} frames at ${size}px (${perRow}×${rows}), ${(fs.statSync(file).size / 1024).toFixed(0)} KB`)
+  console.log(`${file}: ${cells.length} frames at ${size}px, ${(fs.statSync(file).size / 1024).toFixed(0)} KB`)
 }
+
+// public/splash/frame-NN.webp: the phone splash's big logo (SplashIntro), one 720px picture per
+// frame — sharp on a 3× screen at ~18rem, ~1.1MB in all. Separate pictures, not one sheet: a slice
+// of a sheet has to be cut out and drawn the first time it shows, mid-animation (the splash lagged,
+// 2026-11-20); a plain decoded picture goes on screen as it is. On the splash's tan (#d9c6a0, not
+// see-through) so each frame can blend into the next; the tan comes out within 1/255 of the page's.
+const TAN = { r: 0xd9, g: 0xc6, b: 0xa0 }
+fs.mkdirSync('public/splash', { recursive: true })
+let splashBytes = 0
+for (const [i, f] of files.entries()) {
+  const out = `public/splash/frame-${String(i).padStart(2, '0')}.webp`
+  await sharp(path.join(dir, f)).resize(720, 720).flatten({ background: TAN }).webp({ quality: 70, effort: 6, smartSubsample: true }).toFile(out)
+  splashBytes += fs.statSync(out).size
+}
+console.log(`public/splash: ${files.length} frames at 720px, ${(splashBytes / 1024).toFixed(0)} KB`)
+
+// public/logo-card-back.webp: the zoom view's card back (CardexPage) — the last frame, grey, 720px
+await sharp(path.join(dir, files[files.length - 1])).resize(720, 720).grayscale().webp({ quality: 80, alphaQuality: 90, effort: 6 }).toFile('public/logo-card-back.webp')

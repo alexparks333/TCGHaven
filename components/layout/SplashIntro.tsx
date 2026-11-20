@@ -10,8 +10,12 @@ import { hideLaunchScreen } from '@/lib/nativeApp'
 // the way through (cards fly out) over the parchment with the TCGHaven wordmark below, rests on its
 // last frame for a moment, then fades into the app — Sign In for someone signed out, their
 // collection otherwise (it waits on past that only if the app underneath isn't ready yet). Skipped
-// for reduced motion and on desktop. Frames: public/logo-splash.webp (preloaded in app/layout.tsx),
-// a 7 × 3 grid of 720px frames on the splash's own tan.
+// for reduced motion and on desktop. Frames: public/splash/frame-00…20.webp (preloaded in
+// app/layout.tsx), 720px each, on the splash's own tan, all decoded before the play starts.
+//
+// Each frame its own picture, not a slice of one big sheet: a slice has to be cut out and drawn the
+// first time it shows — during the animation, so frames came late (the lag, 2026-11-20). A plain,
+// already-decoded <img> iPhone Safari puts on screen as it is, with no drawing.
 //
 // The frames are played by the browser's compositor, not stepped from JavaScript: each frame is its
 // own layer, faded in over the one before in its slot by a CSS animation (.splash-frame, globals.css). Stepped by a
@@ -24,9 +28,9 @@ import { hideLaunchScreen } from '@/lib/nativeApp'
 // slow start went parchment → half a logo → the plain loader → Sign In. Now: nothing but parchment
 // until the frames are in, and no fade until the page underneath is the real one.
 const SEEN = 'haven:intro'
-const SPRITE = '/logo-splash.webp' // 720px frames — sharp at this size on a 3× iPhone screen (scripts/logo-animation.mjs)
 const FRAMES = 21
-const COLS = 7, ROWS = 3 // the grid the frames are laid out in
+/** Frame i's picture — 720px, sharp at this size on a 3× iPhone screen (scripts/logo-animation.mjs) */
+export const splashFrame = (i: number) => `/splash/frame-${String(i).padStart(2, '0')}.webp`
 const FRAME_MS = 33 // 30 fps, as rendered
 const PLAY_MS = FRAMES * FRAME_MS + 60 // every frame, the last one included
 const REST_MS = 800 // on the finished logo before the fade (2s felt frozen — 2026-11-20)
@@ -83,10 +87,12 @@ export function SplashIntro() {
       later(FADE_IN_MS + PLAY_MS, () => setPhase('rest'))
       later(FADE_IN_MS + PLAY_MS + REST_MS, () => setPhase('hold'))
     }
-    // Start only once the whole picture is decoded, so no frame is drawn half-loaded or skipped
-    const img = new Image()
-    img.src = SPRITE
-    img.decode().then(onDecoded, () => { img.onload = onDecoded; if (img.complete) onDecoded() })
+    // Start only once every frame is decoded, so none is drawn half-loaded, late or skipped
+    Promise.all(Array.from({ length: FRAMES }, (_, i) => {
+      const img = new Image()
+      img.src = splashFrame(i)
+      return img.decode().catch(() => new Promise<void>((done) => { img.onload = img.onerror = () => done(); if (img.complete) done() }))
+    })).then(onDecoded)
     // The frames never came: no animation, but still no flash of a half-ready page
     later(WAIT_FOR_FRAMES_MS, () => { if (!started) { started = true; setPhase('hold') } })
     later(HOLD_MAX_MS, () => setMaxed(true))
@@ -117,15 +123,15 @@ export function SplashIntro() {
         {/* Every frame its own layer, stacked; frame 0 shows before the play, the last stays after */}
         <div className={`splash-frames relative w-[68vw] max-w-[18rem] aspect-square ${phase === 'wait' || phase === 'in' ? '' : 'playing'}`}>
           {Array.from({ length: FRAMES }, (_, i) => (
-            <div
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
               key={i}
-              className="splash-frame absolute inset-0 bg-no-repeat"
-              style={{
-                backgroundImage: `url(${SPRITE})`,
-                backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,
-                backgroundPosition: `${((i % COLS) / (COLS - 1)) * 100}% ${(Math.floor(i / COLS) / (ROWS - 1)) * 100}%`,
-                animationDelay: `${(i - 1) * FRAME_MS}ms`, // fully in at its own frame time
-              }}
+              src={splashFrame(i)}
+              alt=""
+              draggable={false}
+              decoding="sync"
+              className="splash-frame absolute inset-0 w-full h-full"
+              style={{ animationDelay: `${(i - 1) * FRAME_MS}ms` }} // fully in at its own frame time
             />
           ))}
         </div>
