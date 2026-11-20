@@ -2449,10 +2449,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   )
   const fadeStyle: React.CSSProperties = { opacity: swap === 'idle' ? 1 : 0.25, transition: 'opacity 180ms ease' }
 
-  // The owned-version bubbles (tap to swap) — placed beside the card on a computer, beside the info
-  // panel on a phone
-  const versionBubbles = (place: string) => (
-    <div role="tablist" aria-label="Your copies of this card" aria-orientation="vertical" className={cn('card-zoom-versions flex-col gap-1.5', place)}>
+  // The owned-version bubbles (tap to swap) — a column beside the card on a computer; on a phone a
+  // centred row above the info panel (the panel always stays centred — never pushed aside)
+  const versionBubbles = (place: string, row = false) => (
+    <div role="tablist" aria-label="Your copies of this card" aria-orientation={row ? 'horizontal' : 'vertical'} className={cn('card-zoom-versions gap-1.5', row ? 'flex-row flex-wrap justify-center' : 'flex-col', place)}>
             {versions!.map((ver, i) => {
               const on = i === picked
               return (
@@ -2586,8 +2586,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           </div>
 
           {/* Your versions of this card — a small column of bubbles off the card's bottom-right
-              corner on a computer. On a phone there's no room beside the card, so they sit beside
-              the info panel instead (below) — never over the card. Tap one to swap. */}
+              corner on a computer. On a phone there's no room beside the card, so they sit in a
+              centred row above the info panel instead (below) — never over the card, never
+              pushing the panel off centre. Tap one to swap. */}
           {visible && many && versionBubbles('hidden sm:flex absolute z-20 left-full ml-4 bottom-2 items-start')}
 
           {visible && (
@@ -2607,8 +2608,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
             bled THROUGH the translucent background from behind. Using a fully opaque background
             here instead (not `.card-glass`) blocks that regardless of how large the glow grows. */}
         {visible && (
-          // On a phone the version bubbles sit to the right of this panel (sm and up: beside the card)
-          <div className="flex items-center gap-2.5 max-w-full">
+          // On a phone the version bubbles sit in a centred row above this panel (sm and up: beside
+          // the card). The panel itself is always centred.
+          <div className="flex flex-col items-center gap-2.5 max-w-full">
+          {many && versionBubbles('flex sm:hidden relative z-10 max-w-xs', true)}
           <div className={cn('card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs min-w-0', editId ? 'px-8' : 'px-5')}>
             {editId && (
               <Link
@@ -2638,8 +2641,12 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 </span>
               )}
             </div>
+            {/* The version's price lines, rebuilt for each version (key): iPhone Safari left the old
+                price and PriceCharting credit painted under the new ones when the same elements just
+                changed their text mid-fade ("$9926.00" showing through "$1025.01", 2026-11-19) */}
+            <div key={vIndex} className="flex flex-col items-center gap-1.5" style={fadeStyle}>
             {price > 0 && (
-              <div className="text-sm font-semibold text-ink" style={fadeStyle}>
+              <div className="text-sm font-semibold text-ink">
                 ${price.toFixed(2)}
                 {priceEstimated && (
                   <span className="ml-1.5 text-[0.6875rem] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
@@ -2648,13 +2655,14 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 )}
               </div>
             )}
-            {price > 0 && priceSource && <span style={fadeStyle}><PriceChartingCredit label={priceSource.label} url={priceSource.url} /></span>}
+            {price > 0 && priceSource && <span><PriceChartingCredit label={priceSource.label} url={priceSource.url} /></span>}
             {price > 0 && v?.conditionNote && (
-              <div className="text-[0.6875rem] text-slate-500" style={fadeStyle}>{v.conditionNote}</div>
+              <div className="text-[0.6875rem] text-slate-500">{v.conditionNote}</div>
             )}
             {price > 0 && slab && rawEstimate && (
-              <div className="text-[0.6875rem] text-slate-500" style={fadeStyle}>Raw est. — no {slabLabel} sales on PriceCharting yet</div>
+              <div className="text-[0.6875rem] text-slate-500">Raw est. — no {slabLabel} sales on PriceCharting yet</div>
             )}
+            </div>
             {!viewOnly && (
               <>
                 <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
@@ -2669,7 +2677,6 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               </>
             )}
           </div>
-          {many && versionBubbles('flex sm:hidden shrink-0 relative z-10 items-start')}
           </div>
         )}
       </div>
