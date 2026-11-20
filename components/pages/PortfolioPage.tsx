@@ -9,7 +9,7 @@ import { useStore, portfolioGames } from '@/lib/store'
 import type { PriceStatus } from '@/lib/api/priceStatus'
 import { passesSlabFilter, type PortfolioSort } from '@/lib/firebase/preferences'
 import { AuthGuard } from '@/components/auth/AuthGuard'
-import { formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
+import { cn, formatCurrency, formatPercent, openEbaySearch, cardIdentityKey } from '@/lib/utils'
 import { GAME_COLORS, GAME_LABELS, type Game } from '@/lib/types'
 import { entryBaseline } from '@/lib/entryBaseline'
 import { PortfolioPieChart } from '@/components/portfolio/PortfolioPieChart'
@@ -253,6 +253,37 @@ export default function PortfolioPage() {
     )
   }
 
+  // Sort — orders Top Performers and the All Cards list alike, so it sits above both: on a computer
+  // on the right of the Time Frame row; on a phone under the charts, just above Top Performers
+  // (2026-11-20 — under the Time Frame it sat far from the lists it sorts)
+  const sortControl = (place: string) => (
+        <label className={cn('flex items-center gap-2 shrink-0', place)}>
+          <span className="whitespace-nowrap text-xs text-slate-500 uppercase tracking-wide font-semibold">Sort</span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as PortfolioSort)}
+            className="bg-slate-900 border border-slate-700 rounded-xl pl-4 pr-9 py-2 text-sm font-medium text-ink shadow-[0_2px_4px_rgba(90,60,20,0.12)] hover:border-slate-600 focus:outline-none focus:border-violet-500/60 cursor-pointer"
+          >
+              <optgroup label="P&amp;L $">
+                <option value="pnl">Best P&amp;L $</option>
+                <option value="pnlAsc">Worst P&amp;L $</option>
+              </optgroup>
+              <optgroup label="P&amp;L %">
+                <option value="pnlPct">Best P&amp;L %</option>
+                <option value="pnlPctAsc">Worst P&amp;L %</option>
+              </optgroup>
+              <optgroup label="Value">
+                <option value="value">Highest Value</option>
+                <option value="valueAsc">Lowest Value</option>
+              </optgroup>
+              <optgroup label="Name">
+                <option value="name">Name A → Z</option>
+                <option value="nameDesc">Name Z → A</option>
+              </optgroup>
+          </select>
+        </label>
+  )
+
   return (
     <AuthGuard>
       <div>
@@ -380,33 +411,7 @@ export default function PortfolioPage() {
             </button>
           ))}
         </div>
-        {/* Sort — orders Top Performers and the All Cards list alike, so it sits above both, on the
-            right under the stat tiles (it was in the All Cards header, 2026-11-19) */}
-        <label className="flex items-center gap-2 self-end lg:self-auto shrink-0">
-          <span className="whitespace-nowrap text-xs text-slate-500 uppercase tracking-wide font-semibold">Sort</span>
-          <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as PortfolioSort)}
-            className="bg-slate-900 border border-slate-700 rounded-xl pl-4 pr-9 py-2 text-sm font-medium text-ink shadow-[0_2px_4px_rgba(90,60,20,0.12)] hover:border-slate-600 focus:outline-none focus:border-violet-500/60 cursor-pointer"
-          >
-              <optgroup label="P&amp;L $">
-                <option value="pnl">Best P&amp;L $</option>
-                <option value="pnlAsc">Worst P&amp;L $</option>
-              </optgroup>
-              <optgroup label="P&amp;L %">
-                <option value="pnlPct">Best P&amp;L %</option>
-                <option value="pnlPctAsc">Worst P&amp;L %</option>
-              </optgroup>
-              <optgroup label="Value">
-                <option value="value">Highest Value</option>
-                <option value="valueAsc">Lowest Value</option>
-              </optgroup>
-              <optgroup label="Name">
-                <option value="name">Name A → Z</option>
-                <option value="nameDesc">Name Z → A</option>
-              </optgroup>
-          </select>
-        </label>
+        {sortControl('hidden lg:flex')}
         </div>
 
         {/* Circle chart: the collection's value by game (it replaced the By Game cards, 2026-11-15) —
@@ -420,6 +425,7 @@ export default function PortfolioPage() {
                 <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>
               </>}
         </div>
+        {sortControl('lg:hidden justify-self-end')}
         <div className="card-glass p-6 min-w-0">
           <div className="flex items-start justify-between gap-3 mb-4">
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">

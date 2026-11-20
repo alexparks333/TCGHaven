@@ -382,6 +382,10 @@
   cursor: grabbing;
 }
 
+/* Off until the fly-in has landed (the tilter turns .ready): its blend mode made Safari redraw the
+   whole spinning card the slow way every frame, even while invisible (fly-in stutter, 2026-11-20) */
+.card-zoom-tilter:not(.ready) .card-zoom-glint { display: none; }
+
 /* Light catching the surface as the card turns — slides opposite the tilt and brightens with it */
 .card-zoom-glint {
   background:
@@ -417,8 +421,15 @@
 .card-zoom-versions > * {
   animation: card-zoom-version-in 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; /* not `both`: a kept end transform would block the hover scale */
 }
+/* On a phone the bubbles are a row above the info panel: the row comes in the way the panel does
+   (slide up + fade), a beat before it — not each bubble from the side. */
+.card-zoom-versions-row {
+  animation: card-zoom-panel-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) 0.5s both;
+}
+.card-zoom-versions-row .card-zoom-versions > * { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   .card-zoom-versions > * { animation: none; }
+  .card-zoom-versions-row { animation: none; }
 }
 
 /* Admin Catalog's image crop tool — a full-screen takeover (fades in as a whole), with the crop
@@ -1452,3 +1463,13 @@
 }
 .inv-row-lit { animation: inv-row-lit 2.6s ease-out both; }
 
+/* The phone splash's frames (components/layout/SplashIntro.tsx): each frame a stacked layer, on the
+   splash's own tan (the frames aren't see-through), and each one FADES IN over the one before during
+   its 33ms slot — the compositor plays it, smooth even while the app underneath is busy. Blending
+   frame to frame (not switching hard) smooths the fast middle of a 30 fps render on a 120 Hz screen,
+   where hard switches read as a stutter at the same spot every time (2026-11-20). Frame 0 is always
+   shown; every later one stays once in, so the last (on top) is what remains. */
+.splash-frame { opacity: 0; }
+.splash-frame:first-child { opacity: 1; }
+@keyframes splash-frame-in { from { opacity: 0; } to { opacity: 1; } }
+.splash-frames.playing .splash-frame:not(:first-child) { animation: splash-frame-in 33ms linear forwards; }

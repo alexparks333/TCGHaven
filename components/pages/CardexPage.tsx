@@ -4,7 +4,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, cre
 import { useSearchParams } from 'next/navigation'
 import { GamePicker } from '@/components/GamePicker'
 import Link from 'next/link'
-import { Package, FolderHeart, ChevronRight, Search, X, Sparkles, Eye, Check, Edit2 } from 'lucide-react'
+import { Package, FolderHeart, ChevronRight, Search, X, Eye, Check, Edit2 } from 'lucide-react'
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, CONDITION_LABELS, CONDITION_SHORT, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
@@ -1954,6 +1954,8 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
 // drive it ourselves: any touch that STARTS during the close animation scrolls the page's real
 // scroll container (<main>, see ClientWrapper.tsx) by hand for the rest of that gesture, with a
 // short momentum glide on release so it feels like a native flick.
+// A slab's width in the zoom view (its height = width / 0.64); --zoom-cap shrinks it a little on phones
+const SLAB_ZOOM_WIDTH = 'min(86vw, var(--zoom-cap, 9999px), calc(68vh * 0.64), max(370px, calc(56vh * 0.64)))'
 const CLOSE_ANIMATION_MS = 200 // matches card-zoom-backdrop-out / card-zoom-shrink-out's duration
 
 function scrollThroughClose() {
@@ -2135,12 +2137,17 @@ function useCardInspect() {
 // The zoomed card's picture: the tile's copy (already downloaded) straight away, and the clear
 // full-size copy laid exactly over it, fading in once it has loaded — same box, same fit, so the
 // swap never moves or snaps.
+// The sharp copy fades in over the small one as soon as it's in — usually mid-spin, where the
+// motion hides the switch (kept that way on purpose, 2026-11-20)
 function ZoomImage({ url, alt, filter }: { url: string; alt: string; filter?: string }) {
   const [sharp, setSharp] = useState(false)
   useEffect(() => { setSharp(false) }, [url])
   return (
-    <span className="relative block w-full h-full" style={{ filter }}>
-      <img src={cardImage(url, 'grid')} alt="" aria-hidden draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+    // Rounded like its frame (rounded-[inherit]) on the pictures themselves: while the sharp copy
+    // fades in, iPhone Safari draws it on its own layer and skips the frame's rounded clip — the
+    // card showed as a square cut-out until it landed (2026-11-20)
+    <span className="relative block w-full h-full rounded-[inherit]" style={{ filter }}>
+      <img src={cardImage(url, 'grid')} alt="" aria-hidden draggable={false} className="absolute inset-0 w-full h-full object-cover rounded-[inherit]" />
       <img
         src={cardImage(url, 'full')}
         alt={alt}
@@ -2148,7 +2155,7 @@ function ZoomImage({ url, alt, filter }: { url: string; alt: string; filter?: st
         decoding="async"
         ref={(el) => { if (el?.complete && el.naturalWidth) setSharp(true) }}
         onLoad={() => setSharp(true)}
-        className="absolute inset-0 w-full h-full object-cover transition-opacity duration-300"
+        className="absolute inset-0 w-full h-full object-cover rounded-[inherit] transition-opacity duration-300"
         style={{ opacity: sharp ? 1 : 0 }}
       />
     </span>
@@ -2346,12 +2353,19 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
     resetInspect()
     const finalRect = el.getBoundingClientRect()
     const origin = data.originRect
-    const dx = (origin.left + origin.width / 2) - (finalRect.left + finalRect.width / 2)
-    const dy = (origin.top + origin.height / 2) - (finalRect.top + finalRect.height / 2)
-    const scaleX = origin.width / finalRect.width
-    const scaleY = origin.height / finalRect.height
+    // It starts with its CARD PICTURE lined up on the tapped thumbnail — same size, same spot, one
+    // scale for both sides — and grows from there. For a slab that means the case starts around the
+    // thumbnail rather than a whole mini slab squeezed inside it (the card looked crushed into the
+    // tile, 2026-11-20); for a plain card, the picture is the whole card, as before.
+    const pic = el.querySelector('.card-zoom-face:not(.card-zoom-face-back) img')?.getBoundingClientRect()
+    const target = pic && pic.width > 0 ? pic : finalRect
+    const scale = Math.min(origin.width / target.width, origin.height / target.height)
+    // The transform scales about the mover's centre: move the picture's centre onto the tile's
+    const cx = finalRect.left + finalRect.width / 2, cy = finalRect.top + finalRect.height / 2
+    const dx = (origin.left + origin.width / 2) - (cx + scale * (target.left + target.width / 2 - cx))
+    const dy = (origin.top + origin.height / 2) - (cy + scale * (target.top + target.height / 2 - cy))
     el.style.transition = 'none'
-    el.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`
+    el.style.transform = `translate(${dx}px, ${dy}px) scale(${scale})`
     el.offsetHeight // force layout so the line above is committed before it's cleared next frame
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -2406,6 +2420,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   const picked = versions ? Math.min(vi, versions.length - 1) : 0
   const v = versions?.[vIndex]
   const many = (versions?.length ?? 0) > 1
+  const hasSlabCopy = !!d.slab || !!versions?.some((x) => x.slab)
   const slab = v ? v.slab : d.slab
   const price = v ? v.marketPrice : d.marketPrice
   const priceEstimated = v ? v.priceEstimated : d.priceEstimated
@@ -2439,7 +2454,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   const swapFlash = (
     <div
       aria-hidden
-      className="absolute inset-0 pointer-events-none"
+      className="absolute inset-0 pointer-events-none rounded-[inherit]"
       style={{
         background: 'radial-gradient(circle at 50% 45%, rgba(255,255,255,0.75), rgba(255,255,255,0.25) 60%, rgba(255,255,255,0) 85%)',
         opacity: swap === 'idle' ? 0 : 0.7,
@@ -2448,6 +2463,11 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
     />
   )
   const fadeStyle: React.CSSProperties = { opacity: swap === 'idle' ? 1 : 0.25, transition: 'opacity 180ms ease' }
+  const ownedNote = (
+    <span className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
+      {d.owned ? `✓ ${quantity > 1 ? `×${quantity} owned` : 'owned'}` : 'not collected'}
+    </span>
+  )
 
   // The owned-version bubbles (tap to swap) — a column beside the card on a computer; on a phone ONE
   // centred row above the info panel that scrolls sideways when they don't fit (never a second row;
@@ -2483,11 +2503,23 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
 
   return (
     <div
-      className={cn('fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 p-4 card-zoom-backdrop', closing && 'closing pointer-events-none')}
-      style={{ backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}
+      // Phone: everything hangs from a fixed spot near the top (the card never moves when the copy
+      // bubbles or a taller panel appear — 2026-11-20); a computer keeps it centred. Not scrollable.
+      className={cn('fixed inset-0 z-50 flex flex-col items-center justify-start sm:justify-center gap-4 px-4 pb-4 pt-[calc(env(safe-area-inset-top,0px)+3.75rem)] sm:p-4', closing && 'pointer-events-none')}
       onClickCapture={(e) => { if (quickSecondTap()) e.stopPropagation() }}
       onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
     >
+      {/* The dimmed, blurred backdrop on its own layer behind everything (-z-10), with its own fade.
+          On the container itself, iPhone Safari redrew the blur solid black whenever the 3D card
+          inside changed — turned by a drag, or swapped to another copy (2026-11-20). A tap on it
+          closes the view, as a tap on empty space always has. */}
+      <div
+        aria-hidden
+        // No blur on a phone: re-blurring the whole page every frame while the card spins in was the
+        // costliest part of the fly-in there (its stutter, 2026-11-20) — a touch darker instead
+        className={cn('fixed inset-0 -z-10 card-zoom-backdrop bg-black/[0.86] sm:bg-black/80 sm:backdrop-blur-[4px]', closing && 'closing')}
+        onClick={handleClose}
+      />
       <button
         onClick={handleClose}
         className="absolute top-[calc(env(safe-area-inset-top,0px)+12px)] right-4 sm:top-6 sm:right-6 p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-300 hover:text-ink hover:bg-slate-800 z-10"
@@ -2498,13 +2530,20 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
       {/* Click-through: only the card and the info panel themselves catch clicks, so a click on any
           empty space around or between them reaches the backdrop and closes the view */}
       <div className={cn('flex flex-col items-center gap-4 pointer-events-none [&>*]:pointer-events-auto', closing && 'card-zoom-content closing')}>
+        {/* The card's spot: as tall as the tallest of this card's copies (a slab, if any), with the
+            card centred in it — so swapping slab ↔ raw never moves the bubbles or the panel below.
+            --zoom-cap: a little smaller slab on a phone, so the panel fits under it. */}
+        <div
+          className="!pointer-events-none flex items-center justify-center [--zoom-cap:calc(56dvh*0.64)] sm:[--zoom-cap:9999px]"
+          style={hasSlabCopy ? { height: `calc(${SLAB_ZOOM_WIDTH} / 0.64)` } : undefined}
+        >
         <div
           ref={moverRef}
-          className="relative card-zoom-mover"
+          className="relative card-zoom-mover pointer-events-auto"
           style={slab
             // A real slab is the card plus a case: sized so the card inside comes out about as big
             // as a raw card's own zoom (300px), with the label and acrylic border on top of that
-            ? { width: 'min(86vw, calc(68vh * 0.64), max(370px, calc(56vh * 0.64)))', aspectRatio: '0.64', perspective: '1200px' }
+            ? { width: SLAB_ZOOM_WIDTH, aspectRatio: '0.64', perspective: '1200px' }
             : d.landscape
             ? { width: 'min(90vw, max(460px, 64vh))', aspectRatio: '7 / 5', perspective: '1200px' }
             : { width: 'min(80vw, calc(70vh * 5 / 7), max(300px, calc(54vh * 5 / 7)))', aspectRatio: '5 / 7', perspective: '1200px' }}
@@ -2562,9 +2601,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               {d.imageUrl ? (
                 <ZoomImage url={d.imageUrl} alt={d.name} filter={d.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
               ) : (
-                <img src={NO_CARD_IMAGE} alt={d.name} className="w-full h-full object-cover" style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }} />
+                <img src={NO_CARD_IMAGE} alt={d.name} className="w-full h-full object-cover rounded-[inherit]" style={{ filter: d.owned ? 'none' : 'grayscale(1) brightness(0.55)' }} />
               )}
-              <div className="card-zoom-glint absolute inset-0 pointer-events-none" />
+              <div className="card-zoom-glint absolute inset-0 pointer-events-none rounded-[inherit]" />
               {swapFlash}
             </div>
             )}
@@ -2578,9 +2617,10 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`,
               }}
             >
-              <div className="rounded-full p-4" style={{ backgroundColor: d.glowColor + '22', border: `1px solid ${d.glowColor}55` }}>
-                <Sparkles size={32} style={{ color: d.glowColor }} />
-              </div>
+              {/* The back's emblem: the TCGHaven doorway, big and grey (no circle) — public/logo-card-back.webp,
+                  the animation's last frame at 720px, greyed ahead of time (sharp on a 3× screen) */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo-card-back.webp" alt="" draggable={false} className="w-[62%] aspect-square object-contain" style={{ opacity: 0.85 }} />
             </div>
           </div>
           </div>
@@ -2595,6 +2635,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           {visible && (
             <div className={cn('card-zoom-glow-ring absolute inset-0 pointer-events-none', slab ? 'rounded-[1.125rem]' : 'rounded-2xl')} style={{ boxShadow: `0 0 60px 20px ${d.glowColor}` }} />
           )}
+        </div>
         </div>
 
         {/* Two things had to be fixed for the expanding glow-ring above to stop showing over this
@@ -2615,11 +2656,12 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           {many && (
             // w-max + mx-auto inside an overflow box: centred while it fits, scrolls from the first
             // bubble (not clipped on the left) once it doesn't
-            <div className="sm:hidden relative z-10 max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
+            // It comes in like the info panel (card-zoom-versions-row, globals.css), just before it
+            <div className="card-zoom-versions-row sm:hidden relative z-10 max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
               {versionBubbles('flex', true)}
             </div>
           )}
-          <div className={cn('card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs min-w-0', editId ? 'px-8' : 'px-5')}>
+          <div className={cn('card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl py-3 sm:py-3.5 flex flex-col items-center gap-1 sm:gap-1.5 text-center max-w-xs min-w-0', editId ? 'px-8' : 'px-5')}>
             {editId && (
               <Link
                 href={`/inventory?card=${encodeURIComponent(editId)}`}
@@ -2652,14 +2694,19 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                 price and PriceCharting credit painted under the new ones when the same elements just
                 changed their text mid-fade ("$9926.00" showing through "$1025.01", 2026-11-19) */}
             <div key={vIndex} className="flex flex-col items-center gap-1.5" style={fadeStyle}>
+            {/* The price with "✓ owned" beside it — one line, not two (a smaller panel leaves the
+                card room on a phone, 2026-11-20) */}
             {price > 0 && (
-              <div className="text-sm font-semibold text-ink">
-                ${price.toFixed(2)}
-                {priceEstimated && (
-                  <span className="ml-1.5 text-[0.6875rem] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
-                    Est.
-                  </span>
-                )}
+              <div className="flex items-baseline justify-center gap-2 flex-wrap">
+                <span className="text-sm font-semibold text-ink">
+                  ${price.toFixed(2)}
+                  {priceEstimated && (
+                    <span className="ml-1.5 text-[0.6875rem] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
+                      Est.
+                    </span>
+                  )}
+                </span>
+                {!viewOnly && ownedNote}
               </div>
             )}
             {price > 0 && priceSource && <span><PriceChartingCredit label={priceSource.label} url={priceSource.url} /></span>}
@@ -2670,18 +2717,15 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
               <div className="text-[0.6875rem] text-slate-500">Raw est. — no {slabLabel} sales on PriceCharting yet</div>
             )}
             </div>
-            {!viewOnly && (
-              <>
-                <div className="text-xs" style={{ color: d.owned ? '#4f6a2a' : '#7a654a' }}>
-                  {d.owned ? `✓ ${quantity > 1 ? `×${quantity} owned` : 'owned'}` : 'not collected'}
-                </div>
-                <button
-                  onClick={() => openEbaySearch(ebayCard)}
-                  className="mt-1 text-[0.6875rem] text-slate-500 hover:text-ink underline underline-offset-2"
-                >
-                  Search Recently Sold Listings
-                </button>
-              </>
+            {!viewOnly && !(price > 0) && ownedNote}
+            {/* A copy priced by PriceCharting links to its sales there instead (the credit above) */}
+            {!viewOnly && !(price > 0 && priceSource) && (
+              <button
+                onClick={() => openEbaySearch(ebayCard)}
+                className="mt-0.5 sm:mt-1 text-[0.6875rem] text-slate-500 hover:text-ink underline underline-offset-2"
+              >
+                Search Recently Sold Listings
+              </button>
             )}
           </div>
           </div>
