@@ -296,7 +296,10 @@ gives each a `registry.lorcana.placements` entry — same shape and Needs Review
 (Accept / Ignore / Deny / move / rename / picture; per-sync nodes; Complete review), with no
 "Riot art" option and TCGplayer's name kept as-is. The first run recorded the 356 promos already
 in the catalog as an accepted, completed review. `sync/lorcana/sync.ts` reads the registry after
-the download (which saves the placements). Not reviewed yet: the few unmatched TCGplayer rows in
+the download (which saves the placements). **2026-11-19 cleanup:** the Nov 14 lorcast-outage sync
+(the duplicates hidden on 11-16, guarded by `LORCAST_HEALTHY_MIN`) had also left 3,141 of those
+duplicates waiting in Needs Review (~650 KB of `registry/main`'s 1 MiB); they were removed from
+`lorcana.placements` (backup kept by the owner outside the repo). Not reviewed yet: the few unmatched TCGplayer rows in
 real-set groups (Phase 3 skips a group that's mostly matched by lorcast).
 
 ### How New Lorcana Sets Are Added

@@ -19,6 +19,7 @@ import {
   type Profile,
 } from '@/lib/firebase/friends'
 import { searchCommunities, joinCommunity, communityPath, useMyCommunities, type CommunityEntry } from '@/lib/communities'
+import { PushPrompt } from '@/components/push/PushPrompt'
 
 // /friends — the Friends module. Sections, top to bottom: your profile, requests waiting on you,
 // your friends, your communities (lib/communities.ts), requests you sent; invite link + search
@@ -52,9 +53,11 @@ function FriendsModule() {
     if (wantsRequests) requestsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [wantsRequests])
 
+  const { user } = useAuth()
   return (
     <div className="flex flex-col gap-6">
       <ProfileHero />
+      {user && <PushPrompt uid={user.uid} />}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] items-start">
         <div className="flex flex-col gap-6 min-w-0">
           <RequestsSection sectionRef={requestsRef} />

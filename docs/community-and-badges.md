@@ -34,6 +34,9 @@ The first community feature (Creators/Communities come next). `lib/firebase/frie
   popup (`FriendsDialog.tsx`: Friends / Requests / Add Friends tabs). Sidebar card above the account
   box (`FriendsSidebar.tsx`): its inner controls (invite, ➕, requests, a friend) open the popup; the
   card itself goes to `/friends`. The phone top bar's Friends button goes to the page.
+- **Push notifications** (2026-11-19, the apps only): a friend request and a request accepted
+  send a push to the other person's phone — `sendFriendRequest()` / `acceptFriendRequest()` call
+  `/api/notify/friend`, which checks the friendship doc first. Full story: `docs/push-notifications.md`.
 
 ### Friend request popup & dev tools
 

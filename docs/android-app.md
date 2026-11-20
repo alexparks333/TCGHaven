@@ -77,6 +77,11 @@ App Signing's key, from Play Console → App integrity.
 
 ## Notes
 
+- **Push notifications** (2026-11-19): `@capacitor-firebase/messaging` is synced in; friend
+  requests and accepts reach Android through FCM like the iPhone (`docs/push-notifications.md`).
+  Android 13+ asks for permission (the plugin declares `POST_NOTIFICATIONS`). Optional: a white
+  notification icon (`com.google.firebase.messaging.default_notification_icon`).
+
 - Sign-in on Android uses Google's Credential Manager (the plugin's default). With
   `skipNativeAuth`, the site signs in to Firebase with the token, the same as on iOS
   (`AuthProvider.signInWithGoogle`). The login page has no Apple button, so there's no Apple

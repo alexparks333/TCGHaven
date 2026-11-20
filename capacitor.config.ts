@@ -31,7 +31,10 @@ const config: CapacitorConfig = {
         // link only Google's sign-in SDK (not Facebook's — never used, and it collects data)
         swiftToolsVersion: '6.1',
         packageTraits: { '@capacitor-firebase/authentication': ['Google'] },
-        packageOptions: { '@capacitor-firebase/authentication': { symlink: true } },
+        packageOptions: {
+          '@capacitor-firebase/authentication': { symlink: true },
+          '@capacitor-firebase/messaging': { symlink: true }, // the same clash, from its instructions
+        },
       },
     },
   },
@@ -41,6 +44,8 @@ const config: CapacitorConfig = {
       launchAutoHide: true, // so a site that never loads can't leave it up (lib/nativeApp.ts hideLaunchScreen)
       backgroundColor: '#d9c6a0',
     },
+    // Push notifications (lib/push.ts): shown even while the app is open
+    FirebaseMessaging: { presentationOptions: ['alert', 'badge', 'sound'] },
     FirebaseAuthentication: {
       // Native Google / Apple sheets only hand back a token; the site signs in to Firebase with it
       // (its web SDK owns the session), so the native Firebase SDK never signs in itself

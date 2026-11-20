@@ -438,6 +438,8 @@ service cloud.firestore {
     match /friendships/{id} {
       allow read: if signedIn()
         && (resource.data.requester == request.auth.uid || resource.data.addressee == request.auth.uid);
+      // The server checks a request is real before sending its push (app/api/notify/friend)
+      allow read: if isBot();
       allow create: if signedIn() && notBanned()
         && request.resource.data.requester == request.auth.uid
         && request.resource.data.addressee is string
@@ -456,6 +458,22 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt']);
       allow delete: if signedIn()
         && (resource.data.requester == request.auth.uid || resource.data.addressee == request.auth.uid);
+    }
+
+    // Push notifications (lib/push.ts, lib/pushServer.ts): one doc per person — their phones' FCM
+    // tokens and which kinds they want. Theirs to read and write; the server reads it to send and
+    // drops tokens FCM no longer knows.
+    match /push_devices/{uid} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['tokens', 'prefs', 'updatedAt'])
+        && (!('tokens' in request.resource.data) || request.resource.data.tokens is map)
+        && (!('prefs' in request.resource.data) || request.resource.data.prefs is map);
+      allow read, update: if isBot();
+    }
+    // When a friend push last went out per pair and kind (no spamming) — the server's alone
+    match /push_log/{id} {
+      allow read, write: if isBot();
     }
 
     // Per-user inventory data — unchanged from before this migration. A user may only

@@ -25,6 +25,7 @@ in that area:**
 | The scanner's picture AI — the trained model, the fingerprint index, after a training run | `docs/scanner-ai.md` |
 | Training the scanner's picture AI on the RTX 4090 PC | `docs/training-ai.md` |
 | Staff portal Statistics & Finances, usage tracking (`usage_days`, `user_stats`, `stats_daily`) | `docs/insights.md` |
+| Push notifications (friend requests / accepted): FCM, `push_devices`, the notify route, the APNs key and service account | `docs/push-notifications.md` |
 | Haven Premium: what it unlocks, the locks, payments (Stripe + RevenueCat), promo codes, Apple's cut, the Small Business Program, automatic costs | `docs/premium-business.md` |
 | Where a file lives | `docs/file-map.md` |
 | The full story behind any gotcha below | `docs/quirks.md` |

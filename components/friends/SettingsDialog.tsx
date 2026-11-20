@@ -13,6 +13,7 @@ import { useFriends } from './FriendsProvider'
 import { Avatar } from './Avatar'
 import { changeUsername, updateNameAndPhoto, uploadProfilePhoto, NAME_MAX } from '@/lib/firebase/friends'
 import { RequestDelete } from '@/components/account/DeleteAccount'
+import { PushSettings } from '@/components/push/PushSettings'
 
 // Settings — opened from the ⚙️ on your profile banner (it used to be its own page in the
 // sidebar). Your account, your @username, Sign out, and Delete account.
@@ -260,6 +261,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 : `Prices are tracked in US dollars and shown in ${currency} at today’s exchange rate (updated daily), on every device you sign in to.`}
             </p>
           </section>
+
+          {/* Notifications: in the app and on the website (lib/push.ts) */}
+          <PushSettings uid={user.uid} row={row} />
 
           <button
             onClick={handleSignOut}

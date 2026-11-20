@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
 import { db } from './config'
+import { authFetch } from './authFetch'
 import type { Card, Game } from '../types'
 
 // Friends (2026-10-26). Three shared collections, all enforced by firestore.rules:
@@ -302,10 +303,20 @@ export async function sendFriendRequest(me: string, them: string): Promise<void>
     users: [me, them].sort(), requester: me, addressee: them, status: 'pending',
     createdAt: serverTimestamp(),
   })
+  notifyFriend(them, 'request')
 }
 
 export async function acceptFriendRequest(me: string, them: string): Promise<void> {
   await updateDoc(doc(db, 'friendships', pairId(me, them)), { status: 'accepted', respondedAt: serverTimestamp() })
+  notifyFriend(them, 'accepted')
+}
+
+/** A push notification to the other person's phone (app/api/notify/friend — it checks the
+ *  friendship itself). Fire and forget: a failed push never fails the request. */
+function notifyFriend(them: string, kind: 'request' | 'accepted') {
+  authFetch('/api/notify/friend', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ them, kind }),
+  }).catch(() => {})
 }
 
 /** Decline, cancel or unfriend — all the same thing: the pair's doc goes away. */

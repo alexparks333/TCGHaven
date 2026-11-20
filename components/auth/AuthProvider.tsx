@@ -230,6 +230,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signOut = async () => {
+    // This phone stops getting the account's push notifications (no-op in a browser)
+    if (auth.currentUser) await import('@/lib/push').then((m) => m.forgetThisDevice(auth.currentUser!.uid)).catch(() => {})
     await firebaseSignOut(auth)
   }
 

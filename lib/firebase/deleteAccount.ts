@@ -95,6 +95,7 @@ export async function deleteAccount(user: User, onStep: (s: DeleteStep) => void)
     doc(db, 'shared_cardex', uid),
     doc(db, 'shared_badges', uid),
     doc(db, 'profiles', uid),
+    doc(db, 'push_devices', uid), // this account's phones for push notifications (lib/push.ts)
   ])
 
   onStep('friends')

@@ -24,6 +24,8 @@ TCGHaven/
 │                                     packing, the CI fingerprinter, the PC's train_cuda.py (README there;
 │                                     docs/scanner-ai.md). Models and images stay outside the repo.
 ├── scripts/
+│   ├── logo-animation.mjs         ← Builds public/logo-anim.webp + logo-sprite(-sm).webp from the After
+│   │                                 Effects PNG render: node scripts/logo-animation.mjs "<folder>"
 │   ├── download-card-catalog.mjs  ← Thin CLI entry point (`npm run download-cards`) — calls
 │   │                                 scripts/lib/catalog-sync.mjs, no local file writes anymore.
 │   ├── check-image-health.mjs     ← `npm run check-images -- <game>|all` (§16) — full one-time
@@ -72,6 +74,10 @@ TCGHaven/
 │   ├── stats/aggregate.ts          ← The Statistics totals job (stats_daily); types in stats/types.ts
 │   ├── finance.ts                  ← Finances: the Owner's cost tracker (finance/costs)
 │   ├── premium.ts                  ← Haven Premium prices (premium/config) and promo codes (promo_codes)
+│   ├── push.ts                     ← Push notifications in the app: permission, this phone's token
+│   │                                 (push_devices/{uid}), taps, sign-out (docs/push-notifications.md)
+│   ├── pushServer.ts               ← Sends pushes through FCM (service-account JWT, no firebase-admin)
+│   ├── pushRules.ts                ← Push kinds (PUSH_KINDS) and the push_devices shape
 │   ├── creatorBooks.ts             ← Creator Books + communities (creator_books/{uid}, communities/{uid}; docs/creators.md)
 │   ├── pagePatterns.ts             ← Creator Book page patterns (Inside look → Pattern; docs/creators.md)
 │   ├── pageFrames.ts               ← Creator Book page borders (Inside look → Border)
@@ -240,9 +246,16 @@ TCGHaven/
     │   ├── AuthProvider.tsx        ← Firebase auth context + data loading on login +
     │   │                             verifyPasscode() (§19's invite-gated signup)
     │   └── AuthGuard.tsx           ← Redirects unauthenticated users to /login
+    ├── LogoLoader.tsx             ← The one loading screen: the animated doorway (public/logo-anim.webp) + wordmark
+    ├── LogoFrames.tsx             ← The doorway played frame by frame from a strip (public/logo-sprite*.webp):
+    │                                 20 → 0 → 20 with a rest — sidebar logo hover, sign-in/up pages
+    ├── push/                      ← PushSetup (first-open "Allow notifications?", token, taps),
+    │                                 PushSettings (Settings → Notifications), PushPrompt (Friends page card)
     ├── layout/
     │   ├── Sidebar.tsx             ← Desktop sidebar + mobile bottom nav
-    │   └── ClientWrapper.tsx       ← Mounts CardUnlockToast globally
+    │   ├── LogoHover.tsx           ← The sidebar logo: links home, animates on hover (LogoFrames)
+    │   ├── SplashIntro.tsx         ← Phones: the doorway plays once per visit before the app (~1.3 s)
+    │   └── ClientWrapper.tsx       ← Mounts CardUnlockToast, SplashIntro, PushSetup globally
     ├── inventory/
     │   ├── AddCardDialog.tsx       ← Add/edit card modal with live search dropdown; fires the
     │   │                             "Card Unlocked" toast on a genuinely new print (§20)
