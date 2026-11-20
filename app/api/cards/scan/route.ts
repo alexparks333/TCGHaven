@@ -18,6 +18,9 @@ import { FREE_SCANS_PER_MONTH } from '@/lib/premiumRules'
 //   GET ?model=1[&platform=android]                            → the picture model the phone should
 //          have: { version, files: { path in the .mlpackage (iPhone) / 'model.onnx' (Android): URL } } (or null)
 
+// A freshly woken server needs ~14 s to load every game for the warm-up call — never cut it off
+export const maxDuration = 60
+
 const ALL = Object.keys(GAME_LABELS) as Game[]
 const pickGames = (raw: unknown[]) => {
   const games = raw.filter((g): g is Game => ALL.includes(g as Game))

@@ -94,6 +94,11 @@ tray: ✓ added / ? pick one                     ◀──  the answer
   wait on the camera thread, so the scanner seemed stuck. `CardFingerprinter` now loads a GPU copy
   first (warmed before any scan uses it), then swaps in the Neural Engine copy once it has answered.
   Both times are logged ("ready on the GPU in … ms", "Neural Engine ready in … ms").
+- **A server that's just woken up** (2026-11-20): loading every game's catalog + picture index
+  took ~14 s on a cold server (Firestore's first connection alone ~6 s), and the phone gave up on
+  a scan after 12 s — so the first scans after a quiet spell failed or crawled. Scans now wait for
+  the scanner's warm-up call to answer (`lib/scan/scanner.ts` `warmServer`, up to 30 s), get 30 s
+  each while the server isn't known to be ready, and the scan route allows 60 s (`maxDuration`).
 - **Ready before the first scan:** the app readies the model 4 s after it opens (`ClientWrapper` →
   `prepareScanner()`), and again when the scanner opens (a no-op if ready).
 - **Phone** (`CardFingerprinter`): no model in the app bundle. The site names the version and the

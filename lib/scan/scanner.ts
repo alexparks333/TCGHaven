@@ -56,6 +56,23 @@ export interface ScannedCard {
 }
 
 const MATCH_TIMEOUT_MS = 12000
+// A server that has just woken up needs ~14 s to load every game's catalog and picture index (most
+// of it Firestore's first connection — 6 s even for a 500-card game), longer than MATCH_TIMEOUT_MS:
+// the first scans after a quiet spell used to be cut off, retried on yet another cold server, and
+// fail (2026-11-20). So scans wait for the scanner's warm-up call to answer (up to WARM_WAIT_MS),
+// and get COLD_TIMEOUT_MS each while the server isn't known to be ready.
+const WARM_WAIT_MS = 30000
+const COLD_TIMEOUT_MS = 30000
+let serverReady: Promise<boolean> = Promise.resolve(false)
+
+/** Wakes the server and loads these games' catalogs and picture indexes; scans wait for it */
+function warmServer(games: Game[]): void {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), WARM_WAIT_MS)
+  serverReady = fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`, { signal: ctrl.signal })
+    .then((r) => r.ok, () => false)
+    .finally(() => clearTimeout(timer))
+}
 
 function trayOption(m: ScanMatch & { final?: number; distance?: number | null }, slab: ScanSlab | null): TrayOption {
   const ai = typeof m.picture === 'number' ? ` · AI ${m.picture.toFixed(2)}` : ''
@@ -131,9 +148,11 @@ let limitHit = false
 export const scanLimitHit = () => limitHit
 
 async function fetchCandidates(scanId: string, lines: OcrLine[], games: Game[], fingerprints?: number[][], barcodes?: string[]): Promise<{ candidates: ScanMatch[]; slab: ScanSlab | null }> {
+  // Never sent to a server that's still waking up (warmServer)
+  const ready = await serverReady
   for (let attempt = 0; ; attempt++) {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), MATCH_TIMEOUT_MS)
+    const timer = setTimeout(() => ctrl.abort(), ready ? MATCH_TIMEOUT_MS : COLD_TIMEOUT_MS)
     let busy = false
     try {
       const res = await authFetch('/api/cards/scan', {
@@ -199,8 +218,8 @@ export function prepareScanner(): void {
 /** Opens the native scanner; resolves with what the person kept when they tap Add (empty if they
  *  closed it). Only call inside the app (lib/nativeApp.ts inApp()). */
 export async function scanCards(games: Game[]): Promise<ScannedCard[]> {
-  // Wake the server and load the catalogs while the camera starts
-  fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`).catch(() => {})
+  // Wake the server and load the catalogs while the camera starts (the first scans wait for it)
+  warmServer(games)
   // The picture AI (normally already readied when the app opened — prepareScanner)
   prepareScanner()
   limitHit = false
