@@ -32,6 +32,20 @@ const MOBILE_NAV = [
   { href: '/profile', label: 'Profile', icon: CircleUserRound },
 ]
 
+// The app's frame (sidebar, phone header, bottom tabs) waits for sign-in to be known, and never shows
+// on a sign-in-only page to someone signed out: those pages send them to Sign In, and the frame
+// drawn first flashed the main app before the jump (iPhone app start-up, 2026-11-20). Pages a
+// signed-out visitor may open (/u/…, /c/…, /invite, /premium, /scan…) keep it.
+const SIGNED_IN_ONLY = ['/portfolio', '/inventory', '/cardex', '/badges', '/sold', '/profile', '/friends', '/settings', '/creator']
+function useShowFrame(): boolean {
+  const pathname = usePathname() ?? '/'
+  const { user, loading } = useAuth()
+  if (pathname === '/login' || pathname === '/signup') return false
+  if (loading) return false
+  const signedInOnly = pathname === '/' || SIGNED_IN_ONLY.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  return !!user || !signedInOnly
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
@@ -41,8 +55,8 @@ export function Sidebar() {
   const studioLinks = useStudioLinks() // the Creator Studio is computers-only — no link in the app
   const owned = useCommunity(user?.uid).community // the community you run, if any
 
-  const isAuthPage = pathname === '/login' || pathname === '/signup'
-  if (isAuthPage) return null
+  const showFrame = useShowFrame()
+  if (!showFrame) return null
 
   // Admin isn't in the collector app anymore — it's the separate staff portal at /admin.
   const nav = BASE_NAV
@@ -166,7 +180,8 @@ export function Sidebar() {
 export function MobileHeader() {
   const pathname = usePathname()
   const { incoming } = useFriends()
-  if (pathname === '/login' || pathname === '/signup') return null
+  const showFrame = useShowFrame()
+  if (!showFrame) return null
   return (
     <header
       className="md:hidden flex items-center gap-1.5 px-4 pb-2 border-b border-slate-800 bg-slate-950/80"

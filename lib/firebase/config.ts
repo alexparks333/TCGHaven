@@ -2,9 +2,18 @@ import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
+// Google sign-in's helper page on our own address (www.tcghaven.org/__/auth/…, forwarded to Firebase
+// by next.config.js rewrites) instead of tcghaven-85a34.firebaseapp.com — the pop-up's address bar
+// and Google's "continue to …" line then show tcghaven.org, not a Firebase address that looks like a
+// scam. Switched on by NEXT_PUBLIC_AUTH_ON_SITE=on, only once Google Cloud lists
+// https://<host>/__/auth/handler as a redirect URI for the web client (or Google sign-in breaks).
+// Any other host (localhost, Vercel previews) keeps the Firebase address. docs/user-data.md.
+const ownSite = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_AUTH_ON_SITE === 'on'
+  && /(^|\.)tcghaven\.org$/.test(window.location.hostname)
+
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  authDomain: ownSite ? window.location.host : process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,

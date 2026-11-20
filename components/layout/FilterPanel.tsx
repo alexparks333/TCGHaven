@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
 import { X, SlidersHorizontal } from 'lucide-react'
 import { useStore } from '@/lib/store'
+import { useAuth } from '@/components/auth/AuthProvider'
 import { formatCurrency, cn } from '@/lib/utils'
 import { GAME_LABELS, type Game } from '@/lib/types'
 import { toDisplay, toUSD, currencySymbol } from '@/lib/currency'
@@ -73,6 +74,9 @@ export function FilterPanel() {
 
   const allGamesActive = shownGames.every((g) => activeGames.includes(g))
   const hasActiveFilters = calcFloor > 0 || !allGamesActive || hiddenGroups.length > 0
+  // Only for someone signed in — before sign-in is known it flashed over the start-up (Sidebar.tsx useShowFrame)
+  const { user } = useAuth()
+  if (!user) return null
 
   return (
     <>

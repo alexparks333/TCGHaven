@@ -16,14 +16,31 @@ const nextConfig = {
   // Baseline security headers on every response. Deliberately no Cross-Origin-Opener-Policy
   // (it breaks Firebase's Google sign-in popup) and no strict Content-Security-Policy (Firebase
   // Auth loads its own iframe/scripts from the auth domain) — these four are the safe set.
+  // Firebase's sign-in helper pages served from our own address (lib/firebase/config.ts ownSite):
+  // the Google pop-up then shows www.tcghaven.org, not tcghaven-85a34.firebaseapp.com
+  async rewrites() {
+    return [
+      { source: '/__/auth/:path*', destination: 'https://tcghaven-85a34.firebaseapp.com/__/auth/:path*' },
+      { source: '/__/firebase/:path*', destination: 'https://tcghaven-85a34.firebaseapp.com/__/firebase/:path*' },
+    ]
+  },
   async headers() {
     return [{
-      source: '/:path*',
+      // The sign-in helper (/__/auth/iframe) is framed by our own pages, so it gets SAMEORIGIN
+      // below instead of DENY
+      source: '/((?!__/auth/).*)',
       headers: [
         { key: 'X-Frame-Options', value: 'DENY' },                      // no embedding in other sites (clickjacking)
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+      ],
+    }, {
+      source: '/__/auth/:path*',
+      headers: [
+        { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       ],
     }]
   },

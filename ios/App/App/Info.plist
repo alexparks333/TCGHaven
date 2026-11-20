@@ -9,6 +9,15 @@
 	<!-- Only standard HTTPS: answers App Store Connect's export-compliance question for every build -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Dev mode only (npm run ios:dev): the app loads the Mac's dev server over Wi-Fi (plain http on
+	     the local network). Local addresses only — every real website still needs HTTPS. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Test builds load TCGHaven from a computer on your Wi-Fi.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

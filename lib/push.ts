@@ -10,7 +10,10 @@ import { toPushDevices, type PushDevices, type PushKind } from './pushRules'
 
 export type PushPermission = 'granted' | 'denied' | 'prompt' | 'unsupported'
 
-const plugin = () => import('@capacitor-firebase/messaging').then((m) => m.FirebaseMessaging)
+// Resolves to the MODULE, never the plugin itself: a promise that resolves to a Capacitor plugin
+// makes JS ask the plugin for .then(), and iOS answers "FirebaseMessaging.then() is not
+// implemented on ios" (2026-11-20). Take the plugin out after the await: (await plugin()).FirebaseMessaging
+const plugin = () => import('@capacitor-firebase/messaging')
 
 async function keyOf(token: string): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))
@@ -25,7 +28,7 @@ async function platform(): Promise<string> {
 export async function pushPermission(): Promise<PushPermission> {
   if (!inApp()) return 'unsupported'
   try {
-    const { receive } = await (await plugin()).checkPermissions()
+    const { receive } = await (await plugin()).FirebaseMessaging.checkPermissions()
     return receive === 'granted' ? 'granted' : receive === 'denied' ? 'denied' : 'prompt'
   } catch {
     return 'unsupported'
@@ -43,7 +46,7 @@ async function saveToken(uid: string, token: string) {
  *  Returns the permission afterwards. */
 export async function enablePush(uid: string): Promise<PushPermission> {
   if (!inApp()) return 'unsupported'
-  const m = await plugin()
+  const m = (await plugin()).FirebaseMessaging
   const { receive } = await m.requestPermissions()
   if (receive !== 'granted') return receive === 'denied' ? 'denied' : 'prompt'
   const { token } = await m.getToken()
@@ -57,7 +60,7 @@ export function keepPushToken(uid: string): () => void {
   if (!inApp()) return () => {}
   let stop = () => {}
   let live = true
-  plugin().then(async (m) => {
+  plugin().then(async ({ FirebaseMessaging: m }) => {
     if ((await m.checkPermissions()).receive !== 'granted' || !live) return
     const { token } = await m.getToken()
     if (token) await saveToken(uid, token)
@@ -73,7 +76,7 @@ export function onPushTap(open: (link: string) => void): () => void {
   if (!inApp()) return () => {}
   let stop = () => {}
   let live = true
-  plugin().then(async (m) => {
+  plugin().then(async ({ FirebaseMessaging: m }) => {
     const h = await m.addListener('notificationActionPerformed', (e) => {
       const link = (e.notification?.data as { link?: unknown } | undefined)?.link
       if (typeof link === 'string' && link.startsWith('/')) open(link)
@@ -88,7 +91,7 @@ export function onPushTap(open: (link: string) => void): () => void {
 export async function forgetThisDevice(uid: string): Promise<void> {
   if (!inApp()) return
   try {
-    const m = await plugin()
+    const m = (await plugin()).FirebaseMessaging
     if ((await m.checkPermissions()).receive !== 'granted') return
     const { token } = await m.getToken()
     if (token) await updateDoc(doc(db, 'push_devices', uid), { [`tokens.${await keyOf(token)}`]: deleteField() })

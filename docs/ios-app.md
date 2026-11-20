@@ -62,7 +62,23 @@ owner prefers plain Xcode; Expo isn't needed for a web app.)
 ```bash
 npx cap sync ios        # after changing capacitor.config.ts or adding/updating a plugin
 npx cap open ios        # opens the project in Xcode
+npm run ios:dev         # build + install on the paired iPhone over Wi-Fi, loading THIS Mac's dev server
+npm run ios:live        # the same, back on the real site — always before TestFlight / App Store
 ```
+
+**Dev mode (2026-11-20).** `npm run ios:dev` (`scripts/ios-app.mjs`) syncs with
+`CAP_DEV_URL=http://<Mac's Wi-Fi IP>:3000`, so the app loads the dev server instead of
+www.tcghaven.org: a code change shows on the phone in seconds, no push or deploy. Needs `npm run dev`
+running, the phone unlocked and on the same Wi-Fi, and a new `ios:dev` if the Mac's IP changes. It
+builds with `xcodebuild` and installs with `xcrun devicectl` (the phone is paired), so no Xcode
+clicking. The dev address stays in the app until `npm run ios:live`; an Archive made in between would
+ship it — run `ios:live` first. Info.plist allows plain http on the local network only
+(`NSAllowsLocalNetworking`) and asks for Local Network access once. The dev origin has its own
+storage, so you sign in again there.
+
+**Launch screen (2026-11-20):** plain parchment (`Splash.imageset`, #d9c6a0) — no logo, so the first
+logo anyone sees is the web intro's animated one (`components/layout/SplashIntro.tsx`). iOS caches
+launch screens: after changing it, delete the app and reinstall (or restart the phone) to see it.
 
 The web app's `tsconfig.json` excludes `ios/`; `.vercelignore` keeps it out of Vercel uploads.
 

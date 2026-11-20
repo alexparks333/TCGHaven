@@ -273,3 +273,20 @@ back to `[]` and logs its own specific error, so one flaky read no longer blanks
   value floor. They're converted to USD on save with `toUSD()` and shown back with `toDisplay()`
   (`lib/currency.ts`), so a CAD collector never sees or types USD.
 - **Staff portal:** always USD. Use `formatUSD()` there, and anywhere that must not convert.
+
+## Google sign-in on our own address (2026-11-20)
+
+Firebase's Google sign-in runs a helper page on the project's auth domain. By default that's
+`tcghaven-85a34.firebaseapp.com`, which shows in the pop-up's address bar and on Google's "continue
+to …" line and looks like a scam to a new collector. `next.config.js` forwards `/__/auth/*` (and
+`/__/firebase/*`) to it, and with **`NEXT_PUBLIC_AUTH_ON_SITE=on`** `lib/firebase/config.ts` uses the
+site's own host as `authDomain` on tcghaven.org. Every other host (localhost, previews) keeps the
+Firebase address. `/__/auth/*` is exempt from the site-wide `X-Frame-Options: DENY`, because our pages
+frame its `iframe`.
+
+Order matters: Google rejects an unknown redirect address. **First** Google Cloud → APIs & Services →
+Credentials → the Web client (auto created by Google Service) gets redirect URIs
+`https://www.tcghaven.org/__/auth/handler` + `https://tcghaven.org/__/auth/handler` (and both as
+JavaScript origins). **Then** set the env var in Vercel (Production) and redeploy. Google's name and
+logo on that screen come from Google Auth Platform → Branding (app name "TCGHaven", home page, privacy
+page, authorized domain tcghaven.org). The iPhone app uses Google's native sheet and isn't affected.

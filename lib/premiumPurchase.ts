@@ -25,6 +25,8 @@ const nativeKey = () =>
 export const canBuyHere = () => !inApp() || !!nativeKey()
 
 let configuredFor: string | null = null
+// Resolves to { Purchases }, never the plugin itself: an async function returning a Capacitor
+// plugin makes JS ask it for .then(), which iOS rejects ("Purchases.then() is not implemented")
 async function purchases(uid: string) {
   const { Purchases } = await import('@revenuecat/purchases-capacitor')
   const apiKey = nativeKey()
@@ -36,13 +38,13 @@ async function purchases(uid: string) {
     await Purchases.logIn({ appUserID: uid })
     configuredFor = uid
   }
-  return Purchases
+  return { Purchases }
 }
 
 export async function buyPremium(uid: string, plan: Plan): Promise<PurchaseResult> {
   try {
     if (inApp()) {
-      const Purchases = await purchases(uid)
+      const { Purchases } = await purchases(uid)
       const { current } = await Purchases.getOfferings()
       const pkg = plan === 'yearly' ? current?.annual : current?.monthly
       if (!pkg) return { ok: false, error: 'That plan isn’t available in the store right now.' }
@@ -67,7 +69,7 @@ export async function buyPremium(uid: string, plan: Plan): Promise<PurchaseResul
 /** Apple requires a Restore Purchases button: a reinstall or new phone gets Premium back. */
 export async function restorePremium(uid: string): Promise<PurchaseResult> {
   try {
-    const Purchases = await purchases(uid)
+    const { Purchases } = await purchases(uid)
     await Purchases.restorePurchases()
     await tellServer()
     return { ok: true }
