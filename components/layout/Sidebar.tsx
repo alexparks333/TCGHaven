@@ -51,8 +51,10 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 py-6 shrink-0">
+      {/* Desktop Sidebar — also an iPhone on its side (wider than md). It scrolls on its own when the
+          tabs don't fit the height (a sideways phone is ~390px tall: the lower tabs were out of
+          reach, 2026-11-19), and keeps clear of the notch on the left in landscape. */}
+      <aside className="hidden md:flex flex-col w-[17rem] border-r border-slate-800 bg-slate-950/80 backdrop-blur-sm px-3 pl-[max(0.75rem,env(safe-area-inset-left))] py-6 shrink-0 overflow-y-auto overscroll-contain">
         <LogoHover />
 
         <nav className="flex flex-col gap-1">

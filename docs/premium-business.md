@@ -56,7 +56,10 @@ everything open on a server (CI's real-scan check uses it, and it doubles as an 
   priced as raw cards, and the reply carries `gradedLocked: true`.
 - **Price history and the portfolio over time:** `/api/price-history` answers 402 for `series` and
   `portfolio`. Today's change (`baselines`) stays free. The app shows a `PremiumLock` on Portfolio →
-  Over time, on Analytics, and on a card's Price History.
+  Over time, on Analytics, and on a card's Price History. Since 2026-11-19 the over-time charts read
+  the collector's own daily snapshots (`users/{uid}/value_months`, `docs/user-data.md`) straight from
+  Firestore, so that lock is app-side only — it's their own data. Snapshots are saved for every
+  account, so the history is already there the day someone upgrades.
 - **Not locked yet:** the badges' Full look, 3D pins, Pin Display, banner pins and CSV export.
   - Open question: a friend's profile has to know whether *its owner* has Premium. Entitlements
     are private, so that needs a public "has Premium" flag the server writes.

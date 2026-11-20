@@ -11,7 +11,6 @@ import {
 import { useStore, portfolioGames } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent } from '@/lib/utils'
-import { conditionPrice } from '@/lib/pricing'
 import { usePortfolioTimeline } from './usePortfolioTimeline'
 import { PremiumLock } from '@/components/premium/PremiumLock'
 import { LogoLoader } from '@/components/LogoLoader'
@@ -65,47 +64,28 @@ export default function PortfolioAnalyticsPage() {
   const initial: Metric = ['value', 'pnl', 'return', 'cost'].includes(raw) ? (raw as Metric) : 'value'
   const [metric, setMetric] = useState<Metric>(initial)
 
-  const { cards, priceBaselines, gradedSources, priceLoad, activeGames: filterGames, trackedGames, calcFloor, hiddenGroups } = useStore()
+  const { priceLoad, activeGames: filterGames, trackedGames } = useStore()
   const activeGames = useMemo(() => portfolioGames(filterGames, trackedGames), [filterGames, trackedGames])
 
-  // Apply the same filters as PortfolioPage so numbers line up exactly
-  const filteredCards = useMemo(() => {
-    return cards.filter((c) => {
-      if (!activeGames.includes(c.game)) return false
-      if (c.group && hiddenGroups.includes(c.group)) return false // hidden groups, as on Portfolio
-      if (calcFloor > 0 && (c.currentPrice ?? c.purchasePrice) < calcFloor) return false
-      return true
-    })
-  }, [cards, activeGames, calcFloor, hiddenGroups])
+  // The collection's saved daily values (usePortfolioTimeline — the Portfolio's "Over time" chart
+  // reads the same, so the two always agree): what was actually owned each day, by game. Hidden
+  // groups and the price floor can't apply to past days (a day is saved per game), so the chart
+  // counts every card of the picked games.
+  const { dailyValues, ready: timelineReady, locked } = usePortfolioTimeline(activeGames)
 
-  // Daily portfolio value from the shared price history (usePortfolioTimeline — the Portfolio's
-  // "Over time" chart reads the same, so the two always agree)
-  const { dailyValues, fixedValue, ready: timelineReady, locked } = usePortfolioTimeline(filteredCards)
-
-  // P&L and Return use the same "Since Entry" baseline as PortfolioPage:
-  // priceAtEntry (market price when added) → earliest shared-history price → purchasePrice.
-  const timeline = useMemo<TimelinePoint[]>(() => {
-    if (dailyValues.length === 0) return []
-    const cost = filteredCards.reduce((s, c) => s + c.purchasePrice * c.quantity, 0)
-    const entryBase = filteredCards.reduce(
-      // A slab valued at PriceCharting's graded price: since added = against what was paid, as on
-      // Portfolio (its priceAtEntry is the ungraded price it was added at)
-      (s, c) => s + (gradedSources[c.id] ? c.purchasePrice : (c.priceAtEntry != null ? conditionPrice(c.priceAtEntry, c) : priceBaselines[c.id]?.first ?? c.purchasePrice)) * c.quantity,
-      0,
-    )
-    return dailyValues.map(({ day, value: catalogValue }) => {
-      const value = catalogValue + fixedValue
-      const pnl = value - entryBase
-      return {
-        day,
-        label: new Date(day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        value,
-        cost,
-        pnl,
-        returnPct: entryBase > 0 ? (pnl / entryBase) * 100 : 0,
-      }
-    })
-  }, [dailyValues, fixedValue, filteredCards, priceBaselines, gradedSources])
+  // P&L and Return against each day's own "since added" baseline (saved with the day): the price
+  // when added → earliest shared-history price → what was paid, as on Portfolio
+  const timeline = useMemo<TimelinePoint[]>(() => dailyValues.map(({ day, value, cost, entry }) => {
+    const pnl = value - entry
+    return {
+      day,
+      label: new Date(day + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value,
+      cost,
+      pnl,
+      returnPct: entry > 0 ? (pnl / entry) * 100 : 0,
+    }
+  }), [dailyValues])
 
   const cfg = METRICS.find((m) => m.key === metric)!
   const { dataKey, staticColor } = cfg
@@ -218,8 +198,8 @@ export default function PortfolioAnalyticsPage() {
               <div className="text-3xl">📈</div>
               <div className="text-slate-400 text-sm font-medium">Not enough history yet</div>
               <div className="text-slate-600 text-xs max-w-xs">
-                Prices update automatically several times a day, and a data point is recorded each day.
-                Come back after a few days to see your timeline.
+                Your collection’s value is saved each day you open TCGHaven, from today on.
+                Come back tomorrow to see your timeline start.
               </div>
             </div>
           ) : (

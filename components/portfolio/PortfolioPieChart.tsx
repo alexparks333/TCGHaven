@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import { PieChart as PieIcon, TrendingUp } from 'lucide-react'
 import { cn, formatCurrency } from '@/lib/utils'
-import type { Card } from '@/lib/types'
+import type { Game } from '@/lib/types'
 import { usePortfolioTimeline } from './usePortfolioTimeline'
+import { localDay } from '@/lib/valueHistory'
 import { PremiumLock } from '@/components/premium/PremiumLock'
 
 interface Slice { name: string; value: number; color: string; count?: number }
@@ -14,9 +15,9 @@ const MODE_KEY = 'tcghaven-portfolio-chart'
 
 /** Portfolio's value card: the collection's value split by game (a donut), or its value over time
  *  (an area chart) — a toggle top right switches them (remembered on this device). The Portfolio's
- *  only by-game view since 2026-11-15 (it replaced the By Game cards) — on phones too. `cards` are
- *  the same filtered cards the by-game split counts, for the over-time chart. */
-export function PortfolioPieChart({ data, cards }: { data: Slice[]; cards: Card[] }) {
+ *  only by-game view since 2026-11-15 (it replaced the By Game cards) — on phones too. `games` are
+ *  the games the Portfolio counts, for the over-time chart (its saved daily snapshots, by game). */
+export function PortfolioPieChart({ data, games }: { data: Slice[]; games: Game[] }) {
   const [mode, setMode] = useState<Mode>('game')
   useEffect(() => {
     try { if (localStorage.getItem(MODE_KEY) === 'time') setMode('time') } catch { /* private window */ }
@@ -51,7 +52,7 @@ export function PortfolioPieChart({ data, cards }: { data: Slice[]; cards: Card[
           ))}
         </div>
       </div>
-      {mode === 'game' ? <ByGame data={data} /> : <OverTime cards={cards} />}
+      {mode === 'game' ? <ByGame data={data} /> : <OverTime games={games} />}
     </div>
   )
 }
@@ -166,14 +167,15 @@ function ActiveSlice(props: unknown) {
 const RANGES = [['1M', 30], ['3M', 90], ['1Y', 365], ['All', 0]] as const
 type Range = typeof RANGES[number][0]
 
-function OverTime({ cards }: { cards: Card[] }) {
-  const { dailyValues, fixedValue, ready, locked } = usePortfolioTimeline(cards)
+function OverTime({ games }: { games: Game[] }) {
+  const { dailyValues, ready, locked } = usePortfolioTimeline(games)
   const [range, setRange] = useState<Range>('3M')
   const points = useMemo(() => {
     const days = RANGES.find(([r]) => r === range)![1]
-    const all = dailyValues.map(({ day, value }) => ({ day, value: value + fixedValue }))
-    return days ? all.slice(-days) : all
-  }, [dailyValues, fixedValue, range])
+    // Days are saved snapshots (only days the app was open), so a range is a date cut-off, not a count
+    const from = days ? localDay(new Date(Date.now() - days * 86_400_000)) : ''
+    return dailyValues.filter((d) => d.day >= from).map(({ day, value }) => ({ day, value }))
+  }, [dailyValues, range])
   const first = points[0]?.value ?? 0
   const last = points[points.length - 1]?.value ?? 0
   const change = last - first
@@ -192,7 +194,7 @@ function OverTime({ cards }: { cards: Card[] }) {
     return <div className="flex-1 min-h-[16rem] flex items-center justify-center text-xs text-slate-500">Loading your history…</div>
   }
   if (points.length < 2) {
-    return <div className="flex-1 min-h-[16rem] flex items-center justify-center text-center text-xs text-slate-500 px-6">Not enough price history yet — check back in a day or two.</div>
+    return <div className="flex-1 min-h-[16rem] flex items-center justify-center text-center text-xs text-slate-500 px-6">Your collection’s value is saved each day from now on — the chart fills in from tomorrow.</div>
   }
   return (
     <div className="flex flex-col flex-1">

@@ -214,13 +214,6 @@ export default function PortfolioPage() {
       })
   }, [cards, calcFloor, activeGames, hiddenGroups])
 
-  // The same cards the by-game split counts — for the chart's "Over time" view
-  const chartCards = useMemo(() => cards.filter((c) =>
-    activeGames.includes(c.game) &&
-    (!c.group || !hiddenGroups.includes(c.group)) &&
-    (calcFloor === 0 || (c.currentPrice ?? c.purchasePrice) >= calcFloor),
-  ), [cards, calcFloor, activeGames, hiddenGroups])
-
   // Top Performers' game picker: "All Games" or one game the collection has cards in. Works
   // together with the time frame (groupedRows already carries the window's P&L).
   const [performerGame, setPerformerGame] = useState<Game | 'all'>('all')
@@ -410,7 +403,7 @@ export default function PortfolioPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(15rem,1fr)_2fr] gap-4 mb-8">
         <div className="card-glass p-6 flex flex-col">
           {byGame.some((g) => g.value > 0)
-            ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} cards={chartCards} />
+            ? <PortfolioPieChart data={byGame.filter((g) => g.value > 0)} games={activeGames} />
             : <>
                 <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Value by Game</h3>
                 <div className="text-center text-slate-600 py-10 text-sm">No cards yet</div>

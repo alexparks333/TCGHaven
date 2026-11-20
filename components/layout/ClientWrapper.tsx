@@ -11,6 +11,7 @@ import { Sidebar, MobileHeader } from './Sidebar'
 import { FilterPanel } from './FilterPanel'
 import { CardUnlockToast } from '@/components/CardUnlockToast'
 import { PriceAutoUpdater } from '@/components/PriceAutoUpdater'
+import { ValueSnapshotter } from '@/components/ValueSnapshotter'
 import { UsageTracker } from '@/components/UsageTracker'
 import { FriendsProvider } from '@/components/friends/FriendsProvider'
 import { FriendsDialog } from '@/components/friends/FriendsDialog'
@@ -119,6 +120,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
         <PushSetup />
         <CardUnlockToast />
         <PriceAutoUpdater />
+        <ValueSnapshotter />
         <UsageTracker />
         <FriendsDialog />
         <FriendRequestToast />

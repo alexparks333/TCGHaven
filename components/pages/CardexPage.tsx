@@ -2449,10 +2449,11 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
   )
   const fadeStyle: React.CSSProperties = { opacity: swap === 'idle' ? 1 : 0.25, transition: 'opacity 180ms ease' }
 
-  // The owned-version bubbles (tap to swap) — a column beside the card on a computer; on a phone a
-  // centred row above the info panel (the panel always stays centred — never pushed aside)
+  // The owned-version bubbles (tap to swap) — a column beside the card on a computer; on a phone ONE
+  // centred row above the info panel that scrolls sideways when they don't fit (never a second row;
+  // the panel always stays centred — never pushed aside)
   const versionBubbles = (place: string, row = false) => (
-    <div role="tablist" aria-label="Your copies of this card" aria-orientation={row ? 'horizontal' : 'vertical'} className={cn('card-zoom-versions gap-1.5', row ? 'flex-row flex-wrap justify-center' : 'flex-col', place)}>
+    <div role="tablist" aria-label="Your copies of this card" aria-orientation={row ? 'horizontal' : 'vertical'} className={cn('card-zoom-versions gap-1.5', row ? 'flex-row flex-nowrap w-max mx-auto px-2 py-1.5' : 'flex-col', place)}>
             {versions!.map((ver, i) => {
               const on = i === picked
               return (
@@ -2460,7 +2461,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
                   key={i}
                   role="tab"
                   aria-selected={on}
-                  onClick={() => setVi(i)}
+                  onClick={(e) => { setVi(i); e.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }) }}
                   title={ver.slab ? `Your ${ver.label} slab` : `Your ${ver.label.toLowerCase()} cop${ver.quantity > 1 ? 'ies' : 'y'}`}
                   className={cn(
                     'whitespace-nowrap text-[0.6875rem] font-bold leading-none px-2.5 py-1.5 rounded-full border shadow-lg backdrop-blur-md transition-all duration-200',
@@ -2611,7 +2612,13 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false }: { data: Zoo
           // On a phone the version bubbles sit in a centred row above this panel (sm and up: beside
           // the card). The panel itself is always centred.
           <div className="flex flex-col items-center gap-2.5 max-w-full">
-          {many && versionBubbles('flex sm:hidden relative z-10 max-w-xs', true)}
+          {many && (
+            // w-max + mx-auto inside an overflow box: centred while it fits, scrolls from the first
+            // bubble (not clipped on the left) once it doesn't
+            <div className="sm:hidden relative z-10 max-w-[calc(100vw-1.5rem)] overflow-x-auto no-scrollbar">
+              {versionBubbles('flex', true)}
+            </div>
+          )}
           <div className={cn('card-zoom-panel relative z-10 bg-slate-900 border border-slate-800 rounded-2xl py-3.5 flex flex-col items-center gap-1.5 text-center max-w-xs min-w-0', editId ? 'px-8' : 'px-5')}>
             {editId && (
               <Link
