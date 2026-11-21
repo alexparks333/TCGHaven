@@ -225,3 +225,38 @@ Magic, Lorcana and Riftbound none — save `tcgProductId` in their syncs for ful
 - https://www.pricecharting.com/page/terms-of-service
 - https://www.pricecharting.com/game/pokemon-base-set/charizard-4 (example card page; shows TCGplayer ID 42382)
 - https://tcgtalk.com/guides/tcg-market-weekly-analysis (item counts)
+
+## Graded links — PriceCharting rows with no TCGplayer id (2026-11-21)
+
+About 1 in 5 PriceCharting rows with graded sales carry no TCGplayer id, so they can't link by id
+(measured 2026-11-21: Lorcana 9%, Magic 12%, Pokémon 18%, Yu-Gi-Oh! 20%, One Piece 50%).
+
+- **Automatic matching by set + name + number** (`backupMatch()`) — only unambiguous rows (one
+  PriceCharting row, one of our cards, a card PriceCharting doesn't list under its own TCGplayer id,
+  not already priced), and **only in catalogs whose daily self-check passes**: `validateBackup()`
+  replays the rows that DO have ids with the id hidden and compares; on when ≥ 20 checked and ≤ 0.1%
+  wrong (`BACKUP_MAX_WRONG`). Measured 2026-11-21: Pokémon 7 wrong of 11,530, Japanese 3 of 11,829,
+  Lorcana 0 of 372, Yu-Gi-Oh! 0 of 102, Gundam 0 of 53 → on (213 new cards); One Piece 13 of 223,
+  Magic 137 of 3,246, Riftbound 2 of 76 → off (suggestions only). Entries carry `via: 'match'`. The
+  Owner accepted the small error rate and checks the matches now and then (the Graded links page's
+  "Matched automatically" tab). The strictest variant (only cards with no TCGplayer id at all) and
+  attaching no-id "[Foil]" rows as versions were tried and dropped (5 cards; hundreds wrong).
+- **Any link can be changed** — Admin Catalog → Edit card → PriceCharting, or the Graded links page
+  (`components/admin/PriceChartingLink.tsx`): paste the right `pricecharting.com/game/{id}` link
+  (`links[cardId]._`, replaces any match — `via: 'staff'`), "Wrong — remove" (`blocked[cardId]`:
+  no graded prices), or "Back to automatic".
+- **The daily job** (`pricecharting-sync.mjs`) writes `graded_review/{catalog}` (staff read, bot
+  write): those rows with graded sales, each with our cards in the same set (learned from that
+  PriceCharting set's id rows) with the same number — `suggestLinks()` in `scripts/lib/pricecharting.mjs`,
+  most valuable first, ≤ 400 per catalog.
+- **The staff portal's Graded links page** (`/admin/graded`, `components/admin/GradedLinks.tsx`):
+  Link / None of these. Saved to `graded_links/{catalog}` `{ links: { cardId: { slot: pcId } },
+  ignored: { pcId: true }, blocked: { cardId: true } }` (staff only). Slot `_` = the card itself; a "[Foil]" / "[1st Edition]"
+  row goes in as that version of the card (`linkSlot()`), unless the card picked is itself the foil
+  card ("… (Foil)").
+- **The next run applies them** (`applyManualLinks()`): staff always win — a card link replaces
+  whatever matched, a version link adds or replaces that version, a block removes the card's graded
+  prices. Entries set this way carry `via: 'staff'`.
+- **Needs Review tags** (`components/admin/GradedTag.tsx`, `GET /api/admin/graded-status`): each
+  card shows "Graded $…" (linked) or "No graded" (a slab of it is valued raw — Raw est.).
+- Tests: `npm run test:pricecharting`.

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cronAuthorized } from '@/lib/cronAuth'
 import { runStats } from '@/lib/stats/aggregate'
 
 // The Statistics totals job (lib/stats/aggregate.ts), called by the sync-prices workflow twice a
@@ -6,11 +7,7 @@ import { runStats } from '@/lib/stats/aggregate'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false
-  return req.headers.get('x-cron-secret') === secret || req.nextUrl.searchParams.get('secret') === secret
-}
+const isAuthorized = (req: NextRequest) => cronAuthorized(req) // lib/cronAuth.ts
 
 async function handle(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

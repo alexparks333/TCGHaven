@@ -9,6 +9,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useStaff } from '@/components/admin/StaffAuthProvider'
 import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
+import { PriceChartingLink } from '@/components/admin/PriceChartingLink'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { regenerateSnapshot, refreshCatalogCaches, normNum } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus, type PokemonSourceReport } from '@/lib/api/syncStatus'
@@ -2178,6 +2179,8 @@ function EditCardForm({
             rows={2}
             className={cn(FIELD_CLASS, 'w-full resize-y')}
           />
+          {/* Where its graded prices come from — change or remove a wrong link (PriceChartingLink.tsx) */}
+          <PriceChartingLink catalog={game} cardId={card.id} />
           <div className="flex items-center gap-2 pt-1">
             <button
               onClick={save}

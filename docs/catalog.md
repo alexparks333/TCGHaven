@@ -542,7 +542,7 @@ bulk endpoint exists), 8-way concurrency, making it the slowest game to refresh 
 (intended as roughly 6am/12pm/6pm/12am) — instead of on every user's every page visit/click.
 
 - **`app/api/cron/sync-prices/route.ts`** — `GET`/`POST`, protected by a shared secret
-  (`CRON_SECRET` env var, checked against an `x-cron-secret` header or a `?secret=` query param —
+  (`CRON_SECRET` env var, checked against the `x-cron-secret` header only, in constant time (`lib/cronAuth.ts`; the `?secret=` query param was dropped 2026-11-21) —
   the query-param form exists because some free external schedulers can't set custom headers).
   Calls `runPokemonSync`/`runLorcanaSync`/`runRiftboundSync`/`runOnePieceSync` — plain functions
   exported from a sibling `sync.ts` module next to each game's `route.ts` (e.g.

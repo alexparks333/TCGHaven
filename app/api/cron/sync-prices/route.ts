@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cronAuthorized } from '@/lib/cronAuth'
 import { runPokemonSync as syncPokemon } from '../../sync/pokemon/sync'
 import { runLorcanaSync as syncLorcana } from '../../sync/lorcana/sync'
 import { runRiftboundSync as syncRiftbound } from '../../sync/riftbound/sync'
@@ -42,13 +43,7 @@ export const maxDuration = 300
 // so a new MTG set doesn't sit completely unnoticed between manual syncs. It costs nothing
 // against the write quota that keeps the real sync off this cron in the first place.
 
-function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return false // refuse to run unprotected — better a broken cron than an open one
-  const header = req.headers.get('x-cron-secret')
-  const query = req.nextUrl.searchParams.get('secret')
-  return header === secret || query === secret
-}
+const isAuthorized = (req: NextRequest) => cronAuthorized(req) // lib/cronAuth.ts
 
 async function runMtgCheck() {
   try {

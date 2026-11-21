@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { verifyUserRequest } from '@/lib/firebase/verifyAdminRequest'
 import { callerAccess } from '@/lib/premiumServer'
 import { gradedAllowed } from '@/lib/api/gradedPrices'
-import { loadBaselines, loadPriceSeries, priceAtOrBefore, type HistoryItem } from '@/lib/api/priceHistory'
+import { loadBaselines, loadPriceSeries, type HistoryItem } from '@/lib/api/priceHistory'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -21,6 +21,9 @@ export const maxDuration = 60
 
 const DAY_MS = 86_400_000
 const MAX_SERIES_ITEMS = 25
+// More distinct cards than any real collection has — a bigger request is refused, so one request
+// can't make the server load every set's history and loop over it (security review 2026-11-21)
+const MAX_ITEMS = 20000
 
 interface Body {
   mode: 'baselines' | 'series' | 'portfolio'
@@ -34,6 +37,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => null)) as Body | null
   if (!body || !Array.isArray(body.items)) return NextResponse.json({ error: 'Expected { mode, items }' }, { status: 400 })
+  if (body.items.length > MAX_ITEMS) return NextResponse.json({ error: 'Too many items' }, { status: 413 })
   // Haven Premium (docs/premium-business.md): price history and the portfolio over time are
   // Premium once the launch switch is on — today's change (baselines) stays free. Without Premium,
   // slabs follow the raw history, as their value does (lib/api/gradedPrices.ts gradedAllowed).
@@ -61,13 +65,19 @@ export async function POST(request: Request) {
     // One point per calendar day that has any recorded price.
     const daySet = new Set<string>()
     series.forEach((points) => points.forEach((p) => daySet.add(p.date.slice(0, 10))))
+    // Days in order, so each item's price is found by stepping one pointer forward through its
+    // (date-ordered) points — not by re-reading them from the start every day
+    const tracks = items.map((item) => {
+      const points = series.get(item.key) ?? []
+      return { item, times: points.map((p) => new Date(p.date).getTime()), prices: points.map((p) => p.price), at: -1 }
+    })
     const timeline = Array.from(daySet).sort().map((day) => {
       const endOfDay = new Date(`${day}T23:59:59.999Z`).getTime()
       let value = 0
-      for (const item of items) {
-        const points = series.get(item.key)
-        const price = (points ? priceAtOrBefore(points, endOfDay) : null) ?? item.fallback ?? 0
-        value += price * (item.qty ?? 1)
+      for (const t of tracks) {
+        while (t.at + 1 < t.times.length && t.times[t.at + 1] <= endOfDay) t.at++
+        const price = (t.at >= 0 ? t.prices[t.at] : null) ?? t.item.fallback ?? 0
+        value += price * (t.item.qty ?? 1)
       }
       return { day, value }
     })

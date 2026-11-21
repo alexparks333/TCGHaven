@@ -43,7 +43,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return signedIn() && (
-        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3', 'yahGroB7ebaSebrsnAIRhooKVdk1'] ||
+        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3'] ||
         isStaff()
       );
     }
@@ -149,7 +149,10 @@ service cloud.firestore {
     // set them (nobody can make themselves Premium or a Creator). The history — who changed it and
     // why, possibly about a suspension — is staff only.
     match /account_roles/{uid} {
-      allow read: if signedIn();
+      // One account at a time; only staff (and the stats job) list them all — every account's ban
+      // and suspension flags were downloadable by anyone (security review 2026-11-21)
+      allow get: if signedIn();
+      allow list: if isAdmin();
       allow create, update: if isAdmin()
         && request.resource.data.role in ['regular', 'premium', 'creator', 'staff']
         && request.resource.data.keys().hasOnly(['role', 'creatorSince', 'formerCreator', 'suspended', 'banned', 'photoBanned', 'updatedAt']);
@@ -300,6 +303,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+    // The staff portal's Graded links page (scripts/lib/pricecharting.mjs suggestLinks): PriceCharting
+    // cards with graded sales that price nothing yet, with suggested cards — written by the daily
+    // job; and what staff set — links (card id → { slot: PriceCharting id }), dismissed rows, and
+    // blocked cards (no graded prices) — which the job applies over any automatic match.
+    match /graded_review/{game} {
+      allow read: if isAdmin();
+      allow write: if isBot();
+    }
+    match /graded_links/{game} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() && request.resource.data.keys().hasOnly(['links', 'ignored', 'blocked', 'updatedAt']);
+    }
     // Each day's graded prices, kept (scripts/lib/graded-history.mjs) — same layout as price_history
     match /graded_history/{game}/months/{docId} {
       allow read: if true;
@@ -426,8 +441,9 @@ service cloud.firestore {
     match /invite_codes/{code} {
       allow get: if signedIn();
       allow list: if false;
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
-        && request.resource.data.keys().hasOnly(['uid', 'createdAt']);
+      // Never created any more: an old link whose doc was deleted could be re-made pointing at
+      // someone else (security review 2026-11-21)
+      allow create: if false;
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 

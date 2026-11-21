@@ -23,6 +23,7 @@ export interface GradedEntry {
   u: string                     // the card's PriceCharting page — the required citation link
   p: Record<string, number>     // graded key (psa10, g9 …) → USD
   v?: Record<string, { p: Record<string, number>; u?: string }>  // other versions ("[Foil]", "[1st Edition]" …)
+  via?: 'match' | 'staff'       // not by TCGplayer id: matched by set + name + number, or set by staff (Graded links / Admin Catalog)
 }
 
 export const gradedPricesEnabled = () => process.env.GRADED_PRICES === 'on'
@@ -78,6 +79,16 @@ async function read(key: CatalogKey, have?: { asOf: number; byId: Map<string, Gr
  *  graded cards are then priced raw, never wrongly. */
 export async function loadGradedPrices(key: CatalogKey): Promise<Map<string, GradedEntry>> {
   if (!gradedPricesEnabled()) return new Map()
+  return loadGradedMap(key)
+}
+
+/** The same, even while graded prices are switched off for collectors — the staff portal's
+ *  Needs Review tags (app/api/admin/graded-status) */
+export function loadGradedPricesForStaff(key: CatalogKey): Promise<Map<string, GradedEntry>> {
+  return loadGradedMap(key)
+}
+
+async function loadGradedMap(key: CatalogKey): Promise<Map<string, GradedEntry>> {
   const hit = _cache.get(key)
   if (hit && Date.now() - hit.at < hit.ttl) return hit.byId
   const inFlight = _loading.get(key)

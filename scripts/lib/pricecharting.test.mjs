@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   parsePcPrice, penniesToUsd, parsePcCsv, gradedFromRow, pickByTcgId, productIdOf, matchCatalog,
   gradedPriceKey, gradedPriceFor, pcProductUrl, pcIdUrl, pcVariantOf, gradedVariantKey,
+  normPcNumber, pcNameParts, linkSlot, applyManualLinks, suggestLinks, backupMatch, validateBackup, backupAllowed,
 } from './pricecharting.mjs'
 import { GRADED_ORDER, gradedTuple, tupleToGraded, buildGradedHistory } from './graded-history.mjs'
 import { gunzip } from './price-history.mjs'
@@ -172,6 +173,75 @@ assert.deepEqual(tupleToGraded(undefined), {})
   const m = months.get('OP01__2026-11')
   assert.equal(m.dd, '18')
   assert.deepEqual(JSON.parse(await gunzip(m.gz)), { t: when.toISOString(), p: { a: gradedTuple({ psa10: 100 }), 'a~1st': gradedTuple({ psa10: 900 }) } })
+}
+
+// Graded links (2026-11-21): suggestions for rows with no TCGplayer id; links only from staff
+assert.equal(normPcNumber('019/252'), '19')
+assert.equal(normPcNumber('OP01-001'), '1')
+assert.equal(normPcNumber('DPBC-EN039'), 'dpbc-en039', 'a code that isn\'t "letters+digits-digits" is kept whole')
+assert.deepEqual(pcNameParts('Ursula - Deceiver [Foil] #90'), { base: 'ursula deceiver', number: '90', variant: 'foil' })
+assert.deepEqual(pcNameParts('Bartolomeo OP07-031'), { base: 'bartolomeo', number: '31', variant: '' }, 'One Piece: the code at the end, no #')
+assert.equal(pcNameParts('Booster Pack').number, '', 'no number → never suggested')
+assert.equal(linkSlot('', 'Anna'), '')
+assert.equal(linkSlot('foil', 'Anna - Ice Breaker'), 'foil', 'a [Foil] row on a plain card = its Foil version')
+assert.equal(linkSlot('foil', 'Ursula - Deceiver (Foil)'), '', 'on a separate foil card = that card\'s own price')
+{
+  const rows = [
+    { id: '1', 'console-name': 'Lorcana Test', 'product-name': 'A #1', 'tcg-id': '11', 'manual-only-price': '$10' },
+    { id: '2', 'console-name': 'Lorcana Test', 'product-name': 'B #2', 'tcg-id': '12', 'manual-only-price': '$10' },
+    { id: '3', 'console-name': 'Lorcana Test', 'product-name': 'C #3', 'tcg-id': '13', 'manual-only-price': '$10' },
+    { id: '4', 'console-name': 'Lorcana Test', 'product-name': 'D #4', 'tcg-id': '', 'manual-only-price': '$50' },
+    { id: '5', 'console-name': 'Lorcana Test', 'product-name': 'A [Foil] #1', 'tcg-id': '', 'manual-only-price': '$99' },
+    { id: '6', 'console-name': 'Lorcana Other', 'product-name': 'Z #9', 'tcg-id': '', 'manual-only-price': '$5' },
+  ]
+  const cards = [
+    { id: 'a', name: 'A', number: '1', set: 'T', tcgProductId: 11 }, { id: 'b', name: 'B', number: '2', set: 'T', tcgProductId: 12 },
+    { id: 'c', name: 'C', number: '3', set: 'T', tcgProductId: 13 }, { id: 'd', name: 'D', number: '004', set: 'T' },
+    { id: 'd2', name: 'D (Promo)', number: '4', set: 'T' }, { id: 'z', name: 'Z', number: '9', set: 'Q' },
+  ]
+  const out = suggestLinks(rows, { lorcana: cards }, new Set(['lorcana:a', 'lorcana:b', 'lorcana:c']))
+  const items = out.lorcana
+  assert.deepEqual(items.map((i) => i.pc), ['5', '4'], 'most valuable first; the unlearned set (Lorcana Other) gives nothing')
+  assert.deepEqual(items[1].cards.map((c) => [c.id, c.exact]), [['d', true], ['d2', false]], 'every card with that number, exact name first — staff choose')
+  assert.deepEqual(items[0].cards.map((c) => c.id), ['a'], 'a version row may go to a card already priced')
+  assert.equal(suggestLinks(rows, { lorcana: cards }, new Set(), new Set(['4', '5'])).lorcana?.length ?? 0, 0, 'linked / dismissed rows are not suggested again')
+
+  const entries = [{ id: 'a', pc: '1', u: 'u1', p: { psa10: 10 } }, { id: 'c', pc: '3', u: 'u3', p: { psa10: 10 } }]
+  const got = applyManualLinks(entries, rows, { a: { foil: '5' }, d: { _: '4' }, c: { _: '4' }, x: { _: '404' } }, { b: true })
+  assert.deepEqual(got.find((e) => e.id === 'a'), { id: 'a', pc: '1', u: 'u1', p: { psa10: 10 }, v: { foil: { p: { psa10: 99 }, u: 'https://www.pricecharting.com/game/5' } } },
+    'a version link adds the version beside the card\'s own price')
+  assert.deepEqual(got.find((e) => e.id === 'd'), { id: 'd', pc: '4', u: 'https://www.pricecharting.com/game/4', p: { psa10: 50 }, via: 'staff' })
+  assert.equal(got.find((e) => e.id === 'c').pc, '4', 'a staff link replaces the matched one (redirect)')
+  assert.deepEqual(applyManualLinks(entries, rows, {}, { a: true }).map((e) => e.id), ['c'], 'blocked: no graded price at all')
+  assert.equal(got.some((e) => e.id === 'x'), false, 'a row gone from the list adds nothing')
+}
+
+{
+  // Automatic matching: only unambiguous rows, only cards PriceCharting doesn't list by their own id
+  const rows = [
+    ...[1, 2, 3].map((n) => ({ id: `r${n}`, 'console-name': 'Pokemon Test', 'product-name': `Card${n} #${n}`, 'tcg-id': String(100 + n), 'manual-only-price': '$10' })),
+    { id: 'n4', 'console-name': 'Pokemon Test', 'product-name': 'Card4 #4', 'tcg-id': '', 'manual-only-price': '$40' },
+    { id: 'n5', 'console-name': 'Pokemon Test', 'product-name': 'Card5 #5', 'tcg-id': '', 'manual-only-price': '$50' },
+    { id: 'n6', 'console-name': 'Pokemon Test', 'product-name': 'Card6 #6', 'tcg-id': '', 'manual-only-price': '$60' },
+    { id: 'n6b', 'console-name': 'Pokemon Test', 'product-name': 'Card6 #6', 'tcg-id': '', 'manual-only-price': '$61' },
+    { id: 'n7', 'console-name': 'Pokemon Test', 'product-name': 'Card7 #7', 'tcg-id': '', 'manual-only-price': '$70' },
+    { id: 'r8', 'console-name': 'Pokemon Test', 'product-name': 'Other #9', 'tcg-id': '108', 'manual-only-price': '$1' },
+  ]
+  const cards = [
+    ...[1, 2, 3].map((n) => ({ id: `c${n}`, name: `Card${n}`, number: String(n), set: 'T', tcgProductId: 100 + n })),
+    { id: 'c4', name: 'Card4', number: '004', set: 'T' },
+    { id: 'c5', name: 'Card5', number: '5', set: 'T' }, { id: 'c5b', name: 'Card5', number: '5', set: 'T' },
+    { id: 'c6', name: 'Card6', number: '6', set: 'T' },
+    { id: 'c7', name: 'Card7', number: '7', set: 'T', tcgProductId: 108 },
+  ]
+  const links = backupMatch(rows, { pokemon: cards })
+  assert.deepEqual(links.map((l) => [l.id, l.pc]), [['c4', 'n4']],
+    'two of our cards (5), two PriceCharting rows (6), or a card PriceCharting lists under its own id (7) → never matched')
+  const check = validateBackup(rows, { pokemon: cards })
+  assert.deepEqual([check.pokemon.right, check.pokemon.wrong], [2, 0], 'replayed with the id hidden: right, never wrong (with two ids hidden at once, too few are left to learn the set — silent, not wrong)')
+  assert.equal(backupAllowed(check).has('pokemon'), false, 'too few checked to trust (needs 20)')
+  assert.equal(backupAllowed({ a: { right: 2000, wrong: 1 }, b: { right: 2000, wrong: 3 } }).has('a'), true)
+  assert.equal(backupAllowed({ b: { right: 2000, wrong: 3 } }).has('b'), false, 'more than 0.1% wrong → off')
 }
 
 console.log('pricecharting: all tests passed')

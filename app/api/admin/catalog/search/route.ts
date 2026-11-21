@@ -38,7 +38,7 @@ interface CatalogCard {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const game = searchParams.get('game') as Game | null
-  const q = searchParams.get('q') ?? ''
+  const q = (searchParams.get('q') ?? '').slice(0, 100) // no card name is near this long
 
   if (!game || !GAMES.includes(game)) {
     return NextResponse.json({ error: 'game must be pokemon, lorcana, riftbound, onepiece, or mtg' }, { status: 400 })

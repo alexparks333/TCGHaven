@@ -44,6 +44,8 @@ export async function callerAccess(request: Request): Promise<CallerAccess> {
   return { uid, gatesOn: true, unlocked: uid ? await uidHasPremium(uid) : false }
 }
 
+const SCAN_RETRY_MS = 2 * 60 * 1000
+
 /** A free account's scan: counts it (once per scanId) against this month's allowance.
  *  Returns how many are left after it, or -1 when the allowance is used up. */
 export async function countFreeScan(uid: string, scanId: string): Promise<number> {
@@ -53,10 +55,15 @@ export async function countFreeScan(uid: string, scanId: string): Promise<number
   return runTransaction(db, async (tx) => {
     const d = (await tx.get(ref)).data()
     const ids: string[] = d?.month === month && Array.isArray(d.scanIds) ? d.scanIds : []
-    if (ids.includes(scanId)) return FREE_SCANS_PER_MONTH - ids.length // a retry of a scan already counted
+    // A retry of the scan just counted (the phone tries again after a dropped connection) is free —
+    // only the latest one, and only for a couple of minutes: any repeated scanId used to be free,
+    // so sending the same one every time scanned without limit (security review 2026-11-21)
+    if (ids.length && scanId === ids[ids.length - 1] && typeof d?.lastAt === 'number' && Date.now() - d.lastAt < SCAN_RETRY_MS) {
+      return FREE_SCANS_PER_MONTH - ids.length
+    }
     if (ids.length >= FREE_SCANS_PER_MONTH) return -1
     const next = [...ids, scanId]
-    tx.set(ref, { month, scanIds: next, used: next.length, updatedAt: serverTimestamp() })
+    tx.set(ref, { month, scanIds: next, used: next.length, lastAt: Date.now(), updatedAt: serverTimestamp() })
     return FREE_SCANS_PER_MONTH - next.length
   })
 }

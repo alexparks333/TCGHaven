@@ -5,7 +5,9 @@ import type { Game, Language } from '@/lib/types'
 
 export async function GET(req: NextRequest) {
   const game = (req.nextUrl.searchParams.get('game') ?? 'pokemon') as Game
-  const q = req.nextUrl.searchParams.get('q') ?? ''
+  // No card name is near 100 characters; a longer query only makes the fuzzy matching do far more
+  // work (security review 2026-11-21)
+  const q = (req.nextUrl.searchParams.get('q') ?? '').slice(0, 100)
   // ?id= narrows to that one catalog card (the Cardex's "add this card" — q is its name)
   const id = req.nextUrl.searchParams.get('id')
   // lang=ja → Japanese Pokémon catalog

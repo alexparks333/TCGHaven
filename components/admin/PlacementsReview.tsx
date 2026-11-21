@@ -7,6 +7,7 @@ import {
   Pencil, Undo2, Clock, ArrowLeft,
 } from 'lucide-react'
 import { adminFetch } from '@/lib/firebase/authFetch'
+import { GradedTag, useGradedStatus, type GradedStatus } from './GradedTag'
 import { cardImage, NO_CARD_IMAGE } from '@/lib/cardImage'
 import { cn, formatUSD as formatCurrency } from '@/lib/utils'
 import { GAME_COLORS } from '@/lib/types'
@@ -573,6 +574,8 @@ function ReviewBoard({
   onClose: () => void
 }) {
   const game = useReviewGame()
+  // PriceCharting tags: does each card get graded prices (GradedTag.tsx)
+  const graded = useGradedStatus(game, useMemo(() => placements.map((p) => `tcg-${p.productId}`), [placements]))
   // Two tabs: "To review" (by where the sync put each card) and "Reviewed" (everything decided —
   // accepted, ignored, denied — newest decision first, to check or undo).
   const [tab, setTab] = useState<'todo' | 'reviewed'>('todo')
@@ -818,6 +821,7 @@ function ReviewBoard({
                 <CardTile
                   key={p.productId}
                   placement={p}
+                  graded={graded.get(`tcg-${p.productId}`)}
                   name={nameOf(p)}
                   denied={isDenied(p)}
                   image={cardImage(imageOf(p), 'grid') ?? imageOf(p)}
@@ -882,6 +886,7 @@ function ReviewBoard({
       {focus && (
         <FocusViewer
           placement={focus}
+          graded={graded.get(`tcg-${focus.productId}`)}
           name={nameOf(focus)}
           denied={isDenied(focus)}
           index={focusIndex}
@@ -930,9 +935,10 @@ function DestinationButton({ active, onClick, label, count, warn, muted }: { act
 }
 
 function CardTile({
-  placement: p, name, denied, image, price, selected, selecting, busy, showSet, decided, onToggle, onOpen, onApprove, onBringBack,
+  placement: p, graded, name, denied, image, price, selected, selecting, busy, showSet, decided, onToggle, onOpen, onApprove, onBringBack,
 }: {
   placement: Placement
+  graded?: GradedStatus
   name: string
   denied: boolean
   image: string
@@ -1022,6 +1028,7 @@ function CardTile({
           <span className="truncate">{p.number}{denied && p.previousSetName ? ` · was ${p.previousSetName}` : showSet ? ` · ${p.setName ?? 'Couldn’t place'}` : ''}</span>
           {!!price && <span className="font-semibold text-slate-400 shrink-0">{formatCurrency(price)}</span>}
         </div>
+        <div className="mt-1"><GradedTag status={graded} /></div>
         {decided && (
           <div className={cn('mt-1 text-[0.6875rem] font-semibold', denied ? 'text-red-700' : p.ignored ? 'text-slate-500' : 'text-emerald-700')}>{decided}</div>
         )}
@@ -1090,9 +1097,10 @@ function SetMenu({
 }
 
 function FocusViewer({
-  placement: p, name, denied, index, total, image, riotArt, price, categories, sets, busy, onClose, onPrev, onNext, onAccept, onNewSet, onIgnore, onDeny, onRename, onImage, onUnreview,
+  placement: p, graded, name, denied, index, total, image, riotArt, price, categories, sets, busy, onClose, onPrev, onNext, onAccept, onNewSet, onIgnore, onDeny, onRename, onImage, onUnreview,
 }: {
   placement: Placement
+  graded?: GradedStatus
   name: string
   denied: boolean
   index: number
@@ -1207,6 +1215,7 @@ function FocusViewer({
                 TCGplayer <ExternalLink size={12} />
               </a>
             </div>
+            <div className="mt-2"><GradedTag status={graded} full /></div>
 
             <div className="mt-5 rounded-2xl bg-white/40 border border-[#d6c49f]/70 p-4">
               <div className="flex items-center justify-between gap-2 text-xs text-slate-500 mb-1">

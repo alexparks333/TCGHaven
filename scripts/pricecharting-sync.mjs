@@ -41,7 +41,7 @@ loadEnvLocal()
 // After the env is loaded: catalog-sync.mjs initialises Firebase when imported
 const { ensureSignedIn, getCatalogDb } = await import('./lib/catalog-sync.mjs')
 const { readCompressedSnapshot } = await import('./lib/snapshot-codec.mjs')
-const { parsePcCsv, pickByTcgId, matchCatalog } = await import('./lib/pricecharting.mjs')
+const { parsePcCsv, pickByTcgId, matchCatalog, applyManualLinks, suggestLinks, backupMatch, validateBackup, backupAllowed } = await import('./lib/pricecharting.mjs')
 const { buildGradedHistory, GRADED_HISTORY_COLLECTION } = await import('./lib/graded-history.mjs')
 const { encodePriceMap, dayDocId } = await import('./lib/price-history.mjs')
 const { doc, getDoc, setDoc, writeBatch, serverTimestamp, Bytes } = await import('firebase/firestore')
@@ -159,14 +159,64 @@ async function main() {
   if (!dryRun) await ensureSignedIn()
   const db = getCatalogDb()
   let failed = false
-
+  // Pass 1 — every catalog: its cards (slimmed), what its TCGplayer ids price, and what staff set on
+  // the Graded links page (graded_links/{catalog})
+  const slimCards = {}
+  const matchedBy = {}
+  const linksBy = {}
+  const pricedById = new Set()
+  const skipPc = new Set()
   for (const key of only ?? CATALOGS) {
     try {
       const snap = await readCompressedSnapshot(db, key)
       if (!snap) { console.log(`- ${key}: no catalog snapshot, skipped`); continue }
-      const { entries, withProductId, sharedProductIds } = matchCatalog(snap.cards, byTcg)
+      slimCards[key] = snap.cards.map((c) => ({ id: c.id, name: c.name, number: c.number, set: c.set, setCode: c.setCode, setName: c.setName,
+        imageUrl: c.imageUrl, tcgProductId: c.tcgProductId, hidden: c.hidden }))
+      matchedBy[key] = matchCatalog(snap.cards, byTcg)
+      for (const e of matchedBy[key].entries) pricedById.add(`${key}:${e.id}`)
+      const d = (await getDoc(doc(db, 'graded_links', key)).catch(() => null))?.data() ?? {}
+      linksBy[key] = d
+      for (const slots of Object.values(d.links ?? {})) for (const pc of Object.values(slots ?? {})) if (pc) skipPc.add(String(pc))
+      for (const pc of Object.keys(d.ignored ?? {})) skipPc.add(pc)
+    } catch (err) {
+      failed = true
+      console.error(`- ${key}: failed — ${err.message}`)
+    }
+  }
+
+  // Backup matching for rows with no TCGplayer id (set + name + number) — only in catalogs whose
+  // self-check today is nearly perfect (pricecharting.mjs validateBackup / backupAllowed)
+  let backupBy = {}
+  let check = {}
+  try {
+    check = validateBackup(rows, slimCards)
+    const allowed = backupAllowed(check)
+    for (const [k, o] of Object.entries(check)) {
+      if (o.right || o.wrong) console.log(`   backup self-check ${k}: ${o.right} right, ${o.wrong} wrong — ${allowed.has(k) ? 'on' : 'off (suggestions only)'}`)
+    }
+    for (const l of backupMatch(rows, slimCards, pricedById)) {
+      if (!allowed.has(l.catalog)) continue
+      ;(backupBy[l.catalog] ??= []).push({ id: l.id, pc: l.pc, u: l.u, p: l.p, via: 'match' })
+    }
+  } catch (err) {
+    backupBy = {}
+    failed = true
+    console.error(`Backup matching skipped: ${err.message}`)
+  }
+
+  // Pass 2 — write each catalog: TCGplayer id matches + backup matches, then what staff linked,
+  // changed or blocked (applyManualLinks — staff always win)
+  const priced = new Set()
+  for (const key of Object.keys(slimCards)) {
+    try {
+      const { withProductId, sharedProductIds } = matchedBy[key]
+      const entries = applyManualLinks([...matchedBy[key].entries, ...(backupBy[key] ?? [])], rows, linksBy[key].links, linksBy[key].blocked)
+      const auto = entries.filter((e) => e.via === 'match').length
+      const manual = entries.filter((e) => e.via === 'staff').length
+      for (const e of entries) if (Object.keys(e.p).length) priced.add(`${key}:${e.id}`)
       const line = `- ${key}: ${entries.length.toLocaleString()} cards priced of ${withProductId.toLocaleString()} with a TCGplayer id ` +
-        `(${snap.cards.length.toLocaleString()} in catalog${sharedProductIds ? `, ${sharedProductIds} shared ids skipped` : ''})`
+        `(${slimCards[key].length.toLocaleString()} in catalog${sharedProductIds ? `, ${sharedProductIds} shared ids skipped` : ''}` +
+        `${auto ? `, ${auto} by set + name + number` : ''}${manual ? `, ${manual} by staff` : ''})`
       if (dryRun) {
         console.log(line)
         for (const e of entries.slice(0, 3)) console.log(`     ${e.id} → ${JSON.stringify(e.p)}  ${e.u}`)
@@ -198,7 +248,7 @@ async function main() {
       // Today's graded prices into the kept history (graded-history.mjs). After the prices: a
       // history failure never costs today's prices.
       try {
-        const { months, chunks } = await writeGradedHistory(db, key, entries, snap.cards)
+        const { months, chunks } = await writeGradedHistory(db, key, entries, slimCards[key])
         console.log(`   history: ${months} set-month doc(s), ${chunks} day chunk(s)`)
       } catch (err) {
         failed = true
@@ -208,6 +258,32 @@ async function main() {
       failed = true
       console.error(`- ${key}: failed — ${err.message}`)
     }
+  }
+
+  // The Graded links page (graded_review/{catalog}): PriceCharting cards with graded sales that
+  // price nothing, with the cards they could be (to link by hand); the cards matched by set + name
+  // + number (to check); and today's self-check
+  try {
+    const lists = suggestLinks(rows, slimCards, priced, skipPc)
+    const pcName = new Map()
+    for (const row of rows) pcName.set(String(row.id ?? '').trim(), `${String(row['console-name'] ?? '').trim()} · ${String(row['product-name'] ?? '').trim()}`)
+    for (const key of Object.keys(slimCards)) {
+      const items = lists[key] ?? []
+      const byId = new Map(slimCards[key].map((c) => [c.id, c]))
+      const auto = (backupBy[key] ?? []).filter((e) => !linksBy[key].blocked?.[e.id] && !linksBy[key].links?.[e.id]?._).map((e) => {
+        const c = byId.get(e.id) ?? {}
+        return { id: e.id, name: String(c.name ?? ''), setName: String(c.setName ?? ''), number: String(c.number ?? ''), imageUrl: String(c.imageUrl ?? ''),
+          pc: e.pc, pcName: pcName.get(e.pc) ?? '', u: e.u, psa10: e.p.psa10 ?? null }
+      })
+      if (dryRun) { console.log(`   graded links — ${key}: ${items.length} to link, ${auto.length} matched to check`); continue }
+      await setDoc(doc(db, 'graded_review', key), {
+        items: JSON.stringify(items), count: items.length, auto: JSON.stringify(auto), autoCount: auto.length,
+        check: check[key] ?? null, asOf: serverTimestamp(),
+      })
+    }
+  } catch (err) {
+    failed = true
+    console.error(`Graded links list not written: ${err.message}`)
   }
   if (dryRun) console.log('Dry run: nothing written.')
   if (failed || downloadFailed) process.exitCode = 1

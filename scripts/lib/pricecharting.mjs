@@ -291,3 +291,287 @@ export function gradedPriceFor(prices, { company, grade, tier } = {}) {
   const p = key ? Number(prices[key]) : 0
   return Number.isFinite(p) && p > 0 ? p : 0
 }
+
+// ── Graded links: PriceCharting cards that didn't link by TCGplayer id (2026-11-21) ───────────
+// About 1 in 5 PriceCharting rows with graded sales carry no TCGplayer id (One Piece: half), so
+// they never price a card. Matching them by set + name + number automatically was tried and
+// measured: replaying the rows that DO have ids with the ids hidden on both sides, it still named
+// the wrong card in Pokémon (4), Magic (14) and Riftbound (1) — our catalog has near-copies of some
+// printings that name, set and number can't tell apart — and at that strictness it found only 5
+// new cards. So: the clear matches are made automatically only in catalogs whose self-check passes
+// (backupMatch below, the Owner's call 2026-11-21); every other row is listed with suggested cards
+// (suggestLinks) on the staff portal's Graded links page (graded_review/{catalog}); and whatever
+// staff set (graded_links/{catalog} → applyManualLinks) wins over any match.
+
+const foldName = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ').trim()
+
+/** A collector number for comparing: before any "/", no set code, no leading zeros ("019/252" →
+ *  "19", "OP01-001" → "1") */
+export function normPcNumber(n) {
+  let s = String(n ?? '').trim().toLowerCase().split('/')[0].trim()
+  // A set code in front ("OP01-001" on PriceCharting, "001" on our One Piece card) — only ever
+  // compared within one set, so the code adds nothing
+  const coded = /^[a-z]+[0-9]*-([0-9]+[a-z]?)$/.exec(s)
+  if (coded) s = coded[1]
+  return s.replace(/^0+(?=[0-9])/, '')
+}
+
+/** "Ursula - Deceiver [Foil] #90" → { base: 'ursula deceiver', number: '90', variant: 'foil' };
+ *  number '' when the name has none */
+export function pcNameParts(productName) {
+  const name = String(productName ?? '')
+  // "… #90", or One Piece's bare code at the end ("Bartolomeo OP07-031")
+  const m = /#\s*([A-Za-z0-9][A-Za-z0-9\-./]*)\s*$/.exec(name) ?? /\s([A-Z]{1,4}[0-9]{1,3}-[0-9]{2,3}[a-z]?)\s*$/.exec(name)
+  const number = m ? normPcNumber(m[1]) : ''
+  const base = foldName((m ? name.slice(0, m.index) : name).replace(/\[[^\]]*\]/g, ' '))
+  return { base, number, variant: pcVariantOf(name) }
+}
+
+// Our set: its code when it has one (One Piece's OP07 holds cards under several set names — the
+// booster, Judge Packs …), else its name
+const cardSetKey = (catalog, c) => `${catalog}::${c.set || c.setCode || c.setName || ''}`
+const rowTcgId = (row) => { const n = Number(String(row['tcg-id'] ?? '').trim()); return Number.isInteger(n) && n > 0 ? n : null }
+
+/** Graded prices from a row whether or not it has a TCGplayer id (gradedFromRow needs one) */
+export function rowGraded(row) {
+  const prices = {}
+  for (const [col, key] of Object.entries(GRADED_COLUMNS)) {
+    const p = parsePcPrice(row[col])
+    if (p > 0) prices[key] = p
+  }
+  if (!Object.keys(prices).length) return null
+  const name = String(row['product-name'] ?? '').trim()
+  const consoleName = String(row['console-name'] ?? '').trim()
+  const pcId = String(row.id ?? '').trim()
+  return { pcId, name, console: consoleName, url: pcIdUrl(pcId) ?? pcProductUrl(consoleName, name), prices }
+}
+
+/**
+ * The Graded links list. rows: every PriceCharting row; catalogs: { catalogKey: cards[] };
+ * priced: Set of "catalog:id" already priced; skip: Set of PriceCharting ids staff linked or
+ * dismissed. → { [catalog]: items[] }, each item a PriceCharting card with graded prices that
+ * prices nothing, plus our cards it could be: { pc, name, set, u, p, variant ('' or a GRADED_VARIANTS
+ * key — "[Foil]" etc.), cards: [{ id, name, setName,
+ * number, imageUrl, exact }] } — most valuable first, at most `max` per catalog.
+ * Which of our sets a PriceCharting set is, is learned from its rows that do have ids (every one
+ * pointing at the same set, at least 3). Candidates: that set's cards with the same number
+ * (`exact` = the name matches too). Suggestions only — staff decide.
+ */
+export function suggestLinks(rows, catalogs, priced = new Set(), skip = new Set(), max = 400) {
+  const byPid = new Map()
+  for (const [catalog, cards] of Object.entries(catalogs)) for (const c of cards) {
+    if (c?.hidden) continue
+    const pid = productIdOf(c)
+    if (pid == null) continue
+    byPid.set(pid, byPid.has(pid) ? null : { catalog, card: c })
+  }
+  const votes = new Map()   // PriceCharting set → Map(our set → rows)
+  for (const row of rows) {
+    const t = rowTcgId(row)
+    const hit = t ? byPid.get(t) : null
+    if (!hit || pcVariantOf(row['product-name']) !== '') continue
+    const con = String(row['console-name'] ?? '').trim()
+    if (!votes.has(con)) votes.set(con, new Map())
+    const k = cardSetKey(hit.catalog, hit.card)
+    votes.get(con).set(k, (votes.get(con).get(k) ?? 0) + 1)
+  }
+  const setOf = new Map()
+  for (const [con, v] of votes) {
+    if (v.size !== 1) continue
+    const [[k, n]] = [...v]
+    if (n >= 3) setOf.set(con, k)
+  }
+  const bySetNumber = new Map()   // "setKey#number" → [{ catalog, card }]
+  for (const [catalog, cards] of Object.entries(catalogs)) for (const c of cards) {
+    if (c?.hidden) continue
+    const k = `${cardSetKey(catalog, c)}#${normPcNumber(c.number)}`
+    if (!bySetNumber.has(k)) bySetNumber.set(k, [])
+    bySetNumber.get(k).push({ catalog, card: c })
+  }
+
+  const out = {}
+  for (const row of rows) {
+    const t = rowTcgId(row)
+    if (t && byPid.get(t)) continue                  // links (or is ambiguous) by id — not ours to suggest
+    const g = rowGraded(row)
+    if (!g || skip.has(g.pcId)) continue
+    const setKey = setOf.get(g.console)
+    if (!setKey) continue
+    const { base, number, variant } = pcNameParts(g.name)
+    if (!number || variant === null || variant === 'holo') continue   // a rarity / art tag we can't place
+    // A plain row is for a card with no graded price yet; a version row ("[Foil]") may also belong
+    // to a card that's priced but doesn't have that version (applyManualLinks checks)
+    const cands = (bySetNumber.get(`${setKey}#${number}`) ?? []).filter(({ catalog, card }) => variant !== '' || !priced.has(`${catalog}:${card.id}`))
+    if (!cands.length || cands.length > 6) continue
+    const catalog = cands[0].catalog
+    ;(out[catalog] ??= []).push({
+      pc: g.pcId, name: g.name, set: g.console, u: g.url, p: g.prices, variant,
+      cards: cands.map(({ card }) => ({
+        id: card.id, name: String(card.name ?? ''), setName: String(card.setName ?? ''), number: String(card.number ?? ''),
+        imageUrl: String(card.imageUrl ?? ''), exact: foldName(card.name) === base,
+      })).sort((a, b) => Number(b.exact) - Number(a.exact)),
+    })
+  }
+  const worth = (i) => i.p.psa10 ?? i.p.g9 ?? Math.max(0, ...Object.values(i.p))
+  for (const k of Object.keys(out)) out[k] = out[k].sort((a, b) => worth(b) - worth(a)).slice(0, max)
+  return out
+}
+
+/** A confirmed link's slot on the card: '' = the card itself, or a version ('foil', '1st' …). A
+ *  version row goes in as that version — unless the card staff picked is itself that version (a
+ *  separate "… (Foil)" card): then it's the card's own price. */
+export function linkSlot(variant, cardName) {
+  if (!variant) return ''
+  return variant === 'foil' && /\bfoil\b/i.test(String(cardName ?? '')) ? '' : variant
+}
+
+/** Applies what staff set (graded_links/{catalog}) to the day's entries — staff always win:
+ *  - `links`: card id → { slot: PriceCharting id }, slot '_' = the card itself (REPLACES whatever
+ *    matched — by TCGplayer id or by set + name + number: how a wrong link is redirected), or a
+ *    version ('foil' …) added or replaced beside it;
+ *  - `blocked`: card id → true — no graded prices at all (a wrong link removed).
+ *  Each PriceCharting row's graded prices are today's; a row gone from the list or without graded
+ *  sales adds nothing. Entries staff set carry via: 'staff'. → new entries, by id. */
+export function applyManualLinks(entries, rows, links, blocked) {
+  const byPc = new Map()
+  for (const row of rows) { const id = String(row.id ?? '').trim(); if (id) byPc.set(id, row) }
+  const out = new Map(entries.map((e) => [e.id, e]))
+  for (const [cardId, slots] of Object.entries(links ?? {})) {
+    const own = slots?._ ? rowGraded(byPc.get(String(slots._)) ?? {}) : null
+    if (own) {
+      const have = out.get(cardId)
+      out.set(cardId, { id: cardId, pc: own.pcId, u: own.url, p: own.prices, ...(have?.v && { v: have.v }), via: 'staff' })
+    }
+    for (const [slot, pc] of Object.entries(slots ?? {})) {
+      if (!GRADED_VARIANTS.includes(slot)) continue
+      const g = pc ? rowGraded(byPc.get(String(pc)) ?? {}) : null
+      if (!g) continue
+      const base = out.get(cardId) ?? { id: cardId, pc: g.pcId, u: g.url, p: {}, via: 'staff' }
+      out.set(cardId, { ...base, v: { ...base.v, [slot]: { p: g.prices, u: g.url } } })
+    }
+  }
+  for (const [cardId, on] of Object.entries(blocked ?? {})) if (on) out.delete(cardId)
+  return [...out.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
+// ── Automatic backup matching (2026-11-21, the Owner's call) ────────────────────────────────────
+// The same set + name + number match as suggestLinks, but applied without asking — only where it's
+// unambiguous (one PriceCharting row, one of our cards, a card PriceCharting doesn't list under its
+// own TCGplayer id, not already priced) and only for catalogs whose daily self-check (validateBackup)
+// is nearly perfect (BACKUP_MAX_WRONG). Measured 2026-11-21 replaying rows that do have ids: Pokémon
+// 7 wrong of 11,530, Japanese 3 of 11,829, Lorcana 0 of 372, Gundam 0 of 53 — on; Magic 137 of
+// 3,245 and Riftbound 2 of 76 — off (suggestions only). Entries made this way carry via: 'match',
+// are listed on the Graded links page to check, and staff can unlink or relink any of them.
+
+/** The largest share of wrong answers in the self-check that still lets a catalog use it */
+export const BACKUP_MAX_WRONG = 0.001
+
+/** rows, catalogs, priced ("catalog:id" set) → [{ catalog, id, pc, u, p }]. hiddenPids: product ids
+ *  to treat as unknown (validateBackup) */
+export function backupMatch(rows, catalogs, priced = new Set(), hiddenPids = new Set()) {
+  const pidOf = (c) => { const p = productIdOf(c); return p != null && hiddenPids.has(p) ? null : p }
+  const byPid = new Map()
+  for (const [catalog, cards] of Object.entries(catalogs)) for (const c of cards) {
+    if (c?.hidden) continue
+    const pid = pidOf(c)
+    if (pid == null) continue
+    byPid.set(pid, byPid.has(pid) ? null : { catalog, card: c })
+  }
+  const pidsOnPc = new Set()
+  for (const row of rows) { const t = rowTcgId(row); if (t && !hiddenPids.has(t)) pidsOnPc.add(t) }
+  const votes = new Map()
+  for (const row of rows) {
+    const t = rowTcgId(row)
+    const hit = t ? byPid.get(t) : null
+    if (!hit || pcVariantOf(row['product-name']) !== '') continue
+    const con = String(row['console-name'] ?? '').trim()
+    if (!votes.has(con)) votes.set(con, new Map())
+    const k = cardSetKey(hit.catalog, hit.card)
+    votes.get(con).set(k, (votes.get(con).get(k) ?? 0) + 1)
+  }
+  const setOf = new Map()
+  for (const [con, v] of votes) {
+    if (v.size !== 1) continue
+    const [[k, n]] = [...v]
+    if (n >= 3) setOf.set(con, k)
+  }
+  const ours = new Map()
+  for (const [catalog, cards] of Object.entries(catalogs)) for (const c of cards) {
+    if (c?.hidden) continue
+    const k = `${cardSetKey(catalog, c)}#${normPcNumber(c.number)}#${foldName(c.name)}`
+    if (!ours.has(k)) ours.set(k, [])
+    ours.get(k).push({ catalog, card: c })
+  }
+  const pcPlain = new Map()
+  for (const row of rows) {
+    const { base, number, variant } = pcNameParts(row['product-name'])
+    if (variant !== '' || !number) continue
+    const k = `${String(row['console-name'] ?? '').trim()}#${number}#${base}`
+    pcPlain.set(k, (pcPlain.get(k) ?? 0) + 1)
+  }
+  const found = new Map()
+  for (const row of rows) {
+    const t = rowTcgId(row)
+    if (t && !hiddenPids.has(t)) continue
+    const g = rowGraded(row)
+    if (!g) continue
+    const { base, number, variant } = pcNameParts(g.name)
+    if (variant !== '' || !number || !base) continue
+    const setKey = setOf.get(g.console)
+    if (!setKey) continue
+    if (pcPlain.get(`${g.console}#${number}#${base}`) !== 1) continue
+    const cands = ours.get(`${setKey}#${number}#${base}`) ?? []
+    if (cands.length !== 1) continue
+    const { catalog, card } = cands[0]
+    const key = `${catalog}:${card.id}`
+    if (priced.has(key)) continue
+    const pid = pidOf(card)
+    if (pid != null && pidsOnPc.has(pid)) continue   // PriceCharting lists this card under its own id — this row is something else
+    found.set(key, found.has(key) ? null : { catalog, id: card.id, pc: g.pcId, u: g.url, p: g.prices })
+  }
+  return [...found.values()].filter(Boolean)
+}
+
+/**
+ * The daily self-check: rows that DO carry a TCGplayer id, replayed with the id hidden (a fifth at a
+ * time, whole products together) and compared with what the id says → { catalog: { right, wrong,
+ * examples } }. Backup matching is used only where wrong / (right + wrong) ≤ BACKUP_MAX_WRONG.
+ */
+export function validateBackup(rows, catalogs) {
+  const byPid = new Map()
+  for (const [catalog, cards] of Object.entries(catalogs)) for (const c of cards) {
+    if (c?.hidden) continue
+    const pid = productIdOf(c)
+    if (pid == null) continue
+    byPid.set(pid, byPid.has(pid) ? null : `${catalog}:${c.id}`)
+  }
+  const out = {}
+  for (const catalog of Object.keys(catalogs)) out[catalog] = { right: 0, wrong: 0, examples: [] }
+  const FOLDS = 5
+  for (let f = 0; f < FOLDS; f++) {
+    const truth = new Map()
+    const hiddenPids = new Set()
+    for (const row of rows) {
+      const t = rowTcgId(row)
+      if (!t || t % FOLDS !== f) continue
+      hiddenPids.add(t)
+      const k = byPid.get(t)
+      if (k && pcVariantOf(row['product-name']) === '') truth.set(String(row.id ?? '').trim(), k)
+    }
+    for (const l of backupMatch(rows, catalogs, new Set(), hiddenPids)) {
+      const want = truth.get(l.pc)
+      if (!want) continue
+      const got = `${l.catalog}:${l.id}`
+      const o = out[l.catalog]
+      if (got === want) o.right++
+      else { o.wrong++; if (o.examples.length < 5) o.examples.push(`PriceCharting ${l.pc} → ${got}, but its TCGplayer id says ${want}`) }
+    }
+  }
+  return out
+}
+
+/** Which catalogs may use backup matching today, from the self-check */
+export function backupAllowed(check) {
+  return new Set(Object.entries(check).filter(([, o]) => o.right >= 20 && o.wrong / (o.right + o.wrong) <= BACKUP_MAX_WRONG).map(([k]) => k))
+}

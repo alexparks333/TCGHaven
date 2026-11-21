@@ -332,7 +332,9 @@ export async function redeemPromo(uid: string, email: string | null, raw: string
   const usedRefs = (await redemptionIds(uid, email)).map((id) => doc(db, 'promo_redemptions', id))
   return runTransaction(db, async (tx) => {
     const [c, e, ...used] = await Promise.all([tx.get(codeRef), tx.get(entRef), ...usedRefs.map((r) => tx.get(r))])
-    if (!c.exists()) throw new PromoRefused('That code doesn’t exist.')
+    // One answer for a code that doesn't exist, has expired, is used up or is switched off — so
+    // nobody can find real codes by trying names and reading the messages (security review 2026-11-21)
+    if (!c.exists()) throw new PromoRefused(CODE_UNUSABLE)
     const d = c.data()
     const promo: PromoCode = {
       code, kind: d.kind === 'gift' ? 'gift' : 'starter', months: Number(d.months) || 1,
@@ -341,7 +343,7 @@ export async function redeemPromo(uid: string, email: string | null, raw: string
       note: '', createdAt: 0, createdBy: '',
     }
     const status = promoStatus(promo)
-    if (status !== 'active') throw new PromoRefused(status === 'expired' ? 'That code has expired.' : status === 'used up' ? 'That code has been used up.' : 'That code isn’t active.')
+    if (status !== 'active') throw new PromoRefused(CODE_UNUSABLE)
 
     const history = used.map((u) => u.data() ?? {})
     const codesUsed = new Set(history.flatMap((h) => (Array.isArray(h.codes) ? (h.codes as string[]) : [])))
@@ -375,5 +377,7 @@ export async function redeemPromo(uid: string, email: string | null, raw: string
     return { until: until.getTime(), kind: promo.kind }
   })
 }
+
+const CODE_UNUSABLE = 'That code can’t be used — check it and try again.'
 
 export class PromoRefused extends Error {}

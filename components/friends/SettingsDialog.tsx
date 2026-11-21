@@ -126,18 +126,20 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
       <div
         role="dialog"
         aria-label="Settings"
-        className="add-card-panel relative w-full md:max-w-[27.5rem] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl overflow-hidden"
+        // Never taller than the screen: the title and X stay put, the rest scrolls (a short window
+        // used to cut off the top and bottom with no way to reach them — 2026-11-21)
+        className="add-card-panel relative w-full md:max-w-[27.5rem] card-glass bg-slate-900 rounded-t-3xl md:rounded-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-env(safe-area-inset-top)-0.75rem)] md:max-h-[calc(100dvh-2rem)]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        <div className="md:hidden mx-auto mt-2 mb-1 w-10 h-1 rounded-full bg-slate-700" />
-        <div className="flex items-center justify-between px-5 pt-3 md:pt-5 pb-4">
+        <div className="md:hidden mx-auto mt-2 mb-1 w-10 h-1 rounded-full bg-slate-700 shrink-0" />
+        <div className="flex items-center justify-between px-5 pt-3 md:pt-5 pb-4 shrink-0">
           <h2 className="text-lg font-bold text-ink">Settings</h2>
           <button onClick={onClose} aria-label="Close" className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-ink hover:bg-slate-800 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-5 pb-5 flex flex-col gap-4">
+        <div className="px-5 pb-5 flex flex-col gap-4 overflow-y-auto overscroll-contain min-h-0">
           {/* Who you're signed in as */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-950 border border-slate-800">
             {/* Your photo: tap to change it */}
