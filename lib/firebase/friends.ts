@@ -105,6 +105,38 @@ function slugify(s: string): string {
 
 // ── Profiles ────────────────────────────────────────────────────────────────────────────────
 
+// The username picked on the sign-up page, kept until the new account's profile is made
+// (ensureProfile) — the account is created first, the profile right after it signs in.
+const WANTED_USERNAME_KEY = 'tcghaven_wanted_username'
+
+/** A username from the sign-up box ("@Alex.Parks" → "alex.parks"), or null if it isn't one */
+export function cleanUsername(raw: string): string | null {
+  const name = raw.trim().replace(/^@/, '').toLowerCase()
+  return USERNAME_RE.test(name) ? name : null
+}
+
+/** The sign-up page: remember the username they picked for the profile about to be made */
+export function wantUsername(raw: string): void {
+  const name = cleanUsername(raw)
+  try { if (name) sessionStorage.setItem(WANTED_USERNAME_KEY, name); else sessionStorage.removeItem(WANTED_USERNAME_KEY) } catch { /* private mode: a made-up one */ }
+}
+
+function takeWantedUsername(): string | null {
+  try {
+    const name = sessionStorage.getItem(WANTED_USERNAME_KEY)
+    sessionStorage.removeItem(WANTED_USERNAME_KEY)
+    return name && USERNAME_RE.test(name) ? name : null
+  } catch { return null }
+}
+
+/** Is this username free? (The sign-up page checks as they type — usernames are readable one at a
+ *  time by anyone: a profile's address is public anyway.) null when it couldn't check. */
+export async function usernameFree(raw: string): Promise<boolean | null> {
+  const name = cleanUsername(raw)
+  if (!name) return false
+  try { return !(await getDoc(doc(db, 'usernames', name))).exists() } catch { return null }
+}
+
 /**
  * Makes sure the signed-in user has a profile (creating one with a free username the first
  * time) and keeps its name/photo in step with their account. Returns the profile.
@@ -129,10 +161,13 @@ export async function ensureProfile(user: User): Promise<Profile> {
     }
     return { ...(toProfile(user.uid, d) as Profile), displayName }
   }
+  // The username they picked on the sign-up page (wantUsername), when it's still free; otherwise
+  // one made from their name, with digits added if it's taken (they can change it in Settings)
+  const wanted = takeWantedUsername()
   let base = slugify(user.displayName || '') || slugify(user.email?.split('@')[0] || '') || 'collector'
   if (base.length < 3) base = (base + 'collector').slice(0, 15)
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const username = attempt === 0 ? base : `${base}${Math.floor(Math.random() * (attempt < 3 ? 1000 : 100000))}`
+  for (let attempt = wanted ? -1 : 0; attempt < 6; attempt++) {
+    const username = attempt === -1 ? wanted! : attempt === 0 ? base : `${base}${Math.floor(Math.random() * (attempt < 3 ? 1000 : 100000))}`
     if ((await getDoc(doc(db, 'usernames', username))).exists()) continue
     const batch = writeBatch(db)
     batch.set(doc(db, 'usernames', username), { uid: user.uid })

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Mail, Lock, User, KeyRound, AlertCircle, Loader2 } from 'lucide-react'
+import { Mail, Lock, User, KeyRound, AlertCircle, Loader2, AtSign, Check } from 'lucide-react'
+import { cleanUsername, usernameFree, wantUsername } from '@/lib/firebase/friends'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { afterSignIn, nextQuery } from '@/lib/authRedirect'
 import { friendlyAuthError } from '@/lib/auth-errors'
@@ -17,11 +18,26 @@ export default function SignupPage() {
   const [passcodeError, setPasscodeError] = useState('')
   const [passcodeChecking, setPasscodeChecking] = useState(false)
   const [name, setName] = useState('')
+  // The @username: follows the display name ("Alex Parks" → alexparks) until they type their own
+  const [username, setUsername] = useState('')
+  const [usernameEdited, setUsernameEdited] = useState(false)
+  const [free, setFree] = useState<boolean | null>(null)   // null = checking / couldn't check
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+
+  const suggested = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 20)
+  const handle = usernameEdited ? username : suggested
+  const validHandle = cleanUsername(handle)
+  useEffect(() => {
+    setFree(null)
+    if (!validHandle) return
+    let live = true
+    const t = setTimeout(() => { usernameFree(validHandle).then((f) => { if (live) setFree(f) }) }, 350)
+    return () => { live = false; clearTimeout(t) }
+  }, [validHandle])
 
   async function handlePasscodeSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -39,9 +55,12 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    if (!validHandle) { setError('Usernames are 3–20 letters, numbers, _ or .'); return }
+    if (free === false) { setError(`@${validHandle} is taken — try another username.`); return }
     setError('')
     setLoading(true)
     try {
+      wantUsername(validHandle)   // the profile made right after sign-up takes it (lib/firebase/friends.ts)
       await signUp(email, password, name)
       router.replace(afterSignIn())
     } catch (err: unknown) {
@@ -55,6 +74,8 @@ export default function SignupPage() {
     setError('')
     setGoogleLoading(true)
     try {
+      // A username typed in the form below is used for a new Google account too
+      if (validHandle && free !== false) wantUsername(validHandle)
       await signInWithGoogle()
       router.replace(afterSignIn())
     } catch (err: unknown) {
@@ -149,6 +170,31 @@ export default function SignupPage() {
               placeholder="Display name"
               className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
             />
+          </div>
+          <div>
+            <div className="relative">
+              <AtSign size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                required
+                value={handle}
+                onChange={(e) => { setUsernameEdited(true); setUsername(e.target.value.replace(/^@/, '').toLowerCase()) }}
+                placeholder="Username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={20}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-9 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
+              />
+              {validHandle && free === true && <Check size={15} className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600" />}
+            </div>
+            <p className={`text-[0.6875rem] mt-1 ml-1 ${handle && (!validHandle || free === false) ? 'text-red-600' : 'text-slate-500'}`}>
+              {!handle ? 'Your profile link: tcghaven.org/u/yourname'
+                : !validHandle ? '3–20 letters, numbers, _ or .'
+                : free === false ? `@${validHandle} is taken`
+                : free === true ? `tcghaven.org/u/${validHandle} is yours`
+                : `Checking @${validHandle}…`}
+            </p>
           </div>
           <div className="relative">
             <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />

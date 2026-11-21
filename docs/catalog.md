@@ -284,8 +284,11 @@ the collector shell/session for `/admin/*`, and `app/admin/layout.tsx` renders `
   front and on each page change); "Online" = seen in the last 2.5 min, else "Last seen …". Stat tiles:
   members, in the portal now, haven't signed in yet.
 - **Who's staff:** `staff/{uid}` docs `{ name, email, role: 'owner'|'staff', title, mustChangePassword }`.
-  The Owner is `NEXT_PUBLIC_ADMIN_UID`, also hardcoded in `firestore.rules`/`storage.rules` as the
-  root of trust (never lockable-out; their record is created on first portal sign-in). Only the
+  The Owner is `ADMIN_UID` in `lib/firebase/config.ts` (alexparks@tcghaven.org since 2026-11-21 —
+  it was `NEXT_PUBLIC_ADMIN_UID`), also hardcoded in `firestore.rules`/`storage.rules` as the root
+  of trust (never lockable-out; their record is created on first portal sign-in). **The sync bot
+  is a different account** (`ADMIN_EMAIL`, alexparksbot@tcghaven.org — rules `isBot()`): its
+  password lives in Vercel, GitHub and both computers, so it must never be the Owner. Only the
   Owner adds/removes staff (Team page). Adding someone creates a Firebase email/password login with
   a temporary password on a throwaway app instance (so the Owner's session is untouched); the
   employee must choose their own on first sign-in. Removing the `staff` doc revokes access

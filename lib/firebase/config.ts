@@ -30,4 +30,7 @@ export const googleProvider = new GoogleAuthProvider()
 // nav link visibility). Real enforcement is Firestore/Storage security rules, not this check —
 // this only controls what the UI shows; someone bypassing the UI still can't write without
 // matching the same uid server-side.
-export const ADMIN_UID = process.env.NEXT_PUBLIC_ADMIN_UID
+// The Owner: alexparks@tcghaven.org (2026-11-21). Not a secret (firestore.rules names it too), so
+// it lives here rather than in NEXT_PUBLIC_ADMIN_UID, which named the old account that was both the
+// Owner and the sync bot. The sync bot (ADMIN_EMAIL) is a separate account now.
+export const ADMIN_UID: string = 'gTjTFDy9wLWiptuFxhiCLOv8kEa2'

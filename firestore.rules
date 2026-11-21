@@ -16,9 +16,12 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
+    // The Owner (alexparks@tcghaven.org — lib/firebase/config.ts ADMIN_UID). Separate from the sync
+    // bot since 2026-11-21: the bot's password lives in Vercel, GitHub and both computers, so it
+    // must never be enough to act as the Owner.
     function isOwner() {
       return signedIn() && (
-        request.auth.uid == 'kOVse5dvMDOSkxlitTAh1Q99sJD3' ||
+        request.auth.uid == 'gTjTFDy9wLWiptuFxhiCLOv8kEa2' ||
         (exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'owner')
       );
@@ -42,10 +45,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && (
-        request.auth.uid in ['kOVse5dvMDOSkxlitTAh1Q99sJD3'] ||
-        isStaff()
-      );
+      return signedIn() && (isBot() || isOwner() || isStaff());
     }
 
     // Staff list. Staff can see the team; only the Owner adds or removes people (and can't
@@ -163,11 +163,11 @@ service cloud.firestore {
     }
 
     // ── Usage statistics (lib/usage.ts, lib/stats/aggregate.ts) ──────────────────────────────
-    // The sync bot account that runs the server jobs, including the nightly Statistics totals: the
-    // account ADMIN_EMAIL signs in as (lib/firebase/adminAuth.ts) — kOVse…, the first of isAdmin()'s
-    // two. It named the other one until 2026-11-14, so the totals job was refused every run since
-    // it was added (2026-11-09; the sync-prices workflow's "Call stats endpoint" step failed).
-    function isBot() { return signedIn() && request.auth.uid == 'kOVse5dvMDOSkxlitTAh1Q99sJD3'; }
+    // The sync bot account that runs the server jobs (syncs, prices, Statistics totals): the account
+    // ADMIN_EMAIL signs in as (lib/firebase/adminAuth.ts) — alexparksbot@tcghaven.org (C0Two…) since
+    // 2026-11-21. kOVse… (the Owner's personal account, the bot before that) stays a bot ONLY until
+    // ADMIN_EMAIL / ADMIN_PASSWORD are switched in Vercel, GitHub and .env.local — then remove it.
+    function isBot() { return signedIn() && request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'kOVse5dvMDOSkxlitTAh1Q99sJD3']; }
 
     // One doc per account per day, written by that account's own app (increments only). NOBODY
     // reads them but the totals job — not staff, not the Owner: staff see daily totals only.
@@ -380,7 +380,10 @@ service cloud.firestore {
     // rename keeps your last 3 old names (still yours, old links still find you); the app deletes
     // older ones, which frees them for anyone.
     match /usernames/{name} {
-      allow read: if signedIn();
+      // One at a time by anyone (the sign-up page checks a name is free before the account exists;
+      // /u/{name} is a public address anyway); listing them all stays signed-in only
+      allow get: if true;
+      allow list: if signedIn();
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid && notBanned()
         && request.resource.data.keys().hasOnly(['uid'])
         && name.matches('^[a-z0-9_.]{3,20}$');
