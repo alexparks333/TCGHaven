@@ -8,15 +8,14 @@ rules_version = '2';
 
 service firebase.storage {
   // Hard-coded accounts below: the sync bot (C0Two… alexparksbot@tcghaven.org), the Owner
-  // (gTjTF… alexparks@tcghaven.org), and kOVse… — the old bot, until its sign-in is
-  // switched everywhere (then remove it). firestore.rules isBot / isOwner.
+  // (gTjTF… alexparks@tcghaven.org). firestore.rules isBot / isOwner.
   match /b/{bucket}/o {
     // Badge files (pin art, 3D models, normal maps, Relief Studio kits in kit-{time}/ subfolders)
     // uploaded from the staff portal's Badges page.
     match /badges/{badgeId}/{path=**} {
       allow read: if true;
       allow write: if request.auth != null && (
-        request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2', 'kOVse5dvMDOSkxlitTAh1Q99sJD3'] ||
+        request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2'] ||
         firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid))
       ) && request.resource.size < 25 * 1024 * 1024;
     }
@@ -29,7 +28,7 @@ service firebase.storage {
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.size < 25 * 1024 * 1024
         && (
-          request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2', 'kOVse5dvMDOSkxlitTAh1Q99sJD3'] ||
+          request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2'] ||
           firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid)) ||
           (firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.role == 'creator' &&
            firestore.get(/databases/(default)/documents/account_roles/$(request.auth.uid)).data.get('suspended', false) != true &&
@@ -54,7 +53,7 @@ service firebase.storage {
     match /catalog/{game}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null && (
-        request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2', 'kOVse5dvMDOSkxlitTAh1Q99sJD3'] ||
+        request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2'] ||
         firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid))
       );
     }

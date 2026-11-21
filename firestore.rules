@@ -165,9 +165,8 @@ service cloud.firestore {
     // ── Usage statistics (lib/usage.ts, lib/stats/aggregate.ts) ──────────────────────────────
     // The sync bot account that runs the server jobs (syncs, prices, Statistics totals): the account
     // ADMIN_EMAIL signs in as (lib/firebase/adminAuth.ts) — alexparksbot@tcghaven.org (C0Two…) since
-    // 2026-11-21. kOVse… (the Owner's personal account, the bot before that) stays a bot ONLY until
-    // ADMIN_EMAIL / ADMIN_PASSWORD are switched in Vercel, GitHub and .env.local — then remove it.
-    function isBot() { return signedIn() && request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'kOVse5dvMDOSkxlitTAh1Q99sJD3']; }
+    // 2026-11-21. The Owner's personal account (kOVse…), the bot before that, has no special access.
+    function isBot() { return signedIn() && request.auth.uid == 'C0TwoasKIChjBAUSDgywKVt0Sho1'; }
 
     // One doc per account per day, written by that account's own app (increments only). NOBODY
     // reads them but the totals job — not staff, not the Owner: staff see daily totals only.
