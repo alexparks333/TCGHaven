@@ -1,12 +1,19 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { signedInOnlyPath } from './Sidebar'
 import { hideLaunchScreen } from '@/lib/nativeApp'
-import { LOGO_FRAMES, LOGO_FRAME_MS, splashFrame } from '@/lib/logoFrames'
+import { LOGO_FRAMES, LOGO_FRAME_MS, SPLASH_VIDEO, splashFrame } from '@/lib/logoFrames'
 
+// 2026-11-21: it's a VIDEO now (public/splash/splash.mp4, the same 21 frames —
+// scripts/splash/make-splash-video.swift). Even the stacked frames below still stuttered mid-animation
+// on the TestFlight app; a video plays on the phone's video hardware, apart from the page, so the app
+// loading underneath can't hold it up. The whole file is fetched first (preloaded in app/layout.tsx)
+// and played from memory — iPhone otherwise streams a video only once it's told to play. If it can't
+// be read or played in time, the picture frames below play instead (the old way, unchanged).
+//
 // Phones only, once per visit — a splash screen, not a loader: the big doorway animation plays all
 // the way through (cards fly out) over the parchment with the TCGHaven wordmark below, rests on its
 // last frame for a moment, then fades into the app — Sign In for someone signed out, their
@@ -36,6 +43,7 @@ const FRAMES = LOGO_FRAMES
 const FRAME_MS = LOGO_FRAME_MS
 const PLAY_MS = FRAMES * FRAME_MS + 60 // every frame, the last one included
 const REST_MS = 800 // on the finished logo before the fade (2s felt frozen — 2026-11-20)
+const WAIT_FOR_VIDEO_MS = 1500 // then the picture frames instead
 const WAIT_FOR_FRAMES_MS = 3000 // a very slow connection: give up on the animation, not on the hold
 const HOLD_MAX_MS = 6000 // never keep anyone on the logo longer than this from opening
 const FADE_IN_MS = 350 // the logo fades in on its first frame, then plays
@@ -61,6 +69,9 @@ export function SplashIntro() {
   // hold (only if the app isn't ready) → out → done
   const [phase, setPhase] = useState<'wait' | 'in' | 'play' | 'rest' | 'hold' | 'out' | 'done'>('wait')
   const [maxed, setMaxed] = useState(false)
+  const [mode, setMode] = useState<'video' | 'frames'>('video')
+  const video = useRef<HTMLVideoElement>(null)
+  const restWatch = useRef<(() => void) | null>(null)
 
   // Where the app is heading is known once sign-in is known — and, for a signed-out visitor on a
   // sign-in-only page, once AuthGuard has moved them on to Sign In
@@ -77,29 +88,71 @@ export function SplashIntro() {
     // decoded at once and the logo went straight to visible — no fade (2026-11-20). So: wait for the
     // launch screen, then two animation frames (one drawn at opacity 0), then fade.
     let decoded = false, launchGone = false, alive = true
+    let useVideo = true, videoUrl: string | null = null
     const maybePlay = () => { if (alive && decoded && launchGone) requestAnimationFrame(() => requestAnimationFrame(() => { if (alive) play() })) }
     hideLaunchScreen().then(() => { launchGone = true; maybePlay() })
     const onDecoded = () => { decoded = true; maybePlay() }
+    const rest = () => setPhase((p) => (p === 'play' ? 'rest' : p))
     const play = () => {
       if (started) return
       started = true
       setPhase('in')
-      // Then the frames play (the 'playing' class starts their CSS animations) and hold on the last
-      later(FADE_IN_MS, () => setPhase('play'))
-      later(FADE_IN_MS + PLAY_MS, () => setPhase('rest'))
-      later(FADE_IN_MS + PLAY_MS + REST_MS, () => setPhase('hold'))
+      later(FADE_IN_MS, () => {
+        setPhase('play')
+        const v = video.current
+        if (useVideo && v) {
+          // Played through → rest on its last frame (the video stays on it); a play that's refused
+          // or never ends still moves on
+          v.addEventListener('ended', rest, { once: true })
+          v.play().catch(() => later(PLAY_MS, rest))
+          later(PLAY_MS + 700, rest)
+        } else {
+          later(PLAY_MS, rest)
+        }
+      })
     }
-    // Start only once every frame is decoded, so none is drawn half-loaded, late or skipped
-    Promise.all(Array.from({ length: FRAMES }, (_, i) => {
-      const img = new Image()
-      img.src = splashFrame(i)
-      return img.decode().catch(() => new Promise<void>((done) => { img.onload = img.onerror = () => done(); if (img.complete) done() }))
-    })).then(onDecoded)
-    // The frames never came: no animation, but still no flash of a half-ready page
+    // Rest → hold once 'rest' is reached, whichever way
+    const toHold = () => later(REST_MS, () => setPhase((p) => (p === 'rest' ? 'hold' : p)))
+    restWatch.current = toHold
+
+    // The picture frames: only when the video can't be read or played in time
+    const switchToFrames = () => {
+      if (!useVideo || started || !alive) return
+      useVideo = false
+      setMode('frames')
+      // Start only once every frame is decoded, so none is drawn half-loaded, late or skipped
+      Promise.all(Array.from({ length: FRAMES }, (_, i) => {
+        const img = new Image()
+        img.src = splashFrame(i)
+        return img.decode().catch(() => new Promise<void>((done) => { img.onload = img.onerror = () => done(); if (img.complete) done() }))
+      })).then(onDecoded)
+    }
+
+    // The video, whole, from memory
+    fetch(SPLASH_VIDEO, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+      .then((blob) => {
+        const v = video.current
+        if (!alive || !useVideo || !v) return
+        videoUrl = URL.createObjectURL(blob)
+        v.muted = true
+        v.defaultMuted = true
+        const ready = () => { if (useVideo) onDecoded() }
+        v.addEventListener('canplaythrough', ready, { once: true })
+        v.addEventListener('error', switchToFrames, { once: true })
+        v.src = videoUrl
+        v.load()
+      })
+      .catch(switchToFrames)
+    later(WAIT_FOR_VIDEO_MS, () => { if (!decoded) switchToFrames() })
+    // Nothing came at all: no animation, but still no flash of a half-ready page
     later(WAIT_FOR_FRAMES_MS, () => { if (!started) { started = true; setPhase('hold') } })
     later(HOLD_MAX_MS, () => setMaxed(true))
-    return () => { alive = false; timers.forEach(clearTimeout) }
+    return () => { alive = false; timers.forEach(clearTimeout); if (videoUrl) URL.revokeObjectURL(videoUrl) }
   }, [])
+
+  // Resting on the last frame for a moment, then on to hold (the timer is set up in the effect above)
+  useEffect(() => { if (phase === 'rest') restWatch.current?.() }, [phase])
 
   // Played (or gave up waiting) and the page underneath is the right one: fade into it
   useEffect(() => {
@@ -122,8 +175,21 @@ export function SplashIntro() {
         className="flex flex-col items-center gap-5 transition-opacity ease-out"
         style={{ opacity: showLogo ? 1 : 0, transitionDuration: `${FADE_IN_MS}ms` }}
       >
-        {/* Every frame its own layer, stacked with frame 0 on top; each hides at the next frame's time,
-            the last (at the bottom) never does */}
+        {mode === 'video' ? (
+          // The video, played from memory once fully loaded; it stays on its last frame when it ends
+          <div className="relative w-[68vw] max-w-[18rem] aspect-square">
+            <video
+              ref={video}
+              muted
+              playsInline
+              preload="none"
+              disablePictureInPicture
+              className="absolute inset-0 w-full h-full"
+            />
+          </div>
+        ) : (
+        /* The fallback: every frame its own layer, stacked with frame 0 on top; each hides at the next
+           frame's time, the last (at the bottom) never does */
         <div className={`splash-frames relative w-[68vw] max-w-[18rem] aspect-square ${phase === 'wait' || phase === 'in' ? '' : 'playing'}`}>
           {Array.from({ length: FRAMES }, (_, i) => (
             // eslint-disable-next-line @next/next/no-img-element
@@ -138,6 +204,7 @@ export function SplashIntro() {
             />
           ))}
         </div>
+        )}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-text.png" alt="" className="w-[76vw] max-w-[20rem] h-auto object-contain" />
       </div>

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Cinzel } from 'next/font/google'
 import dynamic from 'next/dynamic'
 import './globals.css'
-import { LOGO_FRAMES, splashFrame } from '@/lib/logoFrames'
+import { SPLASH_VIDEO } from '@/lib/logoFrames'
 
 const ClientWrapper = dynamic(
   () => import('@/components/layout/ClientWrapper'),
@@ -42,10 +42,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <head>
-        {/* The phone splash's 21 frames (components/layout/SplashIntro.tsx splashFrame), fetched up front */}
-        {Array.from({ length: LOGO_FRAMES }, (_, i) => (
-          <link key={i} rel="preload" as="image" href={splashFrame(i)} type="image/webp" media="(max-width: 767px)" />
-        ))}
+        {/* The phone splash's video (components/layout/SplashIntro.tsx), fetched up front — the 21 picture
+            frames are only its fallback now, loaded if the video can't play */}
+        <link rel="preload" as="fetch" href={SPLASH_VIDEO} type="video/mp4" crossOrigin="anonymous" media="(max-width: 767px)" />
         {/* LogoLoader (components/LogoLoader.tsx) is the app's loading screen — fetched up front
             so the logo is already there the first time a loader appears, not drawn in late. */}
         <link rel="preload" as="image" href="/logo-anim.webp" type="image/webp" />

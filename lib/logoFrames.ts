@@ -11,3 +11,6 @@ export const LOGO_FRAME_MS = 33
 
 /** The phone splash's frame i — one 720px picture per frame */
 export const splashFrame = (i: number) => `/splash/frame-${String(i).padStart(2, '0')}.webp`
+/** The same 21 frames as one video (scripts/splash/make-splash-video.swift — re-run after re-rendering
+ *  the frames): what the phone splash plays (components/layout/SplashIntro.tsx) */
+export const SPLASH_VIDEO = '/splash/splash.mp4'
