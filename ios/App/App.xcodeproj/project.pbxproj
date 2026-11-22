@@ -92,6 +92,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */;
 			buildPhases = (
+				A1B2C3D4E5F6071829304A5B /* Archive guard: must load www.tcghaven.org */,
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
@@ -161,6 +162,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A1B2C3D4E5F6071829304A5B /* Archive guard: must load www.tcghaven.org */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/App/capacitor.config.json",
+			);
+			name = "Archive guard: must load www.tcghaven.org";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Archive guard (2026-11-21): an Archive must load the real site. npm run ios:dev points the app at\n# this Mac's dev server and that stays until npm run ios:live; build 1 went to TestFlight that way and\n# only worked near the Mac. Runs on Archive only (ACTION=install), never on Run / ios:dev.\nif [ \"$ACTION\" = \"install\" ]; then\n  CFG=\"$SRCROOT/App/capacitor.config.json\"\n  if ! grep -q '\"url\": *\"https://www.tcghaven.org\"' \"$CFG\"; then\n    echo \"error: This archive would load $(grep -o '\"url\": *\"[^\"]*\"' \"$CFG\" | head -1) instead of https://www.tcghaven.org. Run 'npm run ios:live' (or 'npx cap sync ios'), then Archive again.\"\n    exit 1\n  fi\n  if grep -q '\"cleartext\": *true' \"$CFG\"; then\n    echo \"error: This archive allows plain-http (dev server) loading. Run 'npm run ios:live', then Archive again.\"\n    exit 1\n  fi\nfi\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		504EC3001FED79650016851F /* Sources */ = {

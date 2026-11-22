@@ -72,7 +72,10 @@ www.tcghaven.org: a code change shows on the phone in seconds, no push or deploy
 running, the phone unlocked and on the same Wi-Fi, and a new `ios:dev` if the Mac's IP changes. It
 builds with `xcodebuild` and installs with `xcrun devicectl` (the phone is paired), so no Xcode
 clicking. The dev address stays in the app until `npm run ios:live`; an Archive made in between would
-ship it — run `ios:live` first. Info.plist allows plain http on the local network only
+ship it — run `ios:live` first. **Since 2026-11-21 Xcode refuses such an Archive:** the App target's
+first build phase, "Archive guard: must load www.tcghaven.org", fails an Archive (ACTION=install, never
+Run or `ios:dev`) whose `capacitor.config.json` loads anything but `https://www.tcghaven.org` or allows
+plain http — build 1 went to TestFlight pointing at the Mac and only worked near it. Info.plist allows plain http on the local network only
 (`NSAllowsLocalNetworking`) and asks for Local Network access once. The dev origin has its own
 storage, so you sign in again there.
 
