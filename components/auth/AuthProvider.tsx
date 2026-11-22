@@ -178,9 +178,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { user: signedIn } = await signInWithEmailAndPassword(auth, email, password)
     // Employee logins made on the staff portal's Team page are staff-only — they have no
-    // collection, so don't let one into the collector app. (The Owner's account is both.)
+    // collection, so don't let one into the collector app. A staff member who is also a collector
+    // (a profile of their own — the Owner's personal account, 2026-11-21) is both, like the Owner.
     const staff = await getDoc(doc(db, 'staff', signedIn.uid)).catch(() => null)
-    if (staff?.exists() && staff.data().role === 'staff') {
+    const collector = staff?.exists() ? (await getDoc(doc(db, 'profiles', signedIn.uid)).catch(() => null))?.exists() : false
+    if (staff?.exists() && staff.data().role === 'staff' && !collector) {
       await firebaseSignOut(auth)
       throw new Error('This is a staff login. Sign in at tcghaven.org/admin instead.')
     }

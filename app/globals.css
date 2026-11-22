@@ -1469,10 +1469,13 @@
    frame to frame (not switching hard) smooths the fast middle of a 30 fps render on a 120 Hz screen,
    where hard switches read as a stutter at the same spot every time (2026-11-20). Frame 0 is always
    shown; every later one stays once in, so the last (on top) is what remains. */
-.splash-frame { opacity: 0; }
-.splash-frame:first-child { opacity: 1; }
-@keyframes splash-frame-in { from { opacity: 0; } to { opacity: 1; } }
-.splash-frames.playing .splash-frame:not(:first-child) { animation: splash-frame-in 33ms linear forwards; }
+/* Phone splash (SplashIntro.tsx): every frame stacked at full opacity, frame 0 on top, each one
+   hiding on cue to show the one under it. All of them are drawn and on the graphics chip before
+   the play starts — a frame that began invisible (the old fade-IN stack) was only drawn the moment
+   it first showed, mid-animation: the stutter on iPhone (2026-11-21). */
+.splash-frame { opacity: 1; will-change: opacity; transform: translateZ(0); }
+@keyframes splash-frame-out { from { opacity: 1; } to { opacity: 0; } }
+.splash-frames.playing .splash-frame:not(:last-child) { animation: splash-frame-out 33ms linear forwards; }
 
 /* Sideways phone (Tailwind's phoneland): the side menu folded to a strip of icons (Sidebar.tsx
    .is-rail, its fold button). Only with the phone on its side — the class does nothing elsewhere. */

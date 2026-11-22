@@ -19,7 +19,10 @@ import { LOGO_FRAMES, LOGO_FRAME_MS, splashFrame } from '@/lib/logoFrames'
 // already-decoded <img> iPhone Safari puts on screen as it is, with no drawing.
 //
 // The frames are played by the browser's compositor, not stepped from JavaScript: each frame is its
-// own layer, faded in over the one before in its slot by a CSS animation (.splash-frame, globals.css). Stepped by a
+// own layer, all stacked at full opacity with frame 0 on top, and each fades OUT on cue to show the
+// next (.splash-frame, globals.css) — so every frame is drawn before the play, during the fade-in.
+// Fading each one IN over the last (until 2026-11-21) left frames 1–20 invisible, and iPhone Safari
+// only drew each the moment it first showed: still a stutter on the TestFlight app. Stepped by a
 // timer, a frame came late whenever the app underneath was busy loading (the same moment every
 // time), and the old one-row strip (15,120px wide) was cut into tiles by iPhone Safari — the splash
 // stuttered at the same spot on every start (2026-11-20).
@@ -119,7 +122,8 @@ export function SplashIntro() {
         className="flex flex-col items-center gap-5 transition-opacity ease-out"
         style={{ opacity: showLogo ? 1 : 0, transitionDuration: `${FADE_IN_MS}ms` }}
       >
-        {/* Every frame its own layer, stacked; frame 0 shows before the play, the last stays after */}
+        {/* Every frame its own layer, stacked with frame 0 on top; each hides at the next frame's time,
+            the last (at the bottom) never does */}
         <div className={`splash-frames relative w-[68vw] max-w-[18rem] aspect-square ${phase === 'wait' || phase === 'in' ? '' : 'playing'}`}>
           {Array.from({ length: FRAMES }, (_, i) => (
             // eslint-disable-next-line @next/next/no-img-element
@@ -130,7 +134,7 @@ export function SplashIntro() {
               draggable={false}
               decoding="sync"
               className="splash-frame absolute inset-0 w-full h-full"
-              style={{ animationDelay: `${(i - 1) * FRAME_MS}ms` }} // fully in at its own frame time
+              style={{ zIndex: FRAMES - i, animationDelay: `${i * FRAME_MS}ms` }} // gone by frame i + 1's time
             />
           ))}
         </div>
