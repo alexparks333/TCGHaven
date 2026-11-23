@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Mail, Lock, User, KeyRound, AlertCircle, Loader2, AtSign, Check } from 'lucide-react'
+import { Mail, User, KeyRound, AlertCircle, Loader2, AtSign, Check } from 'lucide-react'
+import { PasswordInput } from '@/components/auth/PasswordInput'
 import { cleanUsername, usernameFree, wantUsername } from '@/lib/firebase/friends'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { afterSignIn, nextQuery } from '@/lib/authRedirect'
@@ -24,6 +25,9 @@ export default function SignupPage() {
   const [free, setFree] = useState<boolean | null>(null)   // null = checking / couldn't check
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  // only once they've typed as much as the password, so it doesn't shout mid-typing
+  const mismatch = confirm.length >= password.length && confirm.length > 0 && confirm !== password
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
@@ -55,6 +59,7 @@ export default function SignupPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    if (confirm !== password) { setError('The two passwords don’t match.'); return }
     if (!validHandle) { setError('Usernames are 3–20 letters, numbers, _ or .'); return }
     if (free === false) { setError(`@${validHandle} is taken — try another username.`); return }
     setError('')
@@ -207,16 +212,10 @@ export default function SignupPage() {
               className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
             />
           </div>
-          <div className="relative">
-            <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password (min 6 characters)"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
-            />
+          <PasswordInput value={password} onChange={setPassword} placeholder="Password (min 6 characters)" autoComplete="new-password" />
+          <div>
+            <PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirm password" autoComplete="new-password" invalid={mismatch} />
+            {mismatch && <p className="text-[0.6875rem] mt-1 ml-1 text-red-600">Passwords don’t match</p>}
           </div>
 
           {error && (

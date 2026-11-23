@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
+import { Mail, AlertCircle, Loader2 } from 'lucide-react'
+import { PasswordInput } from '@/components/auth/PasswordInput'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { afterSignIn, nextQuery } from '@/lib/authRedirect'
 import { friendlyAuthError } from '@/lib/auth-errors'
@@ -96,17 +97,7 @@ export default function LoginPage() {
               className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
             />
           </div>
-          <div className="relative">
-            <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-violet-600 transition-colors"
-            />
-          </div>
+          <PasswordInput value={password} onChange={setPassword} placeholder="Password" autoComplete="current-password" />
 
           {error && (
             <div className="flex items-center gap-2 text-red-600 bg-red-100/40 border border-red-200 rounded-xl px-3 py-2 text-xs">

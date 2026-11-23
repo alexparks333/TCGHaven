@@ -185,8 +185,8 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
             className="group flex items-center justify-center outline-none"
             style={box}
           >
-            <span className="banner-hole flex items-center justify-center rounded-full transition-colors" style={{ width: size * 0.9, height: size * 0.9 }}>
-              <Plus size={Math.max(14, size * 0.22)} strokeWidth={1.5} className="text-[#4a321f]/40 group-hover:text-[#4a321f]/75" />
+            <span className="banner-hole flex items-center justify-center rounded-full transition-colors" style={{ width: size * 0.72, height: size * 0.72 }}>
+              <Plus size={Math.max(12, size * 0.18)} strokeWidth={1.5} className="text-[#4a321f]/40 group-hover:text-[#4a321f]/75" />
             </span>
           </Link>
         ) : (
@@ -199,8 +199,8 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
             className="group flex items-center justify-center outline-none"
             style={box}
           >
-            <span className="banner-hole flex items-center justify-center rounded-full transition-colors" style={{ width: size * 0.9, height: size * 0.9 }}>
-              <Plus size={Math.max(14, size * 0.22)} strokeWidth={1.5} className="text-[#4a321f]/40 group-hover:text-[#4a321f]/75" />
+            <span className="banner-hole flex items-center justify-center rounded-full transition-colors" style={{ width: size * 0.72, height: size * 0.72 }}>
+              <Plus size={Math.max(12, size * 0.18)} strokeWidth={1.5} className="text-[#4a321f]/40 group-hover:text-[#4a321f]/75" />
             </span>
           </button>
         ))}
