@@ -99,6 +99,10 @@ tray: ✓ added / ? pick one                     ◀──  the answer
   a scan after 12 s — so the first scans after a quiet spell failed or crawled. Scans now wait for
   the scanner's warm-up call to answer (`lib/scan/scanner.ts` `warmServer`, up to 30 s), get 30 s
   each while the server isn't known to be ready, and the scan route allows 60 s (`maxDuration`).
+  Since 2026-11-23 the app also starts that warm-up as it opens and each time it comes back to the
+  front (`ClientWrapper`), and the Inventory page and scanner reuse it (one shared request; a
+  warm-up answered in the last 3 min counts as warm) — the first scans used to sit on "Waiting…"
+  5–10 s because the warm-up only began when Scan was tapped.
 - **Ready before the first scan:** the app readies the model 4 s after it opens (`ClientWrapper` →
   `prepareScanner()`), and again when the scanner opens (a no-op if ready).
 - **Phone** (`CardFingerprinter`): no model in the app bundle. The site names the version and the

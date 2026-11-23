@@ -76,11 +76,12 @@ export default function InventoryPage() {
   const [canScan, setCanScan] = useState(false)
   const { openPremium } = usePremiumAccess()
   useEffect(() => { setCanScan(inApp()) }, [])
-  // Wake the scanner's matching server while the page is open, so the first scanned card doesn't
-  // wait for it to load the catalogs (~6 s cold; ~0.3 s a card once warm)
+  // Wake the scanner's matching server while the page is open (usually already done as the app
+  // opened — the same warm-up is reused), so the first scanned card doesn't wait for it to load
+  // the catalogs (~14 s cold; ~0.3 s a card once warm)
   useEffect(() => {
     if (!canScan || trackedGames.length === 0) return
-    fetch(`/api/cards/scan?warm=1&games=${trackedGames.join(',')}`).catch(() => {})
+    import('@/lib/scan/scanner').then((m) => m.warmServer(trackedGames)).catch(() => {})
   }, [canScan, trackedGames])
   const [scanned, setScanned] = useState<ScannedCard[] | null>(null)
   async function startScan() {

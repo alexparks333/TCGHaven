@@ -49,6 +49,20 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
     const t = setTimeout(() => { import('@/lib/scan/scanner').then((m) => m.prepareScanner()).catch(() => {}) }, 4000)
     return () => clearTimeout(t)
   }, [])
+  // In the app: wake the scanner's matching server as the app opens and each time it comes back to
+  // the front — a cold one takes ~14 s to load the catalogs, and the first scans used to wait for
+  // it on "Waiting…" (lib/scan/scanner.ts warmServer; ~0.3 s when it's already warm)
+  useEffect(() => {
+    if (!inApp()) return
+    const warm = () => {
+      if (document.visibilityState !== 'visible') return
+      const games = useStore.getState().trackedGames
+      if (games.length) import('@/lib/scan/scanner').then((m) => m.warmServer(games)).catch(() => {})
+    }
+    warm()
+    document.addEventListener('visibilitychange', warm)
+    return () => document.removeEventListener('visibilitychange', warm)
+  }, [])
   // The app opened from the website's "Scan with your phone" QR code: straight to the scanner
   const router = useRouter()
   useEffect(() => onScanLink(() => router.push('/inventory?scan=1')), [router])

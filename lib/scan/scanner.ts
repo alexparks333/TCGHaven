@@ -63,15 +63,39 @@ const MATCH_TIMEOUT_MS = 12000
 // and get COLD_TIMEOUT_MS each while the server isn't known to be ready.
 const WARM_WAIT_MS = 30000
 const COLD_TIMEOUT_MS = 30000
+// A server that answered the warm-up this recently is taken as still warm (a scan's own request
+// counts too). Older than that and the next warm-up asks again — ~0.3 s when it's still warm.
+const WARM_FRESH_MS = 3 * 60 * 1000
 let serverReady: Promise<boolean> = Promise.resolve(false)
+let warmGames = new Set<Game>()
+let warmStarted = 0   // when the current warm-up was sent (0 = none, or it failed)
+let warmOk = 0        // when the server last answered as ready
 
-/** Wakes the server and loads these games' catalogs and picture indexes; scans wait for it */
-function warmServer(games: Game[]): void {
+/** Wakes the server and loads these games' catalogs and picture indexes; scans wait for it.
+ *  Called as the app opens and comes back to the front (ClientWrapper), on the Inventory page and
+ *  when the scanner opens — all share one request: a warm-up still under way, or one answered in
+ *  the last WARM_FRESH_MS that covered these games, is reused instead of sending another (on a cold
+ *  server a second one just waits for the same ~14 s load). The earlier it starts, the less the
+ *  first scans wait — they used to sit on "Waiting…" for 5–10 s (2026-11-23). */
+export function warmServer(games: Game[]): Promise<boolean> {
+  const now = Date.now()
+  const covered = games.every((g) => warmGames.has(g))
+  const inFlight = warmStarted > 0 && warmOk < warmStarted && now - warmStarted < WARM_WAIT_MS
+  if (covered && (inFlight || now - warmOk < WARM_FRESH_MS)) return serverReady
+  // a warm-up for other games still under way: load both sets together
+  warmGames = new Set(inFlight ? Array.from(warmGames).concat(games) : games)
+  warmStarted = now
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), WARM_WAIT_MS)
-  serverReady = fetch(`/api/cards/scan?warm=1&games=${games.join(',')}`, { signal: ctrl.signal })
+  const started = now
+  serverReady = fetch(`/api/cards/scan?warm=1&games=${Array.from(warmGames).join(',')}`, { signal: ctrl.signal })
     .then((r) => r.ok, () => false)
+    .then((ok) => {
+      if (warmStarted === started) { if (ok) warmOk = Date.now(); else warmStarted = 0 }
+      return ok
+    })
     .finally(() => clearTimeout(timer))
+  return serverReady
 }
 
 function trayOption(m: ScanMatch & { final?: number; distance?: number | null }, slab: ScanSlab | null): TrayOption {
@@ -164,6 +188,7 @@ async function fetchCandidates(scanId: string, lines: OcrLine[], games: Game[], 
       if (res.status === 402) { limitHit = true; throw new ScanLimit() }
       busy = res.status === 503
       if (!res.ok) throw busy ? new ScannerBusy() : new Error(`scan match ${res.status}`)
+      warmOk = Date.now()   // it answered: still warm
       return (await res.json()) as { candidates: ScanMatch[]; slab: ScanSlab | null }
     } catch (err) {
       // a dropped connection on a phone is common: one retry. Busy: two more, a moment apart (the
