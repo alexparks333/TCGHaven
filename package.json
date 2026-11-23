@@ -29,6 +29,7 @@
     "pokemon-source-report": "node scripts/pokemon-source-report.mjs",
     "test:snapshot": "node scripts/lib/snapshot-codec.test.mjs",
     "test:pricecharting": "node scripts/lib/pricecharting.test.mjs",
+    "test:riftbound-tcgplayer": "node scripts/lib/riftbound-tcgplayer.test.mjs",
     "pricecharting-sync": "node scripts/pricecharting-sync.mjs",
     "optimize-pin": "npx -y @gltf-transform/cli@4.5.1 optimize --compress meshopt --texture-compress webp --texture-size 2048 --simplify false",
     "scanner-index": "node scripts/scanner-index.mjs",

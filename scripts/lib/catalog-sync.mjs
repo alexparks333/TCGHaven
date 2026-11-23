@@ -30,6 +30,7 @@ import {
   dayDocId, encodePriceMap, decodePriceChunks, mergeFirsts,
 } from './price-history.mjs'
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
+import { tcgKey, signatureNumberFixes, isUltimate } from './riftbound-tcgplayer.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
 import { buildOnePieceCatalog, productsFromRows as opProductsFromRows } from './onepiece-tcgplayer.mjs'
 import { YUGIOH_CATEGORY, buildYugiohCatalog, productsFromRows as ygoProductsFromRows } from './yugioh-tcgplayer.mjs'
@@ -1529,25 +1530,7 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
   return { newSets, newPlacements, returned }
 }
 
-// Build lookup key for a TCGPlayer product
-// extNumber examples: "007a/298" (alt-art), "227/221" (overnumber), "227*/221" (signature),
-// "SP3/006" (a distinct foil-only "Special" promo subset introduced in Vendetta — its own
-// numbering line, unrelated to any plain-numbered card that happens to share the digit).
-function tcgKey(setCode, extNumber, name) {
-  const spMatch = extNumber.match(/^SP(\d+)\//i)
-  if (spMatch) return `${setCode}:sp${parseInt(spMatch[1], 10)}`
-  const m = extNumber.match(/^(\d+)([a*]?)\//)
-  if (!m) return null
-  const num = String(parseInt(m[1], 10))
-  const suffix = m[2]
-  const isSig = suffix === '*' || name.includes('(Signature)')
-  const isAlt = suffix === 'a' || name.includes('(Alternate Art)')
-  const isOver = name.includes('(Overnumbered)')
-  if (isSig) return `${setCode}:${num}:star`
-  if (isAlt) return `${setCode}:${num}:altart`
-  if (isOver) return `${setCode}:${num}:over`
-  return `${setCode}:${num}:regular`
-}
+// The lookup key for a TCGPlayer product: tcgKey() in riftbound-tcgplayer.mjs (tested there)
 
 // Build lookup key for a catalog card
 function catalogKey(card) {
@@ -1557,7 +1540,7 @@ function catalogKey(card) {
   const spMatch = (card.publicCode ?? '').match(/-SP(\d+)\//i)
   if (spMatch) return `${card.setCode}:sp${parseInt(spMatch[1], 10)}`
   const isStar = card.id.includes('-star-')
-  const isOvernumbered = card.rarity === 'Overnumbered' || card.rarity === 'Showcase'
+  const isOvernumbered = card.rarity === 'Overnumbered' || card.rarity === 'Ultimate' || card.rarity === 'Showcase'
   // publicCode like "OGN-007a/298" → has 'a/' means same-number alt-art. This must NOT depend
   // on rarity === 'Alt Art'/'Showcase' — some sets' alt-arts (e.g. Vendetta) keep the base
   // card's rarity (Epic, etc.) on the gallery side, with the "a" suffix in publicCode as the
@@ -1591,15 +1574,19 @@ async function fetchRiftboundPrices() {
       if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${setCode} failed: ${res.status}`); continue }
       const text = await res.text()
       // Read by column name, not position — TCGplayer's column order isn't fixed across groups.
-      for (const row of parseCsv(text)) {
+      const rows = parseCsv(text)
+      // Signatures TCGplayer lists under another card's number (riftbound-tcgplayer.mjs)
+      const sigFixes = signatureNumberFixes(rows)
+      for (const row of rows) {
         const name       = row.name ?? ''
         const tcgImg     = tcgPhoto(row)
         const lowPrice    = parseFloat(row.lowPrice) || 0
         const marketPrice = parseFloat(row.marketPrice) || 0
         const subType    = row.subTypeName ?? ''   // 'Normal' or 'Foil'
         const extRarity  = row.extRarity ?? ''
-        const extNumber  = row.extNumber ?? ''
+        const extNumber  = sigFixes.get(String(row.productId)) ?? row.extNumber ?? ''
         if (!extNumber || !name) continue
+        if (sigFixes.has(String(row.productId))) console.log(`   ${setCode}: "${name}" is listed as ${row.extNumber} on TCGplayer — priced as ${extNumber}`)
 
         // Rune cards: R01, R01a, R01b, R02, ... R06b
         const runeMatch = extNumber.match(/^(R\d+)([a-b]?)$/)
@@ -1644,6 +1631,7 @@ async function fetchRiftboundPrices() {
         if (!key) continue
         const entry = prices.get(key) ?? { normal: 0, foil: 0, lowNormal: 0, lowFoil: 0, img: '', rarity: '' }
         if (extRarity) entry.rarity = extRarity
+        if (isUltimate(name)) entry.ultimate = true
         // The TCGplayer product, saved on the card as tcgProductId — how PriceCharting's graded
         // prices are matched (docs/PriceCharting.md). Two products under one key = can't tell: none.
         const pid = Number(row.productId)
@@ -1793,6 +1781,10 @@ export async function downloadRiftbound() {
           card.rarity = p.rarity
         }
         if (p.productId) card.tcgProductId = p.productId
+        // An Ultimate is its own card type, not an Overnumbered — Riot's gallery doesn't say so
+        // (it calls Baron Nashor #238 "Epic", Packed Amphitheater #184 "Showcase"); TCGplayer's
+        // "(Ultimate)" does.
+        if (p.ultimate && card.rarity === 'Overnumbered') card.rarity = 'Ultimate'
       }
       return card
     })
@@ -1863,7 +1855,7 @@ export async function downloadRiftbound() {
     // version of THAT art, not a separate plain card, so fall back to allowing it once no plain
     // sibling exists (still never cloning from an existing Star, to avoid double-synthesis).
     const notStar = (c) => c.setCode === setCode && String(parseInt(c.number, 10)) === num && c.rarity !== 'Star' && !c.id.includes('-star')
-    const baseCard = all.find((c) => notStar(c) && c.rarity !== 'Alt Art' && c.rarity !== 'Overnumbered') ?? all.find(notStar)
+    const baseCard = all.find((c) => notStar(c) && c.rarity !== 'Alt Art' && c.rarity !== 'Overnumbered' && c.rarity !== 'Ultimate') ?? all.find(notStar)
     if (!baseCard) continue
     const starCard = {
       ...baseCard,

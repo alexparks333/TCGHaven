@@ -251,7 +251,8 @@ export const CARDEX_RARITY_ORDER: Record<string, number> = {
   // Riftbound: 'Alt Art' (same-number foil-only print) and 'Overnumbered' (collector number
   // exceeds the set's card count) — both formerly flattened to a single 'Showcase' rarity
   // value; that key is kept as a fallback for any doc a resync hasn't touched yet.
-  'Alt Art': 90, Overnumbered: 90, Showcase: 90, Star: 91,
+  // 'Ultimate' (2026-11-23): its own above-the-set card type (Baron Nashor #238), rarer still.
+  'Alt Art': 90, Overnumbered: 90, Showcase: 90, Star: 91, Ultimate: 91.5,
   // Riftbound promos built straight from TCGplayer for products Riot's gallery never lists
   // (Worlds bundles etc. — catalog-sync.mjs's fetchTcgplayerOnlyRiftboundSets()).
   'Event Promo': 92, Metal: 93,

@@ -21,6 +21,7 @@ const ZOOM_GLOW_COLORS: Partial<Record<Game, Record<string, string>>> = {
     Rare: '#5e3a4a',         // dark purple
     Epic: '#a8861e',         // gold/yellow
     Overnumbered: '#a8861e', // gold/yellow
+    Ultimate: '#a8861e',     // gold/yellow
     Star: '#a8861e',         // gold/yellow (Overnumbered Signature)
   },
 }
@@ -167,7 +168,7 @@ export function riftboundVariantFlags(rarity: string | undefined, publicCode?: s
   const isSameNumAltCode = !isStar && (publicCode ?? '').includes('a/')
   const pubNums = (publicCode ?? '').match(/-(\d+)[a-zA-Z]?\*?\/(\d+)/)
   const isOvernumber = !isStar && !isSameNumAltCode
-    && (rarity === 'Overnumbered' || (!!pubNums && parseInt(pubNums[1], 10) > parseInt(pubNums[2], 10)))
+    && (rarity === 'Overnumbered' || rarity === 'Ultimate' || (!!pubNums && parseInt(pubNums[1], 10) > parseInt(pubNums[2], 10)))
   const isAltArtShowcase = !isStar && !isOvernumber && (isSameNumAltCode || rarity === 'Alt Art' || rarity === 'Showcase')
   return { isStar, isOvernumber, isAltArtShowcase }
 }

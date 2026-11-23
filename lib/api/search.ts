@@ -188,6 +188,7 @@ async function searchCardsUncapped(game: Game, query: string, onlyId?: string, l
       else if (isLegend && isOvernumber) suffix = ' · Legend Overnumbered'
       else if (isLegend) suffix = ' · Legend'
       else if (isStar) suffix = ' · Star'
+      else if (isOvernumber && c.rarity === 'Ultimate') suffix = ' · Ultimate'
       else if (isOvernumber) suffix = ' · Overnumbered'
       else if (isAltArtShowcase) suffix = ' · Alt Art'
 

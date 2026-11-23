@@ -439,6 +439,21 @@ catalogKey(card) → "OGN:227:star"   (Signature)
 Alt Art and Star cards only have foil prices. The script assigns `marketPrice` as the foil
 price for these variants. Overnumbered prints like a regular card (not foil-only).
 
+`tcgKey()` lives in `scripts/lib/riftbound-tcgplayer.mjs` (`npm run test:riftbound-tcgplayer`).
+Since 2026-11-23 a product numbered above its set's size is matched by its number whatever
+TCGplayer calls it ("(Heartsteel Overnumbered)", "(Ultimate)" — Radiance #178–#184 and Unleashed's
+Baron Nashor #238 sat at $0 before). **Ultimates are their own rarity, `Ultimate`**, not
+Overnumbered: Riot's gallery doesn't mark them, so the sync sets it from TCGplayer's "(Ultimate)"
+name (`isUltimate()`); they still share the `:over` price key and the Overnumbered behaviour (one
+price point, not foil-only). A Signature TCGplayer lists under another card's number is
+priced at the number of the Overnumbered card with its name (`signatureNumberFixes()`: Radiance's
+Jarvan IV Signature is listed as 179\*, Aphelios's number).
+
+**Chinese/Korean Exclusives** (`CKX`, Promos group, added by hand 2026-11-23): cards printed only
+in Chinese or Korean — no TCGplayer or PriceCharting listing, so no price. Riot's per-language
+galleries don't list them either. Holds the Korean Ahri "Gumiho" OGN-303a and the Chinese Lunar
+Revel Irelia SFD-195a (moved from "Lunar Revel 2026").
+
 ### Known Riftbound Sets (as of July 2026)
 
 | Set Code | Set Name | Group ID | Released | Card Count |

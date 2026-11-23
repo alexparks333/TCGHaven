@@ -35,7 +35,7 @@ export const rarityLabel = (game: Game, r?: string) => (r ? RARITY_LABELS_BY_GAM
 const toSlotCard = (c: { id: string; name: string; setName: string; number: string; imageUrl?: string }): SlotCard =>
   ({ id: c.id, name: c.name, setName: c.setName, number: c.number, imageUrl: c.imageUrl })
 // A slot is named after the card (Riftbound names its Signatures "X (Signature)")
-const slotLabel = (name: string) => name.replace(/\s*\((Signature|Alt Art|Overnumbered)\)\s*$/i, '').trim()
+const slotLabel = (name: string) => name.replace(/\s*\((Signature|Alt Art|Overnumbered|Ultimate)\)\s*$/i, '').trim()
 
 /** The other printings of a card: same set, same collector number, different card. */
 export function siblingsOf(card: { id: string; number?: string }, setCards: CatalogRow[]): CatalogRow[] {
