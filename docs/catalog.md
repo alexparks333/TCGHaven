@@ -528,6 +528,57 @@ visible even from the "last known status" view, not just right after clicking Sy
   doesn't exist anymore; it only made sense next to a local-file registry and local catalog JSON,
   both gone). Nothing is ever deleted by a sync, same as before, just no separate backup copy.
 
+## Stagnant prices (2026-11-23, live pickup 2026-11-24)
+
+A **stagnant** card is one whose price nothing updates on its own — a staff-only label, never shown
+to collectors. The rule (`scripts/lib/stagnant.mjs` `stagnantReason()`, `npm run test:stagnant`):
+
+| reason | meaning |
+|---|---|
+| `hand-added` | `source: 'manual'`, not linked to a TCGplayer product — no sync prices it (even when it has a price) |
+| `manual` | `priceSource: 'manual'` — priced by hand because nothing live has a price; re-check now and then |
+| `no-price` | no price from its sync and no TCGplayer product (`productIdOf()`) |
+
+Not stagnant (live): hidden cards, cards a sync prices (Cardmarket / backup prices included), cards
+priced from PriceCharting's ungraded price (`priceSource: 'pricecharting'`), hand-added cards linked
+to a TCGplayer product, and cards linked to a TCGplayer product that just hasn't sold yet. **Magic is left out** (`STAGNANT_SKIP_GAMES` — ~1,100 memorabilia cards with no
+market). On 2026-11-23: 98 (Lorcana 46, Riftbound 39, Pokémon 13).
+
+- **A hand price survives syncs.** It's written as `marketPrice` (+ `marketPriceFoil`) with
+  `priceSource: 'manual'`, `manualPriceAt`, `manualPriceNote` (where it came from). `syncToFirestore()`
+  runs every fresh card through `keepHandPrice()`: while the sync has no price, the card's price
+  fields are left alone; once the sync has a real one it takes over and `priceSource` is cleared.
+  (Before this, admin-edit-wins only protected an edit for one sync.)
+- **Live prices take over on their own** — a stagnant card leaves the list as soon as one turns up:
+  - **TCGplayer** (always first): a synced card's sync has a price → `keepHandPrice()` hands over.
+  - **PriceCharting's ungraded price** (the Owner's call, 2026-11-24 — the one exception to "graded
+    only", CLAUDE.md rule 39): the daily PriceCharting job (`pricecharting-sync.mjs`) works out
+    `ungradedPrices()` (`scripts/lib/pricecharting.mjs`) for the cards `wantsPriceChartingPrice()`
+    — the stagnant ones and those it already prices — and saves `{ cardId: { r, u, pc } }` as
+    `graded_prices/{catalog}.raw`. Which PriceCharting row: the one staff linked (Graded links /
+    Edit card → PriceCharting — works even for a row with no graded sales), the card's graded
+    entry, or the plain row under its TCGplayer id. The next catalog sync (`syncToFirestore()` →
+    `livePriceFromPriceCharting()`) puts it on any card it has no price for, as `marketPrice` with
+    `priceSource: 'pricecharting'` and `pcUrl`; hand-added cards (in no sync's list) get it in the
+    same pass. When TCGplayer has a price, or PriceCharting none, the source is dropped. Shown to
+    collectors with the PriceCharting citation (Cardex zoom: "Ungraded · PriceCharting ↗").
+  - **Hand-added Riftbound cards on TCGplayer** (`scripts/lib/hand-added-tcgplayer.mjs`,
+    `linkRiftboundHandAdded()` in the Riftbound sync): every sync looks for each hand-added card
+    among all of TCGplayer's Riftbound products — the same collector number (suffix and set size)
+    and name, a product no catalog card already is. Exactly one → linked (`tcgProductId`,
+    `tcgGroupId`) and priced live from then on (and never placed in Needs Review as a new card);
+    several → "Found on TCGplayer — Link" on the Stagnant prices page (`sync_status/riftbound`
+    `handAddedMatches`). Other games' hand-added cards (Pokémon has one) only get PriceCharting's.
+- **Staff portal → Stagnant prices** (`/admin/stagnant`, `components/admin/StagnantPrices.tsx`,
+  `GET /api/admin/catalog/stagnant?game=`): every stagnant card by game, filter by reason, "Set
+  price" with a required note, and TCGplayer matches to link. Admin Catalog tags them **stagnant**, lets their price be typed in
+  Edit (saved as a hand price), and shows "By hand" under a hand price.
+- **The AI agent:** `/update-stagnant-prices [game] [set]` in Claude Code follows
+  `docs/stagnant-prices-agent.md` — lists them (`npm run stagnant-prices -- list --game g --json`),
+  researches recent sales, shows the proposed prices for an OK, then writes each with
+  `npm run stagnant-prices -- set <game> <id> <price> [--foil p] --note "<source>"` (refuses a card
+  that isn't stagnant). The app picks a change up within ~2 minutes (updatedAt deltas).
+
 ---
 
 ---

@@ -16,7 +16,8 @@
  * once a day and allows one download per 10 minutes.
  *
  * Writes nothing to the catalog cards (their updatedAt would read as a staff edit to the catalog
- * sync). Each catalog's graded prices are rewritten whole: chunks first, then the meta doc's
+ * sync). Stagnant cards' ungraded prices go in the meta doc's `raw` ({ cardId: { r, u, pc } }) and
+ * the next catalog sync puts them on the cards (scripts/lib/stagnant.mjs). Each catalog's graded prices are rewritten whole: chunks first, then the meta doc's
  * chunkCount, which is all the app reads up to. Nothing is ever deleted. A catalog whose match
  * count collapses (a partial or wrong file) keeps yesterday's prices instead.
  *
@@ -41,7 +42,8 @@ loadEnvLocal()
 // After the env is loaded: catalog-sync.mjs initialises Firebase when imported
 const { ensureSignedIn, getCatalogDb } = await import('./lib/catalog-sync.mjs')
 const { readCompressedSnapshot } = await import('./lib/snapshot-codec.mjs')
-const { parsePcCsv, pickByTcgId, matchCatalog, applyManualLinks, suggestLinks, backupMatch, validateBackup, backupAllowed } = await import('./lib/pricecharting.mjs')
+const { parsePcCsv, pickByTcgId, matchCatalog, applyManualLinks, suggestLinks, backupMatch, validateBackup, backupAllowed, ungradedPrices } = await import('./lib/pricecharting.mjs')
+const { wantsPriceChartingPrice } = await import('./lib/stagnant.mjs')
 const { buildGradedHistory, GRADED_HISTORY_COLLECTION } = await import('./lib/graded-history.mjs')
 const { encodePriceMap, dayDocId } = await import('./lib/price-history.mjs')
 const { doc, getDoc, setDoc, writeBatch, serverTimestamp, Bytes } = await import('firebase/firestore')
@@ -171,7 +173,10 @@ async function main() {
       const snap = await readCompressedSnapshot(db, key)
       if (!snap) { console.log(`- ${key}: no catalog snapshot, skipped`); continue }
       slimCards[key] = snap.cards.map((c) => ({ id: c.id, name: c.name, number: c.number, set: c.set, setCode: c.setCode, setName: c.setName,
-        imageUrl: c.imageUrl, tcgProductId: c.tcgProductId, hidden: c.hidden }))
+        imageUrl: c.imageUrl, tcgProductId: c.tcgProductId, hidden: c.hidden,
+        // for ungradedPrices(): which cards nothing else prices (stagnant.mjs)
+        marketPrice: c.marketPrice, marketPriceFoil: c.marketPriceFoil, lowPriceNM: c.lowPriceNM, lowPriceNMFoil: c.lowPriceNMFoil,
+        variantPrices: c.variantPrices, priceSource: c.priceSource, source: c.source }))
       matchedBy[key] = matchCatalog(snap.cards, byTcg)
       for (const e of matchedBy[key].entries) pricedById.add(`${key}:${e.id}`)
       const d = (await getDoc(doc(db, 'graded_links', key)).catch(() => null))?.data() ?? {}
@@ -211,12 +216,17 @@ async function main() {
     try {
       const { withProductId, sharedProductIds } = matchedBy[key]
       const entries = applyManualLinks([...matchedBy[key].entries, ...(backupBy[key] ?? [])], rows, linksBy[key].links, linksBy[key].blocked)
+      // Stagnant cards' raw price from PriceCharting's ungraded price — the catalog sync applies it
+      // (stagnant.mjs livePriceFromPriceCharting). docs/catalog.md "Stagnant prices".
+      const raw = ungradedPrices(slimCards[key], rows, entries, linksBy[key].links, linksBy[key].blocked, wantsPriceChartingPrice)
+      const rawCount = Object.keys(raw).length
       const auto = entries.filter((e) => e.via === 'match').length
       const manual = entries.filter((e) => e.via === 'staff').length
       for (const e of entries) if (Object.keys(e.p).length) priced.add(`${key}:${e.id}`)
       const line = `- ${key}: ${entries.length.toLocaleString()} cards priced of ${withProductId.toLocaleString()} with a TCGplayer id ` +
         `(${slimCards[key].length.toLocaleString()} in catalog${sharedProductIds ? `, ${sharedProductIds} shared ids skipped` : ''}` +
-        `${auto ? `, ${auto} by set + name + number` : ''}${manual ? `, ${manual} by staff` : ''})`
+        `${auto ? `, ${auto} by set + name + number` : ''}${manual ? `, ${manual} by staff` : ''})` +
+        `${rawCount ? `; ${rawCount} stagnant card(s) given PriceCharting's ungraded price` : ''}`
       if (dryRun) {
         console.log(line)
         for (const e of entries.slice(0, 3)) console.log(`     ${e.id} → ${JSON.stringify(e.p)}  ${e.u}`)
@@ -243,6 +253,7 @@ async function main() {
       }
       await setDoc(metaRef, {
         chunkCount: chunks.length, slot, matched: entries.length, source: 'pricecharting', asOf: serverTimestamp(),
+        raw: JSON.stringify(raw), rawCount,
       })
       console.log(`${line} — written`)
       // Today's graded prices into the kept history (graded-history.mjs). After the prices: a

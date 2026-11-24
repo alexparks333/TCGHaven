@@ -23,7 +23,7 @@ import { Readable } from 'node:stream'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes, runTransaction,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes, runTransaction, query, where,
 } from 'firebase/firestore'
 import {
   PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, buildDailyEntries, buildDayPrices,
@@ -31,6 +31,9 @@ import {
 } from './price-history.mjs'
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { tcgKey, signatureNumberFixes, isUltimate } from './riftbound-tcgplayer.mjs'
+import { keepHandPrice, hasPrice, livePriceFromPriceCharting } from './stagnant.mjs'
+import { matchHandAdded, linkedHandCard } from './hand-added-tcgplayer.mjs'
+import { productIdOf } from './pricecharting.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
 import { buildOnePieceCatalog, productsFromRows as opProductsFromRows } from './onepiece-tcgplayer.mjs'
 import { YUGIOH_CATEGORY, buildYugiohCatalog, productsFromRows as ygoProductsFromRows } from './yugioh-tcgplayer.mjs'
@@ -186,6 +189,18 @@ export function stableStringify(v) {
   return JSON.stringify(v)
 }
 
+/** graded_prices/{game}.raw → { cardId: { r, u, pc } } ({} when there's none or it's unreadable —
+ *  the sync then just doesn't use PriceCharting's ungraded prices this run). */
+async function readUngradedPrices(game) {
+  try {
+    const raw = (await getDoc(doc(db, 'graded_prices', game))).data()?.raw
+    return raw ? JSON.parse(raw) : {}
+  } catch (err) {
+    console.warn(`   ⚠️  PriceCharting ungraded prices for ${game} unreadable: ${err.message}`)
+    return {}
+  }
+}
+
 async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [], fieldDefaults = {}, checkImages = true } = {}) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
@@ -208,8 +223,18 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
   const writes = []
   const newCardIds = []
 
-  for (const card of freshCards) {
-    const existing = existingMap.get(card.id)
+  // Stagnant cards' raw prices from PriceCharting's ungraded price, worked out by the daily
+  // PriceCharting job (graded_prices/{game}.raw — scripts/lib/stagnant.mjs). Only for cards this
+  // sync has no price for; TCGplayer always wins.
+  const pcRaw = await readUngradedPrices(game)
+
+  for (const sourceCard of freshCards) {
+    const existing = existingMap.get(sourceCard.id)
+    const freshCard = livePriceFromPriceCharting(existing, sourceCard, pcRaw[sourceCard.id])
+    // A price staff (or the stagnant-prices agent) set by hand stays until this sync has a real
+    // one (scripts/lib/stagnant.mjs) — without this, the next sync wrote the card's $0 back.
+    const handKept = existing?.priceSource === 'manual' && !hasPrice(freshCard)
+    const card = existing ? keepHandPrice(existing, freshCard) : freshCard
 
     if (!existing) {
       finalMap.set(card.id, { ...card, hidden: false })
@@ -228,12 +253,28 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
     }
     for (const [key, def] of Object.entries(fieldDefaults)) {
       if (key in card || existing[key] === undefined || existing[key] === def) continue
+      if (handKept && key === 'priceSource') continue
       changed[key] = def
     }
     if (Object.keys(changed).length === 0) continue // nothing real changed — no write, no timestamp churn
 
     finalMap.set(card.id, { ...existing, ...changed })
     writes.push({ id: card.id, data: { ...changed, updatedAt: serverTimestamp() } })
+  }
+
+  // Cards staff added by hand aren't in any sync's list — their live price (PriceCharting's
+  // ungraded one) is applied here; a hand price hands over to it. (Riftbound's hand-added cards
+  // linked to a TCGplayer product come in through freshCards — hand-added-tcgplayer.mjs.)
+  const freshIds = new Set(freshCards.map((c) => c.id))
+  for (const [id, existing] of existingMap) {
+    if (existing.source !== 'manual' || existing.hidden || freshIds.has(id)) continue
+    if (lastBulkSyncAt && existing.updatedAt && existing.updatedAt.toMillis() > lastBulkSyncAt.toMillis()) continue
+    const next = keepHandPrice(existing, livePriceFromPriceCharting(existing, { id }, pcRaw[id]))
+    const changed = {}
+    for (const [key, v] of Object.entries(next)) if (key !== 'id' && stableStringify(existing[key]) !== stableStringify(v)) changed[key] = v
+    if (!Object.keys(changed).length) continue
+    finalMap.set(id, { ...existing, ...changed })
+    writes.push({ id, data: { ...changed, updatedAt: serverTimestamp() } })
   }
 
   // Explicit hide list — currently only Riftbound's supersededStubIds (a TCGCSV-synthesized
@@ -1432,7 +1473,8 @@ function newBundleSet(group, sets, groupOrder, nowIso) {
 }
 
 // `save: false` = dry run (scripts that preview what a sync would place).
-export async function discoverRiftboundProducts(registry, galleryCards, rowsOf = tcgplayerRowCache(), { save = true } = {}) {
+// `skipProductIds`: products a hand-added card is linked to (linkRiftboundHandAdded) — never placed again.
+export async function discoverRiftboundProducts(registry, galleryCards, rowsOf = tcgplayerRowCache(), { save = true, skipProductIds = new Set() } = {}) {
   const rb = registry?.riftbound
   if (!rb?.sets) return { newSets: [], newPlacements: [], returned: [] }
   const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS })
@@ -1463,6 +1505,7 @@ export async function discoverRiftboundProducts(registry, galleryCards, rowsOf =
   const newSets = []
   const newPlacements = []
   const placed = new Set(placements.filter((p) => !p.ignored).map((p) => String(p.productId)))
+  for (const pid of skipProductIds) placed.add(String(pid))
   // "Ignore" on Needs Review = ask again next sync (maybe it has a photo by then): offered again
   // as part of this sync's batch, where staff last had it (or a fresh guess).
   const ignored = new Map(placements.filter((p) => p.ignored).map((p) => [String(p.productId), p]))
@@ -1688,6 +1731,54 @@ function findCardsInNextData(obj, depth = 0) {
 
 const REGULAR_RARITIES = new Set(['Common', 'Uncommon', 'Rare', 'Epic'])
 
+/**
+ * Hand-added Riftbound cards (source 'manual') ↔ TCGplayer (scripts/lib/hand-added-tcgplayer.mjs):
+ * links a card to the one product that is clearly it, prices every linked one from this run's
+ * rows, and saves the unclear matches for the Stagnant prices page (sync_status/riftbound
+ * handAddedMatches). → { fresh: cards for syncToFirestore, productIds: Set of linked products }.
+ * Never fails the sync — on any error the hand-added cards are just left as they are.
+ */
+async function linkRiftboundHandAdded(registry, catalogCards, rowsOf) {
+  const none = { fresh: [], productIds: new Set() }
+  try {
+    const handSnap = await getDocs(query(collection(db, 'catalog', 'riftbound', 'cards'), where('source', '==', 'manual')))
+    const hand = handSnap.docs.map((d) => ({ ...d.data(), id: d.id })).filter((c) => !c.hidden)
+    if (!hand.length) return none
+    const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS })
+    if (!res.ok) throw new Error(`groups: ${res.status}`)
+    const rows = []
+    for (const g of (await res.json()).results ?? []) {
+      try { for (const r of oneRowPerProduct(await rowsOf(g.groupId))) rows.push({ ...r, groupId: g.groupId }) } catch { /* one group missing: next run */ }
+    }
+    // Products some catalog card already is — never linked to a second card
+    const taken = new Set()
+    for (const c of [...catalogCards, ...hand]) {
+      const pid = productIdOf(c) ?? Number(/-(\d{6,})$/.exec(c.id)?.[1] ?? 0)
+      if (pid > 0) taken.add(pid)
+    }
+    for (const p of registry?.riftbound?.placements ?? []) taken.add(Number(p.productId))
+    const { links, suggestions } = matchHandAdded(hand, rows, taken)
+    const linkOf = new Map(links.map((l) => [l.cardId, l]))
+    const byPid = new Map(rows.map((r) => [Number(r.productId), r]))
+    const fresh = []
+    const productIds = new Set()
+    for (const c of hand) {
+      const pid = Number(c.tcgProductId) || linkOf.get(c.id)?.productId
+      if (!pid) continue
+      productIds.add(pid)
+      const card = linkedHandCard(c, byPid.get(pid))
+      if (card) fresh.push(card)
+      if (linkOf.has(c.id)) console.log(`   🔗 Hand-added "${c.name}" found on TCGplayer (product ${pid}) — linked, priced live from now on`)
+    }
+    if (suggestions.length) console.log(`   🔗 ${suggestions.length} hand-added card(s) with several possible TCGplayer products — on the Stagnant prices page`)
+    await setDoc(doc(db, 'sync_status', 'riftbound'), { handAddedMatches: JSON.stringify(suggestions), handAddedMatchesAt: new Date().toISOString() }, { merge: true })
+    return { fresh, productIds }
+  } catch (err) {
+    console.warn(`   ⚠️  Matching hand-added cards to TCGplayer failed: ${err.message}`)
+    return none
+  }
+}
+
 export async function downloadRiftbound() {
   console.log('\n⚡ Riftbound...')
 
@@ -1881,10 +1972,14 @@ export async function downloadRiftbound() {
   }
   if (starCount > 0) console.log(`   Created ${starCount} Signature (Star) stubs from TCGCSV`)
 
+  // Hand-added cards → their TCGplayer product once it's listed, then priced live (before discovery,
+  // so their products aren't also placed as new cards)
+  const hand = await linkRiftboundHandAdded(registry, [...all, ...tcgplayerOnlyCards], rowsOf)
+
   // New TCGplayer groups/products since the last sync — placed, built and saved for review.
   let discovered = { newSets: [], newPlacements: [], returned: [] }
   try {
-    discovered = await discoverRiftboundProducts(registry, all, rowsOf)
+    discovered = await discoverRiftboundProducts(registry, all, rowsOf, { skipProductIds: hand.productIds })
     tcgplayerOnlyCards.push(...await fetchTcgplayerOnlyRiftboundSets({
       sets: discovered.newSets, placements: [...discovered.newPlacements, ...discovered.returned], allSets: registrySets, rowsOf,
     }))
@@ -1914,6 +2009,7 @@ export async function downloadRiftbound() {
 
   const priced = all.filter(c => c.marketPrice > 0).length
   console.log(`   Priced ${priced}/${all.length} cards from TCGCSV`)
+  all.push(...hand.fresh)
   const result = await syncToFirestore('riftbound', all, { hideIds: [...supersededStubIds, ...leftOutIds], unhideIds: returnedIds })
   return { ...result, discovered }
 }

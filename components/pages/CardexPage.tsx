@@ -43,8 +43,10 @@ export interface CatalogCard {
   publicCode?: string
   cardType?: string   // Riftbound only — 'Battlefield' cards are landscape (see CardZoomOverlay)
   // Set when the price isn't from TCGplayer's own feed (scripts/lib/price-fallback.mjs);
-  // 'cardmarket' is an EUR→USD estimate and is labeled Est.
+  // 'cardmarket' is an EUR→USD estimate and is labeled Est.; 'pricecharting' is PriceCharting's
+  // ungraded price for a card nothing else prices (scripts/lib/stagnant.mjs) — credited in the zoom
   priceSource?: string
+  pcUrl?: string
 }
 
 type BaseGame = 'lorcana' | 'riftbound' | 'pokemon' | 'onepiece' | 'mtg' | 'yugioh' | TcgplayerSourcedGame
@@ -1736,6 +1738,8 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
       rarityColor,
       marketPrice: card.marketPrice,
       priceEstimated: card.priceSource === 'cardmarket',
+      // PriceCharting's ungraded price: always with its citation link (CLAUDE.md rule 39)
+      ...(card.priceSource === 'pricecharting' && card.pcUrl && !(card.owned && card.slab) && { priceSource: { label: 'Ungraded', url: card.pcUrl } }),
       owned: card.owned,
       quantity: card.quantity,
       glowColor: zoomGlowColor(game, card.rarity, gameColor),

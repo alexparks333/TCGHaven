@@ -21,7 +21,8 @@ interface CatalogCard {
   hidden?: boolean
   publicCode?: string  // Riftbound only — carries the "a"/"*" variant suffix `number` lacks
   cardType?: string    // Riftbound only — the Cardex zoom shows 'Battlefield' cards landscape
-  priceSource?: string // Pokémon backup price — see scripts/lib/price-fallback.mjs
+  priceSource?: string // Pokémon backup price — see scripts/lib/price-fallback.mjs; 'pricecharting' — stagnant.mjs
+  pcUrl?: string       // priceSource 'pricecharting': the card's PriceCharting page (the citation)
   variant?: string     // Yu-Gi-Oh! only — TCGplayer's version ("Starlight Rare"), shown after the name
   variantPrices?: Record<string, number> // Pokémon / Yu-Gi-Oh! printings
 }
@@ -77,6 +78,9 @@ export async function GET(request: Request) {
       cardType:        c.cardType,
       // '' / absent = TCGplayer's own feed; 'cardmarket' = an EUR→USD estimate (shown as Est.)
       priceSource:     c.priceSource || undefined,
+      // 'pricecharting' = PriceCharting's ungraded price for a card nothing else prices — shown with
+      // its citation link (scripts/lib/stagnant.mjs)
+      pcUrl:           c.priceSource === 'pricecharting' && c.pcUrl ? c.pcUrl : undefined,
     }))
 
   // Public catalog data: cached by Vercel's CDN, refreshed in the background (prices change at most

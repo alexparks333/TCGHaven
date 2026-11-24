@@ -226,6 +226,14 @@ Magic, Lorcana and Riftbound none — save `tcgProductId` in their syncs for ful
 - https://www.pricecharting.com/game/pokemon-base-set/charizard-4 (example card page; shows TCGplayer ID 42382)
 - https://tcgtalk.com/guides/tcg-market-weekly-analysis (item counts)
 
+## Ungraded prices for stagnant cards (2026-11-24)
+
+The one place PriceCharting supplies a **raw** price: a catalog card nothing else prices (stagnant —
+`scripts/lib/stagnant.mjs`) takes PriceCharting's ungraded (`loose-price`) price, saved by the daily
+job as `graded_prices/{catalog}.raw` and put on the card by the next catalog sync (`priceSource:
+'pricecharting'`, `pcUrl` = the citation link). TCGplayer always wins. Full write-up: docs/catalog.md
+"Stagnant prices".
+
 ## Graded links — PriceCharting rows with no TCGplayer id (2026-11-21)
 
 About 1 in 5 PriceCharting rows with graded sales carry no TCGplayer id, so they can't link by id

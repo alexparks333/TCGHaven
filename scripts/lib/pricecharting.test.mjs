@@ -5,6 +5,7 @@ import {
   parsePcPrice, penniesToUsd, parsePcCsv, gradedFromRow, pickByTcgId, productIdOf, matchCatalog,
   gradedPriceKey, gradedPriceFor, pcProductUrl, pcIdUrl, pcVariantOf, gradedVariantKey,
   normPcNumber, pcNameParts, linkSlot, applyManualLinks, suggestLinks, backupMatch, validateBackup, backupAllowed,
+  ungradedPrices,
 } from './pricecharting.mjs'
 import { GRADED_ORDER, gradedTuple, tupleToGraded, buildGradedHistory } from './graded-history.mjs'
 import { gunzip } from './price-history.mjs'
@@ -242,6 +243,28 @@ assert.equal(linkSlot('foil', 'Ursula - Deceiver (Foil)'), '', 'on a separate fo
   assert.equal(backupAllowed(check).has('pokemon'), false, 'too few checked to trust (needs 20)')
   assert.equal(backupAllowed({ a: { right: 2000, wrong: 1 }, b: { right: 2000, wrong: 3 } }).has('a'), true)
   assert.equal(backupAllowed({ b: { right: 2000, wrong: 3 } }).has('b'), false, 'more than 0.1% wrong → off')
+}
+
+// Ungraded prices for stagnant cards
+{
+  const rows = [
+    { id: '900', 'product-name': 'Ahri #303a', 'tcg-id': '', 'loose-price': '$412.50' },
+    { id: '901', 'product-name': 'Rengar #25a', 'tcg-id': '700001', 'loose-price': '80.00' },
+    { id: '902', 'product-name': 'Rengar #25a [Foil]', 'tcg-id': '700001', 'loose-price': '120.00' },
+    { id: '903', 'product-name': 'Jinx #1', 'tcg-id': '', 'loose-price': '10' },
+    { id: '904', 'product-name': 'Vi #2', 'tcg-id': '700002', 'loose-price': '' },
+  ]
+  const cards = [
+    { id: 'ahri' }, { id: 'rengar', tcgProductId: 700001 }, { id: 'jinx' }, { id: 'vi', tcgProductId: 700002 },
+    { id: 'priced', tcgProductId: 700001 }, { id: 'gone', hidden: true }, { id: 'blocked' },
+  ]
+  const out = ungradedPrices(cards, rows, [{ id: 'jinx', pc: '903' }], { ahri: { _: '900' }, blocked: { _: '900' } }, { blocked: true },
+    (c) => c.id !== 'priced')
+  assert.deepEqual(out, {
+    ahri: { r: 412.5, u: 'https://www.pricecharting.com/game/900', pc: '900' },     // staff link, no graded sales needed
+    rengar: { r: 80, u: 'https://www.pricecharting.com/game/901', pc: '901' },      // by TCGplayer id, the plain row
+    jinx: { r: 10, u: 'https://www.pricecharting.com/game/903', pc: '903' },        // its graded entry
+  })
 }
 
 console.log('pricecharting: all tests passed')

@@ -575,3 +575,38 @@ export function validateBackup(rows, catalogs) {
 export function backupAllowed(check) {
   return new Set(Object.entries(check).filter(([, o]) => o.right >= 20 && o.wrong / (o.right + o.wrong) <= BACKUP_MAX_WRONG).map(([k]) => k))
 }
+
+// ── Ungraded prices for stagnant cards (2026-11-24, the Owner's call) ───────────────────────────
+// PriceCharting adds graded prices — except for a card nothing else prices (stagnant —
+// scripts/lib/stagnant.mjs): its raw price may come from PriceCharting's ungraded ("loose-price")
+// column, always shown with the PriceCharting citation link. TCGplayer wins whenever it has a price.
+
+/**
+ * cards: one catalog's cards; rows: every PriceCharting row; entries: today's graded entries for
+ * the catalog (after applyManualLinks); links / blocked: graded_links/{catalog}; wants(card): may
+ * PriceCharting price this card (stagnant.mjs wantsPriceChartingPrice). → { [cardId]: { r, u, pc } }.
+ * The PriceCharting row is, in order: the one staff linked (Graded links / Edit card — even one with
+ * no graded sales), the card's graded entry, or the plain row under the card's TCGplayer id.
+ */
+export function ungradedPrices(cards, rows, entries, links = {}, blocked = {}, wants = () => true) {
+  const byPc = new Map()
+  const byTcg = new Map()   // TCGplayer id → PriceCharting id, plain-named rows only; shared → null
+  for (const row of rows) {
+    const id = String(row.id ?? '').trim()
+    if (!id) continue
+    byPc.set(id, row)
+    const tcg = rowTcgId(row)
+    if (!tcg || /\[[^\]]*\]/.test(String(row['product-name'] ?? ''))) continue
+    byTcg.set(tcg, byTcg.has(tcg) ? null : id)
+  }
+  const entryPc = new Map(entries.map((e) => [e.id, e.pc]))
+  const out = {}
+  for (const c of cards) {
+    if (!c?.id || c.hidden || blocked?.[c.id] || !wants(c)) continue
+    const pid = productIdOf(c)
+    const pc = String(links?.[c.id]?._ ?? entryPc.get(c.id) ?? (pid ? byTcg.get(pid) ?? '' : ''))
+    const r = pc ? parsePcPrice(byPc.get(pc)?.['loose-price']) : 0
+    if (r > 0) out[c.id] = { r, u: pcIdUrl(pc), pc }
+  }
+  return out
+}

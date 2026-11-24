@@ -53,7 +53,8 @@ interface CatalogCard {
   marketPriceFoil?: number
   isCustom?: boolean
   isHidden?: boolean
-  priceSource?: string // Pokémon backup prices: 'tcgplayer-backup' | 'cardmarket'
+  priceSource?: string // Pokémon backup prices: 'tcgplayer-backup' | 'cardmarket'; 'manual' / 'pricecharting' — scripts/lib/stagnant.mjs
+  tcgProductId?: number // a hand-added card linked to its TCGplayer product (hand-added-tcgplayer.mjs)
   // Pokémon: a TCGplayer promo product from Needs Review (its set lives in the review record).
   // Riftbound's and Lorcana's are every `tcg-` card — see isReviewCard().
   fromReview?: boolean
@@ -390,6 +391,18 @@ export function CatalogBrowser() {
   const isSearchMode = globalQuery.trim().length >= 2
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>())
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Cards whose price nothing updates on its own (scripts/lib/stagnant.mjs) — the "stagnant" tag,
+  // and the only synced cards whose price can be typed here. Staff only.
+  const [stagnantIds, setStagnantIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let live = true
+    setStagnantIds(new Set())
+    adminFetch(`/api/admin/catalog/stagnant?game=${activeGame}`)
+      .then((r) => (r.ok ? r.json() : { cards: [] }))
+      .then((d: { cards: Array<{ id: string }> }) => { if (live) setStagnantIds(new Set(d.cards.map((c) => c.id))) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [activeGame])
 
   useEffect(() => {
     let stale = false
@@ -916,6 +929,7 @@ export function CatalogBrowser() {
             key={editingCard.id}
             game={activeGame}
             card={editingCard}
+            stagnant={stagnantIds.has(editingCard.id)}
             sets={sets}
             setSections={setSections}
             onSave={(patch) => saveCardEdit(editingCard.id, patch)}
@@ -944,6 +958,7 @@ export function CatalogBrowser() {
               onToggleHide={toggleHideCard}
               onEdit={setEditingCard}
               onDelete={deleteCard}
+              stagnantIds={stagnantIds}
               rowRefs={rowRefs.current}
               highlightedId={highlightedId}
               showSetColumn
@@ -1000,6 +1015,7 @@ export function CatalogBrowser() {
               onToggleHide={toggleHideCard}
               onEdit={setEditingCard}
               onDelete={deleteCard}
+              stagnantIds={stagnantIds}
               rowRefs={rowRefs.current}
               highlightedId={highlightedId}
             />
@@ -1144,8 +1160,18 @@ const PRICE_SOURCE: Record<Game, string> = {
 }
 
 function PriceLink({ game, card }: { game: Game; card: CatalogCard }) {
-  const linked = !card.isCustom
-  const source = card.priceSource === 'cardmarket' ? 'Cardmarket (estimate)'
+  if (card.priceSource === 'manual') {
+    return (
+      <div className="mt-0.5 flex items-center gap-1 text-[0.625rem] leading-none text-amber-700" title="Priced by hand — its sync has no price for it; kept until a sync finds one (Stagnant prices)">
+        <span className="w-3 h-3 rounded-full flex items-center justify-center text-white bg-amber-500"><Pencil size={7} strokeWidth={3.5} /></span>
+        By hand
+      </div>
+    )
+  }
+  // A hand-added card is live once linked to a TCGplayer product or priced from PriceCharting (stagnant.mjs)
+  const linked = !card.isCustom || Number(card.tcgProductId) > 0 || card.priceSource === 'pricecharting'
+  const source = card.priceSource === 'pricecharting' ? 'PriceCharting (ungraded)'
+    : card.priceSource === 'cardmarket' ? 'Cardmarket (estimate)'
     : card.priceSource === 'tcgplayer-backup' ? 'TCGplayer (backup lookup)'
     : PRICE_SOURCE[game]
   const title = linked
@@ -1174,10 +1200,11 @@ function DetailField({ label, value, mono, truncate }: { label: string; value: s
 
 function CardTable({
   game, cards, isAdmin, onToggleHide, onEdit, onDelete, rowRefs, highlightedId,
-  showSetColumn, onJumpToSet, emptyMessage,
+  showSetColumn, onJumpToSet, emptyMessage, stagnantIds,
 }: {
   game: Game
   cards: CatalogCard[]
+  stagnantIds?: Set<string>
   isAdmin: boolean
   onToggleHide: (id: string) => void
   onEdit: (card: CatalogCard) => void
@@ -1271,6 +1298,7 @@ function CardTable({
                   <CardName name={c.name} />
                   {c.isCustom && <span className="ml-2 text-[0.625rem] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>}
                   {c.isHidden && <span className="ml-2 text-[0.625rem] font-bold uppercase text-slate-500 border border-slate-700 rounded px-1 py-0.5">hidden</span>}
+                  {stagnantIds?.has(c.id) && <span className="ml-2 text-[0.625rem] font-bold uppercase text-amber-700 border border-amber-300 rounded px-1 py-0.5" title="Stagnant price — nothing updates it on its own (no sync price, TCGplayer product or PriceCharting link). Staff only; see Stagnant prices.">stagnant</span>}
                   {c.notes && <StickyNote size={11} className="inline ml-2 text-amber-500 align-text-top" aria-label="Has notes" />}
                 </td>
                 {showSetColumn && (
@@ -2048,10 +2076,11 @@ function AddCardForm({
 }
 
 function EditCardForm({
-  game, card, sets, setSections, onSave, onCancel,
+  game, card, stagnant, sets, setSections, onSave, onCancel,
 }: {
   game: Game
   card: CatalogCard
+  stagnant?: boolean   // nothing updates its price on its own — so it can be typed (scripts/lib/stagnant.mjs)
   sets: SetOption[]
   setSections: Array<[string, SetOption[]]> | null // the set picker's category sections
   onSave: (patch: Record<string, unknown>) => Promise<void>
@@ -2071,7 +2100,8 @@ function EditCardForm({
   const [name, setName] = useState(card.name)
   const [rarity, setRarity] = useState(card.rarity ?? '')
   const [imageUrl, setImageUrl] = useState(card.imageUrl ?? '')
-  const priceLinked = !card.isCustom // live price from the sync (see PriceLink)
+  // live price from the sync (see PriceLink) — a hand-added card too once TCGplayer or PriceCharting prices it
+  const priceLinked = !stagnant && (!card.isCustom || Number(card.tcgProductId) > 0 || card.priceSource === 'pricecharting')
   const [marketPrice, setMarketPrice] = useState(card.marketPrice ? String(card.marketPrice) : '')
   const [marketPriceFoil, setMarketPriceFoil] = useState(card.marketPriceFoil ? String(card.marketPriceFoil) : '')
   const [notes, setNotes] = useState(card.notes ?? '')
@@ -2098,6 +2128,10 @@ function EditCardForm({
       marketPrice: card.marketPrice || 0, marketPriceFoil: card.marketPriceFoil || 0, notes: card.notes ?? '',
     }
     const patch = Object.fromEntries(Object.entries(next).filter(([k, v]) => v !== before[k] && !(priceLinked && k.startsWith('marketPrice'))))
+    // A price typed for a stagnant card is a hand price: every sync keeps it until it finds a real one
+    if (!priceLinked && ('marketPrice' in patch || 'marketPriceFoil' in patch)) {
+      Object.assign(patch, { priceSource: 'manual', manualPriceAt: new Date().toISOString(), manualPriceNote: 'Set in Admin Catalog' })
+    }
     try {
       if (Object.keys(patch).length) await onSave(patch)
       else onCancel()
@@ -2157,7 +2191,8 @@ function EditCardForm({
           <input placeholder="Image URL (paste a link, or use the box →)" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)}
             className={cn(FIELD_CLASS, 'w-full')} />
           {/* A synced card's price comes from its source on every sync — not editable here (a typed
-              price would just be replaced). Only cards added by hand have a price to type. */}
+              price would just be replaced). Only cards added by hand, and stagnant ones (nothing
+              prices them — the sync keeps a hand price), have a price to type. */}
           {priceLinked ? (
             <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-xs text-slate-400">
               <span className="text-ink font-medium">{card.marketPrice ? `$${card.marketPrice.toFixed(2)}` : '—'}</span>
