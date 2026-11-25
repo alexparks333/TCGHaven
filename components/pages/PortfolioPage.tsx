@@ -292,8 +292,10 @@ export default function PortfolioPage() {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
           {/* On desktop this row dissolves (md:contents) so Filters lands far right, after the status */}
           <div className="flex items-start justify-between gap-3 md:contents">
-            <div className="min-w-0 md:mr-auto">
+            <div className="min-w-0 md:mr-auto flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-bold text-ink">Portfolio</h1>
+              {/* Phone (2026-11-25): the update status sits beside the title, a size smaller */}
+              <div className="md:hidden"><PriceUpdateStatus status={priceStatus} compact /></div>
             </div>
             {/* Opens the FilterPanel above the page (ClientWrapper) */}
             <button
@@ -311,7 +313,7 @@ export default function PortfolioPage() {
               {calcFloor > 0 && <span className={`text-[0.5625rem] font-bold px-1.5 py-0.5 rounded-full leading-none ${showFilters ? 'bg-white text-violet-700' : 'bg-violet-600 text-white'}`}>ON</span>}
             </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             <PriceUpdateStatus status={priceStatus} />
           </div>
         </div>
@@ -674,22 +676,25 @@ export default function PortfolioPage() {
 // scheduled catalog sync (twice a day — see components/PriceAutoUpdater.tsx), so this just says when
 // that last happened, and turns into a warning if the latest scheduled update didn't go through
 // (failed, or overdue) so a broken sync can't go unnoticed. See lib/api/priceStatus.ts.
-function PriceUpdateStatus({ status }: { status: PriceStatus | null }) {
+function PriceUpdateStatus({ status, compact }: { status: PriceStatus | null; compact?: boolean }) {
   const when = status?.updatedAt ? formatUpdatedAt(status.updatedAt) : null
+  // compact: the phone's copy beside the title — smaller text, icon and padding
+  const size = compact ? 'gap-1 text-[0.625rem] rounded-md px-1.5 py-0.5' : 'gap-1.5 text-[0.6875rem] rounded-lg px-2.5 py-1.5'
+  const icon = compact ? 11 : 13
   if (status?.failed) {
     return (
       <div
-        className="flex items-center gap-1.5 text-[0.6875rem] font-semibold text-red-700 bg-red-100/60 border border-red-300 rounded-lg px-2.5 py-1.5"
+        className={`flex items-center font-semibold text-red-700 bg-red-100/60 border border-red-300 ${size}`}
         title={`Latest scheduled price update didn't go through for: ${status.failedGames.join(', ')}`}
       >
-        <AlertTriangle size={13} className="shrink-0" />
+        <AlertTriangle size={icon} className="shrink-0" />
         <span>Price update failed{when ? ` — showing prices from ${when}` : ''}</span>
       </div>
     )
   }
   return (
-    <div className="flex items-center gap-1.5 text-[0.6875rem] text-slate-400 bg-slate-800/60 border border-slate-700/50 rounded-lg px-2.5 py-1.5">
-      <Clock size={13} className="shrink-0" />
+    <div className={`flex items-center text-slate-400 bg-slate-800/60 border border-slate-700/50 ${size}`}>
+      <Clock size={icon} className="shrink-0" />
       <span>{status === null ? 'Checking prices…' : when ? `Prices updated ${when}` : 'Prices not synced yet'}</span>
     </div>
   )
