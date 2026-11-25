@@ -214,6 +214,18 @@ always TCGplayer market price — there's no price-mode toggle; the catalog's `l
 lowest listings in any condition, damaged included, and are never used) is used by the five price routes, the Cardex (client-side from the raw fields
 `/api/cardex` returns), Personalized Collections and the history API — so they can't disagree.
 
+**Price history before we recorded it (2026-11-25).** `scripts/backfill-price-history.mjs` loaded
+tcgcsv's daily price archives (from 2024-02-08, the first archived day) into the same month docs, so a
+card's chart runs back to 2024 or its release — **one price a week** (the Owner's call: daily was
+several GB, some big sets' months went over 1 MiB, and "All" charts read it all); days the syncs
+recorded stay daily and are never replaced. Cards were matched to their TCGplayer listing over each
+game's latest 30 recorded days (product id first; a ±1 day allowance, since our syncs and the
+archive snapshot at different hours): 96–99% of most games; the rest (Prize Wall cards, backup-priced
+cards) keep only our own record. The archives were converted outside the repo (py7zr). Daily-close
+files and first prices (Portfolio baselines) were not touched. A card's own chart asks for up to
+1,500 days (`/api/price-history` series). Past months are cached as final by running servers —
+redeploy after any backfill.
+
 **Shared price history.** Every successful sync writes that day's prices once, for everyone, to
 `price_history/{game}/months/{setKey}__{YYYY-MM}` (`scripts/lib/price-history.mjs`; written by
 `syncToFirestore()`, non-fatal). `/api/price-history` (signed-in users) computes answers on the
