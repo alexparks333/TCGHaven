@@ -1615,7 +1615,15 @@ function ImageCropModal({
   source, uploading, onCancel, onConfirm,
 }: { source: Blob; uploading: boolean; onCancel: () => void; onConfirm: (blob: Blob) => void }) {
   useScrollLock()
-  const [src] = useState(() => URL.createObjectURL(source))
+  // The photo's temporary blob: address — made and revoked in the same effect. It used to be made once in
+  // useState and revoked in an effect cleanup: React's dev double-run (StrictMode) revoked it before the
+  // <img> loaded, so on localhost the photo never showed (and "Use this image" stayed off) — 2026-11-24
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    const url = URL.createObjectURL(source)
+    setSrc(url)
+    return () => URL.revokeObjectURL(url)
+  }, [source])
   const [natural, setNatural] = useState<{ w: number; h: number } | null>(null)
   const [zoom, setZoom] = useState(1)
   // The zoom % text field's own displayed string, deliberately NOT derived straight from `zoom`
@@ -1632,8 +1640,6 @@ function ImageCropModal({
   const imgRef = useRef<HTMLImageElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startX: number; startY: number; startOffset: { x: number; y: number } } | null>(null)
-
-  useEffect(() => () => URL.revokeObjectURL(src), [src])
 
   // Keeps the text field showing the current zoom whenever it changes from anywhere ELSE (the
   // slider, the +/- buttons, scroll/pinch) — but never while the field itself has focus, so it
@@ -1754,7 +1760,7 @@ function ImageCropModal({
           onPointerCancel={handlePointerUp}
           onWheel={handleWheel}
         >
-          <img
+          {src && <img
             ref={imgRef}
             src={src}
             alt=""
@@ -1768,7 +1774,7 @@ function ImageCropModal({
               top: '50%',
               transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)`,
             }}
-          />
+          />}
           {/* Rule-of-thirds guide + viewfinder corners — purely decorative, pointer-events-none so
               drag/wheel/scroll still land on the frame div's own handlers underneath. */}
           <div className="pointer-events-none absolute inset-0">
