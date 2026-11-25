@@ -2,10 +2,12 @@
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Check, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, FolderTree, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut } from 'lucide-react'
+import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Check, Wand2, AlertCircle, CheckCircle2, LocateFixed, FolderPlus, FolderTree, ScanSearch, Trash2, X, ChevronRight, ChevronDown, StickyNote, RefreshCw, ImagePlus, ZoomIn, ZoomOut, Hand, Layers } from 'lucide-react'
 import {
-  doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch,
+  doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch, deleteField,
 } from 'firebase/firestore'
+import { rarityPatch } from '@/scripts/lib/rarity-override.mjs'
+import { RarityGroups } from '@/components/admin/RarityGroups'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useStaff } from '@/components/admin/StaffAuthProvider'
 import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
@@ -55,6 +57,8 @@ interface CatalogCard {
   isHidden?: boolean
   priceSource?: string // Pokémon backup prices: 'tcgplayer-backup' | 'cardmarket'; 'manual' / 'pricecharting' — scripts/lib/stagnant.mjs
   tcgProductId?: number // a hand-added card linked to its TCGplayer product (hand-added-tcgplayer.mjs)
+  rarityOverride?: string // a rarity staff set by hand (Rarity dropdown / Rarity groups) — syncs keep it
+  rarityAuto?: string     // …and the rarity the sync reports, to go back to (scripts/lib/rarity-override.mjs)
   // Pokémon: a TCGplayer promo product from Needs Review (its set lives in the review record).
   // Riftbound's and Lorcana's are every `tcg-` card — see isReviewCard().
   fromReview?: boolean
@@ -368,6 +372,11 @@ export function CatalogBrowser() {
   const [cards, setCards] = useState<CatalogCard[]>([])
   // Rarity bubbles above the table (2026-11-24): pick any number to narrow the list; none = every card
   const [rarityPick, setRarityPick] = useState<Set<string>>(new Set())
+  // Rarity groups (scripts/lib/rarity-override.mjs): the window, groups added there that no card is in
+  // yet (per set, while the page is open), and a move being saved
+  const [rarityGroupsOpen, setRarityGroupsOpen] = useState(false)
+  const [addedRarities, setAddedRarities] = useState<Record<string, string[]>>({})
+  const [rarityBusy, setRarityBusy] = useState(false)
   const [loadingSets, setLoadingSets] = useState(false)
   const [loadingCards, setLoadingCards] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -519,6 +528,44 @@ export function CatalogBrowser() {
     return cards.find((c) => c.id === id) ?? globalResults.find((c) => c.id === id)
   }
 
+  /** Move cards to another rarity — each a hand override the syncs keep (rarityPatch: back to the sync's own = cleared) */
+  async function moveRarity(list: { id: string; rarity?: string; rarityOverride?: string; rarityAuto?: string }[], to: string) {
+    setActionError(null)
+    setActionSuccess(null)
+    const patches = new Map(list.map((c) => [c.id, rarityPatch(c, to)]))
+    const apply = (c: CatalogCard): CatalogCard => {
+      const p = patches.get(c.id)
+      return p ? { ...c, rarity: p.rarity, rarityOverride: p.rarityOverride ?? undefined, rarityAuto: p.rarityAuto ?? undefined } : c
+    }
+    setCards((prev) => prev.map(apply))
+    setGlobalResults((prev) => prev.map(apply))
+    setRarityBusy(true)
+    try {
+      const ids = Array.from(patches.keys())
+      for (let i = 0; i < ids.length; i += 400) {
+        const batch = writeBatch(db)
+        for (const id of ids.slice(i, i + 400)) {
+          const p = patches.get(id)!
+          batch.update(doc(db, 'catalog', activeGame, 'cards', id), {
+            rarity: p.rarity,
+            rarityOverride: p.rarityOverride ?? deleteField(),
+            rarityAuto: p.rarityAuto ?? deleteField(),
+            updatedAt: serverTimestamp(),
+          })
+        }
+        await batch.commit()
+      }
+      await refreshCatalogCaches(activeGame)
+      if (list.length > 1) setActionSuccess(`Moved ${list.length} cards to ${rarityLabel(activeGame, to)}.`)
+    } catch (err) {
+      console.error(err)
+      setActionError(`Couldn't change the rarity — ${(err as Error).message}`)
+      loadCards()
+    } finally {
+      setRarityBusy(false)
+    }
+  }
+
   async function toggleHideCard(id: string) {
     setActionError(null)
     setActionSuccess(null)
@@ -583,7 +630,15 @@ export function CatalogBrowser() {
       } else if (movedTo) {
         Object.assign(patch, activeGame === 'riftbound' ? { setCode: movedTo.code } : { set: movedTo.code })
       }
-      if (Object.keys(patch).length) await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...patch, updatedAt: serverTimestamp() })
+      // A rarity changed here is a hand override too, like the Rarity dropdown (scripts/lib/rarity-override.mjs)
+      // — without it the second sync after the edit put the sync's rarity back
+      let write: Record<string, unknown> = patch
+      if (typeof patch.rarity === 'string') {
+        const rp = rarityPatch(findDisplayedCard(id) ?? {}, patch.rarity)
+        Object.assign(patch, { rarity: rp.rarity, rarityOverride: rp.rarityOverride ?? undefined, rarityAuto: rp.rarityAuto ?? undefined })
+        write = { ...patch, rarityOverride: rp.rarityOverride ?? deleteField(), rarityAuto: rp.rarityAuto ?? deleteField() }
+      }
+      if (Object.keys(write).length) await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...write, updatedAt: serverTimestamp() })
       // A card from Needs Review (`tcg-…`) is rebuilt by every sync from its review record, so a
       // rename has to be saved there too, or the next sync puts the old name back.
       if (reviewCard && typeof patch.name === 'string') {
@@ -976,6 +1031,7 @@ export function CatalogBrowser() {
             <CardTable
               game={activeGame}
               cards={rarityPick.size ? globalResults.filter((c) => rarityPick.has(c.rarity || '—')) : globalResults}
+              onRarity={isAdmin ? (card, to) => void moveRarity([card], to) : undefined}
               isAdmin={isAdmin}
               onToggleHide={toggleHideCard}
               onEdit={setEditingCard}
@@ -1008,6 +1064,7 @@ export function CatalogBrowser() {
               onError={setActionError}
               addCardOpen={showAddForm}
               onAddCard={isAdmin ? () => { setAddFormPrefill(null); setShowAddForm((v) => !v) } : undefined}
+              onRarityGroups={isAdmin && cards.length > 0 ? () => setRarityGroupsOpen(true) : undefined}
             />
           )}
           {isAdmin && showAddForm && activeSet && (
@@ -1024,6 +1081,21 @@ export function CatalogBrowser() {
             />
           )}
           {!loadingCards && <RarityBubbles game={activeGame} cards={cards} picked={rarityPick} onChange={setRarityPick} color={gameColor} />}
+          {rarityGroupsOpen && activeSet && (
+            <StaffModal onClose={() => setRarityGroupsOpen(false)} className="max-w-xl">
+              <RarityGroups
+                setName={activeSet.name}
+                cards={cards}
+                added={addedRarities[`${activeGame}:${activeSet.name}`] ?? []}
+                label={(r) => rarityLabel(activeGame, r)}
+                busy={rarityBusy}
+                onAdd={(name) => setAddedRarities((m) => ({ ...m, [`${activeGame}:${activeSet.name}`]: [...(m[`${activeGame}:${activeSet.name}`] ?? []), name] }))}
+                onForget={(name) => setAddedRarities((m) => ({ ...m, [`${activeGame}:${activeSet.name}`]: (m[`${activeGame}:${activeSet.name}`] ?? []).filter((n) => n !== name) }))}
+                onMove={moveRarity}
+                onClose={() => setRarityGroupsOpen(false)}
+              />
+            </StaffModal>
+          )}
           {loadingCards ? (
             <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
               <Loader2 size={20} className="animate-spin" style={{ color: gameColor }} />
@@ -1033,6 +1105,8 @@ export function CatalogBrowser() {
             <CardTable
               game={activeGame}
               cards={rarityPick.size ? cards.filter((c) => rarityPick.has(c.rarity || '—')) : cards}
+              rarityChoices={activeSet ? addedRarities[`${activeGame}:${activeSet.name}`] : undefined}
+              onRarity={isAdmin ? (card, to) => void moveRarity([card], to) : undefined}
               isAdmin={isAdmin}
               onToggleHide={toggleHideCard}
               onEdit={setEditingCard}
@@ -1055,7 +1129,7 @@ export function CatalogBrowser() {
 // registry-driven source of truth for their entire set list) but only custom Pokemon sets do
 // (official Pokemon sets come live from api.pokemontcg.io with nothing local to patch).
 function SetInfoBar({
-  game, activeSet, isAdmin, editable, onSaved, onError, onAddCard, addCardOpen,
+  game, activeSet, isAdmin, editable, onSaved, onError, onAddCard, addCardOpen, onRarityGroups,
 }: {
   game: Game
   activeSet: SetOption
@@ -1065,6 +1139,7 @@ function SetInfoBar({
   onError: (msg: string | null) => void
   // Adds a card to THIS set — the button lives here, on the set it adds to
   onAddCard?: () => void
+  onRarityGroups?: () => void // the set's rarity groups window (RarityGroups)
   addCardOpen?: boolean
 }) {
   const [editing, setEditing] = useState(false)
@@ -1135,11 +1210,21 @@ function SetInfoBar({
       {activeSet.isCustom && (
         <span className="text-[0.625rem] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
       )}
+      {onRarityGroups && (
+        <button
+          onClick={onRarityGroups}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700"
+          title="Rename, add or delete this set's rarity groups — moves are kept through every sync"
+        >
+          <Layers size={13} /> Rarity groups
+        </button>
+      )}
       {onAddCard && (
         <button
           onClick={onAddCard}
           className={cn(
-            'ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold',
+            onRarityGroups ? '' : 'ml-auto',
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold',
             addCardOpen ? 'bg-slate-700 text-ink' : 'bg-violet-600 text-white hover:bg-violet-500',
           )}
           title={`Add a card the sync missed to ${activeSet.name}`}
@@ -1238,7 +1323,7 @@ function RarityBubbles({ game, cards, picked, onChange, color }: { game: Game; c
 
 function CardTable({
   game, cards, isAdmin, onToggleHide, onEdit, onDelete, rowRefs, highlightedId,
-  showSetColumn, onJumpToSet, emptyMessage, stagnantIds,
+  showSetColumn, onJumpToSet, emptyMessage, stagnantIds, rarityChoices, onRarity,
 }: {
   game: Game
   cards: CatalogCard[]
@@ -1252,7 +1337,18 @@ function CardTable({
   showSetColumn?: boolean
   onJumpToSet?: (setName: string, cardId: string) => void
   emptyMessage?: string
+  /** Rarity groups added in the Rarity groups window that no card is in yet — offered in the dropdowns */
+  rarityChoices?: string[]
+  /** Staff: move a card to another rarity (a hand override the syncs keep) */
+  onRarity?: (card: CatalogCard, to: string) => void
 }) {
+  // Every rarity in this list (plus newly added groups) — each card's Rarity dropdown offers them all
+  const rarityOptions = useMemo(() => {
+    const all = new Set<string>()
+    for (const c of cards) if (c.rarity) all.add(c.rarity)
+    for (const r of rarityChoices ?? []) all.add(r)
+    return Array.from(all).sort((a, b) => (CARDEX_RARITY_ORDER[a] ?? 50) - (CARDEX_RARITY_ORDER[b] ?? 50) || a.localeCompare(b))
+  }, [cards, rarityChoices])
   const [hoverPreviewUrl, setHoverPreviewUrl] = useState<string | null>(null)
   const [hoverLandscape, setHoverLandscape] = useState(false) // a sideways card (its picture is wider than tall)
   useEffect(() => { setHoverLandscape(false) }, [hoverPreviewUrl])
@@ -1353,7 +1449,31 @@ function CardTable({
                     <span className="text-[0.625rem] text-slate-600">{c.releaseDate || 'release date unknown'}</span>
                   </td>
                 )}
-                <td className="px-3 py-2 text-slate-400">{c.rarity ? rarityLabel(game, c.rarity) : '—'}</td>
+                <td className="px-3 py-2 text-slate-400">
+                  {onRarity ? (
+                    <span className="flex items-center gap-1.5">
+                      <select
+                        value={c.rarity ?? ''}
+                        onChange={(e) => e.target.value && e.target.value !== c.rarity && onRarity(c, e.target.value)}
+                        aria-label={`Rarity of ${c.name}`}
+                        className={cn('max-w-[13rem] bg-transparent border rounded-lg px-1.5 py-1 text-sm hover:border-slate-700 focus:border-violet-600 outline-none cursor-pointer',
+                          c.rarityOverride ? 'border-amber-400/70 text-ink' : 'border-transparent text-slate-400')}
+                      >
+                        {!c.rarity && <option value="">—</option>}
+                        {Array.from(new Set([...rarityOptions, ...(c.rarity ? [c.rarity] : []), ...(c.rarityAuto ? [c.rarityAuto] : [])])).map((r) => (
+                          <option key={r} value={r}>
+                            {rarityLabel(game, r)}{c.rarityOverride && r === (c.rarityAuto ?? '') ? ' (automatic)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {c.rarityOverride && (
+                        <span title={`Set by hand — the sync says ${c.rarityAuto ? rarityLabel(game, c.rarityAuto) : 'no rarity'}. Pick that to go back to automatic.`}>
+                          <Hand size={13} className="text-amber-600" />
+                        </span>
+                      )}
+                    </span>
+                  ) : c.rarity ? rarityLabel(game, c.rarity) : '—'}
+                </td>
                 <td className="px-3 py-2 text-slate-300">
                   {c.marketPrice ? `$${c.marketPrice.toFixed(2)}` : '—'}
                   {c.marketPriceFoil ? <span className="text-slate-500"> / ${c.marketPriceFoil.toFixed(2)} foil</span> : null}

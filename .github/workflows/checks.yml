@@ -57,6 +57,7 @@ jobs:
           npm run test:pricecharting
           npm run test:riftbound-tcgplayer
           npm run test:stagnant
+          npm run test:rarity
           npm run test:rebase
           npm run test:relief
           npm run test:scan

@@ -530,6 +530,24 @@ visible even from the "last known status" view, not just right after clicking Sy
   doesn't exist anymore; it only made sense next to a local-file registry and local catalog JSON,
   both gone). Nothing is ever deleted by a sync, same as before, just no separate backup copy.
 
+## Rarity overrides (2026-11-24)
+
+A new set's cards are grouped by the rarity its sync reports (the Cardex's rarity bubbles). Staff fix
+mistakes in Admin Catalog, and the fix survives every sync:
+- **Per card:** the table's Rarity cell is a dropdown of the list's rarities. Picking one writes
+  `rarity` (what everything shows and groups by), `rarityOverride` (the choice) and `rarityAuto` (what
+  the sync reports). A ✋ marks it; picking the sync's own rarity — "(automatic)" — clears the override
+  (`rarityPatch()`).
+- **Per set — "Rarity groups"** on the set's line (`components/admin/RarityGroups.tsx`): rename a
+  group (all its cards move to the new name), delete one (its cards move to a group you choose), or
+  add an empty one to move cards into (kept only once a card is in it).
+- **Syncs:** `syncToFirestore()` runs `applyRarityOverride()` (`scripts/lib/rarity-override.mjs`, tests:
+  `npm run test:rarity`) on every existing card at the write: the override stays as `rarity`, the
+  sync's latest goes to `rarityAuto`. Matching (TCGplayer keys, Signature stubs, Overnumbered numbers)
+  all runs earlier on the source's own rarity, so an override never changes which product a card is.
+- A renamed special rarity (Overnumbered, Star = Overnumbered Signature, Alt Art, Ultimate) loses that
+  rarity's Cardex look (badges, glow); a brand-new name sorts mid-list (`CARDEX_RARITY_ORDER` default).
+
 ## Stagnant prices (2026-11-23, live pickup 2026-11-24)
 
 A **stagnant** card is one whose price nothing updates on its own — a staff-only label, never shown
