@@ -54,7 +54,8 @@ export async function POST(request: Request) {
   }
 
   if (body.mode === 'series') {
-    const days = Math.min(Math.max(Number(body.days) || 365, 1), 730)
+    // A card's own chart can reach back to the first archived day, 2024-02-08 (scripts/backfill-price-history.mjs)
+    const days = Math.min(Math.max(Number(body.days) || 365, 1), 1500)
     const series = await loadPriceSeries(items.slice(0, MAX_SERIES_ITEMS), new Date(now - days * DAY_MS))
     return NextResponse.json(Object.fromEntries(series))
   }
