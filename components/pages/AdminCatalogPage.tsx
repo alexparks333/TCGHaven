@@ -6,7 +6,7 @@ import { Loader2, Search, Plus, Eye, EyeOff, Pencil, Check, Wand2, AlertCircle, 
 import {
   doc, setDoc, updateDoc, getDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, writeBatch, deleteField,
 } from 'firebase/firestore'
-import { rarityPatch } from '@/scripts/lib/rarity-override.mjs'
+import { rarityPatch, setPatch } from '@/scripts/lib/rarity-override.mjs'
 import { RarityGroups } from '@/components/admin/RarityGroups'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useStaff } from '@/components/admin/StaffAuthProvider'
@@ -59,6 +59,8 @@ interface CatalogCard {
   tcgProductId?: number // a hand-added card linked to its TCGplayer product (hand-added-tcgplayer.mjs)
   rarityOverride?: string // a rarity staff set by hand (Rarity dropdown / Rarity groups) — syncs keep it
   rarityAuto?: string     // …and the rarity the sync reports, to go back to (scripts/lib/rarity-override.mjs)
+  setOverride?: { setName: string; setCode?: string; set?: string } // a set staff moved it to (Edit card → Set) — syncs keep it
+  setAuto?: { setName?: string; setCode?: string; set?: string }    // …and the set the sync files it under
   // Pokémon: a TCGplayer promo product from Needs Review (its set lives in the review record).
   // Riftbound's and Lorcana's are every `tcg-` card — see isReviewCard().
   fromReview?: boolean
@@ -630,13 +632,22 @@ export function CatalogBrowser() {
       } else if (movedTo) {
         Object.assign(patch, activeGame === 'riftbound' ? { setCode: movedTo.code } : { set: movedTo.code })
       }
+      // A move to another set is a hand override every sync keeps (scripts/lib/rarity-override.mjs setPatch)
+      // — without it the sync put the card back in the set its source files it under
+      const setFix = movedTo && !reviewCard
+        ? setPatch(findDisplayedCard(id) ?? {}, { setName: movedTo.name, ...(activeGame === 'riftbound' ? { setCode: movedTo.code } : { set: movedTo.code }) })
+        : null
       // A rarity changed here is a hand override too, like the Rarity dropdown (scripts/lib/rarity-override.mjs)
       // — without it the second sync after the edit put the sync's rarity back
       let write: Record<string, unknown> = patch
+      if (setFix) {
+        Object.assign(patch, { setOverride: setFix.setOverride ?? undefined, setAuto: setFix.setAuto ?? undefined })
+        write = { ...patch, setOverride: setFix.setOverride ?? deleteField(), setAuto: setFix.setAuto ?? deleteField() }
+      }
       if (typeof patch.rarity === 'string') {
         const rp = rarityPatch(findDisplayedCard(id) ?? {}, patch.rarity)
         Object.assign(patch, { rarity: rp.rarity, rarityOverride: rp.rarityOverride ?? undefined, rarityAuto: rp.rarityAuto ?? undefined })
-        write = { ...patch, rarityOverride: rp.rarityOverride ?? deleteField(), rarityAuto: rp.rarityAuto ?? deleteField() }
+        write = { ...write, ...patch, rarityOverride: rp.rarityOverride ?? deleteField(), rarityAuto: rp.rarityAuto ?? deleteField() }
       }
       if (Object.keys(write).length) await updateDoc(doc(db, 'catalog', activeGame, 'cards', id), { ...write, updatedAt: serverTimestamp() })
       // A card from Needs Review (`tcg-…`) is rebuilt by every sync from its review record, so a

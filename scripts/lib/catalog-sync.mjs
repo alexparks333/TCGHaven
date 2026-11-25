@@ -32,7 +32,7 @@ import {
 import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { tcgKey, signatureNumberFixes, isUltimate } from './riftbound-tcgplayer.mjs'
 import { keepHandPrice, hasPrice, livePriceFromPriceCharting } from './stagnant.mjs'
-import { applyRarityOverride } from './rarity-override.mjs'
+import { applyHandOverrides } from './rarity-override.mjs'
 import { matchHandAdded, linkedHandCard } from './hand-added-tcgplayer.mjs'
 import { productIdOf } from './pricecharting.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
@@ -235,9 +235,9 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
     // A price staff (or the stagnant-prices agent) set by hand stays until this sync has a real
     // one (scripts/lib/stagnant.mjs) — without this, the next sync wrote the card's $0 back.
     const handKept = existing?.priceSource === 'manual' && !hasPrice(freshCard)
-    // …and a rarity staff set by hand stays too (scripts/lib/rarity-override.mjs) — applied here, at
-    // the write: everything above matched the card on the source's own data
-    const card = existing ? applyRarityOverride(existing, keepHandPrice(existing, freshCard)) : freshCard
+    // …and a rarity or set staff chose by hand stays too (scripts/lib/rarity-override.mjs) — applied
+    // here, at the write: everything above matched the card on the source's own data
+    const card = existing ? applyHandOverrides(existing, keepHandPrice(existing, freshCard)) : freshCard
 
     if (!existing) {
       finalMap.set(card.id, { ...card, hidden: false })

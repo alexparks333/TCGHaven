@@ -545,6 +545,10 @@ mistakes in Admin Catalog, and the fix survives every sync:
   `npm run test:rarity`) on every existing card at the write: the override stays as `rarity`, the
   sync's latest goes to `rarityAuto`. Matching (TCGplayer keys, Signature stubs, Overnumbered numbers)
   all runs earlier on the source's own rarity, so an override never changes which product a card is.
+- **The set, too:** Edit card → Set is a lasting move the same way (`setOverride` / `setAuto`,
+  `setPatch()` / `applySetOverride()`); the card's id never changes. First use (2026-11-24): Riot's
+  gallery files Unleashed's Nexus Night "c" runes as Spiritforged (SFD-R01c…R06c) while TCGplayer
+  lists them only under Unleashed (and prices them there) — all six moved to Unleashed.
 - A renamed special rarity (Overnumbered, Star = Overnumbered Signature, Alt Art, Ultimate) loses that
   rarity's Cardex look (badges, glow); a brand-new name sorts mid-list (`CARDEX_RARITY_ORDER` default).
 
