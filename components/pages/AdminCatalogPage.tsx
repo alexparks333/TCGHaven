@@ -1609,7 +1609,7 @@ function ImageUploadField({
 // px constant) and measured via ResizeObserver into `frameSize` — every bit of the crop math
 // (base scale, pan clamping, and the final crop rect) reads that measured size instead of a
 // hardcoded width/height, so it stays correct at any window size or on rotation.
-const CROP_ZOOM_STEP = 0.25
+const CROP_ZOOM_STEP = 0.01 // the − / + buttons nudge the zoom 1% at a time (2026-11-24; was 25%)
 
 function ImageCropModal({
   source, uploading, onCancel, onConfirm,
