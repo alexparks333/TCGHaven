@@ -13,7 +13,7 @@ import { PriceChartingLink } from '@/components/admin/PriceChartingLink'
 import { adminFetch } from '@/lib/firebase/authFetch'
 import { regenerateSnapshot, refreshCatalogCaches, normNum, CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus, type PokemonSourceReport } from '@/lib/api/syncStatus'
-import { cn } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME } from '@/lib/utils'
 import { GAME_COLORS, type Game } from '@/lib/types'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { StaffModal } from '@/components/admin/StaffModal'
@@ -972,7 +972,7 @@ export function CatalogBrowser() {
             </div>
           ) : (
             <>
-            <RarityBubbles cards={globalResults} picked={rarityPick} onChange={setRarityPick} color={gameColor} />
+            <RarityBubbles game={activeGame} cards={globalResults} picked={rarityPick} onChange={setRarityPick} color={gameColor} />
             <CardTable
               game={activeGame}
               cards={rarityPick.size ? globalResults.filter((c) => rarityPick.has(c.rarity || '—')) : globalResults}
@@ -1023,7 +1023,7 @@ export function CatalogBrowser() {
               onSetInfoUpdated={handleSetInfoUpdated}
             />
           )}
-          {!loadingCards && <RarityBubbles cards={cards} picked={rarityPick} onChange={setRarityPick} color={gameColor} />}
+          {!loadingCards && <RarityBubbles game={activeGame} cards={cards} picked={rarityPick} onChange={setRarityPick} color={gameColor} />}
           {loadingCards ? (
             <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
               <Loader2 size={20} className="animate-spin" style={{ color: gameColor }} />
@@ -1198,10 +1198,13 @@ function DetailField({ label, value, mono, truncate }: { label: string; value: s
   )
 }
 
+/** A rarity as collectors see it (the Cardex's labels): Riftbound's stored 'Star' is "Overnumbered Signature" */
+const rarityLabel = (game: Game, r: string) => RARITY_LABELS_BY_GAME[game]?.[r] ?? r
+
 /** Rarity bubbles: one per rarity in the list, with its count, in the Cardex's rarity order; tap to
  *  show only those (several at once), "All" clears. Their own picks are dropped when a rarity isn't in
  *  the list any more (another set). */
-function RarityBubbles({ cards, picked, onChange, color }: { cards: CatalogCard[]; picked: Set<string>; onChange: (s: Set<string>) => void; color: string }) {
+function RarityBubbles({ game, cards, picked, onChange, color }: { game: Game; cards: CatalogCard[]; picked: Set<string>; onChange: (s: Set<string>) => void; color: string }) {
   const counts = useMemo(() => {
     const m = new Map<string, number>()
     for (const c of cards) m.set(c.rarity || '—', (m.get(c.rarity || '—') ?? 0) + 1)
@@ -1225,7 +1228,7 @@ function RarityBubbles({ cards, picked, onChange, color }: { cards: CatalogCard[
         return (
           <button key={r} type="button" aria-pressed={on} className={bubble(on)} style={on ? onStyle : undefined}
             onClick={() => { const next = new Set(picked); if (on) next.delete(r); else next.add(r); onChange(next) }}>
-            {r} <span className="text-slate-500 font-normal">{n}</span>
+            {rarityLabel(game, r)} <span className="text-slate-500 font-normal">{n}</span>
           </button>
         )
       })}
@@ -1350,7 +1353,7 @@ function CardTable({
                     <span className="text-[0.625rem] text-slate-600">{c.releaseDate || 'release date unknown'}</span>
                   </td>
                 )}
-                <td className="px-3 py-2 text-slate-400">{c.rarity ?? '—'}</td>
+                <td className="px-3 py-2 text-slate-400">{c.rarity ? rarityLabel(game, c.rarity) : '—'}</td>
                 <td className="px-3 py-2 text-slate-300">
                   {c.marketPrice ? `$${c.marketPrice.toFixed(2)}` : '—'}
                   {c.marketPriceFoil ? <span className="text-slate-500"> / ${c.marketPriceFoil.toFixed(2)} foil</span> : null}
@@ -1397,7 +1400,7 @@ function CardTable({
                       <DetailField label="Set" value={c.setName} />
                       <DetailField label="Set code" value={(c.setCode ?? c.set) || '—'} />
                       <DetailField label="Catalog ID" value={c.id} mono />
-                      <DetailField label="Rarity" value={c.rarity || '—'} />
+                      <DetailField label="Rarity" value={c.rarity ? rarityLabel(game, c.rarity) : '—'} />
                       <DetailField label="Source" value={c.isCustom ? 'Custom (added manually)' : 'Scraped from upstream'} />
                       <DetailField label="Hidden" value={c.isHidden ? 'Yes' : 'No'} />
                       {c.publicCode && <DetailField label="Public code" value={c.publicCode} mono />}
