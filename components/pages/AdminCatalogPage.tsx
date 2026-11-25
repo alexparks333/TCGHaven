@@ -11,7 +11,7 @@ import { useStaff } from '@/components/admin/StaffAuthProvider'
 import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
 import { PriceChartingLink } from '@/components/admin/PriceChartingLink'
 import { adminFetch } from '@/lib/firebase/authFetch'
-import { regenerateSnapshot, refreshCatalogCaches, normNum } from '@/lib/api/catalog'
+import { regenerateSnapshot, refreshCatalogCaches, normNum, CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { getAllSyncStatuses, getSyncStatus, type SyncStatus, type PokemonSourceReport } from '@/lib/api/syncStatus'
 import { cn } from '@/lib/utils'
 import { GAME_COLORS, type Game } from '@/lib/types'
@@ -366,6 +366,8 @@ export function CatalogBrowser() {
   const [sets, setSets] = useState<SetOption[]>([])
   const [activeSet, setActiveSet] = useState<SetOption | null>(null)
   const [cards, setCards] = useState<CatalogCard[]>([])
+  // Rarity bubbles above the table (2026-11-24): pick any number to narrow the list; none = every card
+  const [rarityPick, setRarityPick] = useState<Set<string>>(new Set())
   const [loadingSets, setLoadingSets] = useState(false)
   const [loadingCards, setLoadingCards] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -969,9 +971,11 @@ export function CatalogBrowser() {
               <span className="text-sm">Searching…</span>
             </div>
           ) : (
+            <>
+            <RarityBubbles cards={globalResults} picked={rarityPick} onChange={setRarityPick} color={gameColor} />
             <CardTable
               game={activeGame}
-              cards={globalResults}
+              cards={rarityPick.size ? globalResults.filter((c) => rarityPick.has(c.rarity || '—')) : globalResults}
               isAdmin={isAdmin}
               onToggleHide={toggleHideCard}
               onEdit={setEditingCard}
@@ -983,6 +987,7 @@ export function CatalogBrowser() {
               onJumpToSet={handleJumpToSet}
               emptyMessage={`No matches for "${globalQuery.trim()}" across the entire ${activeGame} catalog.`}
             />
+            </>
           )}
         </>
       ) : (
@@ -999,8 +1004,6 @@ export function CatalogBrowser() {
               // no registry entry to patch — only their own custom ("New Set") sets are
               // registry-backed and thus editable.
               editable={(activeGame !== 'pokemon' && activeGame !== 'mtg') || !!activeSet.isCustom}
-              category={hasCategories(activeGame) && categories ? { current: categories.setCategory.get(activeSet.name) ?? null, all: categories.order } : null}
-              onCategory={(category) => categoryAction({ action: 'assign', setName: activeSet.name, category }).catch((err) => setActionError((err as Error).message))}
               onSaved={handleSetInfoUpdated}
               onError={setActionError}
               addCardOpen={showAddForm}
@@ -1020,6 +1023,7 @@ export function CatalogBrowser() {
               onSetInfoUpdated={handleSetInfoUpdated}
             />
           )}
+          {!loadingCards && <RarityBubbles cards={cards} picked={rarityPick} onChange={setRarityPick} color={gameColor} />}
           {loadingCards ? (
             <div className="flex items-center justify-center py-16 gap-3 text-slate-500">
               <Loader2 size={20} className="animate-spin" style={{ color: gameColor }} />
@@ -1028,7 +1032,7 @@ export function CatalogBrowser() {
           ) : (
             <CardTable
               game={activeGame}
-              cards={cards}
+              cards={rarityPick.size ? cards.filter((c) => rarityPick.has(c.rarity || '—')) : cards}
               isAdmin={isAdmin}
               onToggleHide={toggleHideCard}
               onEdit={setEditingCard}
@@ -1051,14 +1055,12 @@ export function CatalogBrowser() {
 // registry-driven source of truth for their entire set list) but only custom Pokemon sets do
 // (official Pokemon sets come live from api.pokemontcg.io with nothing local to patch).
 function SetInfoBar({
-  game, activeSet, isAdmin, editable, category, onCategory, onSaved, onError, onAddCard, addCardOpen,
+  game, activeSet, isAdmin, editable, onSaved, onError, onAddCard, addCardOpen,
 }: {
   game: Game
   activeSet: SetOption
   isAdmin: boolean
   editable: boolean
-  category: { current: string | null; all: string[] } | null
-  onCategory: (category: string) => void
   onSaved: (patch: { releaseDate?: string }) => void
   onError: (msg: string | null) => void
   // Adds a card to THIS set — the button lives here, on the set it adds to
@@ -1130,26 +1132,6 @@ function SetInfoBar({
       <span className="text-slate-500">{activeSet.cardCount ?? '?'} cards</span>
       <span className="text-slate-700">·</span>
       <span className="text-slate-500">Code: {activeSet.code}</span>
-      {category && (
-        <>
-          <span className="text-slate-700">·</span>
-          {isAdmin ? (
-            <label className="flex items-center gap-1 text-slate-500">
-              Category
-              <select
-                value={category.current ?? ''}
-                onChange={(e) => e.target.value && onCategory(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-slate-300"
-              >
-                {category.current === null && <option value="">None</option>}
-                {category.all.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-          ) : (
-            <span className="text-slate-500">Category: {category.current ?? 'none'}</span>
-          )}
-        </>
-      )}
       {activeSet.isCustom && (
         <span className="text-[0.625rem] font-bold uppercase text-violet-600 border border-violet-300 rounded px-1 py-0.5">custom</span>
       )}
@@ -1212,6 +1194,41 @@ function DetailField({ label, value, mono, truncate }: { label: string; value: s
       <div className={cn('text-slate-300', mono && 'font-mono', truncate && 'truncate')} title={truncate ? value : undefined}>
         {value}
       </div>
+    </div>
+  )
+}
+
+/** Rarity bubbles: one per rarity in the list, with its count, in the Cardex's rarity order; tap to
+ *  show only those (several at once), "All" clears. Their own picks are dropped when a rarity isn't in
+ *  the list any more (another set). */
+function RarityBubbles({ cards, picked, onChange, color }: { cards: CatalogCard[]; picked: Set<string>; onChange: (s: Set<string>) => void; color: string }) {
+  const counts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const c of cards) m.set(c.rarity || '—', (m.get(c.rarity || '—') ?? 0) + 1)
+    return Array.from(m).sort((a, b) => (CARDEX_RARITY_ORDER[a[0]] ?? 50) - (CARDEX_RARITY_ORDER[b[0]] ?? 50) || a[0].localeCompare(b[0]))
+  }, [cards])
+  useEffect(() => {
+    const next = new Set(Array.from(picked).filter((r) => counts.some(([k]) => k === r)))
+    if (next.size !== picked.size) onChange(next)
+  }, [counts]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (counts.length < 2) return null
+  const bubble = (on: boolean) => cn('shrink-0 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+    on ? 'text-ink' : 'border-slate-800 bg-slate-900 text-slate-400 hover:text-ink hover:border-slate-700')
+  const onStyle = { backgroundColor: color + '22', borderColor: color + '66' }
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-3">
+      <button type="button" onClick={() => onChange(new Set())} className={bubble(picked.size === 0)} style={picked.size === 0 ? onStyle : undefined}>
+        All <span className="text-slate-500 font-normal">{cards.length}</span>
+      </button>
+      {counts.map(([r, n]) => {
+        const on = picked.has(r)
+        return (
+          <button key={r} type="button" aria-pressed={on} className={bubble(on)} style={on ? onStyle : undefined}
+            onClick={() => { const next = new Set(picked); if (on) next.delete(r); else next.add(r); onChange(next) }}>
+            {r} <span className="text-slate-500 font-normal">{n}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }
