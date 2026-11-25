@@ -790,9 +790,9 @@ export default function InventoryPage() {
                     <div className="flex items-center gap-3 min-w-0 row-span-2 wide:row-span-1">
                       <div className="relative shrink-0">
                         {rep.imageUrl ? (
-                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-12 h-[4.25rem] wide:w-14 wide:h-20 object-contain rounded-md" />
+                          <img src={cardImage(rep.imageUrl, 'thumb')} alt={rep.name} className="w-[2.875rem] h-16 wide:w-[3.25rem] wide:h-[4.5rem] object-contain rounded-md" />
                         ) : (
-                          <div className="w-12 h-[4.25rem] wide:w-14 wide:h-20 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
+                          <div className="w-[2.875rem] h-16 wide:w-[3.25rem] wide:h-[4.5rem] rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
                         {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
                         {totalQty > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
@@ -977,9 +977,9 @@ export default function InventoryPage() {
                   <div className="flex items-center gap-3 min-w-0 row-span-2 wide:row-span-1">
                     <div className="relative shrink-0">
                       {card.imageUrl ? (
-                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-12 h-[4.25rem] wide:w-14 wide:h-20 object-contain rounded-md" />
+                        <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-[2.875rem] h-16 wide:w-[3.25rem] wide:h-[4.5rem] object-contain rounded-md" />
                       ) : (
-                        <div className="w-12 h-[4.25rem] wide:w-14 wide:h-20 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
+                        <div className="w-[2.875rem] h-16 wide:w-[3.25rem] wide:h-[4.5rem] rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
                       {card.quantity > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
