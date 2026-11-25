@@ -2352,6 +2352,8 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = fa
   }
   const resetInspect = inspect.reset
   const setInspectReady = inspect.setReady
+  // How it twists as it pops open (Settings → Cardex Settings): two turns, one, or none
+  const cardSpin = useStore((s) => s.cardSpin)
   // Grabbable once the fly-in flip (card-zoom-flip, 0.65s) has played out
   useEffect(() => {
     if (!visible) return
@@ -2590,7 +2592,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = fa
             className={cn('card-zoom-tilter relative w-full h-full select-none', inspect.ready && 'ready')}
             {...inspect.handlers}
           >
-          <div className={cn('relative w-full h-full card-zoom-flipper', visible && 'spin')}>
+          <div className={cn('relative w-full h-full card-zoom-flipper', visible && cardSpin !== 'off' && (cardSpin === 'one' ? 'spin-one' : 'spin'))}>
             {/* Edge thickness: thin outlines stacked through the card's depth, so it has real sides
                 when turned. A slab is a thick clear block; a raw card is a sliver. */}
             {Array.from({ length: slab ? SLAB_EDGE_LAYERS : CARD_EDGE_LAYERS }, (_, i) => {

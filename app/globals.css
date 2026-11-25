@@ -316,6 +316,11 @@
   0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(720deg); }
 }
+/* Settings → Cardex Settings "1 twist" (the store's cardSpin; "Off" plays no flip at all) */
+@keyframes card-zoom-flip-one {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
 
 /* Scale is only keyed at the start and end so it grows in ONE continuous, decelerating motion.
    It used to have a 45% keyframe too — and since an animation's easing applies to each keyframe
@@ -359,6 +364,9 @@
 
 .card-zoom-flipper.spin {
   animation: card-zoom-flip 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.card-zoom-flipper.spin-one {
+  animation: card-zoom-flip-one 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card-zoom-face {

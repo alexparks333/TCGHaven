@@ -1,7 +1,7 @@
 import { onSnapshot } from 'firebase/firestore'
 import { useStore } from './store'
 import { isCurrency } from './currency'
-import { preferencesDoc, parseFilterPrefs, parseTrackedGames, saveFilterPrefs, type FilterPrefs } from './firebase/preferences'
+import { preferencesDoc, parseFilterPrefs, parseTrackedGames, isCardSpin, saveFilterPrefs, type FilterPrefs } from './firebase/preferences'
 
 // Keeps Portfolio's settings — the Filters panel (value floor, game toggles, hidden groups), the
 // time frame, the card sort and "include sold" — the same on every device signed in to an
@@ -41,6 +41,8 @@ export function startPreferencesSync(userId: string): () => void {
     const data = snap.data()
     // The display currency (Settings → Currency): follow the account's choice
     if (isCurrency(data?.currency) && data.currency !== useStore.getState().currency) useStore.getState().setCurrency(data.currency, false)
+    // The Cardex pop-out twist (Settings → Cardex Settings): follow the account's choice
+    if (isCardSpin(data?.cardSpin) && data.cardSpin !== useStore.getState().cardSpin) useStore.getState().setCardSpin(data.cardSpin)
     const tracked = parseTrackedGames(data?.trackedGames)
     if (tracked && !sameGames(tracked, useStore.getState().trackedGames)) useStore.getState().applyAccountTrackedGames(tracked)
     const remote = parseFilterPrefs(data?.filters)

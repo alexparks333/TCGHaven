@@ -75,6 +75,16 @@ export async function saveCurrency(userId: string, currency: string): Promise<vo
   await setDoc(prefsRef(userId), { currency }, { merge: true })
 }
 
+// How a Cardex card twists as it pops open (Settings → Cardex Settings): 'full' = two whole turns
+// (the original), 'one' = one turn, 'off' = it just flies in. null = never chosen ('full').
+export const CARD_SPINS = ['full', 'one', 'off'] as const
+export type CardSpin = typeof CARD_SPINS[number]
+export const isCardSpin = (v: unknown): v is CardSpin => CARD_SPINS.includes(v as CardSpin)
+
+export async function saveCardSpin(userId: string, cardSpin: CardSpin): Promise<void> {
+  await setDoc(prefsRef(userId), { cardSpin }, { merge: true })
+}
+
 export function preferencesDoc(userId: string) {
   return prefsRef(userId)
 }

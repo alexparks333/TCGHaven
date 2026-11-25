@@ -4,7 +4,7 @@ import { Card, Game, SoldCard } from './types'
 import type { PriceStatus } from './api/priceStatus'
 import type { GradedSource } from './api/gradedPrices'
 import { sharpImageUrl } from './utils'
-import type { PortfolioSort, SlabFilter } from './firebase/preferences'
+import type { PortfolioSort, SlabFilter, CardSpin } from './firebase/preferences'
 import type { CurrencyCode } from './currency'
 
 interface TCGStore {
@@ -52,6 +52,10 @@ interface TCGStore {
   // in USD. Account-wide (lib/preferencesSync.ts) and persisted below.
   currency: CurrencyCode
   setCurrency: (code: CurrencyCode, fromUser?: boolean) => void
+  // How a Cardex card twists as it pops open (Settings → Cardex Settings, lib/firebase/preferences.ts
+  // CARD_SPINS). Account-wide (lib/preferencesSync.ts) and persisted below.
+  cardSpin: CardSpin
+  setCardSpin: (spin: CardSpin) => void
   cardUnlocks: { id: string; card: Card }[]
 
   // Populated by AuthProvider on login
@@ -142,6 +146,8 @@ export const useStore = create<TCGStore>()(
   includeSold: false,
   currency: 'USD',
   setCurrency: (currency) => set({ currency }),
+  cardSpin: 'full' as CardSpin,
+  setCardSpin: (cardSpin) => set({ cardSpin }),
   cardUnlocks: [] as { id: string; card: Card }[],
 
   loadUserCards: (cards) => set((state) => ({ cards: cards.map((c) => withLivePrice(c, state.livePrices)) })),
@@ -231,6 +237,7 @@ export const useStore = create<TCGStore>()(
         portfolioSort: state.portfolioSort,
         includeSold: state.includeSold,
         currency: state.currency,
+        cardSpin: state.cardSpin,
         lastPriceRefresh: state.lastPriceRefresh,
       }),
     }

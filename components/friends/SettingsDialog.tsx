@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins, Camera, LifeBuoy, ChevronRight } from 'lucide-react'
+import { X, LogOut, Pencil, Check, Loader2, AtSign, Mail, UserRound, Trash2, Coins, Camera, LifeBuoy, ChevronRight, RotateCw } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { CURRENCIES, type CurrencyCode } from '@/lib/currency'
-import { saveCurrency } from '@/lib/firebase/preferences'
+import { saveCurrency, saveCardSpin, type CardSpin } from '@/lib/firebase/preferences'
 import { useAccountRole } from '@/lib/accountRoles'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends } from './FriendsProvider'
@@ -16,11 +16,26 @@ import { RequestDelete } from '@/components/account/DeleteAccount'
 import { PushSettings } from '@/components/push/PushSettings'
 
 // Settings — opened from the ⚙️ on your profile banner (it used to be its own page in the
-// sidebar). Your account, your @username, Sign out, and Delete account.
+// sidebar). Three tabs (2026-11-24): Account Settings (email, currency, notifications, support,
+// Sign out, Delete account), Cardex Settings (the pop-out card's twist) and Profile Settings
+// (photo, name, @username).
+type Tab = 'account' | 'cardex' | 'profile'
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'account', label: 'Account Settings' },
+  { id: 'cardex', label: 'Cardex Settings' },
+  { id: 'profile', label: 'Profile Settings' },
+]
+const SPIN_OPTIONS: { value: CardSpin; label: string }[] = [
+  { value: 'full', label: 'Full twists' },
+  { value: 'one', label: '1 twist' },
+  { value: 'off', label: 'Off' },
+]
+
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { user, signOut } = useAuth()
   const { me, setMe } = useFriends()
   const router = useRouter()
+  const [tab, setTab] = useState<Tab>('account')
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
@@ -41,6 +56,13 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const chooseCurrency = (code: CurrencyCode) => {
     setCurrency(code)
     if (user) saveCurrency(user.uid, code).catch((e) => console.error('Failed to save the currency:', e))
+  }
+  // How a Cardex card twists as it pops open — every device signed in to the account (preferencesSync)
+  const cardSpin = useStore((s) => s.cardSpin)
+  const setCardSpin = useStore((s) => s.setCardSpin)
+  const chooseCardSpin = (spin: CardSpin) => {
+    setCardSpin(spin)
+    if (user) saveCardSpin(user.uid, spin).catch((e) => console.error('Failed to save the card twist:', e))
   }
 
   useEffect(() => {
@@ -138,9 +160,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <X size={18} />
           </button>
         </div>
+        <div role="tablist" aria-label="Settings sections" className="mx-5 mb-4 grid grid-cols-3 gap-1 p-1 rounded-2xl bg-slate-950 border border-slate-800 shrink-0">
+          {TABS.map((t) => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+              className={'rounded-xl px-1.5 py-2 text-xs font-semibold leading-tight text-center transition-colors ' +
+                (tab === t.id ? 'bg-[#6b4a2e] text-[#f6ecd6] shadow-sm' : 'text-slate-500 hover:text-ink hover:bg-slate-800')}>
+              {t.label}
+            </button>
+          ))}
+        </div>
 
         <div className="px-5 pb-5 flex flex-col gap-4 overflow-y-auto overscroll-contain min-h-0">
-          {/* Who you're signed in as */}
+          {tab === 'profile' && <>
+          {/* Who you are: your photo — tap to change it */}
           <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-950 border border-slate-800">
             {/* Your photo: tap to change it */}
             <button type="button" onClick={() => photoInput.current?.click()} disabled={photoBusy || !me || photoBlocked}
@@ -167,9 +199,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          {/* Account */}
+          {/* Name and @username */}
           <section>
-            <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Account</div>
+            <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Profile</div>
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 divide-y divide-slate-800">
               <div className={row}>
                 <UserRound size={16} className="text-slate-500 shrink-0" />
@@ -198,11 +230,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                     </button>
                   </>
                 )}
-              </div>
-              <div className={row}>
-                <Mail size={16} className="text-slate-500 shrink-0" />
-                <span className="text-sm text-slate-400 w-20 shrink-0">Email</span>
-                <span className="text-sm font-semibold text-ink truncate">{user.email}</span>
               </div>
               <div className={row}>
                 <AtSign size={16} className="text-slate-500 shrink-0" />
@@ -242,6 +269,48 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </div>
             </div>
             <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">Your profile link uses your username. Your last 3 old usernames stay yours, so links with them still work; older ones are freed up.</p>
+          </section>
+          </>}
+
+          {tab === 'cardex' && (
+            <section>
+              <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Card pop-out</div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60">
+                <label className={row}>
+                  <RotateCw size={16} className="text-slate-500 shrink-0" />
+                  <span className="text-sm text-slate-400 w-20 shrink-0">Card twist</span>
+                  <select value={cardSpin} onChange={(e) => chooseCardSpin(e.target.value as CardSpin)} aria-label="Card twist"
+                    className="flex-1 min-w-0 bg-slate-900 border border-slate-700 focus:border-violet-600 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink outline-none">
+                    {SPIN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">
+                {cardSpin === 'off'
+                  ? 'Cards fly open without twisting.'
+                  : cardSpin === 'one'
+                    ? 'Cards turn round once as they pop open.'
+                    : 'Cards turn round twice as they pop open.'} On every device you sign in to.
+              </p>
+            </section>
+          )}
+
+          {tab === 'account' && <>
+          {/* Who you're signed in as */}
+          <section>
+            <div className="text-[0.6875rem] font-bold uppercase tracking-wider text-slate-500 mb-1.5 px-1">Account</div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 divide-y divide-slate-800">
+              <div className={row}>
+                <Mail size={16} className="text-slate-500 shrink-0" />
+                <span className="text-sm text-slate-400 w-20 shrink-0">Email</span>
+                <span className="text-sm font-semibold text-ink truncate">{user.email}</span>
+              </div>
+              <div className={row}>
+                <UserRound size={16} className="text-slate-500 shrink-0" />
+                <span className="text-sm text-slate-400 w-20 shrink-0">Sign-in</span>
+                <span className="text-sm font-semibold text-ink truncate">{google ? 'Google' : 'Email and password'}</span>
+              </div>
+            </div>
           </section>
 
           {/* Currency: what prices are shown in (lib/currency.ts) — everything is still tracked in USD */}
@@ -298,6 +367,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <Trash2 size={12} />Delete account
           </button>
           <a href="/privacy" target="_blank" rel="noopener" className="mx-auto -mt-3 text-[0.6875rem] text-slate-500 hover:text-ink">Privacy Policy</a>
+          </>}
         </div>
       </div>
     </div>,

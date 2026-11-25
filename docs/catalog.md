@@ -300,8 +300,10 @@ the collector shell/session for `/admin/*`, and `app/admin/layout.tsx` renders `
 - Admin Catalog edits no longer cascade name/number/image into the editor's own inventory (the
   portal has no inventory), so the Inventory "catalog correction" banner is gone too. The collector
   app has no admin or sync UI at all anymore. There's no Settings page either (2026-10-27): Settings
-  is a panel behind the ⚙️ on your profile banner (`components/friends/SettingsDialog.tsx` — name,
-  email, @username, Sign out); `/settings` redirects to `/profile?settings=1`, which opens it. The
+  is a panel behind the ⚙️ on your profile banner (`components/friends/SettingsDialog.tsx` — three tabs
+  since 2026-11-24: Account Settings (email, currency, notifications, Sign out), Cardex Settings (the
+  pop-out card's twist: Full twists / 1 twist / Off — `cardSpin` on `users/{uid}/settings/preferences`)
+  and Profile Settings (photo, name, @username)); `/settings` redirects to `/profile?settings=1`, which opens it. The
   old Riftbound "scan & fix numbers/foil/rarity" repair tool was removed with it.
 
 ### Auth model — `isAdmin` is UX, but every write route now checks the caller too
