@@ -280,7 +280,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60">
                 <label className={row}>
                   <RotateCw size={16} className="text-slate-500 shrink-0" />
-                  <span className="text-sm text-slate-400 w-20 shrink-0">Card animation</span>
+                  <span className="text-sm text-slate-400 shrink-0 whitespace-nowrap">Card animation</span>
                   <select value={cardSpin} onChange={(e) => chooseCardSpin(e.target.value as CardSpin)} aria-label="Card animation"
                     className="flex-1 min-w-0 bg-slate-900 border border-slate-700 focus:border-violet-600 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink outline-none">
                     {SPIN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
