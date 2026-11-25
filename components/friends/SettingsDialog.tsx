@@ -29,7 +29,7 @@ const TABS: { id: Tab; label: string }[] = [
 const SPIN_OPTIONS: { value: CardSpin; label: string }[] = [
   { value: 'full', label: 'Full twists' },
   { value: 'one', label: '1 twist' },
-  { value: 'off', label: 'Off' },
+  { value: 'off', label: 'No twist (fade in)' },
 ]
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
@@ -280,8 +280,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60">
                 <label className={row}>
                   <RotateCw size={16} className="text-slate-500 shrink-0" />
-                  <span className="text-sm text-slate-400 w-20 shrink-0">Card twist</span>
-                  <select value={cardSpin} onChange={(e) => chooseCardSpin(e.target.value as CardSpin)} aria-label="Card twist"
+                  <span className="text-sm text-slate-400 w-20 shrink-0">Card animation</span>
+                  <select value={cardSpin} onChange={(e) => chooseCardSpin(e.target.value as CardSpin)} aria-label="Card animation"
                     className="flex-1 min-w-0 bg-slate-900 border border-slate-700 focus:border-violet-600 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink outline-none">
                     {SPIN_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
@@ -289,7 +289,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               </div>
               <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">
                 {cardSpin === 'off'
-                  ? 'Cards fly open without twisting.'
+                  ? 'Cards fade in as they pop open, without twisting.'
                   : cardSpin === 'one'
                     ? 'Cards turn round once as they pop open.'
                     : 'Cards turn round twice as they pop open.'} On every device you sign in to.

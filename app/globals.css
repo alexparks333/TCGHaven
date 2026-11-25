@@ -316,7 +316,7 @@
   0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(720deg); }
 }
-/* Settings → Cardex Settings "1 twist" (the store's cardSpin; "Off" plays no flip at all) */
+/* Settings → Cardex Settings → Card animation "1 twist" (the store's cardSpin) */
 @keyframes card-zoom-flip-one {
   0%   { transform: rotateY(0deg); }
   100% { transform: rotateY(360deg); }
@@ -367,6 +367,14 @@
 }
 .card-zoom-flipper.spin-one {
   animation: card-zoom-flip-one 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* …"No twist (fade in)": no turn — it fades up from a little smaller as it flies in */
+@keyframes card-zoom-fade-pop {
+  0%   { opacity: 0; transform: scale(0.94); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.card-zoom-flipper.fade-pop {
+  animation: card-zoom-fade-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card-zoom-face {
