@@ -190,7 +190,9 @@ export default function CardDetailPage() {
           </div>
           {historyLocked
             ? <PremiumLock reason="graded" title="Price history" sub="See how this card’s price has moved, by day, with Haven Premium." />
-            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} />}
+            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]}
+                // the day you got it — your purchase date, else when you added it to TCG Haven
+                gotIt={(card.purchaseDate || card.createdAt) ? { date: card.purchaseDate || card.createdAt!, title: `You got it — ${formatDate(card.purchaseDate || card.createdAt!)}` } : undefined} />}
           <div className="text-center text-xs text-slate-600 mt-3">
             {chartData.length <= 2
               ? (gradedSource ? 'Graded price history started 19 Nov 2026 and builds up each day.' : 'Price history builds up automatically as prices update each day.')
