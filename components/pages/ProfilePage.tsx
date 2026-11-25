@@ -275,6 +275,8 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
 
   const me = user?.uid ?? ''
   const first = profile.displayName.split(' ')[0]
+  const since = friendship?.status === 'accepted' && friendship.respondedAt > 0
+    ? new Date(friendship.respondedAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : ''
 
   let action: React.ReactNode = null
   if (!isMe) {
@@ -290,7 +292,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
       // They sent you a request: accept or deny it right here
       action = (
         // Phone: stacked (beside the photo there's no room for both side by side — Deny was cut off)
-        <div className="flex flex-col items-stretch md:flex-row md:items-center gap-2">
+        <div className="flex flex-row items-center gap-2">
           <button onClick={() => act('accept', () => acceptFriendRequest(me, profile.uid))} disabled={!!busy} className="btn-primary disabled:opacity-60">
             {busy === 'accept' ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}Accept request
           </button>
@@ -364,7 +366,6 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
               )}
               <Avatar seed={profile.uid} name={profile.displayName} photoURL={profile.photoURL} size={96} className="ring-[3px] ring-[#ede1c6]" />
             </span>
-            {action && <div className="mb-1 md:hidden">{action}</div>}
           </div>
           <h1 className="text-xl md:text-2xl font-bold text-ink mt-3 leading-tight [overflow-wrap:anywhere]">{profile.displayName}</h1>
           <div className="flex items-center gap-1.5 min-w-0">
@@ -449,9 +450,16 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             </button>
           ) : null}
 
-          {!isMe && friendship?.status === 'accepted' && friendship.respondedAt > 0 && (
-            <div className="flex items-center gap-1.5 mt-4 text-xs text-slate-500">
-              <Users size={13} />Friends since {new Date(friendship.respondedAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          {/* "Friends since…", and on a phone the friend button on the same line to its right (2026-11-24:
+              beside the photo it ran into the Friends / Communities buttons). Desktop: the button is top right. */}
+          {!isMe && (since || action) && (
+            <div className="flex items-center gap-3 mt-4">
+              {since && (
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 min-w-0">
+                  <Users size={13} className="shrink-0" />Friends since {since}
+                </div>
+              )}
+              {action && <div className="md:hidden ml-auto shrink-0 [&_button]:whitespace-nowrap [&_button]:!py-1.5 [&_button]:!px-3 [&_button]:!text-xs">{action}</div>}
             </div>
           )}
           {error && <div className="text-xs text-red-600 mt-2">{error}</div>}
