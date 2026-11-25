@@ -14,11 +14,12 @@ import { Avatar } from './Avatar'
 import { changeUsername, updateNameAndPhoto, uploadProfilePhoto, NAME_MAX } from '@/lib/firebase/friends'
 import { RequestDelete } from '@/components/account/DeleteAccount'
 import { PushSettings } from '@/components/push/PushSettings'
+import { PrivacySettings } from './PrivacySettings'
 
 // Settings — opened from the ⚙️ on your profile banner (it used to be its own page in the
 // sidebar). Three tabs (2026-11-24): Account Settings (email, currency, notifications, support,
 // Sign out, Delete account), Cardex Settings (the pop-out card's twist) and Profile Settings
-// (photo, name, @username).
+// (photo, name, @username, who can see your Cardex / Badges — PrivacySettings).
 type Tab = 'account' | 'cardex' | 'profile'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'account', label: 'Account Settings' },
@@ -270,6 +271,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </div>
             <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">Your profile link uses your username. Your last 3 old usernames stay yours, so links with them still work; older ones are freed up.</p>
           </section>
+          {me && <PrivacySettings profile={me} onSaved={setMe} row={row} />}
           </>}
 
           {tab === 'cardex' && (

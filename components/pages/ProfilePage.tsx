@@ -3,8 +3,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  BookOpen, Lock, Award, TrendingUp, Pencil, Check, Loader2, UserPlus, UserMinus, Clock, Eye, EyeOff, ChevronRight, Users, Globe,
-  Layers, LayoutGrid, Sparkles, Settings, X,
+  BookOpen, Lock, Award, Pencil, Check, Loader2, UserPlus, UserMinus, Clock, ChevronRight, Users,
+  LayoutGrid, Sparkles, Settings, X,
 } from 'lucide-react'
 import { LogoLoader } from '@/components/LogoLoader'
 import { cn, RARITY_LABELS_BY_GAME, zoomGlowColor } from '@/lib/utils'
@@ -33,7 +33,7 @@ import { GAME_COLORS, GAME_LABELS, type Card, type Game } from '@/lib/types'
 import { conditionFactor } from '@/lib/pricing'
 import {
   getProfile, resolveUsername, profilePath, updateProfileDetails, loadFriendCardex, sendFriendRequest, acceptFriendRequest, removeFriendship,
-  BIO_MAX, type Profile, type ProfilePrivacy, type Friendship,
+  BIO_MAX, type Profile, type Friendship,
 } from '@/lib/firebase/friends'
 import { cardImage } from '@/lib/cardImage'
 import { EDITION_LABELS, FINISH_LABELS } from '@/scripts/lib/pokemon-variants.mjs'
@@ -230,7 +230,6 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   // clear) — but never so wide on a phone that they run into the avatar or Settings
   const bannerRef = useRef<HTMLDivElement>(null)
   const [bannerPin, setBannerPin] = useState(0)
-  const [pinsOverPhoto, setPinsOverPhoto] = useState(true)
   useEffect(() => {
     const el = bannerRef.current
     if (!el) return
@@ -239,10 +238,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
       // The avatar / Settings room is sized in rem (it grows with the root size on big monitors)
       const r = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
       const phone = window.innerWidth < 768
-      setPinsOverPhoto(!phone)
-      // Phone (2026-11-24): the pins sit in the banner above the photo (its top 3rem pokes up into the
-      // banner) and take the whole width but Settings — beside the photo they came out tiny
-      const tall = phone ? el.clientHeight - 48 * r - 8 : el.clientHeight - 2
+      // Phone (2026-11-24): a shorter banner, the pins centred in it top to bottom (12px either side)
+      // across its whole width but Settings — the photo only just tucks under its foot
+      const tall = phone ? el.clientHeight - 24 : el.clientHeight - 2
       const wide = phone
         ? (el.clientWidth - ((isMe ? 52 : 0) + 24) * r) / 3.3
         : (el.clientWidth - (150 + (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) + 16) * r) / 3.3
@@ -310,15 +308,14 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
       {/* Banner: darker, aged Haven parchment with a walnut-and-gilt rule along its foot; your
           pins in a stitched leather strap beside Settings (components/badges/BannerPins.tsx) */}
       {/* no walnut-and-gilt rule along its foot here — the photo's ring carries the banner's art on round it */}
-      <div ref={bannerRef} className="haven-banner relative h-36 overflow-hidden" style={{ boxShadow: 'none' }}>
+      <div ref={bannerRef} className="haven-banner relative h-28 md:h-36 overflow-hidden" style={{ boxShadow: 'none' }}>
         {/* the fine gilt rules either side of a small diamond, near its foot */}
         <span aria-hidden className="haven-banner-flourish absolute inset-0 pointer-events-none" />
         <BannerArt />
         {bannerPin > 0 && (
           // The whole banner's height, over the gilt rule like pins on a strap (they used to stop above
           // it with a margin either side, and came out small next to the pin book's — 2026-11-20)
-          // (phone: only the part above the photo — see the sizing above)
-          <div className={cn('absolute top-0 flex items-center', pinsOverPhoto ? 'bottom-0' : 'bottom-12')} style={{ right: 12 }}>
+          <div className="absolute top-0 bottom-0 flex items-center" style={{ right: 12 }}>
             <div className={isMe ? 'mr-[3.25rem] sm:mr-[7.5rem]' : undefined}>
               <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin} />
             </div>
@@ -342,7 +339,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           Desktop: identity above the bio, the right-hand column beside both. */}
       <div className="px-5 md:px-6 pb-5 grid grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_1fr]">
         {/* Identity */}
-        <div className="min-w-0 -mt-12">
+        <div className="min-w-0 -mt-3 md:-mt-12">
           <div className="flex items-end justify-between gap-3">
             {/* A ring of the banner round the photo — a flex box, so it hugs the photo exactly (as an inline span it
                 kept a text line's descender gap under it, and the gold showed as a crescent below the photo) */}
@@ -379,29 +376,27 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           </div>
           {/* Phone: the counts and the community as a line of text (on desktop they're the tiles on the right) */}
           {/* wraps: on your own profile this column is narrow (the privacy box is beside it) */}
-          {/* Phone: the counts as rounded buttons (on desktop they're the tiles on the right) — they wrap,
-              since on your own profile this column is narrow (the privacy box is beside it) */}
-          <div className="md:hidden mt-2.5 flex flex-wrap gap-2">
-            {([[isMe ? '/friends' : null, friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
-               [isMe ? '/friends#communities' : null, communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([href, n, label]) => {
-              const cls = 'inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-800 bg-slate-950/70 px-3.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors'
-              const body = <><span className="text-ink font-bold">{n ?? '–'}</span> {label}</>
-              return href
-                ? <Link key={label} href={href} className={cn(cls, 'hover:border-[#7a5230] hover:text-ink active:bg-slate-900')}>{body}{<ChevronRight size={13} className="-mr-1 text-slate-500" />}</Link>
-                : <span key={label} className={cls}>{body}</span>
-            })}
-          </div>
-          {/* someone else's community: under their counts (yours sits under Who can see it) */}
-          {owned && !isMe && (
-            <CommunityButton uid={profile.uid} label={`${first}’s community`} name={owned.name || 'Community'} className="md:hidden mt-2.5 max-w-xs" />
-          )}
         </div>
 
         {/* Right side: the counts and the community they run, then your privacy switches — or, on someone
             else's profile, the friend action */}
-        <div className={cn('flex gap-3 items-start md:row-span-2', isMe ? 'pl-3 md:pl-5 pt-3 md:pt-4' : 'hidden md:flex pl-5 pt-4')}>
-          {/* someone else's profile: Add / Requested / Remove friend first, to the left of their counts */}
-          {!isMe && action && <div className="shrink-0">{action}</div>}
+        <div className="flex gap-3 items-start md:row-span-2 pl-3 md:pl-5 pt-3 md:pt-4">
+          {/* someone else's profile: Add / Requested / Remove friend first, to the left of their counts
+              (on a phone it sits beside their photo instead) */}
+          {!isMe && action && <div className="shrink-0 hidden md:block">{action}</div>}
+          {/* Phone (2026-11-24): the counts as rounded buttons and the community they run, top right —
+              who can see your Cardex / Badges moved to Settings → Profile Settings */}
+          <div className="md:hidden flex flex-col gap-2 w-[10.5rem]">
+            {([[isMe ? '/friends' : null, friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
+               [isMe ? '/friends#communities' : null, communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([href, n, label]) => {
+              const cls = 'flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-800 bg-slate-950/70 px-3.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors'
+              const body = <span className="flex-1 min-w-0 truncate"><span className="text-ink font-bold">{n ?? '–'}</span> {label}</span>
+              return href
+                ? <Link key={label} href={href} className={cn(cls, 'hover:border-[#7a5230] hover:text-ink active:bg-slate-900')}>{body}<ChevronRight size={13} className="-mr-1 shrink-0 text-slate-500" /></Link>
+                : <span key={label} className={cls}>{body}</span>
+            })}
+            {owned && <CommunityButton uid={profile.uid} label={isMe ? 'Your community' : `${first}’s community`} name={owned.name || 'Community'} />}
+          </div>
           {/* No fixed px width here: the tiles are in rem, and rem grows on wide screens
               (globals.css html font-size), so a px column let them spill over the privacy box */}
           <div className="hidden md:flex flex-col gap-2 shrink-0">
@@ -414,13 +409,6 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
             {/* The community they run — straight to its page (where a visitor can join it) */}
             {owned && <CommunityButton uid={profile.uid} label={isMe ? 'Your community' : `${first}’s community`} name={owned.name || 'Community'} />}
           </div>
-          {isMe && (
-            <div className="flex flex-col gap-2 min-w-0">
-              <PrivacyBox profile={profile} onSaved={onSaved} />
-              {/* Phone: your community as a button under Who can see it (desktop: under the count tiles) */}
-              {owned && <CommunityButton uid={profile.uid} label="Your community" name={owned.name || 'Community'} className="md:hidden w-[11rem]" />}
-            </div>
-          )}
         </div>
 
         {/* Bio */}
@@ -469,74 +457,6 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   )
 }
 
-// ── What others can see (compact, inside your header) ─────────────────────────────────────
-
-/** The width of the Everyone / Friends choice (and Portfolio's "Only you"): icons only on a phone, words from md */
-const SEG_W = 'w-[3.75rem] md:w-[10.25rem]'
-
-function PrivacyBox({ profile, onSaved }: { profile: Profile; onSaved: (p: Profile) => void }) {
-  const [saving, setSaving] = useState<keyof ProfilePrivacy | null>(null)
-  const [error, setError] = useState('')
-
-  // true = Everyone (any collector), false = Friends (only the friends you've added and accepted)
-  async function choose(key: keyof ProfilePrivacy, everyone: boolean) {
-    if (profile.privacy[key] === everyone) return
-    const privacy = { ...profile.privacy, [key]: everyone }
-    setSaving(key); setError('')
-    try {
-      await updateProfileDetails(profile.uid, { privacy })
-      onSaved({ ...profile, privacy })
-    } catch (e) {
-      console.error(e); setError('Couldn’t save — please try again.')
-    } finally { setSaving(null) }
-  }
-
-  const rows: { key: keyof ProfilePrivacy; icon: typeof Award; label: string; hint: string }[] = [
-    { key: 'cardex', icon: BookOpen, label: 'Cardex', hint: 'Which cards you own and what they’re worth — never what you paid' },
-    { key: 'badges', icon: Award, label: 'Badges', hint: 'Your Haven Badges pin book' },
-  ]
-
-  return (
-    <div className="w-[11rem] md:w-[20rem] min-w-0 rounded-2xl border border-slate-800 bg-slate-950/60 p-2 md:p-3">
-      <div className="flex items-center gap-1.5 px-1 mb-1 md:mb-2">
-        <Eye size={13} className="text-slate-500 shrink-0" />
-        <span className="text-[0.625rem] md:text-[0.6875rem] font-bold uppercase md:tracking-wider leading-tight text-slate-500">Who can see it</span>
-      </div>
-      <div className="flex flex-col md:gap-1">
-        {rows.map(({ key, icon: Icon, label, hint }) => {
-          const everyone = profile.privacy[key]
-          // Everyone / Friends — on a phone just the icons (a globe, two people), the words from md up
-          const opt = (value: boolean, I: typeof Globe, name: string, tip: string) => (
-            <button type="button" role="radio" aria-checked={everyone === value} aria-label={`${label}: ${name}`} title={tip}
-              onClick={() => choose(key, value)} disabled={saving === key}
-              className={cn('flex items-center justify-center gap-1 px-1 md:px-2 py-1 text-[0.625rem] md:text-[0.6875rem] font-bold leading-none whitespace-nowrap transition-colors',
-                everyone === value ? 'bg-[#7a5230] text-[#fbf6ea]' : 'text-slate-500 hover:text-ink')}>
-              {saving === key && everyone !== value ? <Loader2 size={11} className="animate-spin" /> : <I size={11} />}<span className="hidden md:inline">{name}</span>
-            </button>
-          )
-          return (
-            <div key={key} title={hint} className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5">
-              <Icon size={15} className={everyone ? 'text-violet-700' : 'text-slate-500'} />
-              <span className="text-sm font-semibold text-ink flex-1 min-w-0 truncate md:overflow-visible md:whitespace-nowrap">{label}</span>
-              {/* two equal halves, the same width as Portfolio's "Only you" box below so all three line up */}
-              <span role="radiogroup" aria-label={`Who can see your ${label}`} className={cn(SEG_W, 'shrink-0 grid grid-cols-2 rounded-lg border border-[#d6c49f] overflow-hidden bg-[#f6eedb] [&>button+button]:border-l [&>button+button]:border-[#d6c49f]')}>
-                {opt(true, Globe, 'Everyone', 'Everyone — any collector can see it')}
-                {opt(false, Users, 'Friends', 'Friends — only the friends you’ve added and accepted')}
-              </span>
-            </div>
-          )
-        })}
-        <div className="flex items-center gap-1.5 md:gap-2.5 rounded-xl px-1 md:px-2 py-1 md:py-1.5" title="Your values and P&L are only ever for you — not even friends">
-          <TrendingUp size={15} className="text-slate-500" />
-          <span className="text-sm font-semibold text-ink flex-1 min-w-0 truncate md:overflow-visible md:whitespace-nowrap">Portfolio</span>
-          <span className={cn(SEG_W, 'shrink-0 flex items-center justify-center gap-1 rounded-lg border border-dashed border-[#d6c49f] py-1 text-[0.625rem] md:text-[0.6875rem] font-bold leading-none text-slate-500')} aria-label="Only you"><Lock size={11} /><span className="hidden md:inline">Only you</span></span>
-        </div>
-      </div>
-      {error && <div className="text-[0.6875rem] text-red-600 mt-1.5 px-1">{error}</div>}
-    </div>
-  )
-}
-
 // ── Showcase: a framed mini Cardex, with a Badges tab ──────────────────────────────────────
 
 type ShowcaseTab = 'cardex' | 'badges'
@@ -552,7 +472,7 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
   // Everyone sees what's set to Everyone; what's set to Friends, only accepted friends (and you)
   const cardexVisible = isMe || profile.privacy.cardex || isFriend
   const badgesVisible = isMe || profile.privacy.badges || isFriend
-  const shared = tab === 'cardex' ? profile.privacy.cardex : profile.privacy.badges
+  const [cardCount, setCardCount] = useState<number | null>(null)
   const tabs: { id: ShowcaseTab; label: string; icon: typeof Award }[] = [
     { id: 'cardex', label: 'Cardex', icon: BookOpen },
     { id: 'badges', label: 'Badges', icon: Award },
@@ -576,12 +496,12 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
               </button>
             ))}
           </div>
-          {isMe && (
-            <span className={cn(
-              'flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full',
-              shared ? 'bg-emerald-600/15 text-emerald-700' : 'bg-slate-800 text-slate-500',
-            )}>
-              {shared ? <Eye size={11} /> : <EyeOff size={11} />}{shared ? 'Everyone' : 'Friends only'}
+          {/* How many cards (2026-11-24: in place of the Everyone / Friends only tag — that's in Settings now) */}
+          {tab === 'cardex' && cardCount != null && (
+            <span className="flex items-center gap-1.5 rounded-xl bg-slate-900 border border-slate-800 px-3 py-2">
+              <LayoutGrid size={14} className="text-violet-600" />
+              <span className="text-sm font-bold text-ink">{cardCount.toLocaleString()}</span>
+              <span className="text-xs text-slate-500">{cardCount === 1 ? 'card' : 'cards'}</span>
             </span>
           )}
           {tab === 'cardex' && cardexVisible && (
@@ -592,7 +512,7 @@ function Showcase({ profile, isMe, isFriend, onSaved }: { profile: Profile; isMe
           )}
         </div>
         {tab === 'cardex'
-          ? <CardexTab profile={profile} isMe={isMe} isFriend={isFriend} view={view} />
+          ? <CardexTab profile={profile} isMe={isMe} isFriend={isFriend} view={view} onCount={setCardCount} />
           : <BadgesTab profile={profile} isMe={isMe} isFriend={isFriend} view={badgesView} onSaved={onSaved} />}
       </div>
     </section>
@@ -647,7 +567,7 @@ function printingOf(c: Card): string {
 // Cardex, which a visitor has no access to. Filter by game and set, page through in place, and
 // click a card for the same spin-around zoom the Cardex has, with the card's market price (the
 // shared catalog's — never what its owner paid; the grid itself shows no prices).
-function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: boolean; isFriend: boolean; view: CardexView }) {
+function CardexTab({ profile, isMe, isFriend, view, onCount }: { profile: Profile; isMe: boolean; isFriend: boolean; view: CardexView; onCount: (n: number | null) => void }) {
   const ownCards = useStore((s) => s.cards)
   const [friendCards, setFriendCards] = useState<Card[] | 'private' | undefined>(undefined)
   // A friend's prices, all fetched together as their cards open (their shared copies carry none) —
@@ -718,6 +638,12 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
     [isMe, ownCards, friendPriced, friendPrices],
   )
 
+  // distinct cards, whatever their printing (a card in two printings is two tiles, one card) — shown
+  // in the showcase's top bar (Showcase), so worked out before the locked / loading returns below
+  const cardCount = useMemo(() => new Set(unique.map((c) => c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`)).size, [unique])
+  const countShown = canView && friendCards !== 'private' && unique.length > 0 ? cardCount : null
+  useEffect(() => { onCount(countShown) }, [countShown, onCount])
+
   const first = profile.displayName.split(' ')[0]
   if (!canView || friendCards === 'private') {
     return (
@@ -741,9 +667,6 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
     inGame.reduce((m, c) => m.set(c.set, (m.get(c.set) ?? 0) + 1), new Map<string, number>()).entries(),
   ).sort((a, b) => b[1] - a[1])
   const shown = set ? inGame.filter((c) => c.set === set) : inGame
-  const setCount = new Set(unique.map((c) => `${c.game}|${c.set}`)).size
-  // distinct cards, whatever their printing (a card in two printings is two tiles, one card)
-  const cardCount = new Set(unique.map((c) => c.apiId || `${c.game}|${c.set}|${c.number}|${c.name}`)).size
 
   function open(el: HTMLElement, c: ShowcaseCard) {
     const color = GAME_COLORS[c.game]
@@ -780,27 +703,10 @@ function CardexTab({ profile, isMe, isFriend, view }: { profile: Profile; isMe: 
     }
   }
 
-  const stats = [
-    { icon: LayoutGrid, value: cardCount.toLocaleString(), label: 'cards' },
-    { icon: Layers, value: setCount.toLocaleString(), label: setCount === 1 ? 'set' : 'sets' },
-    { icon: BookOpen, value: games.length.toString(), label: games.length === 1 ? 'game' : 'games' },
-  ]
-
   if (view === 'full') return <CardexPage viewer={viewer} />
 
   return (
     <div>
-      {/* Stats */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {stats.map(({ icon: Icon, value, label }) => (
-          <div key={label} className="flex items-center gap-2 rounded-xl bg-slate-900 border border-slate-800 px-3 py-2">
-            <Icon size={14} className="text-violet-600" />
-            <span className="text-sm font-bold text-ink">{value}</span>
-            <span className="text-xs text-slate-500">{label}</span>
-          </div>
-        ))}
-      </div>
-
       {/* Game chips, then that game's sets */}
       {games.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-5">

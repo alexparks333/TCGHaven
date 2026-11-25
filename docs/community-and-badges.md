@@ -492,7 +492,7 @@ plus two holds that never delete anything: a Creator can be **suspended**, and a
 from the sidebar's profile button (its own box; Sign out sits separately below it). You curate it:
 a bio (≤160 chars) and `privacy` on `profiles/{uid}` — `cardex` and `badges`, each **Everyone** (`true`,
 the default since 2026-10-28: any signed-in collector, friend or not) or **Friends** (`false`: only the
-friends you've added and accepted — "Who can see it" on your profile). Until 2026-11-16 `false` meant
+friends you've added and accepted — "Who can see it" in Settings → Profile Settings, `components/friends/PrivacySettings.tsx`, since 2026-11-24 — it was a box in your profile header). Until 2026-11-16 `false` meant
 *no one*, not even friends. **The Portfolio is never shared** ("Only you") — there is
 no shared copy of values, prices or purchase info anywhere. `/u/{username}` (`profilePath()`; the
 profile's "Share profile" button copies it) — or `/profile/{uid}` as a fallback — shows someone else's
