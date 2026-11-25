@@ -1526,7 +1526,10 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
                   <CardTile
                     key={card.id}
                     eagerArt={i < FIRST_SCREEN_ART}
-                    onArtDone={markArtDone}
+                    // Only the first screen's pictures hold the loader, and only until the set shows. Every
+                    // other tile reporting its picture re-rendered the whole grid per image — a fast flick
+                    // on a phone loads dozens at once and froze scrolling for ~2 s (2026-11-24)
+                    onArtDone={i < FIRST_SCREEN_ART && revealedSetKey !== setKey ? markArtDone : undefined}
                     card={card}
                     gameColor={gameColor}
                     game={baseGame}
@@ -1791,6 +1794,7 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
             src={cardImage(card.imageUrl, 'grid')}
             alt={card.name}
             loading={eagerArt ? 'eager' : 'lazy'}
+            decoding="async"
             onLoad={() => onArtDone?.(card.id)}
             onError={() => onArtDone?.(card.id)}
             // An image already in the browser cache can finish before onLoad is attached

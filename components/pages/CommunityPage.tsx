@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, Users, Check, LogOut, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette } from 'lucide-react'
+import { Loader2, Users, Check, LogOut, Sparkles, Wand2, Plus, ArrowUp, ArrowDown, Trash2, Palette, Crown } from 'lucide-react'
 import { LogoLoader } from '@/components/LogoLoader'
 import { BlockView, LookScope, Section, type BlockContext } from '@/components/community/blocks'
 import { Medal, METALS } from '@/components/community/Medals'
@@ -176,7 +176,9 @@ export function CommunityView({ uid, community, creator, members, mine, studio, 
             <div className="basis-full">
               {mine ? (
                 // the Studio is computers-only — no link to it in the app or on a phone
-                studio === 'computer' ? <Link href="/creator" className="btn-secondary !inline-flex !w-auto !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link> : null
+                // — there it says whose it is, so the spot where Join sits isn't just empty (2026-11-24)
+                studio === 'computer' ? <Link href="/creator" className="btn-secondary !inline-flex !w-auto !bg-slate-950 border border-slate-700 !text-ink"><Wand2 size={15} />Edit in Creator Studio</Link>
+                  : <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d6c49f] bg-[#f6eedb] px-3.5 py-1.5 text-sm font-semibold text-[#7a5230]"><Crown size={15} />You run this community — edit it in the Creator Studio on a computer</span>
               ) : (
                 <button type="button" onClick={toggle} disabled={busy}
                   className={isMember ? 'group btn-secondary !bg-slate-950 border border-slate-700 !text-ink' : 'btn-primary px-7 py-3 text-base shadow-[0_10px_22px_-10px_rgba(122,82,48,0.8)]'}>
