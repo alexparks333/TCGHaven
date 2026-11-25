@@ -1,6 +1,6 @@
 'use client'
 
-import { PrintingTags } from '@/components/PrintingTags'
+import { PrintingTags, LanguageNote } from '@/components/PrintingTags'
 import { GradedPriceTag } from '@/components/GradedPriceTag'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Plus, Search, Trash2, Edit2, AlertTriangle, CalendarDays, X, ChevronDown, DollarSign, Check, Filter, ScanLine } from 'lucide-react'
@@ -794,6 +794,7 @@ export default function InventoryPage() {
                         ) : (
                           <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
+                        <LanguageNote language={rep.language} />
                         {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
                         {totalQty > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
                       </div>
@@ -980,6 +981,7 @@ export default function InventoryPage() {
                       ) : (
                         <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
+                      <LanguageNote language={card.language} />
                       {card.quantity > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">

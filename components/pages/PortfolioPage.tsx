@@ -1,6 +1,6 @@
 'use client'
 
-import { PrintingTags } from '@/components/PrintingTags'
+import { PrintingTags, LanguageNote } from '@/components/PrintingTags'
 import { GradedPriceTag } from '@/components/GradedPriceTag'
 import { useState, useMemo, useEffect } from 'react'
 import { TrendingUp, TrendingDown, ArrowUpRight, Search, X, Clock, AlertTriangle, SlidersHorizontal } from 'lucide-react'
@@ -599,6 +599,7 @@ export default function PortfolioPage() {
                     ? <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-8 h-11 object-contain rounded" />
                     : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
                   }
+                  <LanguageNote language={card.language} />
                   {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                 </div>
                 <div>

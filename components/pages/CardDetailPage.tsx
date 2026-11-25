@@ -1,6 +1,6 @@
 'use client'
 
-import { PrintingTags } from '@/components/PrintingTags'
+import { PrintingTags, LanguageNote } from '@/components/PrintingTags'
 import { GradedPriceNote, PriceChartingCredit, gradedLabel } from '@/components/GradedPriceTag'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -107,12 +107,15 @@ export default function CardDetailPage() {
             onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
             title="⌘/Ctrl+Click to search eBay sold listings"
           >
-            {card.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
-            ) : (
-              <div className="w-28 h-40 bg-slate-800 rounded-xl flex items-center justify-center text-2xl text-slate-600">🃏</div>
-            )}
+            <div className="shrink-0">
+              {card.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
+              ) : (
+                <div className="w-28 h-40 bg-slate-800 rounded-xl flex items-center justify-center text-2xl text-slate-600">🃏</div>
+              )}
+              <LanguageNote language={card.language} className="mt-1.5 !text-[0.6875rem]" />
+            </div>
             <div className="flex flex-col gap-2">
               <span className="text-xs font-bold px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>
                 {GAME_LABELS[card.game]}
