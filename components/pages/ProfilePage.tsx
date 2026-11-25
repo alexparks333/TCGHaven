@@ -147,6 +147,21 @@ function StatTile({ href, n, label }: { href?: string; n: number | undefined; la
   return href ? <Link href={href} className={cn(cls, 'hover:border-slate-700')}>{body}</Link> : <div className={cls}>{body}</div>
 }
 
+/** The community they run, as a button — straight to its page (where a visitor can join it) */
+function CommunityButton({ uid, label, name, className }: { uid: string; label: string; name: string; className?: string }) {
+  return (
+    <Link href={`/c/${uid}`} title={`Go to ${name}`}
+      className={cn('flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-[#7a5230] px-3 py-2 transition-colors', className)}>
+      <Users size={15} className="shrink-0 text-[#7a5230]" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.625rem] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{label}</span>
+        <span className="block text-sm font-bold text-ink truncate mt-0.5">{name}</span>
+      </span>
+      <ChevronRight size={15} className="shrink-0 text-slate-500" />
+    </Link>
+  )
+}
+
 /** How far below the banner the ring can reach (the banner's look carries on that far, in its bottom tone) */
 const RING_REACH = 160
 
@@ -215,15 +230,22 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   // clear) — but never so wide on a phone that they run into the avatar or Settings
   const bannerRef = useRef<HTMLDivElement>(null)
   const [bannerPin, setBannerPin] = useState(0)
+  const [pinsOverPhoto, setPinsOverPhoto] = useState(true)
   useEffect(() => {
     const el = bannerRef.current
     if (!el) return
     const fit = () => {
       // the banner's full height: BannerPins keeps each pin's art within it (BannerPin's cap)
-      const tall = el.clientHeight - 2
       // The avatar / Settings room is sized in rem (it grows with the root size on big monitors)
       const r = (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16
-      const wide = (el.clientWidth - (150 + (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) + 16) * r) / 3.3
+      const phone = window.innerWidth < 768
+      setPinsOverPhoto(!phone)
+      // Phone (2026-11-24): the pins sit in the banner above the photo (its top 3rem pokes up into the
+      // banner) and take the whole width but Settings — beside the photo they came out tiny
+      const tall = phone ? el.clientHeight - 48 * r - 8 : el.clientHeight - 2
+      const wide = phone
+        ? (el.clientWidth - ((isMe ? 52 : 0) + 24) * r) / 3.3
+        : (el.clientWidth - (150 + (isMe ? (el.clientWidth >= 640 ? 120 : 52) : 0) + 16) * r) / 3.3
       setBannerPin(Math.max(28, Math.floor(Math.min(tall, wide))))
     }
     fit()
@@ -288,14 +310,15 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
       {/* Banner: darker, aged Haven parchment with a walnut-and-gilt rule along its foot; your
           pins in a stitched leather strap beside Settings (components/badges/BannerPins.tsx) */}
       {/* no walnut-and-gilt rule along its foot here — the photo's ring carries the banner's art on round it */}
-      <div ref={bannerRef} className="haven-banner relative h-28 md:h-36 overflow-hidden" style={{ boxShadow: 'none' }}>
+      <div ref={bannerRef} className="haven-banner relative h-36 overflow-hidden" style={{ boxShadow: 'none' }}>
         {/* the fine gilt rules either side of a small diamond, near its foot */}
         <span aria-hidden className="haven-banner-flourish absolute inset-0 pointer-events-none" />
         <BannerArt />
         {bannerPin > 0 && (
           // The whole banner's height, over the gilt rule like pins on a strap (they used to stop above
           // it with a margin either side, and came out small next to the pin book's — 2026-11-20)
-          <div className="absolute top-0 bottom-0 flex items-center" style={{ right: 12 }}>
+          // (phone: only the part above the photo — see the sizing above)
+          <div className={cn('absolute top-0 flex items-center', pinsOverPhoto ? 'bottom-0' : 'bottom-12')} style={{ right: 12 }}>
             <div className={isMe ? 'mr-[3.25rem] sm:mr-[7.5rem]' : undefined}>
               <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin} />
             </div>
@@ -356,18 +379,21 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           </div>
           {/* Phone: the counts and the community as a line of text (on desktop they're the tiles on the right) */}
           {/* wraps: on your own profile this column is narrow (the privacy box is beside it) */}
-          <div className="md:hidden mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm font-semibold text-slate-400">
+          {/* Phone: the counts as rounded buttons (on desktop they're the tiles on the right) — they wrap,
+              since on your own profile this column is narrow (the privacy box is beside it) */}
+          <div className="md:hidden mt-2.5 flex flex-wrap gap-2">
             {([[isMe ? '/friends' : null, friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
                [isMe ? '/friends#communities' : null, communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([href, n, label]) => {
+              const cls = 'inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-800 bg-slate-950/70 px-3.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors'
               const body = <><span className="text-ink font-bold">{n ?? '–'}</span> {label}</>
-              return href ? <Link key={label} href={href} className="hover:text-ink whitespace-nowrap">{body}</Link> : <span key={label} className="whitespace-nowrap">{body}</span>
+              return href
+                ? <Link key={label} href={href} className={cn(cls, 'hover:border-[#7a5230] hover:text-ink active:bg-slate-900')}>{body}{<ChevronRight size={13} className="-mr-1 text-slate-500" />}</Link>
+                : <span key={label} className={cls}>{body}</span>
             })}
           </div>
-          {owned && (
-            <Link href={`/c/${profile.uid}`} className="md:hidden mt-2 flex items-start gap-1.5 text-sm font-bold text-[#7a5230] max-w-full">
-              {/* the text wraps inside the narrow column instead of running under the privacy box */}
-              <Users size={14} className="shrink-0 mt-[3px]" /><span className="min-w-0 [overflow-wrap:anywhere]">{isMe ? 'Your community' : `${first}’s community`}: {owned.name || 'Open'}</span><ChevronRight size={14} className="shrink-0 mt-[3px]" />
-            </Link>
+          {/* someone else's community: under their counts (yours sits under Who can see it) */}
+          {owned && !isMe && (
+            <CommunityButton uid={profile.uid} label={`${first}’s community`} name={owned.name || 'Community'} className="md:hidden mt-2.5 max-w-xs" />
           )}
         </div>
 
@@ -386,19 +412,15 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
               <StatTile href={isMe ? '/friends#communities' : undefined} n={communities.length} label={communities.length === 1 ? 'Community' : 'Communities'} />
             </div>
             {/* The community they run — straight to its page (where a visitor can join it) */}
-            {owned && (
-              <Link href={`/c/${profile.uid}`} title={`Go to ${owned.name || 'the community'}`}
-                className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:border-[#7a5230] px-3 py-2 transition-colors">
-                <Users size={15} className="shrink-0 text-[#7a5230]" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[0.625rem] font-bold uppercase tracking-[0.12em] text-slate-500 leading-none">{isMe ? 'Your community' : `${first}’s community`}</span>
-                  <span className="block text-sm font-bold text-ink truncate mt-0.5">{owned.name || 'Community'}</span>
-                </span>
-                <ChevronRight size={15} className="shrink-0 text-slate-500" />
-              </Link>
-            )}
+            {owned && <CommunityButton uid={profile.uid} label={isMe ? 'Your community' : `${first}’s community`} name={owned.name || 'Community'} />}
           </div>
-          {isMe && <PrivacyBox profile={profile} onSaved={onSaved} />}
+          {isMe && (
+            <div className="flex flex-col gap-2 min-w-0">
+              <PrivacyBox profile={profile} onSaved={onSaved} />
+              {/* Phone: your community as a button under Who can see it (desktop: under the count tiles) */}
+              {owned && <CommunityButton uid={profile.uid} label="Your community" name={owned.name || 'Community'} className="md:hidden w-[11rem]" />}
+            </div>
+          )}
         </div>
 
         {/* Bio */}
