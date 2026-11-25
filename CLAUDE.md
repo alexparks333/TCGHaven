@@ -34,8 +34,8 @@ in that area:**
 ## Running the app
 
 **Port 4000 belongs to a different project (AuctionHous-TCG). Never kill, restart or touch anything
-on port 4000.** TCGHaven is port 3000 only; scope any kill to 3000 (Mac: `lsof -ti :3000 | xargs -r
-kill -9`; Windows: `netstat -ano | findstr :3000` then `taskkill /PID <pid> /T /F`). Never use broad
+on port 4000.** TCGHaven is port 3000 only; scope any kill to 3000 (Mac: `lsof -ti tcp:3000 -sTCP:LISTEN |
+xargs -r kill -9` — the listener only: plain `lsof -ti :3000` also lists the browser's connections; Windows: `netstat -ano | findstr :3000` then `taskkill /PID <pid> /T /F`). Never use broad
 kills like `pkill -f "next dev"`.
 
 ```bash
