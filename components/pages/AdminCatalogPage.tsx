@@ -1031,6 +1031,7 @@ export function CatalogBrowser() {
             <CardTable
               game={activeGame}
               cards={rarityPick.size ? globalResults.filter((c) => rarityPick.has(c.rarity || '—')) : globalResults}
+              rarityChoices={globalResults.map((c) => c.rarity ?? '').filter(Boolean)}
               onRarity={isAdmin ? (card, to) => void moveRarity([card], to) : undefined}
               isAdmin={isAdmin}
               onToggleHide={toggleHideCard}
@@ -1105,7 +1106,8 @@ export function CatalogBrowser() {
             <CardTable
               game={activeGame}
               cards={rarityPick.size ? cards.filter((c) => rarityPick.has(c.rarity || '—')) : cards}
-              rarityChoices={activeSet ? addedRarities[`${activeGame}:${activeSet.name}`] : undefined}
+              // every group in the set (not just the rows a rarity bubble leaves showing) + newly added ones
+              rarityChoices={[...cards.map((c) => c.rarity ?? ''), ...(activeSet ? addedRarities[`${activeGame}:${activeSet.name}`] ?? [] : [])].filter(Boolean)}
               onRarity={isAdmin ? (card, to) => void moveRarity([card], to) : undefined}
               isAdmin={isAdmin}
               onToggleHide={toggleHideCard}
@@ -1337,7 +1339,7 @@ function CardTable({
   showSetColumn?: boolean
   onJumpToSet?: (setName: string, cardId: string) => void
   emptyMessage?: string
-  /** Rarity groups added in the Rarity groups window that no card is in yet — offered in the dropdowns */
+  /** Every rarity to offer in the dropdowns: the whole set's (the table may be narrowed by a rarity bubble) and groups added in the Rarity groups window */
   rarityChoices?: string[]
   /** Staff: move a card to another rarity (a hand override the syncs keep) */
   onRarity?: (card: CatalogCard, to: string) => void
