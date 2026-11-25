@@ -815,21 +815,39 @@ export function CatalogBrowser() {
         {loadingSets ? (
           <span className="text-slate-500 text-sm flex items-center gap-2"><Loader2 size={14} className="animate-spin" /> Loading sets…</span>
         ) : (
-          <select
-            // By name, not code: One Piece has dozens of sets with no code and some sharing one
-            // (ST22, ST29…), so picking by code opened the wrong set
-            value={activeSet?.name ?? ''}
-            onChange={(e) => setActiveSet(sets.find((s) => s.name === e.target.value) ?? null)}
-            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink"
-          >
-            {setSections
-              ? setSections.map(([label, list]) => (
-                  <optgroup key={label} label={label}>
-                    {list.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-                  </optgroup>
-                ))
-              : sets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
-          </select>
+          <>
+            {/* Two pickers when the game has categories (2026-11-24): the category, then its sets —
+                one list of every set was too long to find anything in. Choosing a category opens its first set. */}
+            {setSections && (() => {
+              const current = setSections.find(([, list]) => list.some((x) => x.name === activeSet?.name))?.[0] ?? ''
+              return (
+                <select
+                  value={current}
+                  onChange={(e) => {
+                    const list = setSections.find(([label]) => label === e.target.value)?.[1] ?? []
+                    if (list[0]) setActiveSet(list[0])
+                  }}
+                  aria-label="Category"
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink"
+                >
+                  {setSections.map(([label, list]) => <option key={label} value={label}>{label} ({list.length})</option>)}
+                </select>
+              )
+            })()}
+            <select
+              // By name, not code: One Piece has dozens of sets with no code and some sharing one
+              // (ST22, ST29…), so picking by code opened the wrong set
+              value={activeSet?.name ?? ''}
+              onChange={(e) => setActiveSet(sets.find((s) => s.name === e.target.value) ?? null)}
+              aria-label="Set"
+              className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-ink"
+            >
+              {setSections
+                ? (setSections.find(([, list]) => list.some((x) => x.name === activeSet?.name))?.[1] ?? sets)
+                    .map((s) => <option key={s.name} value={s.name}>{s.name}</option>)
+                : sets.map((s) => <option key={s.name} value={s.name}>{s.name}</option>)}
+            </select>
+          </>
         )}
         {isAdmin && hasCategories(activeGame) && (
           <button
