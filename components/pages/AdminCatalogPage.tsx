@@ -8,6 +8,7 @@ import {
 } from 'firebase/firestore'
 import { rarityPatch, setPatch } from '@/scripts/lib/rarity-override.mjs'
 import { RarityGroups } from '@/components/admin/RarityGroups'
+import { useRarityOrder, saveSetRarityOrder, sortRarities } from '@/lib/rarityOrder'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { useStaff } from '@/components/admin/StaffAuthProvider'
 import { staffDb as db, staffStorage as storage } from '@/lib/firebase/staff'
@@ -379,6 +380,17 @@ export function CatalogBrowser() {
   const [rarityGroupsOpen, setRarityGroupsOpen] = useState(false)
   const [addedRarities, setAddedRarities] = useState<Record<string, string[]>>({})
   const [rarityBusy, setRarityBusy] = useState(false)
+  // Each set's bubble order (lib/rarityOrder.ts) — the Cardex follows it too
+  const { order: rarityOrders, reload: reloadRarityOrders } = useRarityOrder(db, activeGame)
+  async function saveRarityOrder(list: string[]) {
+    if (!activeSet) return
+    try {
+      await saveSetRarityOrder(db, activeGame, activeSet.name, list)
+      reloadRarityOrders()
+    } catch (err) {
+      setActionError(`Couldn't save the order — ${(err as Error).message}`)
+    }
+  }
   const [loadingSets, setLoadingSets] = useState(false)
   const [loadingCards, setLoadingCards] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -1092,7 +1104,7 @@ export function CatalogBrowser() {
               onSetInfoUpdated={handleSetInfoUpdated}
             />
           )}
-          {!loadingCards && <RarityBubbles game={activeGame} cards={cards} picked={rarityPick} onChange={setRarityPick} color={gameColor} />}
+          {!loadingCards && <RarityBubbles game={activeGame} cards={cards} picked={rarityPick} onChange={setRarityPick} color={gameColor} order={activeSet ? rarityOrders[activeSet.name] : undefined} />}
           {rarityGroupsOpen && activeSet && (
             <StaffModal onClose={() => setRarityGroupsOpen(false)} className="max-w-xl">
               <RarityGroups
@@ -1104,6 +1116,8 @@ export function CatalogBrowser() {
                 onAdd={(name) => setAddedRarities((m) => ({ ...m, [`${activeGame}:${activeSet.name}`]: [...(m[`${activeGame}:${activeSet.name}`] ?? []), name] }))}
                 onForget={(name) => setAddedRarities((m) => ({ ...m, [`${activeGame}:${activeSet.name}`]: (m[`${activeGame}:${activeSet.name}`] ?? []).filter((n) => n !== name) }))}
                 onMove={moveRarity}
+                order={rarityOrders[activeSet.name]}
+                onReorder={saveRarityOrder}
                 onClose={() => setRarityGroupsOpen(false)}
               />
             </StaffModal>
@@ -1302,12 +1316,13 @@ const rarityLabel = (game: Game, r: string) => RARITY_LABELS_BY_GAME[game]?.[r] 
 /** Rarity bubbles: one per rarity in the list, with its count, in the Cardex's rarity order; tap to
  *  show only those (several at once), "All" clears. Their own picks are dropped when a rarity isn't in
  *  the list any more (another set). */
-function RarityBubbles({ game, cards, picked, onChange, color }: { game: Game; cards: CatalogCard[]; picked: Set<string>; onChange: (s: Set<string>) => void; color: string }) {
+function RarityBubbles({ game, cards, picked, onChange, color, order }: { game: Game; cards: CatalogCard[]; picked: Set<string>; onChange: (s: Set<string>) => void; color: string; order?: string[] }) {
   const counts = useMemo(() => {
     const m = new Map<string, number>()
     for (const c of cards) m.set(c.rarity || '—', (m.get(c.rarity || '—') ?? 0) + 1)
-    return Array.from(m).sort((a, b) => (CARDEX_RARITY_ORDER[a[0]] ?? 50) - (CARDEX_RARITY_ORDER[b[0]] ?? 50) || a[0].localeCompare(b[0]))
-  }, [cards])
+    const sorted = sortRarities(Array.from(m.keys()), order)
+    return sorted.map((r) => [r, m.get(r)!] as [string, number])
+  }, [cards, order])
   useEffect(() => {
     const next = new Set(Array.from(picked).filter((r) => counts.some(([k]) => k === r)))
     if (next.size !== picked.size) onChange(next)

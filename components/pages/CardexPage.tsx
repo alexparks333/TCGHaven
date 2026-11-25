@@ -10,6 +10,8 @@ import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, CONDITION_LABELS, CONDITION_SHORT, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
 import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText, cardIdentityKey } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
+import { db as appDb } from '@/lib/firebase/config'
+import { useRarityOrder, sortRarities } from '@/lib/rarityOrder'
 import { PersonalCollectionsView } from './PersonalCollectionsView'
 import { LogoLoader } from '@/components/LogoLoader'
 import { useScrollLock } from '@/lib/useScrollLock'
@@ -1169,15 +1171,14 @@ function CardexPageBody({ viewer, picker }: { viewer?: CardexViewer; picker?: Ca
   const gameSearching = !!gameSearchKey
   const gameCardsReady = gameSearching && gameResults?.key === gameSearchKey ? gameResults.cards : undefined
 
+  // A set's own order when staff saved one (Admin Catalog → Rarity groups, lib/rarityOrder.ts) — the whole-game
+  // search spans sets, so it keeps the shared order
+  const { order: rarityOrder } = useRarityOrder(appDb, catalogGame)
   const rarityFilters = useMemo(() => {
     if (!RARITY_TOGGLE_GAMES.has(baseGame)) return []
     const present = new Set((gameCardsReady ?? enriched).map((c) => c.rarity).filter((r): r is string => !!r))
-    return Array.from(present).sort((a, b) => {
-      const pa = CARDEX_RARITY_ORDER[a] ?? 9999
-      const pb = CARDEX_RARITY_ORDER[b] ?? 9999
-      return pa !== pb ? pa - pb : a.localeCompare(b)
-    })
-  }, [baseGame, enriched, gameCardsReady])
+    return sortRarities(Array.from(present), gameCardsReady ? undefined : rarityOrder[activeSet.name])
+  }, [baseGame, enriched, gameCardsReady, rarityOrder, activeSet.name])
 
   const filteredEnriched = useMemo(() => {
     let list = enriched

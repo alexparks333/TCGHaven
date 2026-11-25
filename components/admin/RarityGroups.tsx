@@ -1,17 +1,19 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Check, Loader2, Pencil, Plus, Trash2, X, Hand } from 'lucide-react'
+import { Check, Loader2, Pencil, Plus, Trash2, X, Hand, ArrowUp, ArrowDown } from 'lucide-react'
+import { sortRarities } from '@/lib/rarityOrder'
 
 // A set's rarity groups (2026-11-24, the Owner's call) — opened from Admin Catalog's set line. A new
 // set's cards are grouped by the rarity their sync reports; here staff fix the groups themselves:
 // rename one (all its cards move to the new name), delete one (its cards move to another group first),
 // or add an empty one to move cards into from each card's Rarity dropdown. Every move is a hand
-// override the syncs keep (scripts/lib/rarity-override.mjs).
+// override the syncs keep (scripts/lib/rarity-override.mjs). ↑ / ↓ set the order of the set's rarity bubbles,
+// here and in the Cardex (lib/rarityOrder.ts).
 
 export interface RarityCard { id: string; name: string; rarity?: string; rarityOverride?: string; rarityAuto?: string }
 
-export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForget, onMove, onClose }: {
+export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForget, onMove, order, onReorder, onClose }: {
   setName: string
   cards: RarityCard[]
   /** Groups added here that no card is in yet (kept by the page while it's open) */
@@ -22,6 +24,10 @@ export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForg
   onForget: (name: string) => void
   /** Move these cards to `to` (each becomes a hand override) */
   onMove: (cards: RarityCard[], to: string) => Promise<void>
+  /** The set's saved bubble order (none = the shared default) */
+  order?: string[]
+  /** Save the set's bubble order (every group, top to bottom) */
+  onReorder: (list: string[]) => Promise<void>
   onClose: () => void
 }) {
   const groups = useMemo(() => {
@@ -31,8 +37,8 @@ export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForg
       m.set(r, [...(m.get(r) ?? []), c])
     }
     for (const a of added) if (!m.has(a)) m.set(a, [])
-    return Array.from(m)
-  }, [cards, added])
+    return sortRarities(Array.from(m.keys()), order).map((g) => [g, m.get(g)!] as [string, RarityCard[]])
+  }, [cards, added, order])
   const names = groups.map(([g]) => g)
 
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -42,20 +48,33 @@ export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForg
   const [newName, setNewName] = useState('')
   const [error, setError] = useState('')
 
+  /** Move one group up or down; saves the whole set's order as shown */
+  function move(i: number, by: -1 | 1) {
+    const list = [...names]
+    const j = i + by
+    if (j < 0 || j >= list.length) return
+    ;[list[i], list[j]] = [list[j], list[i]]
+    void onReorder(list)
+  }
+
   async function rename(from: string, list: RarityCard[]) {
     const to = renameTo.trim().replace(/\s+/g, ' ')
     setError('')
     if (!to || to === from) { setRenaming(null); return }
-    if (list.length === 0) { onForget(from); onAdd(to); setRenaming(null); return }
-    await onMove(list, to)
+    if (list.length === 0) { onForget(from); onAdd(to) } else await onMove(list, to)
+    // the renamed group keeps its place in the order
+    if (order?.length) await onReorder(names.map((n) => (n === from ? to : n)).filter((n, i, a) => a.indexOf(n) === i))
     setRenaming(null)
   }
 
   async function remove(from: string, list: RarityCard[]) {
     setError('')
-    if (list.length === 0) { onForget(from); setDeleting(null); return }
-    if (!moveTo || moveTo === from) { setError('Pick the group its cards move to first.'); return }
-    await onMove(list, moveTo)
+    if (list.length === 0) onForget(from)
+    else {
+      if (!moveTo || moveTo === from) { setError('Pick the group its cards move to first.'); return }
+      await onMove(list, moveTo)
+    }
+    if (order?.includes(from)) await onReorder(names.filter((n) => n !== from))
     setDeleting(null)
   }
 
@@ -78,12 +97,12 @@ export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForg
       </div>
       <p className="text-xs text-slate-500 mb-4">
         The sync groups a new set&rsquo;s cards by the rarity it reports. Rename or delete a group here, or add one and move cards into it with
-        each card&rsquo;s Rarity dropdown. Every change is a hand override (<Hand size={11} className="inline -mt-0.5" />) that syncs keep; set a card
+        each card&rsquo;s Rarity dropdown. ↑ / ↓ set the order of the set&rsquo;s rarity bubbles, here and in the Cardex. Every change is a hand override (<Hand size={11} className="inline -mt-0.5" />) that syncs keep; set a card
         back to its automatic rarity any time.
       </p>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950/60 divide-y divide-slate-800">
-        {groups.map(([g, list]) => {
+        {groups.map(([g, list], i) => {
           const byHand = list.filter((c) => c.rarityOverride).length
           return (
             <div key={g} className="px-3 py-2.5">
@@ -109,6 +128,13 @@ export function RarityGroups({ setName, cards, added, label, busy, onAdd, onForg
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
+                  {/* the bubble order, top = first (here and in the Cardex) */}
+                  <span className="flex flex-col -my-1 shrink-0">
+                    <button onClick={() => move(i, -1)} disabled={busy || i === 0} aria-label={`Move ${label(g)} up`} title="Move up"
+                      className="w-6 h-5 flex items-center justify-center rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25 disabled:hover:bg-transparent"><ArrowUp size={13} /></button>
+                    <button onClick={() => move(i, 1)} disabled={busy || i === groups.length - 1} aria-label={`Move ${label(g)} down`} title="Move down"
+                      className="w-6 h-5 flex items-center justify-center rounded text-slate-500 hover:text-ink hover:bg-slate-800 disabled:opacity-25 disabled:hover:bg-transparent"><ArrowDown size={13} /></button>
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="text-sm font-semibold text-ink">{label(g)}</span>
                     {label(g) !== g && <span className="ml-1.5 text-[0.6875rem] text-slate-500">stored as “{g}”</span>}

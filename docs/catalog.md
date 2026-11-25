@@ -545,6 +545,11 @@ mistakes in Admin Catalog, and the fix survives every sync:
   `npm run test:rarity`) on every existing card at the write: the override stays as `rarity`, the
   sync's latest goes to `rarityAuto`. Matching (TCGplayer keys, Signature stubs, Overnumbered numbers)
   all runs earlier on the source's own rarity, so an override never changes which product a card is.
+- **Bubble order:** ↑ / ↓ in Rarity groups save the set's order to `catalog_meta/{game}_rarities`
+  `{ order: { [setName]: rarity[] } }` (`lib/rarityOrder.ts`); Admin Catalog's bubbles and the Cardex's
+  rarity bubbles follow it (`sortRarities()`), anything it doesn't list falls back to
+  `CARDEX_RARITY_ORDER`. The Cardex's set API is cached 2 minutes at the CDN (was 10), so a staff fix
+  shows about as fast as the catalog cache picks it up.
 - **The set, too:** Edit card → Set is a lasting move the same way (`setOverride` / `setAuto`,
   `setPatch()` / `applySetOverride()`); the card's id never changes. First use (2026-11-24): Riot's
   gallery files Unleashed's Nexus Night "c" runes as Spiritforged (SFD-R01c…R06c) while TCGplayer

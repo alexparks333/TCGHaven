@@ -85,7 +85,9 @@ export async function GET(request: Request) {
 
   // Public catalog data: cached by Vercel's CDN, refreshed in the background (prices change at most
   // every few hours with the sync)
-  return NextResponse.json(cards, { headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=86400' } })
+  // 2 minutes at the CDN (was 10): staff fixes in Admin Catalog (a rarity, a set) reach the Cardex about as fast as
+  // the server's own catalog cache picks them up (STALE_MS)
+  return NextResponse.json(cards, { headers: { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=86400' } })
 }
 
 // Most results a whole-game search returns — a one-letter-ish name ("a") would otherwise send a
