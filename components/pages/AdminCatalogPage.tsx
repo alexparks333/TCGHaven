@@ -1234,6 +1234,8 @@ function CardTable({
   emptyMessage?: string
 }) {
   const [hoverPreviewUrl, setHoverPreviewUrl] = useState<string | null>(null)
+  const [hoverLandscape, setHoverLandscape] = useState(false) // a sideways card (its picture is wider than tall)
+  useEffect(() => { setHoverLandscape(false) }, [hoverPreviewUrl])
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   function toggleExpanded(id: string) {
@@ -1410,12 +1412,23 @@ function CardTable({
         // ancestor creates a new containing block for `position: fixed` descendants — so a
         // fixed element left inside this tree centers on that (possibly off-screen, scrolled)
         // container instead of the actual viewport. Escaping to <body> sidesteps that entirely.
+        // Shaped exactly like the Cardex's card zoom (CardexPage CardZoomOverlay): a 5:7 card (7:5 for a
+        // landscape one, e.g. a Riftbound battlefield) filled edge to edge, 1.125rem corners, no border
+        // — it used to be the raw photo at its own shape with small corners (2026-11-24)
         <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center">
-          <img
-            src={hoverPreviewUrl}
-            alt=""
-            className="w-[23.75rem] max-w-[80vw] max-h-[80vh] h-auto object-contain rounded-lg shadow-2xl border border-slate-700"
-          />
+          <div
+            className="relative overflow-hidden rounded-[1.125rem] shadow-2xl shadow-black/50"
+            style={hoverLandscape
+              ? { width: 'min(90vw, max(460px, 64vh))', aspectRatio: '7 / 5' }
+              : { width: 'min(80vw, calc(70vh * 5 / 7), 23.75rem)', aspectRatio: '5 / 7' }}
+          >
+            <img
+              src={hoverPreviewUrl}
+              alt=""
+              onLoad={(e) => setHoverLandscape(e.currentTarget.naturalWidth > e.currentTarget.naturalHeight * 1.1)}
+              className="absolute inset-0 w-full h-full object-cover rounded-[inherit]"
+            />
+          </div>
         </div>,
         document.body,
       )}
