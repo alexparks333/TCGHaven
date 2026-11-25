@@ -4,14 +4,15 @@ import type { Card } from '@/lib/types'
 // a Reverse Holo, a Japanese card. Shown next to a card's name wherever inventory rows appear, so
 // two rows of the same card (a 1st Edition and an Unlimited copy are separate rows) can be told
 // apart at a glance. Same tag style as the Riftbound "Nexus" tag beside it.
-// A copy's language when it isn't English — small, under its picture (LanguageNote), not a tag beside
-// the name: the tags are for the printing (Reverse Holo, 1st Ed…), the Owner's call 2026-11-24.
+// A copy's language when it isn't English — small (LanguageNote), not a tag beside
+// the name: the tags are for the printing (Reverse Holo, 1st Ed…), the Owner's call 2026-11-24. A small line
+// under the card's text (below its group), never under the picture — that shrank the thumbnail.
 const LANGUAGE_NAMES: Record<string, string> = { ja: 'Japanese' }
 
 export function LanguageNote({ language, className = '' }: { language?: string; className?: string }) {
   const name = language && language !== 'en' ? LANGUAGE_NAMES[language] ?? language.toUpperCase() : ''
   if (!name) return null
-  return <div className={`mt-0.5 text-center text-[0.5625rem] font-semibold leading-none text-slate-500 ${className}`}>{name}</div>
+  return <div className={`mt-0.5 text-[0.625rem] font-semibold text-slate-500 ${className}`}>{name}</div>
 }
 
 export function PrintingTags({ card, className = '' }: { card: Pick<Card, 'edition' | 'finish' | 'language'>; className?: string }) {

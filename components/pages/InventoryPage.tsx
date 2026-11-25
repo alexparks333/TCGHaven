@@ -794,7 +794,6 @@ export default function InventoryPage() {
                         ) : (
                           <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{rep.number}</div>
                         )}
-                        <LanguageNote language={rep.language} />
                         {/* Phone only (desktop has a Qty column): on the thumbnail's corner so a long name can't wrap it */}
                         {totalQty > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{totalQty}</span>}
                       </div>
@@ -815,6 +814,7 @@ export default function InventoryPage() {
                         <div className="hidden wide:block text-xs text-slate-500">#{rep.number}{hasMarket && <> · {formatCurrency(currentPrice)} ea</>}</div>
                         {hasMarket && <GradedPriceTag card={rep} className="mt-1" />}
                         {rep.group && <div className="text-[0.625rem] text-violet-600/70 mt-0.5">{rep.group}</div>}
+                        <LanguageNote language={rep.language} />
                       </div>
                     </div>
                     <div className="text-sm text-slate-300 hidden wide:flex items-center">{rep.set}</div>
@@ -981,7 +981,6 @@ export default function InventoryPage() {
                       ) : (
                         <div className="w-11 h-[3.75rem] wide:w-10 wide:h-14 rounded-md bg-slate-800 flex items-center justify-center text-xs text-slate-600">#{card.number}</div>
                       )}
-                      <LanguageNote language={card.language} />
                       {card.quantity > 1 && <span className="wide:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                     </div>
                     <div className="min-w-0">
@@ -1005,6 +1004,7 @@ export default function InventoryPage() {
                       <div className="hidden wide:block text-xs text-slate-500">#{card.number}{hasMarket && <> · {formatCurrency(card.currentPrice!)} ea</>}</div>
                       {hasMarket && <GradedPriceTag card={card} className="mt-1" />}
                       {card.group && <div className="text-[0.625rem] text-violet-600/70 mt-0.5">{card.group}</div>}
+                      <LanguageNote language={card.language} />
                     </div>
                   </div>
                   <div className="text-sm text-slate-300 hidden wide:flex items-center">{card.set}</div>

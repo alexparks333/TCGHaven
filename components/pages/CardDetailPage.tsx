@@ -107,15 +107,12 @@ export default function CardDetailPage() {
             onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
             title="⌘/Ctrl+Click to search eBay sold listings"
           >
-            <div className="shrink-0">
-              {card.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
-              ) : (
-                <div className="w-28 h-40 bg-slate-800 rounded-xl flex items-center justify-center text-2xl text-slate-600">🃏</div>
-              )}
-              <LanguageNote language={card.language} className="mt-1.5 !text-[0.6875rem]" />
-            </div>
+            {card.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
+            ) : (
+              <div className="w-28 h-40 bg-slate-800 rounded-xl flex items-center justify-center text-2xl text-slate-600">🃏</div>
+            )}
             <div className="flex flex-col gap-2">
               <span className="text-xs font-bold px-2 py-0.5 rounded-full w-fit" style={{ backgroundColor: GAME_COLORS[card.game] + '22', color: GAME_COLORS[card.game] }}>
                 {GAME_LABELS[card.game]}
@@ -128,6 +125,7 @@ export default function CardDetailPage() {
               )}
               <PrintingTags card={card} className="w-fit" />
               <div className="text-sm text-slate-400">{card.set}</div>
+              <LanguageNote language={card.language} className="!mt-0 !text-xs" />
               <div className="text-xs text-slate-500">#{card.number}</div>
               <div className="text-xs text-slate-500">{conditionLabel(card)}</div>
               <div className="text-xs text-slate-500">Qty: {card.quantity}</div>
