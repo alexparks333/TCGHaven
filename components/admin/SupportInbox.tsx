@@ -5,7 +5,7 @@ import { Check, Loader2, Mail, RefreshCw, RotateCcw, SearchX, LifeBuoy, Smartpho
 import { cn } from '@/lib/utils'
 import { staffDb } from '@/lib/firebase/staff'
 import { GAME_LABELS } from '@/lib/types'
-import { loadSupportRequests, setSupportStatus, SUPPORT_TOPICS, type SupportRequest, type SupportStatus } from '@/lib/support'
+import { loadSupportRequests, setSupportStatus, supportPhotoUrl, SUPPORT_TOPICS, type SupportRequest, type SupportStatus } from '@/lib/support'
 
 // The staff portal's Support tab: what collectors sent from /support (lib/support.ts) — missing
 // cards to add to the catalog, and help / bug reports to answer (by email: the reply link). Newest
@@ -98,6 +98,7 @@ export function SupportInbox() {
                       </div>
                     ) : null}
                     {r.message && <p className="mt-2 text-sm text-slate-300 whitespace-pre-wrap break-words">{r.message}</p>}
+                    {!!r.photos?.length && <ReportPhotos paths={r.photos} />}
                     <div className="mt-2 text-xs text-slate-500">
                       From <span className="text-ink font-medium">{r.name || 'a collector'}</span>
                       {' · '}<a href={`mailto:${r.email}?subject=${subject}`} className="inline-flex items-center gap-1 underline underline-offset-2 hover:text-ink"><Mail size={11} />{r.email}</a>
@@ -118,6 +119,30 @@ export function SupportInbox() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/** A report's pictures (only staff can open them — storage.rules support/): tap one for full size */
+function ReportPhotos({ paths }: { paths: string[] }) {
+  const [urls, setUrls] = useState<(string | null)[]>([])
+  useEffect(() => {
+    let live = true
+    Promise.all(paths.map((p) => supportPhotoUrl(p).catch(() => null))).then((u) => { if (live) setUrls(u) })
+    return () => { live = false }
+  }, [paths])
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {paths.map((p, i) => urls[i] ? (
+        <a key={p} href={urls[i]!} target="_blank" rel="noreferrer" className="block w-20 h-20 rounded-lg overflow-hidden border border-slate-800 hover:border-slate-600">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={urls[i]!} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+        </a>
+      ) : (
+        <div key={p} className="w-20 h-20 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-center text-slate-600">
+          {urls.length ? <span className="text-[0.625rem]">missing</span> : <Loader2 size={14} className="animate-spin" />}
+        </div>
+      ))}
     </div>
   )
 }

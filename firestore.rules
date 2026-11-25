@@ -491,7 +491,9 @@ service cloud.firestore {
         && request.resource.data.kind in ['missing-card', 'general']
         && request.resource.data.platform in ['app', 'web']
         && request.resource.data.createdAt == request.time
-        && request.resource.data.keys().hasOnly(['kind', 'status', 'uid', 'email', 'name', 'message', 'platform', 'createdAt', 'setName', 'cardName', 'number', 'page', 'game', 'topic'])
+        && request.resource.data.keys().hasOnly(['kind', 'status', 'uid', 'email', 'name', 'message', 'platform', 'createdAt', 'setName', 'cardName', 'number', 'page', 'game', 'topic', 'photos'])
+        // up to 10 pictures, each in the sender's own support/{uid}/ folder in Storage (storage.rules)
+        && (!('photos' in request.resource.data) || (request.resource.data.photos is list && request.resource.data.photos.size() <= 10))
         && request.resource.data.message is string && request.resource.data.message.size() <= 4000
         && shortStr(request.resource.data, 'email') && shortStr(request.resource.data, 'name')
         && shortStr(request.resource.data, 'setName') && shortStr(request.resource.data, 'cardName')

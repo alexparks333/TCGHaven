@@ -50,6 +50,18 @@ service firebase.storage {
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Pictures sent with a support report (/support — lib/support.ts uploadSupportPhoto, up to 10 a
+    // report): only you add yours, an image under 10 MB; only staff (and the Owner / bot) open them.
+    match /support/{uid}/{fileName} {
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read: if request.auth != null && (
+        request.auth.uid in ['C0TwoasKIChjBAUSDgywKVt0Sho1', 'gTjTFDy9wLWiptuFxhiCLOv8kEa2'] ||
+        firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid))
+      );
+    }
+
     match /catalog/{game}/{fileName} {
       allow read: if true;
       allow write: if request.auth != null && (

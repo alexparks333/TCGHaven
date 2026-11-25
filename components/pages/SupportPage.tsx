@@ -1,16 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Check, LifeBuoy, Loader2, Mail, SearchX } from 'lucide-react'
+import { Check, ImagePlus, LifeBuoy, Loader2, Mail, SearchX, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { db } from '@/lib/firebase/config'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { inApp } from '@/lib/nativeApp'
 import { GAME_LABELS, type Game } from '@/lib/types'
-import { sendSupportRequest, SUPPORT_EMAIL, SUPPORT_LIMITS, SUPPORT_TOPICS, type SupportKind, type SupportTopic } from '@/lib/support'
+import { sendSupportRequest, uploadSupportPhoto, SUPPORT_EMAIL, SUPPORT_LIMITS, SUPPORT_TOPICS, type SupportKind, type SupportTopic } from '@/lib/support'
 
 // /support — the public help page (the App Store's support URL too). Two kinds of report: a card
 // missing from the catalog, or help (account, a bug, billing, anything else). Saved for staff
@@ -37,6 +37,22 @@ export default function SupportPage() {
   const [emailEdit, setEmailEdit] = useState<string | null>(null)
   const email = emailEdit ?? user?.email ?? ''
 
+  // Up to 10 pictures (the card, its back, a screenshot of the bug…), uploaded when it's sent
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([])
+  const photoInput = useRef<HTMLInputElement>(null)
+  const photosRef = useRef(photos)
+  photosRef.current = photos
+  useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.url)), [])
+  function addPhotos(files: FileList | null) {
+    const picked = Array.from(files ?? []).filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name))
+    setPhotos((ps) => [...ps, ...picked.slice(0, SUPPORT_LIMITS.photos - ps.length).map((file) => ({ file, url: URL.createObjectURL(file) }))])
+    if (photoInput.current) photoInput.current.value = ''
+  }
+  function removePhoto(i: number) {
+    setPhotos((ps) => { URL.revokeObjectURL(ps[i].url); return ps.filter((_, j) => j !== i) })
+  }
+  const [uploaded, setUploaded] = useState(0)
+
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,8 +66,15 @@ export default function SupportPage() {
     if (!user || !ready || sending) return
     setSending(true)
     setError(null)
+    setUploaded(0)
     try {
+      const paths: string[] = []
+      for (const p of photos) {
+        paths.push(await uploadSupportPhoto(user.uid, p.file))
+        setUploaded(paths.length)
+      }
       await sendSupportRequest(db, {
+        photos: paths,
         kind, uid: user.uid, email, name: me?.displayName ?? user.displayName ?? '',
         message, platform: inApp() ? 'app' : 'web',
         ...(kind === 'missing-card' ? { game, setName, cardName, number } : { topic }),
@@ -68,6 +91,7 @@ export default function SupportPage() {
 
   function another() {
     setSent(false); setSetName(''); setCardName(''); setNumber(''); setMessage('')
+    photos.forEach((p) => URL.revokeObjectURL(p.url)); setPhotos([])
   }
 
   const field = 'w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-ink placeholder-slate-500 focus:outline-none focus:border-slate-600'
@@ -179,6 +203,29 @@ export default function SupportPage() {
                 </div>
               </>
             )}
+            {/* Pictures: up to 10 */}
+            <div>
+              <span className={label}>Photos <span className="font-normal text-slate-500">(optional — up to {SUPPORT_LIMITS.photos}{kind === 'missing-card' ? ': the front and back of the card help most' : ', e.g. screenshots'})</span></span>
+              <div className="flex flex-wrap gap-2">
+                {photos.map((p, i) => (
+                  <div key={p.url} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={p.url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                    {!sending && (
+                      <button type="button" onClick={() => removePhoto(i)} aria-label={`Remove photo ${i + 1}`}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"><X size={13} /></button>
+                    )}
+                  </div>
+                ))}
+                {photos.length < SUPPORT_LIMITS.photos && !sending && (
+                  <button type="button" onClick={() => photoInput.current?.click()}
+                    className="w-20 h-20 rounded-xl border border-dashed border-slate-700 hover:border-slate-500 text-slate-500 hover:text-ink flex flex-col items-center justify-center gap-1 text-[0.6875rem] font-semibold transition-colors">
+                    <ImagePlus size={18} />{photos.length ? `${photos.length}/${SUPPORT_LIMITS.photos}` : 'Add photos'}
+                  </button>
+                )}
+              </div>
+              <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={(e) => addPhotos(e.target.files)} />
+            </div>
             <div>
               <label className={label} htmlFor="s-email">Reply to</label>
               <input id="s-email" type="email" value={email} onChange={(e) => setEmailEdit(e.target.value)} maxLength={SUPPORT_LIMITS.short} className={field} required />
@@ -187,7 +234,7 @@ export default function SupportPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <a href={`mailto:${SUPPORT_EMAIL}`} className="text-xs text-slate-500 hover:text-ink underline underline-offset-2">Prefer email? {SUPPORT_EMAIL}</a>
               <button type="submit" disabled={!ready || sending} className="btn-primary disabled:opacity-50">
-                {sending && <Loader2 size={15} className="animate-spin" />}Send
+                {sending && <Loader2 size={15} className="animate-spin" />}{sending && photos.length ? `Uploading ${Math.min(uploaded + 1, photos.length)}/${photos.length}…` : 'Send'}
               </button>
             </div>
           </form>

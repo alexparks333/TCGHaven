@@ -21,7 +21,7 @@ export const SUPPORT_TOPICS: { id: SupportTopic; label: string; hint: string }[]
 ]
 
 // Lengths the rules enforce too (firestore.rules support_requests) — keep the two in step
-export const SUPPORT_LIMITS = { short: 120, message: 4000 } as const
+export const SUPPORT_LIMITS = { short: 120, message: 4000, photos: 10 } as const
 
 export interface SupportRequest {
   id: string
@@ -40,6 +40,9 @@ export interface SupportRequest {
   message: string        // the details (a missing card's note may be empty)
   platform: 'app' | 'web'
   page?: string          // where it was sent from (a Cardex/Add Card search link), for context
+  // Up to 10 pictures (2026-11-24): Storage paths support/{uid}/… — only staff can open them
+  // (storage.rules); uploadSupportPhoto() before sending, supportPhotoUrl() in the staff inbox
+  photos?: string[]
   createdAt?: Timestamp
 }
 
@@ -66,7 +69,33 @@ export async function sendSupportRequest(db: Firestore, req: NewSupportRequest):
   }
   if (req.kind === 'missing-card' && req.game) data.game = req.game
   if (req.kind === 'general' && req.topic) data.topic = req.topic
+  const photos = (req.photos ?? []).filter((p) => p.startsWith(`support/${req.uid}/`)).slice(0, SUPPORT_LIMITS.photos)
+  if (photos.length) data.photos = photos
   await addDoc(collection(db, 'support_requests'), data)
+}
+
+/** A picture for a report: shrunk to at most 2000px on its long side (a phone photo is often 5–10 MB),
+ *  saved as a JPEG under support/{uid}/ (storage.rules: yours to add, under 10 MB, staff read). → its path */
+export async function uploadSupportPhoto(uid: string, file: File): Promise<string> {
+  const bmp = await createImageBitmap(file)
+  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height))
+  const c = document.createElement('canvas')
+  c.width = Math.round(bmp.width * scale)
+  c.height = Math.round(bmp.height * scale)
+  c.getContext('2d')!.drawImage(bmp, 0, 0, c.width, c.height)
+  bmp.close()
+  const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/jpeg', 0.85))
+  if (!blob) throw new Error('Couldn’t read that picture')
+  const [{ ref, uploadBytes }, { appStorage }] = await Promise.all([import('firebase/storage'), import('./firebase/appStorage')])
+  const path = `support/${uid}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`
+  await uploadBytes(ref(appStorage, path), blob, { contentType: 'image/jpeg' })
+  return path
+}
+
+/** Staff: a report picture's address (the staff portal's own Storage sign-in — only staff may read them) */
+export async function supportPhotoUrl(path: string): Promise<string> {
+  const [{ ref, getDownloadURL }, { staffStorage }] = await Promise.all([import('firebase/storage'), import('./firebase/staff')])
+  return getDownloadURL(ref(staffStorage, path))
 }
 
 /** Staff: the newest reports first */
