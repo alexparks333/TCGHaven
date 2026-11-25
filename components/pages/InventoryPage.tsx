@@ -779,7 +779,7 @@ export default function InventoryPage() {
                 <div key={key} id={`inv-row-${key}`} className={cn('border-b border-slate-800/50 last:border-0 transition-colors duration-700', litKey === key && 'inv-row-lit')}>
                   {/* Main row */}
                   <div
-                    className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-3.5 wide:py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                    className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-2.5 wide:py-2 hover:bg-slate-800/20 transition-colors cursor-pointer"
                     onClick={(e) => {
                       if (e.ctrlKey || e.metaKey) { openEbaySearch(rep); return }
                       if (e.shiftKey) { router.push(cardexHref(rep)); return }
@@ -972,7 +972,7 @@ export default function InventoryPage() {
                     router.push(`/portfolio/${card.id}`)
                   }}
                   title="Click to view card detail · Shift+Click to see it in the Cardex · ⌘/Ctrl+Click to search recently sold listings"
-                  className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-3.5 wide:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                  className="relative grid grid-cols-[1fr_auto] wide:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_80px] items-center wide:items-stretch gap-x-3 gap-y-1 wide:gap-4 px-4 wide:px-5 py-2.5 wide:py-2 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0 row-span-2 wide:row-span-1">
                     <div className="relative shrink-0">
