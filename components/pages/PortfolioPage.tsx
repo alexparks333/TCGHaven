@@ -477,9 +477,9 @@ export default function PortfolioPage() {
                 className="flex items-center gap-3 hover:bg-slate-800/40 rounded-xl p-2 -mx-2 transition-colors group cursor-pointer"
               >
                 {c.imageUrl ? (
-                  <img src={cardImage(c.imageUrl, 'thumb')} alt={c.name} className="w-8 h-11 object-contain rounded" />
+                  <img src={cardImage(c.imageUrl, 'thumb')} alt={c.name} className="w-12 h-[4.25rem] md:w-14 md:h-20 object-contain rounded-md" />
                 ) : (
-                  <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">#{c.number}</div>
+                  <div className="w-12 h-[4.25rem] md:w-14 md:h-20 bg-slate-800 rounded-md flex items-center justify-center text-xs text-slate-600">#{c.number}</div>
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -591,15 +591,15 @@ export default function PortfolioPage() {
                 router.push(`/portfolio/${card.id}`)
               }}
               title="Click to view card · ⌘/Ctrl+Click to search eBay sold listings"
-              className="grid grid-cols-[1fr_auto] items-center md:grid-cols-[2fr_1fr_1fr_1fr_40px] gap-3 md:gap-4 px-4 md:px-5 py-3 md:py-4 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
+              className="grid grid-cols-[1fr_auto] items-center md:grid-cols-[2fr_1fr_1fr_1fr_40px] gap-3 md:gap-4 px-4 md:px-5 py-2.5 md:py-2 border-b border-slate-800/50 last:border-0 hover:bg-slate-800/20 transition-colors group cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 {/* On phones the ×N badge sits on the thumbnail's corner, so a long name can't push it
                     onto its own line; on the web it stays next to the name. */}
                 <div className="relative shrink-0">
                   {card.imageUrl
-                    ? <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-8 h-11 object-contain rounded" />
-                    : <div className="w-8 h-11 bg-slate-800 rounded flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
+                    ? <img src={cardImage(card.imageUrl, 'thumb')} alt={card.name} className="w-12 h-[4.25rem] md:w-14 md:h-20 object-contain rounded-md" />
+                    : <div className="w-12 h-[4.25rem] md:w-14 md:h-20 bg-slate-800 rounded-md flex items-center justify-center text-xs text-slate-600">{card.number || '?'}</div>
                   }
                   {card.quantity > 1 && <span className="md:hidden absolute -top-1.5 -right-2 min-w-[1.125rem] text-center text-[0.5625rem] font-bold leading-none px-1 py-[0.1875rem] rounded-full bg-violet-700 text-white ring-2 ring-slate-900">×{card.quantity}</span>}
                 </div>
