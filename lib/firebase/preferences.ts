@@ -76,7 +76,7 @@ export async function saveCurrency(userId: string, currency: string): Promise<vo
 }
 
 // How a Cardex card twists as it pops open (Settings → Cardex Settings): 'full' = two whole turns
-// (the original), 'one' = one turn, 'off' = it just flies in. null = never chosen ('full').
+// (the original), 'one' = one turn, 'off' = it just flies in. Never chosen = 'one' (lib/store.ts).
 export const CARD_SPINS = ['full', 'one', 'off'] as const
 export type CardSpin = typeof CARD_SPINS[number]
 export const isCardSpin = (v: unknown): v is CardSpin => CARD_SPINS.includes(v as CardSpin)

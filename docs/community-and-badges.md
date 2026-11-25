@@ -498,6 +498,16 @@ no shared copy of values, prices or purchase info anywhere. `/u/{username}` (`pr
 profile's "Share profile" button copies it) — or `/profile/{uid}` as a fallback — shows someone else's
 profile with only what they share (non-friends see name/bio and an Add button).
 
+**Friends / Communities lists (2026-11-24).** A profile's "N Friends" / "N Communities" buttons open a
+searchable list (`components/friends/PeopleListDialog.tsx`): communities from `useMyCommunities()`;
+friends — yours live from FriendsProvider, anyone else's from `GET /api/friends/list?uid=` (the
+server reads the friendships as the bot; they stay private in firestore.rules). Who may see someone's
+friend list is their `privacy.friends` ("Friends list" in Who can see it): Everyone (`true`, the
+default — also when the field is missing) or Friends. Each row has Add friend (or Friends / Requested),
+and Add friend at the top opens the Friends popup's search of every collector. The rules allow the
+`friends` key from 2026-11-24 — the app must not ship before those rules are deployed (a new profile
+saves `privacy` with it).
+
 Layout: header card (banner, avatar, name, bio — and on your own profile the compact "Friends can
 see" switches on its right), then the **showcase**, framed in the parchment palette
 (`.showcase-frame` / `.showcase-inner` in `globals.css`) with Cardex | Badges tabs. The profile is

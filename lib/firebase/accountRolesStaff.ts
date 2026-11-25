@@ -18,7 +18,7 @@ export interface AccountChange { id: string; at: number; byName: string; action:
 export type AccountList = 'regular' | 'premium' | 'creator' | 'suspended' | 'staff' | 'banned'
 
 const roleRef = (uid: string) => doc(staffDb, 'account_roles', uid)
-const DELETED = (uid: string): Profile => ({ uid, username: '', displayName: '(deleted account)', photoURL: '', bio: '', privacy: { cardex: false, badges: false }, pinDisplay: [] })
+const DELETED = (uid: string): Profile => ({ uid, username: '', displayName: '(deleted account)', photoURL: '', bio: '', privacy: { cardex: false, badges: false, friends: false }, pinDisplay: [] })
 
 async function inChunks<T>(ids: string[], coll: string, read: (id: string, d: Record<string, unknown>) => T | null): Promise<Map<string, T>> {
   const out = new Map<string, T>()

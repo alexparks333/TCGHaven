@@ -27,11 +27,14 @@ import type { Card, Game } from '../types'
 export interface ProfilePrivacy {
   cardex: boolean  // true = Everyone can browse your Cardex; false = only your accepted friends (firestore.rules)
   badges: boolean  // true = Everyone can see your badges; false = only your accepted friends
+  // true = anyone signed in can browse your friend list (and add people from it); false = only your
+  // accepted friends. Read on the server (app/api/friends/list) — the friendships stay private. 2026-11-24
+  friends: boolean
 }
 
 // Public by default: anyone signed in can see your Cardex and Badges until you set them to Friends on your
 // profile — then only the friends you've added and accepted can.
-export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: true, badges: true }
+export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: true, badges: true, friends: true }
 export const BIO_MAX = 160
 // The pin display pad on a profile's Badges tab: this many spots, each holding a badge id the owner
 // picked ('' = empty). Only earned badges are shown, whatever is stored.
@@ -264,7 +267,7 @@ export async function updateProfileDetails(uid: string, patch: { bio?: string; p
   if (patch.pinDisplay) data.pinDisplay = toPinDisplay(patch.pinDisplay)
   if (patch.bannerPins) data.bannerPins = toBannerPins(patch.bannerPins)
   if (patch.bio !== undefined) data.bio = patch.bio.trim().slice(0, BIO_MAX)
-  if (patch.privacy) data.privacy = { cardex: !!patch.privacy.cardex, badges: !!patch.privacy.badges }
+  if (patch.privacy) data.privacy = { cardex: !!patch.privacy.cardex, badges: !!patch.privacy.badges, friends: patch.privacy.friends !== false }
   await updateDoc(doc(db, 'profiles', uid), data)
 }
 
@@ -331,6 +334,15 @@ export function watchFriendships(me: string, onChange: (list: Friendship[]) => v
   const a = listen('requester', sent)
   const b = listen('addressee', received)
   return () => { a(); b() }
+}
+
+/** Someone's friends, as their profile cards (app/api/friends/list) — 'private' when they keep the list to friends */
+export interface FriendListEntry { uid: string; username: string; displayName: string; photoURL: string }
+export async function loadFriendList(uid: string): Promise<FriendListEntry[] | 'private'> {
+  const res = await authFetch(`/api/friends/list?uid=${encodeURIComponent(uid)}`)
+  if (res.status === 403) return 'private'
+  if (!res.ok) throw new Error(`Friend list: ${res.status}`)
+  return ((await res.json()) as { friends: FriendListEntry[] }).friends
 }
 
 export async function sendFriendRequest(me: string, them: string): Promise<void> {

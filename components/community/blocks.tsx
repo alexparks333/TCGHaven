@@ -230,7 +230,7 @@ export function AchievementBoard({ community, book, title, sample, styleOf }: { 
       const d = (e as CustomEvent<DevEarner>).detail
       const badge = d.badge && ids.includes(d.badge) ? d.badge : ids[Math.floor(Math.random() * ids.length)]
       if (!badge) return
-      const profile = { uid: d.key, username: '', displayName: d.name, photoURL: '', bio: '', privacy: { cardex: false, badges: false }, pinDisplay: [] }
+      const profile = { uid: d.key, username: '', displayName: d.name, photoURL: '', bio: '', privacy: { cardex: false, badges: false, friends: false }, pinDisplay: [] }
       setFakes((f) => [{ key: d.key, member: d.key, badge, earnedAt: d.at, profile, fake: true }, ...f].slice(0, BOARD_ROWS))
     }
     const clear = () => setFakes([])

@@ -53,7 +53,8 @@ interface TCGStore {
   currency: CurrencyCode
   setCurrency: (code: CurrencyCode, fromUser?: boolean) => void
   // How a Cardex card twists as it pops open (Settings → Cardex Settings, lib/firebase/preferences.ts
-  // CARD_SPINS). Account-wide (lib/preferencesSync.ts) and persisted below.
+  // CARD_SPINS). Account-wide (lib/preferencesSync.ts) — not kept on the device: the account's choice
+  // arrives with the preferences doc, and every device first stored the old 'full' default.
   cardSpin: CardSpin
   setCardSpin: (spin: CardSpin) => void
   cardUnlocks: { id: string; card: Card }[]
@@ -146,7 +147,8 @@ export const useStore = create<TCGStore>()(
   includeSold: false,
   currency: 'USD',
   setCurrency: (currency) => set({ currency }),
-  cardSpin: 'full' as CardSpin,
+  // 1 twist for everyone until they pick otherwise (the Owner's call, 2026-11-24)
+  cardSpin: 'one' as CardSpin,
   setCardSpin: (cardSpin) => set({ cardSpin }),
   cardUnlocks: [] as { id: string; card: Card }[],
 
@@ -237,9 +239,15 @@ export const useStore = create<TCGStore>()(
         portfolioSort: state.portfolioSort,
         includeSold: state.includeSold,
         currency: state.currency,
-        cardSpin: state.cardSpin,
         lastPriceRefresh: state.lastPriceRefresh,
       }),
+      // A device that opened the app on 2026-11-24 stored cardSpin 'full' (the old default) — never
+      // bring that back; the account's own choice comes from the preferences doc (preferencesSync)
+      merge: (persisted, current) => {
+        const { cardSpin: _old, ...rest } = (persisted ?? {}) as Partial<TCGStore>
+        void _old
+        return { ...current, ...rest }
+      },
     }
   )
 )

@@ -384,7 +384,7 @@ export function MembersColumn({ community, book, members, sample, look }: { comm
     const total = ids ? ids.split(',').length : 0
     const add = (e: Event) => {
       const d = (e as CustomEvent<DevMember>).detail
-      const profile = { uid: d.key, username: '', displayName: d.name, photoURL: '', bio: '', privacy: { cardex: false, badges: false }, pinDisplay: [] }
+      const profile = { uid: d.key, username: '', displayName: d.name, photoURL: '', bio: '', privacy: { cardex: false, badges: false, friends: false }, pinDisplay: [] }
       setFakes((f) => [...f, { uid: d.key, profile, hidden: false, joinedAt: d.at, badges: Math.round(d.badges * total), cards: d.cards, fake: true }])
     }
     const clear = () => setFakes([])

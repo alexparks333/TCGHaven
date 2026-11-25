@@ -21,6 +21,7 @@ import { getCommunity, useMyCommunities } from '@/lib/communities'
 import { useCommunity, type Community } from '@/lib/creatorBooks'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
+import { PeopleListDialog } from '@/components/friends/PeopleListDialog'
 import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
 import { shownTitle, usePaidPremium } from '@/components/premium/TitleTag'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
@@ -137,14 +138,14 @@ function BannerArt() {
     <Sparkles aria-hidden size={64} strokeWidth={1.25} className="absolute left-[38%] top-3 text-[#4a321f]/[0.08] -rotate-6" />
   </>
 }
-/** A count in the Friends page's stat-tile style; a link only when it goes somewhere (your own profile) */
-function StatTile({ href, n, label }: { href?: string; n: number | undefined; label: string }) {
-  const cls = 'block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5 text-center transition-colors'
-  const body = <>
-    <div className="text-xl font-bold leading-none text-ink">{n ?? '–'}</div>
-    <div className="text-[0.6875rem] font-semibold text-slate-500 mt-1">{label}</div>
-  </>
-  return href ? <Link href={href} className={cn(cls, 'hover:border-slate-700')}>{body}</Link> : <div className={cls}>{body}</div>
+/** A count in the Friends page's stat-tile style — opens the list (PeopleListDialog) */
+function StatTile({ onClick, n, label }: { onClick: () => void; n: number | undefined; label: string }) {
+  return (
+    <button type="button" onClick={onClick} className="block w-24 shrink-0 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2.5 text-center transition-colors hover:border-slate-700">
+      <div className="text-xl font-bold leading-none text-ink">{n ?? '–'}</div>
+      <div className="text-[0.6875rem] font-semibold text-slate-500 mt-1">{label}</div>
+    </button>
+  )
 }
 
 /** The community they run, as a button — straight to its page (where a visitor can join it) */
@@ -195,6 +196,8 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   const [error, setError] = useState('')
   // Settings opens from the ⚙️ here; the old /settings address redirects to /profile?settings=1.
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // The searchable Friends / Communities list (components/friends/PeopleListDialog.tsx)
+  const [listOpen, setListOpen] = useState<'friends' | 'communities' | null>(null)
   // Their title (Premium / Creator / Staff) beside the name. Regular shows only on your own profile.
   const mine = useAccountRole(isMe ? profile.uid : null).record
   const [theirs, setTheirs] = useState<AccountRoleRecord>(REGULAR)
@@ -335,6 +338,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
         </div>
       </div>
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+      {listOpen && <PeopleListDialog kind={listOpen} profile={profile} isMe={isMe} communities={communities} onClose={() => setListOpen(null)} />}
       {/* Phone: identity and the privacy box side by side, the bio full width under them.
           Desktop: identity above the bio, the right-hand column beside both. */}
       <div className="px-5 md:px-6 pb-5 grid grid-cols-[minmax(0,1fr)_auto] md:grid-rows-[auto_1fr]">
@@ -387,14 +391,14 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           {/* Phone (2026-11-24): the counts as rounded buttons and the community they run, top right —
               who can see your Cardex / Badges moved to Settings → Profile Settings */}
           <div className="md:hidden flex flex-col gap-2 w-[10.5rem]">
-            {([[isMe ? '/friends' : null, friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
-               [isMe ? '/friends#communities' : null, communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([href, n, label]) => {
-              const cls = 'flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-800 bg-slate-950/70 px-3.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors'
-              const body = <span className="flex-1 min-w-0 truncate"><span className="text-ink font-bold">{n ?? '–'}</span> {label}</span>
-              return href
-                ? <Link key={label} href={href} className={cn(cls, 'hover:border-[#7a5230] hover:text-ink active:bg-slate-900')}>{body}<ChevronRight size={13} className="-mr-1 shrink-0 text-slate-500" /></Link>
-                : <span key={label} className={cls}>{body}</span>
-            })}
+            {([['friends', friendCount, friendCount === 1 ? 'Friend' : 'Friends'],
+               ['communities', communities.length, communities.length === 1 ? 'Community' : 'Communities']] as const).map(([kind, n, label]) => (
+              <button key={kind} type="button" onClick={() => setListOpen(kind)}
+                className="flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-800 bg-slate-950/70 px-3.5 py-1.5 text-sm font-semibold text-slate-400 transition-colors hover:border-[#7a5230] hover:text-ink active:bg-slate-900 text-left">
+                <span className="flex-1 min-w-0 truncate"><span className="text-ink font-bold">{n ?? '–'}</span> {label}</span>
+                <ChevronRight size={13} className="-mr-1 shrink-0 text-slate-500" />
+              </button>
+            ))}
             {owned && <CommunityButton uid={profile.uid} label={isMe ? 'Your community' : `${first}’s community`} name={owned.name || 'Community'} />}
           </div>
           {/* No fixed px width here: the tiles are in rem, and rem grows on wide screens
@@ -402,9 +406,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           <div className="hidden md:flex flex-col gap-2 shrink-0">
             <div className="flex gap-3">
               {/* Friend count, in the Friends page's stat-tile style (someone else's: the number their app keeps) */}
-              <StatTile href={isMe ? '/friends' : undefined} n={friendCount} label={friendCount === 1 ? 'Friend' : 'Friends'} />
+              <StatTile onClick={() => setListOpen('friends')} n={friendCount} label={friendCount === 1 ? 'Friend' : 'Friends'} />
               {/* Communities they're in (lib/communities.ts) — yours open the Friends page's "Your communities" */}
-              <StatTile href={isMe ? '/friends#communities' : undefined} n={communities.length} label={communities.length === 1 ? 'Community' : 'Communities'} />
+              <StatTile onClick={() => setListOpen('communities')} n={communities.length} label={communities.length === 1 ? 'Community' : 'Communities'} />
             </div>
             {/* The community they run — straight to its page (where a visitor can join it) */}
             {owned && <CommunityButton uid={profile.uid} label={isMe ? 'Your community' : `${first}’s community`} name={owned.name || 'Community'} />}

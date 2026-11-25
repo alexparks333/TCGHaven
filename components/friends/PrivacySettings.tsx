@@ -27,6 +27,7 @@ export function PrivacySettings({ profile, onSaved, row }: { profile: Profile; o
   const rows: { key: keyof ProfilePrivacy; icon: typeof Award; label: string }[] = [
     { key: 'cardex', icon: BookOpen, label: 'Cardex' },
     { key: 'badges', icon: Award, label: 'Badges' },
+    { key: 'friends', icon: Users, label: 'Friends list' },
   ]
   const seg = 'w-[9.5rem] shrink-0'
 
@@ -63,7 +64,7 @@ export function PrivacySettings({ profile, onSaved, row }: { profile: Profile; o
       </div>
       <p className="text-[0.6875rem] text-slate-500 mt-1.5 px-1">
         Everyone = any collector; Friends = only the friends you’ve added and accepted. Your Cardex shows which cards you own and
-        what they’re worth — never what you paid. Your values and P&amp;L are only ever for you.
+        what they’re worth — never what you paid. Your friends list lets people find and add your friends. Your values and P&amp;L are only ever for you.
       </p>
       {error && <div className="text-[0.6875rem] text-red-600 mt-1 px-1">{error}</div>}
     </section>
