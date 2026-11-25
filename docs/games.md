@@ -228,6 +228,14 @@ zero Iconic-rarity cards despite Iconic being a real, valuable rarity tier lorca
 
 A `seen` Map deduplicates by card ID across both phases.
 
+**The duplicate-sets incident (2026-11-14 → 11-24).** A sync ran while lorcast was answering short, so every
+real set's TCGplayer group looked unknown and was added again as `tcg-{productId}` cards — every Cardex slot
+showed the card twice. 2026-11-16: `scripts/hide-lorcana-duplicates.mjs` hid the 2,942 copies (hidden, so a
+collector who'd logged one kept its price), and the sync now skips TCGplayer-only groups whenever lorcast
+returns under `LORCAST_HEALTHY_MIN` (2,500). 2026-11-24 (the Owner's OK): no collector's shared Cardex held
+one, so all 2,942 were deleted — the catalog is back to ~3,670 cards; a JSON backup of them is in
+`~/Developer/TCGHaven-backups/` on the Mac.
+
 ### Catalog Schema (`catalog/lorcana/cards/{id}` Firestore doc)
 
 Each card doc:
