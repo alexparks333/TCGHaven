@@ -56,6 +56,8 @@ export default function PortfolioPage() {
     return cards
       .filter((c) => activeGames.includes(c.game) && (!c.group || !hiddenGroups.includes(c.group)))
       .map((c) => {
+        // An unpriced copy is valued at what was paid — the one rule for every total (Inventory's
+        // copyValue, lib/valueHistory.ts)
         const currentPrice = c.currentPrice ?? c.purchasePrice
         const currentVal = currentPrice * c.quantity
         const cost = c.purchasePrice * c.quantity

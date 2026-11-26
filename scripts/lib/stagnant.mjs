@@ -49,17 +49,23 @@ export const wantsPriceChartingPrice = (card) => stagnantReason(card) !== null |
 
 /**
  * A sync's fresh card + PriceCharting's ungraded price for it (`pc` = { r, u } from
- * graded_prices/{catalog}.raw, or undefined). TCGplayer always wins: only a fresh card with no price
- * of its own takes PriceCharting's — as priceSource 'pricecharting' with `pcUrl`, the citation link.
- * A card PriceCharting priced before that has a TCGplayer price now, or no PriceCharting price any
- * more, drops the source (and is stagnant again if nothing prices it).
+ * graded_prices/{catalog}.raw, or undefined — none today, or the doc couldn't be read). TCGplayer
+ * always wins: only a fresh card with no price of its own takes PriceCharting's — as priceSource
+ * 'pricecharting' with `pcUrl`, the citation link. A card PriceCharting priced before that has a
+ * TCGplayer price now drops the source. One PriceCharting priced before that neither has a price
+ * for today keeps its last PriceCharting price and citation together (returned without its price
+ * fields, like keepHandPrice) — never $0 with no source, which lost it: a card with a TCGplayer
+ * product and no price isn't stagnant, so PriceCharting stopped tracking it (wantsPriceChartingPrice).
  */
 export function livePriceFromPriceCharting(existing, fresh, pc) {
   if (!hasPrice(fresh) && Number(pc?.r) > 0) {
     return { ...fresh, marketPrice: Number(pc.r), marketPriceFoil: 0, priceSource: 'pricecharting', pcUrl: String(pc.u ?? '') }
   }
-  if (existing?.priceSource === 'pricecharting') return { ...fresh, priceSource: fresh.priceSource ?? '', pcUrl: '' }
-  return fresh
+  if (existing?.priceSource !== 'pricecharting') return fresh
+  if (hasPrice(fresh)) return { ...fresh, priceSource: fresh.priceSource ?? '', pcUrl: '' }
+  const out = { ...fresh }
+  for (const k of [...PRICE_FIELDS, 'priceSource', 'pcUrl']) delete out[k]
+  return out
 }
 
 /**

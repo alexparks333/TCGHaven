@@ -223,15 +223,7 @@ export function isFoilSubtype(subTypeName) {
 export function priceFieldsOf(game, rows) {
   const cfg = cfgOf(game)
   if (cfg.priceModel === 'printings') {
-    const variantPrices = {}, lowByKey = {}
-    for (const r of rows) {
-      const key = printingKeyOf(r.subTypeName)
-      if (!key) continue
-      const market = Number(r.marketPrice) || 0
-      if (market > 0) variantPrices[key] = round2(market)
-      const low = Number(r.lowPrice) || 0
-      if (low > 0) lowByKey[key] = round2(low)
-    }
+    const { variantPrices, lowByKey } = printingPricesOf(rows)
     return printingFields(variantPrices, lowByKey)
   }
   const out = { marketPrice: 0, marketPriceFoil: 0, lowPriceNM: 0, lowPriceNMFoil: 0 }
@@ -242,6 +234,20 @@ export function priceFieldsOf(game, rows) {
     if (low > 0) out[foil ? 'lowPriceNMFoil' : 'lowPriceNM'] = low
   }
   return out
+}
+
+/** Flesh and Blood price rows → { variantPrices, lowByKey } (market and low price per printing) */
+export function printingPricesOf(rows = []) {
+  const variantPrices = {}, lowByKey = {}
+  for (const r of rows) {
+    const key = printingKeyOf(r.subTypeName)
+    if (!key) continue
+    const market = Number(r.marketPrice) || 0
+    if (market > 0) variantPrices[key] = round2(market)
+    const low = Number(r.lowPrice) || 0
+    if (low > 0) lowByKey[key] = round2(low)
+  }
+  return { variantPrices, lowByKey }
 }
 
 /** variantPrices + the classic fields for the default printing (Flesh and Blood) */
@@ -335,15 +341,20 @@ export function cardFromProduct(game, product, group) {
   return card
 }
 
-/** Today's price fields laid over an existing card's, keeping a price TCGplayer has none for today */
-export function mergePrices(game, old, fresh) {
+/**
+ * Today's price fields laid over an existing card's, keeping a price TCGplayer has none for today.
+ * `rows`: the product's price rows today (Flesh and Blood) — so each low price comes from the same
+ * printing as its market price (the merged default printing), not from today's default.
+ */
+export function mergePrices(game, old, fresh, rows = []) {
   const cfg = cfgOf(game)
   if (cfg.priceModel === 'printings') {
     const vp = { ...(old.variantPrices ?? {}) }
     for (const [k, v] of Object.entries(fresh.variantPrices ?? {})) vp[k] = v
-    const out = printingFields(vp)
-    out.lowPriceNM = fresh.lowPriceNM || old.lowPriceNM || 0
-    out.lowPriceNMFoil = fresh.lowPriceNMFoil || old.lowPriceNMFoil || 0
+    const out = printingFields(vp, printingPricesOf(rows).lowByKey)
+    // No low for that printing today: keep the last one
+    out.lowPriceNM = out.lowPriceNM || old.lowPriceNM || 0
+    out.lowPriceNMFoil = out.lowPriceNMFoil || old.lowPriceNMFoil || 0
     return out
   }
   return {
@@ -375,7 +386,7 @@ export function buildTcgplayerCatalog(game, { groups, productsByGroup, existing 
       if (old) {
         report.existingCards++
         card = { ...fresh, name: old.name, number: old.number, set: old.set, setName: old.setName, rarity: old.rarity,
-          imageUrl: old.imageUrl || fresh.imageUrl, ...mergePrices(game, old, fresh) }
+          imageUrl: old.imageUrl || fresh.imageUrl, ...mergePrices(game, old, fresh, p.rows) }
         if (old.variant !== undefined) card.variant = old.variant; else delete card.variant
       } else {
         report.newCards++

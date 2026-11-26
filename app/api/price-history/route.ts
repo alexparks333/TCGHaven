@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { verifyUserRequest } from '@/lib/firebase/verifyAdminRequest'
 import { callerAccess } from '@/lib/premiumServer'
 import { gradedAllowed } from '@/lib/api/gradedPrices'
-import { loadBaselines, loadPriceSeries, type HistoryItem } from '@/lib/api/priceHistory'
+import { loadBaselines, loadPriceSeries, TooManySetsError, type HistoryItem } from '@/lib/api/priceHistory'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -24,6 +24,10 @@ const MAX_SERIES_ITEMS = 25
 // More distinct cards than any real collection has — a bigger request is refused, so one request
 // can't make the server load every set's history and loop over it (security review 2026-11-21)
 const MAX_ITEMS = 20000
+// "portfolio" reads every owned set's month docs for up to two years — far more work per item than
+// baselines, so it takes fewer distinct cards (and loadPriceSeries refuses more than
+// MAX_SERIES_SETS sets and reads a few sets at a time).
+const MAX_PORTFOLIO_ITEMS = 5000
 
 interface Body {
   mode: 'baselines' | 'series' | 'portfolio'
@@ -43,26 +47,33 @@ export async function POST(request: Request) {
   // slabs follow the raw history, as their value does (lib/api/gradedPrices.ts gradedAllowed).
   const access = await callerAccess(request)
   if (!access.unlocked && body.mode !== 'baselines') return NextResponse.json({ error: 'premium', reason: 'history' }, { status: 402 })
+  // Without graded prices a slab stays a slab: it reads the raw history at the Near Mint price, no
+  // condition discount — what the live price routes value it at (lib/pricing.ts copyPrice)
   const graded = await gradedAllowed(request)
-  const items = body.items
-    .filter((i) => i && i.key && i.apiId && i.game)
-    .map((i) => (graded || !i.gradingCompany ? i : { ...i, gradingCompany: undefined, grade: undefined, gradeTier: undefined }))
+  const items = body.items.filter((i) => i && i.key && i.apiId && i.game)
   const now = Date.now()
 
   if (body.mode === 'baselines') {
-    return NextResponse.json(await loadBaselines(items, now))
+    return NextResponse.json(await loadBaselines(items, now, graded))
   }
 
   if (body.mode === 'series') {
     // A card's own chart can reach back to the first archived day, 2024-02-08 (scripts/backfill-price-history.mjs)
     const days = Math.min(Math.max(Number(body.days) || 365, 1), 1500)
-    const series = await loadPriceSeries(items.slice(0, MAX_SERIES_ITEMS), new Date(now - days * DAY_MS))
+    const series = await loadPriceSeries(items.slice(0, MAX_SERIES_ITEMS), new Date(now - days * DAY_MS), graded)
     return NextResponse.json(Object.fromEntries(series))
   }
 
   if (body.mode === 'portfolio') {
+    if (items.length > MAX_PORTFOLIO_ITEMS) return NextResponse.json({ error: 'Too many items' }, { status: 413 })
     const days = Math.min(Math.max(Number(body.days) || 365, 1), 730)
-    const series = await loadPriceSeries(items, new Date(now - days * DAY_MS))
+    let series: Awaited<ReturnType<typeof loadPriceSeries>>
+    try {
+      series = await loadPriceSeries(items, new Date(now - days * DAY_MS), graded)
+    } catch (err) {
+      if (err instanceof TooManySetsError) return NextResponse.json({ error: 'Too many sets' }, { status: 413 })
+      throw err
+    }
     // One point per calendar day that has any recorded price.
     const daySet = new Set<string>()
     series.forEach((points) => points.forEach((p) => daySet.add(p.date.slice(0, 10))))

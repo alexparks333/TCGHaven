@@ -111,4 +111,34 @@ assert.equal(build([]).marketPrice, 0)
   assert.equal(tupleToFields([1, 2, 0, 0]).variantPrices, undefined, 'old history days still parse')
 }
 
+// ── "Pikachu (1)" / "Drowzee (74a)" are the plain card (a number tag, not a variant): its price
+// isn't blocked by — and does block — a real "(…)" variant's row for the same printing ──
+{
+  const f = build([
+    { name: 'Pikachu (Prerelease)', subTypeName: 'Holofoil', marketPrice: '50' },
+    { name: 'Pikachu (1)', subTypeName: 'Holofoil', marketPrice: '5' },
+    { name: 'Pikachu (Staff)', subTypeName: 'Holofoil', marketPrice: '900' },
+  ])
+  assert.equal(f.variantPrices['unlimited:holofoil'], 5)
+  const d = build([
+    { name: 'Drowzee (74a)', subTypeName: 'Normal', marketPrice: '2' },
+    { name: 'Drowzee (Stamped)', subTypeName: 'Normal', marketPrice: '40' },
+  ])
+  assert.equal(d.marketPrice, 2)
+}
+
+// ── Both classic prices of a slot come from one finish: Normal has a market price but no low,
+// Holo has a low — the regular low is Normal's (none), not Holo's ──
+{
+  const f = build([
+    { name: 'Eevee', subTypeName: 'Normal', marketPrice: '1', lowPrice: '' },
+    { name: 'Eevee', subTypeName: 'Holofoil', marketPrice: '', lowPrice: '20' },
+  ])
+  assert.equal(f.marketPrice, 1)
+  assert.equal(f.lowPriceNM, 0, 'not the Holo low')
+  // Holo has only a low: the foil slot is Holo for both (market 0, low 20)
+  assert.equal(f.marketPriceFoil, 0)
+  assert.equal(f.lowPriceNMFoil, 20)
+}
+
 console.log('pokemon-variants: all tests passed')

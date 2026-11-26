@@ -5,7 +5,7 @@
 //
 // Pure functions only — catalog-sync.mjs's downloadPokemonJapanese() does the fetching/writing.
 
-import { newPriceEntry, addPriceRow, legacyFields } from './pokemon-variants.mjs'
+import { newPriceEntry, addPriceRow, legacyFields, keepLastPrices } from './pokemon-variants.mjs'
 
 export const JP_CATEGORY = 85
 export const JP_CATALOG = 'pokemon-jp'
@@ -59,13 +59,16 @@ export function cleanJpCardName(name) {
     .trim()
 }
 
-/** One catalog card from all of a product's rows (one row per printing TCGplayer prices). */
-export function jpCard(group, rows) {
+/**
+ * One catalog card from all of a product's rows (one row per printing TCGplayer prices). `old`: the
+ * card as the catalog has it now, if the caller has it — no price today keeps its last price.
+ */
+export function jpCard(group, rows, old) {
   const first = rows[0]
   const entry = newPriceEntry()
   for (const r of rows) addPriceRow(entry, r)
   const rarity = (first.extRarity ?? '').trim()
-  return {
+  return keepLastPrices({
     id: `jp-${first.productId}`,
     name: cleanJpCardName(first.name),
     set: `jp-${group.groupId}`,
@@ -74,7 +77,7 @@ export function jpCard(group, rows) {
     rarity: rarity === 'None' ? '' : rarity,
     imageUrl: jpImageUrl(first),
     ...legacyFields(entry),
-  }
+  }, old)
 }
 
 // ── Sets: release date and era (the Japanese Cardex's groups) ──────────────

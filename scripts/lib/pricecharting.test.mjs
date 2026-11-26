@@ -215,6 +215,13 @@ assert.equal(linkSlot('foil', 'Ursula - Deceiver (Foil)'), '', 'on a separate fo
   assert.equal(got.find((e) => e.id === 'c').pc, '4', 'a staff link replaces the matched one (redirect)')
   assert.deepEqual(applyManualLinks(entries, rows, {}, { a: true }).map((e) => e.id), ['c'], 'blocked: no graded price at all')
   assert.equal(got.some((e) => e.id === 'x'), false, 'a row gone from the list adds nothing')
+
+  // A relink drops the old (wrong) match's versions; confirming the same row keeps them
+  const withV = [{ id: 'c', pc: '3', u: 'u3', p: { psa10: 10 }, v: { '1st': { p: { psa10: 500 }, u: 'old' } } }]
+  assert.equal(applyManualLinks(withV, rows, { c: { _: '4' } }, {})[0].v, undefined, 'relinked: the old match\'s 1st Edition price is gone')
+  assert.deepEqual(applyManualLinks(withV, rows, { c: { _: '4', foil: '5' } }, {})[0].v, { foil: { p: { psa10: 99 }, u: 'https://www.pricecharting.com/game/5' } },
+    'relinked: only the versions staff linked')
+  assert.deepEqual(applyManualLinks(withV, rows, { c: { _: '3' } }, {})[0].v, withV[0].v, 'the same row confirmed: its versions stay')
 }
 
 {
@@ -258,13 +265,19 @@ assert.equal(linkSlot('foil', 'Ursula - Deceiver (Foil)'), '', 'on a separate fo
     { id: 'ahri' }, { id: 'rengar', tcgProductId: 700001 }, { id: 'jinx' }, { id: 'vi', tcgProductId: 700002 },
     { id: 'priced', tcgProductId: 700001 }, { id: 'gone', hidden: true }, { id: 'blocked' },
   ]
-  const out = ungradedPrices(cards, rows, [{ id: 'jinx', pc: '903' }], { ahri: { _: '900' }, blocked: { _: '900' } }, { blocked: true },
+  const out = ungradedPrices(cards, rows, [{ id: 'jinx', pc: '903', p: { psa10: 1 } }], { ahri: { _: '900' }, blocked: { _: '900' } }, { blocked: true },
     (c) => c.id !== 'priced')
   assert.deepEqual(out, {
     ahri: { r: 412.5, u: 'https://www.pricecharting.com/game/900', pc: '900' },     // staff link, no graded sales needed
     rengar: { r: 80, u: 'https://www.pricecharting.com/game/901', pc: '901' },      // by TCGplayer id, the plain row
     jinx: { r: 10, u: 'https://www.pricecharting.com/game/903', pc: '903' },        // its graded entry
   })
+
+  // A version-only staff link (just "foil", no plain match) never prices the normal card from the
+  // "[Foil]" row: the entry applyManualLinks makes has no graded prices of its own
+  const vOnly = applyManualLinks([], [{ ...rows[2], 'manual-only-price': '$300' }], { lone: { foil: '902' } }, {})
+  assert.equal(vOnly[0].pc, '902')
+  assert.deepEqual(ungradedPrices([{ id: 'lone' }], rows, vOnly), {}, 'no foil loose price on a normal card')
 }
 
 console.log('pricecharting: all tests passed')

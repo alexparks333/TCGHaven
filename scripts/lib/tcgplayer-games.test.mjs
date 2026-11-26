@@ -117,6 +117,22 @@ assert.deepEqual(mergePrices('swu', { marketPrice: 1, marketPriceFoil: 5 }, { ma
   { marketPrice: 2, marketPriceFoil: 5, lowPriceNM: 0, lowPriceNMFoil: 0 })
 assert.deepEqual(mergePrices('fab', { variantPrices: { '1st:normal': 3, 'unlimited:normal': 1 } }, { variantPrices: { 'unlimited:normal': 1.5 } }).variantPrices,
   { '1st:normal': 3, 'unlimited:normal': 1.5 })
+// Flesh and Blood: the low price comes from the same printing as the market price. Today only
+// 1st Edition is priced, so the card stays priced by its kept Unlimited price — and its low is the
+// Unlimited low (kept), not today's 1st Edition low
+{
+  const old = { variantPrices: { 'unlimited:normal': 1 }, marketPrice: 1, lowPriceNM: 0.8 }
+  const rows = [{ subTypeName: '1st Edition Normal', marketPrice: '9', lowPrice: '7' }]
+  const fresh = priceFieldsOf('fab', rows)
+  assert.equal(fresh.lowPriceNM, 7)
+  const merged = mergePrices('fab', old, fresh, rows)
+  assert.equal(merged.marketPrice, 1)
+  assert.equal(merged.lowPriceNM, 0.8, 'the Unlimited low, not 1st Edition\'s')
+  const rows2 = [...rows, { subTypeName: 'Unlimited Normal', marketPrice: '1.2', lowPrice: '0.9' }]
+  const merged2 = mergePrices('fab', old, priceFieldsOf('fab', rows2), rows2)
+  assert.equal(merged2.marketPrice, 1.2)
+  assert.equal(merged2.lowPriceNM, 0.9, 'today\'s Unlimited low')
+}
 
 const productsByGroup = new Map([[24000, products]])
 const existing = new Map([['tcg-183145', { ...card, name: 'Orbiting K-Wing (old name)', variant: undefined, imageUrl: 'https://old/photo.jpg', marketPrice: 0.5 }]])

@@ -95,4 +95,20 @@ assert.equal(xyz2.variantPrices['unlimited:normal'], 0.22, 'no price today → k
 assert.equal(xyz2.variantPrices['1st:normal'], 0.15)
 assert.equal(second.report.newCards, 0)
 
+// The low price refreshes on an existing card too (not frozen at its first value); kept when
+// today has none
+{
+  const rowsLow = rows.map((r) => (r.productId === 731469 ? { ...r, lowPrice: 30 } : r))
+  const byGroup3 = new Map()
+  for (const p of productsFromRows(rowsLow)) { if (!byGroup3.has(p.groupId)) byGroup3.set(p.groupId, []); byGroup3.get(p.groupId).push(p) }
+  const third = buildYugiohCatalog({ groups, productsByGroup: byGroup3, existing })
+  assert.equal(existing.get('tcg-731469').lowPriceNM, 33.75)
+  assert.equal(third.cards.find((c) => c.id === 'tcg-731469').lowPriceNM, 30, 'the low refreshes')
+  const rowsNoLow = rows.map((r) => (r.productId === 731469 ? { ...r, lowPrice: null } : r))
+  const byGroup4 = new Map()
+  for (const p of productsFromRows(rowsNoLow)) { if (!byGroup4.has(p.groupId)) byGroup4.set(p.groupId, []); byGroup4.get(p.groupId).push(p) }
+  const fourth = buildYugiohCatalog({ groups, productsByGroup: byGroup4, existing })
+  assert.equal(fourth.cards.find((c) => c.id === 'tcg-731469').lowPriceNM, 33.75, 'no low today → keeps the last')
+}
+
 console.log('yugioh-tcgplayer: all tests passed')

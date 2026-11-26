@@ -440,8 +440,12 @@ export function applyManualLinks(entries, rows, links, blocked) {
   for (const [cardId, slots] of Object.entries(links ?? {})) {
     const own = slots?._ ? rowGraded(byPc.get(String(slots._)) ?? {}) : null
     if (own) {
+      // The versions ride along only when staff confirmed the same row: a relink means the old
+      // match was wrong, and so were its "[1st Edition]" / "[Foil]" prices (versions staff linked
+      // themselves are added just below)
       const have = out.get(cardId)
-      out.set(cardId, { id: cardId, pc: own.pcId, u: own.url, p: own.prices, ...(have?.v && { v: have.v }), via: 'staff' })
+      const keepV = have?.v && have.pc === own.pcId
+      out.set(cardId, { id: cardId, pc: own.pcId, u: own.url, p: own.prices, ...(keepV && { v: have.v }), via: 'staff' })
     }
     for (const [slot, pc] of Object.entries(slots ?? {})) {
       if (!GRADED_VARIANTS.includes(slot)) continue
@@ -599,7 +603,10 @@ export function ungradedPrices(cards, rows, entries, links = {}, blocked = {}, w
     if (!tcg || /\[[^\]]*\]/.test(String(row['product-name'] ?? ''))) continue
     byTcg.set(tcg, byTcg.has(tcg) ? null : id)
   }
-  const entryPc = new Map(entries.map((e) => [e.id, e.pc]))
+  // Only an entry with the card's own graded prices names its plain row — a version-only entry (staff
+  // linked just "foil" on a card with no plain match: p is {}) carries the "[Foil]" row's id, and a
+  // foil price must never price the normal card
+  const entryPc = new Map(entries.filter((e) => Object.keys(e.p ?? {}).length).map((e) => [e.id, e.pc]))
   const out = {}
   for (const c of cards) {
     if (!c?.id || c.hidden || blocked?.[c.id] || !wants(c)) continue

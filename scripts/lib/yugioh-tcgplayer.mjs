@@ -227,8 +227,9 @@ export function buildYugiohCatalog({ groups, productsByGroup, existing = new Map
         const vp = { ...(old.variantPrices ?? {}) }
         for (const [k, v] of Object.entries(fresh.variantPrices)) vp[k] = v
         if (Object.keys(fresh.variantPrices).length < Object.keys(old.variantPrices ?? {}).length) report.keptPrices++
+        // Today's low prices too, so the low refreshes; the last one is kept only when today has none
         card = { ...fresh, name: old.name, number: old.number, set: old.set, setName: old.setName, rarity: old.rarity,
-          imageUrl: old.imageUrl || fresh.imageUrl, ...priceFields(vp) }
+          imageUrl: old.imageUrl || fresh.imageUrl, ...priceFields(vp, pricesOf(p.rows).lowByKey) }
         if (old.variant !== undefined) card.variant = old.variant; else delete card.variant
         if (!card.lowPriceNM && old.lowPriceNM) card.lowPriceNM = old.lowPriceNM
       } else {

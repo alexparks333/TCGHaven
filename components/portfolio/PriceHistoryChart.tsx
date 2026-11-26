@@ -35,18 +35,22 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
     )
   }
 
+  // The X axis is TIME, not one slot per point: the history before we recorded it is one price a
+  // week (2024 – Oct 2026) and daily after, so evenly spaced points squeezed two years into the
+  // same width as a few weeks on "All". `at` = the point's time in ms.
   // Labels carry the year once the chart spans more than one (history goes back to 2024)
-  const years = new Set(data.map((d) => new Date(d.date).getFullYear()))
-  const formatted = data.map((d) => ({
-    ...d,
-    label: new Date(d.date).toLocaleDateString('en-US', years.size > 1 ? { month: 'short', day: 'numeric', year: '2-digit' } : { month: 'short', day: 'numeric' }),
-  }))
+  const formatted = data
+    .map((d) => ({ ...d, at: Date.parse(d.date.length === 10 ? d.date + 'T12:00:00' : d.date) }))
+    .filter((d) => Number.isFinite(d.at))
+  const years = new Set(formatted.map((d) => new Date(d.at).getFullYear()))
+  const dateLabel = (ms: number) =>
+    new Date(ms).toLocaleDateString('en-US', years.size > 1 ? { month: 'short', day: 'numeric', year: '2-digit' } : { month: 'short', day: 'numeric' })
   // The day you got it: the point on (or just after) that date — nothing when it's outside the range shown
   const gotAt = gotIt ? Date.parse(gotIt.date.length === 10 ? gotIt.date + 'T12:00:00' : gotIt.date) : NaN
-  const firstAt = Date.parse(data[0].date)
-  const lastAt = Date.parse(data[data.length - 1].date)
+  const firstAt = formatted[0]?.at ?? NaN
+  const lastAt = formatted[formatted.length - 1]?.at ?? NaN
   const mark = Number.isFinite(gotAt) && gotAt >= firstAt - 86400000 && gotAt <= lastAt + 86400000
-    ? formatted.find((d) => Date.parse(d.date) >= gotAt - 43200000) ?? formatted[formatted.length - 1]
+    ? formatted.find((d) => d.at >= gotAt - 43200000) ?? formatted[formatted.length - 1]
     : null
 
   return (
@@ -60,11 +64,15 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#d6c49f" vertical={false} />
         <XAxis
-          dataKey="label"
+          dataKey="at"
+          type="number"
+          scale="time"
+          domain={['dataMin', 'dataMax']}
+          tickFormatter={dateLabel}
           tick={{ fill: '#7a654a', fontSize: 11 }}
           axisLine={false}
           tickLine={false}
-          interval="preserveStartEnd"
+          minTickGap={24}
         />
         <YAxis
           tick={{ fill: '#7a654a', fontSize: 11 }}
@@ -76,9 +84,10 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
         <Tooltip
           contentStyle={{ background: '#ede1c6', border: '1px solid #d6c49f', color: '#2b2014', borderRadius: '0.75rem', fontSize: 12 }}
           labelStyle={{ color: '#634f38' }}
+          labelFormatter={(ms: number) => dateLabel(ms)}
           formatter={(val: number) => [formatCurrency(val), 'Price']}
         />
-        {mark && <ReferenceLine x={mark.label} stroke={color} strokeOpacity={0.35} strokeDasharray="3 3" />}
+        {mark && <ReferenceLine x={mark.at} stroke={color} strokeOpacity={0.35} strokeDasharray="3 3" />}
         <Area
           type="monotone"
           dataKey="price"
@@ -89,7 +98,7 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
           activeDot={{ r: 4, fill: color }}
         />
         {mark && gotIt && (
-          <ReferenceDot x={mark.label} y={mark.price} r={0} ifOverflow="extendDomain"
+          <ReferenceDot x={mark.at} y={mark.price} r={0} ifOverflow="extendDomain"
             shape={(props: { cx?: number; cy?: number }) => <g><title>{gotIt.title}</title><CardMark cx={props.cx} cy={props.cy} color={color} /></g>} />
         )}
       </AreaChart>

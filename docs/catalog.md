@@ -530,6 +530,27 @@ visible even from the "last known status" view, not just right after clicking Sy
   doesn't exist anymore; it only made sense next to a local-file registry and local catalog JSON,
   both gone). Nothing is ever deleted by a sync, same as before, just no separate backup copy.
 
+## Sync safety (2026-11-25 review)
+
+- **A failed source never zeroes prices.** Riftbound: a set whose TCGplayer CSV fails is listed in
+  `keepIds` and `syncToFirestore()` leaves its existing cards untouched (prices, rarity fixes,
+  Ultimate, product id); if every group fails nothing is touched. Pokémon: while a group or a GitHub
+  set file fails, cards it would price are left as they are and its products aren't turned into new
+  `tcg-` cards (`report.stalePriceCards` / `heldBackProducts`).
+- **Pokémon `tcg-` / Japanese `jp-` cards keep their last price** when a product has none today
+  (`keepLastPrices()` at the write), like every other game.
+- **PriceCharting:** an unreadable `graded_prices` doc means "no PriceCharting this run" (cards priced
+  from it keep their price and citation); a day PriceCharting has no price keeps the last one with its
+  `pcUrl`. An unreadable `graded_links` doc stops the PriceCharting job instead of running without
+  staff links and blocks.
+- **Staff edits during a sync:** the sync notes the time before reading the catalog and, before
+  writing the snapshot, re-reads every card changed since (`catchUpSince()`), so the snapshot holds
+  them and edits the sync didn't write keep admin-edit-wins protection.
+- **Price history writes:** a failed batch (a month doc over 1 MiB) is retried doc by doc — only the
+  doc that fails is skipped.
+- **Warm server caches** reload the snapshot every 6 hours (`RELOAD_MS`, lib/api/catalog.ts), so a
+  deleted card drops out within 6 hours on every instance.
+
 ## Rarity overrides (2026-11-24)
 
 A new set's cards are grouped by the rarity its sync reports (the Cardex's rarity bubbles). Staff fix

@@ -6,6 +6,7 @@ import {
   cleanEnName, namesAgree, productsFromRows, buildPokemonCatalog, resolveIdCollisions, collidingIds,
   isNumberedSet, rarityTier, githubRarity, catalogNumber,
 } from './pokemon-tcgplayer.mjs'
+import { jpCard } from './pokemon-jp.mjs'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 let nextProduct = 1000
@@ -278,6 +279,66 @@ const deltaRows = Array.from({ length: 25 }, (_, i) => row(24831, `Card ${i + 1}
   })
   assert.equal(out.report.contentMatched.length, 1)
   assert.ok(out.cards.every((c) => !c.id.startsWith('tcg-')))
+}
+
+// ── A group failed whose products price a GitHub card of ANOTHER set (pass C — Best of Game in
+// "Best of Promos"): that card is left out (keeps today's prices), not written at $0 ──
+{
+  const out = build({
+    ghSets: [ghSet('bp', 'Best of Game'), ghSet('sv7', 'Stellar Crown')],
+    ghCards: [ghCard('bp', 1, 'Electabuzz', 'Best of Game'), ghCard('sv7', 1, 'Bulbasaur', 'Stellar Crown')],
+    groups: [group(16, 'Best of Promos'), group(20, 'SV07: Stellar Crown')],
+    rows: [row(20, 'Bulbasaur - 001/142', '001/142', '0.2', 'Normal', { productId: 21 })],
+    failedGroupIds: new Set([16]),
+  })
+  const c = byId(out)
+  assert.ok(!c.has('bp-1'), 'bp-1 keeps its current prices')
+  assert.equal(c.get('sv7-1').marketPrice, 0.2)
+  assert.deepEqual(out.report.stalePriceCards, ['bp-1'])
+}
+
+// ── A GitHub set file failed: a product in another group that could be one of its cards (pass C)
+// is held back — never built as a permanent tcg- duplicate ──
+{
+  const out = build({
+    ghSets: [ghSet('bp', 'Best of Game'), ghSet('sv7', 'Stellar Crown')],
+    ghCards: [ghCard('sv7', 1, 'Bulbasaur', 'Stellar Crown')], // bp's file failed
+    groups: [group(16, 'Best of Promos'), group(20, 'SV07: Stellar Crown')],
+    rows: [
+      row(16, 'Electabuzz - 1', '001/009', '12', 'Normal', { productId: 16 }),
+      row(20, 'Bulbasaur - 001/142', '001/142', '0.2', 'Normal', { productId: 21 }),
+    ],
+    unavailableSetIds: new Set(['bp']),
+  })
+  const c = byId(out)
+  assert.ok(!c.has('tcg-16'), 'no tcg- duplicate of bp-1')
+  assert.equal(c.get('sv7-1').marketPrice, 0.2, 'linked cards still priced')
+  assert.deepEqual(out.report.heldBackProducts.map((x) => x.product), [16])
+}
+
+// ── A tcg- / jp- product with no price today keeps its last price (when the caller passes the
+// catalog's current cards) ──
+{
+  const rows = [
+    row(16, 'Electabuzz - 1', '001/009', '12', 'Normal', { productId: 16 }),
+    row(16, 'Electabuzz - 1 [Winner]', '001/009', '', 'Normal', { productId: 17 }),
+  ]
+  const args = { ghSets: [ghSet('bp', 'Best of Game')], ghCards: [ghCard('bp', 1, 'Electabuzz', 'Best of Game')], groups: [group(16, 'Best of Promos')], rows }
+  assert.equal(byId(build(args)).get('tcg-17').marketPrice, 0, 'no existing card: nothing to keep')
+  const old = { id: 'tcg-17', marketPrice: 80, marketPriceFoil: 0, lowPriceNM: 70, lowPriceNMFoil: 0, variantPrices: { 'unlimited:normal': 80 } }
+  const kept = byId(build({ ...args, existing: new Map([['tcg-17', old]]) })).get('tcg-17')
+  assert.equal(kept.marketPrice, 80)
+  assert.equal(kept.lowPriceNM, 70)
+  assert.deepEqual(kept.variantPrices, { 'unlimited:normal': 80 })
+  // priced today: today's price wins
+  const priced = rows.map((r) => (r.productId === '17' ? { ...r, marketPrice: '90' } : r))
+  assert.equal(byId(build({ ...args, rows: priced, existing: new Map([['tcg-17', old]]) })).get('tcg-17').marketPrice, 90)
+
+  const jpRows = [{ productId: '5', name: 'Pikachu', extNumber: '001/100', extRarity: 'C', subTypeName: 'Normal', marketPrice: '', lowPrice: '' }]
+  const jpOld = { marketPrice: 3, marketPriceFoil: 0, lowPriceNM: 2, lowPriceNMFoil: 0, variantPrices: { 'unlimited:normal': 3 } }
+  assert.equal(jpCard({ groupId: 9, name: 'SV1' }, jpRows).marketPrice, 0)
+  assert.equal(jpCard({ groupId: 9, name: 'SV1' }, jpRows, jpOld).marketPrice, 3)
+  assert.equal(jpCard({ groupId: 9, name: 'SV1' }, [{ ...jpRows[0], marketPrice: '4' }], jpOld).marketPrice, 4)
 }
 
 console.log('pokemon-tcgplayer: all tests passed')

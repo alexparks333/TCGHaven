@@ -200,4 +200,28 @@ assert.equal(productsFromRows([row(1, 9, 'Romance Dawn Booster Box', '', 100)]).
   assert.equal(out.cards.length, 0)
 }
 
+// ── A product first seen Foil-only that later lists a Normal row: the foil card keeps tcg-500,
+// the Normal finish becomes tcg-500-normal (never a second tcg-500 over the foil card) ──
+{
+  const out = build({
+    groups: [G(40, 'Romance Dawn')],
+    rows: [row(40, 500, 'Uta', 'OP01-005', 12, 'Foil'), row(40, 500, 'Uta', 'OP01-005', 0.5, 'Normal')],
+    existing: [{ id: 'tcg-500', name: 'Uta', setName: 'Romance Dawn', imageUrl: photo(500), tcgProductId: 500, tcgSubType: 'Foil', marketPrice: 11 }],
+  })
+  const c = byId(out)
+  assert.equal(out.cards.filter((x) => x.id === 'tcg-500').length, 1, 'one tcg-500')
+  assert.equal(c.get('tcg-500').tcgSubType, 'Foil')
+  assert.equal(c.get('tcg-500').marketPrice, 12)
+  assert.equal(c.get('tcg-500-normal').tcgSubType, 'Normal')
+  assert.equal(c.get('tcg-500-normal').marketPrice, 0.5)
+}
+
+// ── A price is market, else mid — never the low listing ──
+{
+  const [p] = productsFromRows([{ ...row(41, 600, 'Uta', 'OP01-005', ''), marketPrice: '', midPrice: '', lowPrice: '0.01' }])
+  assert.equal(p.price, 0)
+  const [q] = productsFromRows([{ ...row(41, 601, 'Uta', 'OP01-005', ''), marketPrice: '', midPrice: '2.5', lowPrice: '0.01' }])
+  assert.equal(q.price, 2.5)
+}
+
 console.log('onepiece-tcgplayer: all tests passed')

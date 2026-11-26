@@ -8,7 +8,7 @@ import { Package, FolderHeart, ChevronRight, Search, X, Eye, Check, Edit2 } from
 import { useStore, DEFAULT_TRACKED_GAMES } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { GAME_COLORS, TCGPLAYER_SOURCED_GAMES, CONDITION_LABELS, CONDITION_SHORT, isTcgplayerSourced, type Game, type Card, type Language, type TcgplayerSourcedGame } from '@/lib/types'
-import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText, cardIdentityKey } from '@/lib/utils'
+import { cn, RARITY_LABELS_BY_GAME, openEbaySearch, zoomGlowColor, printingText, cardIdentityKey, formatCurrency } from '@/lib/utils'
 import { CARDEX_RARITY_ORDER } from '@/lib/api/catalog'
 import { db as appDb } from '@/lib/firebase/config'
 import { useRarityOrder, sortRarities } from '@/lib/rarityOrder'
@@ -23,7 +23,7 @@ import { CardName } from '@/components/CardName'
 import { SET_TYPE_LABELS as YUGIOH_SET_TYPE_LABELS } from '@/scripts/lib/yugioh-tcgplayer.mjs'
 import { TCGPLAYER_GAMES } from '@/scripts/lib/tcgplayer-games.mjs'
 import { FullSlab, slabStyle, type SlabInfo } from '@/components/SlabCase'
-import { PriceChartingCredit, gradedLabel, slabName } from '@/components/GradedPriceTag'
+import { PriceChartingCredit, gradedLabel, slabName, useUngradedUrl } from '@/components/GradedPriceTag'
 import type { GradedSource } from '@/lib/api/gradedPrices'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -493,10 +493,12 @@ const slabScore = (c: Card) => {
 }
 
 /** The collector's versions of one card, best slab first (the one the tile shows), raw last.
- *  copies = the owned inventory cards matching it; prices are the live ones Inventory shows. */
+ *  copies = the owned inventory cards matching it; prices are the live ones Inventory shows.
+ *  rawSource = the citation when the card's raw price is PriceCharting's ungraded one — shown on
+ *  every version valued at that raw price (CLAUDE.md rule 39). */
 export function ownedVersions(
   copies: Card[], gradedSources: Record<string, GradedSource>, gradedOn: boolean,
-  rawPrice: number, rawEstimated: boolean,
+  rawPrice: number, rawEstimated: boolean, rawSource?: { label: string; url: string },
 ): ZoomVersion[] {
   const groups = new Map<string, Card[]>()
   for (const c of copies) groups.set(cardIdentityKey(c), [...(groups.get(cardIdentityKey(c)) ?? []), c])
@@ -510,7 +512,7 @@ export function ownedVersions(
         const source = gradedOn ? gradedSources[rep.id] : undefined
         const v: ZoomVersion = {
           label: slabName(rep), cardId: rep.id, slab: bestSlab([rep]), quantity, printing, marketPrice: price,
-          ...(source ? { priceSource: { label: gradedLabel(source.key), url: source.url } } : { rawEstimate: gradedOn && Boolean(rep.apiId) }),
+          ...(source ? { priceSource: { label: gradedLabel(source.key), url: source.url } } : { rawEstimate: gradedOn && Boolean(rep.apiId), ...(rawSource && { priceSource: rawSource }) }),
         }
         return { score: slabScore(rep), v }
       }
@@ -519,7 +521,7 @@ export function ownedVersions(
       const cond = conditionFactor(rep) !== 1 ? CONDITION_SHORT[rep.condition] : ''
       const extra = [rep.isFoil && !printing ? 'Foil' : '', printing ?? ''].filter(Boolean).join(' · ')
       const conditionNote = cond ? CONDITION_LABELS[rep.condition] : undefined
-      const v: ZoomVersion = { label: cond ? `Raw · ${cond}` : 'Raw', cardId: rep.id, quantity, printing, marketPrice: rep.currentPrice ?? conditionPrice(rawPrice, rep), priceEstimated: rawEstimated, conditionNote }
+      const v: ZoomVersion = { label: cond ? `Raw · ${cond}` : 'Raw', cardId: rep.id, quantity, printing, marketPrice: rep.currentPrice ?? conditionPrice(rawPrice, rep), priceEstimated: rawEstimated, conditionNote, ...(rawSource && { priceSource: rawSource }) }
       return { score: -1, v, extra }
     })
     .sort((a, b) => b.score - a.score)
@@ -1719,7 +1721,8 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
   const gradedSources = viewerGraded ? viewerGraded.sources : ownSources
   const gradedOn = viewerGraded ? viewerGraded.on : ownOn
   const versions = () => (card.owned && card.copies?.length
-    ? ownedVersions(card.copies, gradedSources, gradedOn, card.marketPrice, card.priceSource === 'cardmarket')
+    ? ownedVersions(card.copies, gradedSources, gradedOn, card.marketPrice, card.priceSource === 'cardmarket',
+      card.priceSource === 'pricecharting' && card.pcUrl ? { label: 'Ungraded', url: card.pcUrl } : undefined)
     : undefined)
 
   // Shift+Click / double-tap: open Add Card on this exact card. AddCardDialog re-fetches it as a
@@ -1852,7 +1855,9 @@ function CardTile({ card, gameColor, game, language, isHovered, onHover, onLeave
             {/* Always the card's raw (ungraded) price — a slab's own price is in the zoom view */}
             {card.marketPrice > 0 && (
               <div className="text-[0.625rem] text-slate-400 mt-0.5">
-                ${card.marketPrice.toFixed(2)}{card.priceSource === 'cardmarket' && <span className="ml-1 font-semibold">Est.</span>}
+                {formatCurrency(card.marketPrice)}{card.priceSource === 'cardmarket' && <span className="ml-1 font-semibold">Est.</span>}
+                {/* The credit; its link is in the zoom view (this tooltip can't be clicked) */}
+                {card.priceSource === 'pricecharting' && <span className="ml-1 text-slate-500">· PriceCharting</span>}
                 {card.owned && card.slab && <span className="ml-1 text-slate-500">raw</span>}
               </div>
             )}
@@ -1882,6 +1887,8 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
   const viewerGraded = useContext(ViewerGraded)
   const gradedSources = viewerGraded ? viewerGraded.sources : ownSources
   const gradedOn = viewerGraded ? viewerGraded.on : ownOn
+  // Its raw price may be PriceCharting's ungraded one (a stagnant card) — then cited like a graded one
+  const ungradedUrl = useUngradedUrl(card)
   const rarityColor = card.rarity ? (RARITY_COLORS[card.rarity] ?? '#7a6a55') : '#7a6a55'
   const slab: SlabInfo | undefined = card.gradingCompany ? { company: card.gradingCompany, grade: card.grade ?? '', cert: card.certNumber, tier: card.gradeTier ?? null, subgrades: card.subgrades, printing: printingText(card) || undefined } : undefined
 
@@ -1903,9 +1910,12 @@ function InventoryCardTile({ card, gameColor, isHovered, onHover, onLeave, onZoo
           rarityLabel: card.rarity ?? '',
           rarityColor,
           marketPrice: card.currentPrice ?? 0,
-          ...(slab && gradedOn && card.apiId && (gradedSources[card.id]
+          ...(slab && gradedOn && card.apiId && gradedSources[card.id]
             ? { priceSource: { label: gradedLabel(gradedSources[card.id].key), url: gradedSources[card.id].url } }
-            : { rawEstimate: true })),
+            : {
+                ...(slab && gradedOn && card.apiId && { rawEstimate: true }),
+                ...(ungradedUrl && { priceSource: { label: 'Ungraded', url: ungradedUrl } }),
+              }),
           owned: true,
           inventoryId: card.id,
           quantity: card.quantity,
@@ -2737,7 +2747,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = fa
             {price > 0 && (
               <div className="flex items-baseline justify-center gap-2 flex-wrap">
                 <span className="text-sm font-semibold text-ink">
-                  ${price.toFixed(2)}
+                  {formatCurrency(price)}
                   {priceEstimated && (
                     <span className="ml-1.5 text-[0.6875rem] font-medium text-slate-500" title="No TCGplayer price yet — estimated from Cardmarket (EU), converted to USD">
                       Est.

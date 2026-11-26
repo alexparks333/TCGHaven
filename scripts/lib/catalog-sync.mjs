@@ -23,7 +23,7 @@ import { Readable } from 'node:stream'
 import { initializeApp, getApps } from 'firebase/app'
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth'
 import {
-  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes, runTransaction, query, where,
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, writeBatch, serverTimestamp, Bytes, runTransaction, query, where, Timestamp,
 } from 'firebase/firestore'
 import {
   PRICE_HISTORY_COLLECTION, DAYS_COLLECTION, FIRSTS_COLLECTION, buildDailyEntries, buildDayPrices,
@@ -33,6 +33,7 @@ import { fillPokemonPriceGaps } from './price-fallback.mjs'
 import { tcgKey, signatureNumberFixes, isUltimate } from './riftbound-tcgplayer.mjs'
 import { keepHandPrice, hasPrice, livePriceFromPriceCharting } from './stagnant.mjs'
 import { applyHandOverrides } from './rarity-override.mjs'
+import { keepLastPrices } from './pokemon-variants.mjs'
 import { matchHandAdded, linkedHandCard } from './hand-added-tcgplayer.mjs'
 import { productIdOf } from './pricecharting.mjs'
 import { buildPokemonCatalog, productsFromRows, resolveIdCollisions, collidingIds } from './pokemon-tcgplayer.mjs'
@@ -190,19 +191,23 @@ export function stableStringify(v) {
   return JSON.stringify(v)
 }
 
-/** graded_prices/{game}.raw → { cardId: { r, u, pc } } ({} when there's none or it's unreadable —
- *  the sync then just doesn't use PriceCharting's ungraded prices this run). */
+/** graded_prices/{game}.raw → { cardId: { r, u, pc } } ({} when there's none). null when it's
+ *  unreadable — "no PriceCharting info this run": the sync then gives no card a new PriceCharting
+ *  price, and the ones it already prices keep theirs (livePriceFromPriceCharting with no `pc`). */
 async function readUngradedPrices(game) {
   try {
     const raw = (await getDoc(doc(db, 'graded_prices', game))).data()?.raw
     return raw ? JSON.parse(raw) : {}
   } catch (err) {
-    console.warn(`   ⚠️  PriceCharting ungraded prices for ${game} unreadable: ${err.message}`)
-    return {}
+    console.warn(`   ⚠️  PriceCharting ungraded prices for ${game} unreadable — PriceCharting-priced cards left as they are: ${err.message}`)
+    return null
   }
 }
 
-async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [], fieldDefaults = {}, checkImages = true } = {}) {
+// `keepIds`: cards whose source failed this run (e.g. a Riftbound set whose TCGplayer prices didn't
+// download) — one already in Firestore is left exactly as it is, never written with the run's $0;
+// a brand-new one is still added.
+async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [], keepIds = new Set(), fieldDefaults = {}, checkImages = true } = {}) {
   const metaRef = doc(db, 'catalog_meta', game)
   const metaSnap = await getDoc(metaRef)
   const meta = metaSnap.exists() ? metaSnap.data() : {}
@@ -213,6 +218,9 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
   // noticed rather than staying flagged forever.
   const previouslyBrokenImageIds = Array.isArray(meta.brokenImageIds) ? meta.brokenImageIds : []
 
+  // When the cards below are read: anything written after it (a staff edit while this sync runs,
+  // or this sync's own writes) is caught up before the snapshot (catchUpSince() below)
+  const readAt = new Date()
   const existingSnap = await getDocs(collection(db, 'catalog', game, 'cards'))
   const existingMap = new Map(existingSnap.docs.map((d) => [d.id, d.data()]))
   // Pre-sync distinct set names — lets callers with no registry to diff against (Pokemon, MTG;
@@ -231,10 +239,18 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
 
   for (const sourceCard of freshCards) {
     const existing = existingMap.get(sourceCard.id)
-    const freshCard = livePriceFromPriceCharting(existing, sourceCard, pcRaw[sourceCard.id])
+    if (existing && keepIds.has(sourceCard.id)) continue // its source failed this run — left as it is
+    // pcRaw null (unreadable) → no `pc`: PriceCharting-priced cards keep their price and citation
+    // Pokémon's TCGplayer-only (`tcg-`) and Japanese (`jp-`) cards are rebuilt from today's rows each sync: a
+    // product with no price today keeps its last one instead of dropping to $0 (keepLastPrices), as every
+    // other game's engine already does
+    const rebuilt = (game === 'pokemon' || game === 'pokemon-jp') && /^(tcg|jp)-/.test(sourceCard.id)
+      ? keepLastPrices(sourceCard, existing) : sourceCard
+    const freshCard = livePriceFromPriceCharting(existing, rebuilt, pcRaw?.[sourceCard.id])
     // A price staff (or the stagnant-prices agent) set by hand stays until this sync has a real
-    // one (scripts/lib/stagnant.mjs) — without this, the next sync wrote the card's $0 back.
-    const handKept = existing?.priceSource === 'manual' && !hasPrice(freshCard)
+    // one (scripts/lib/stagnant.mjs) — without this, the next sync wrote the card's $0 back. So does
+    // a PriceCharting price with no new one today (livePriceFromPriceCharting).
+    const handKept = (existing?.priceSource === 'manual' || existing?.priceSource === 'pricecharting') && !hasPrice(freshCard)
     // …and a rarity or set staff chose by hand stays too (scripts/lib/rarity-override.mjs) — applied
     // here, at the write: everything above matched the card on the source's own data
     const card = existing ? applyHandOverrides(existing, keepHandPrice(existing, freshCard)) : freshCard
@@ -272,7 +288,7 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
   for (const [id, existing] of existingMap) {
     if (existing.source !== 'manual' || existing.hidden || freshIds.has(id)) continue
     if (lastBulkSyncAt && existing.updatedAt && existing.updatedAt.toMillis() > lastBulkSyncAt.toMillis()) continue
-    const next = keepHandPrice(existing, livePriceFromPriceCharting(existing, { id }, pcRaw[id]))
+    const next = keepHandPrice(existing, livePriceFromPriceCharting(existing, { id }, pcRaw?.[id]))
     const changed = {}
     for (const [key, v] of Object.entries(next)) if (key !== 'id' && stableStringify(existing[key]) !== stableStringify(v)) changed[key] = v
     if (!Object.keys(changed).length) continue
@@ -293,7 +309,7 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
     const editedSinceLastSync =
       lastBulkSyncAt && existing.updatedAt && existing.updatedAt.toMillis() > lastBulkSyncAt.toMillis()
     if (editedSinceLastSync) continue
-    finalMap.set(id, { ...existing, hidden: true })
+    finalMap.set(id, { ...finalMap.get(id), hidden: true }) // the latest entry — this run's changes kept
     writes.push({ id, data: { hidden: true, updatedAt: serverTimestamp() } })
   }
 
@@ -325,7 +341,7 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
     console.log(`   Firestore sync (${game}): no changes`)
   }
 
-  const finalCards = [...finalMap.values()]
+  let finalCards = [...finalMap.values()]
 
   // Image health: re-check every previously-flagged card (small, bounded list) plus every card
   // that's brand-new this run (also bounded — never the whole catalog) rather than re-validating
@@ -365,11 +381,19 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
 
   const newSetNames = [...new Set(finalCards.map((c) => c.setName).filter(Boolean))].filter((n) => !existingSetNames.has(n))
 
+  // Staff may have edited cards while this sync ran (after the read above) — fold them in, so the
+  // snapshot has them and they stay protected by admin-edit-wins next sync (catchUpSince()).
+  const { asOf, editedAt } = await catchUpSince(game, readAt, finalMap, new Set(writes.map((w) => w.id)))
+  finalCards = [...finalMap.values()]
+
   await writeSnapshot(game, finalCards)
-  // The compressed copy the app's cold loads read (snapshot-codec.mjs). As of now: every write
-  // above is committed, and anything changed after this the app pulls as a delta.
-  await writeCompressedSnapshot(db, game, finalCards, new Date())
-  await setDoc(metaRef, { lastBulkSyncAt: serverTimestamp(), brokenImageIds }, { merge: true })
+  // The compressed copy the app's cold loads read (snapshot-codec.mjs). As of `asOf`: every write
+  // before it is in, and anything changed after it the app pulls as a delta.
+  await writeCompressedSnapshot(db, game, finalCards, asOf)
+  // lastBulkSyncAt: now — or, when staff edited a card during this sync, just before that edit, so
+  // the next sync still counts it as an edit since the last sync and leaves it alone
+  const syncedAt = editedAt === null ? serverTimestamp() : Timestamp.fromMillis(editedAt - 1)
+  await setDoc(metaRef, { lastBulkSyncAt: syncedAt, brokenImageIds }, { merge: true })
   // The same moment on the small sync_status doc: what every open app checks every 15 minutes
   // (lib/api/priceStatus.ts) and what the server's history cache keys off (lib/api/priceHistory.ts)
   // — catalog_meta also carries the set list and broken-image ids (~180KB for Pokémon).
@@ -400,23 +424,77 @@ async function syncToFirestore(game, freshCards, { hideIds = [], unhideIds = [],
   }
 }
 
+/**
+ * Every card written since `readAt` (when syncToFirestore read the catalog): this sync's own writes
+ * and any staff edit made while it ran. Folds them into `finalMap` (so the snapshot is current as of
+ * the returned `asOf`) and returns the earliest staff edit's time in ms (`editedAt`, null if none).
+ * A card this sync wrote counts as edited only when it no longer matches what the sync wrote.
+ * Stamping lastBulkSyncAt at the start instead would have counted the sync's own writes as staff
+ * edits next sync (they're stamped after it) and skipped them. On a failed read: asOf = readAt (cold
+ * loads pull the rest as deltas), no edit known.
+ */
+async function catchUpSince(game, readAt, finalMap, writtenIds) {
+  const asOf = new Date()
+  // Compared without updatedAt, times as ms (a Firestore Timestamp and a Date compare equal)
+  const norm = (v) => typeof v?.toMillis === 'function' ? v.toMillis()
+    : v instanceof Date ? v.getTime()
+    : Array.isArray(v) ? v.map(norm)
+    : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined).map(([k, x]) => [k, norm(x)]))
+    : v
+  const bare = (c) => stableStringify(norm({ ...c, updatedAt: null }))
+  try {
+    const snap = await getDocs(query(collection(db, 'catalog', game, 'cards'), where('updatedAt', '>', Timestamp.fromDate(readAt))))
+    let editedAt = null
+    let edits = 0
+    for (const d of snap.docs) {
+      const data = d.data()
+      if (!writtenIds.has(d.id) || bare(data) !== bare(finalMap.get(d.id))) {
+        edits++
+        const t = data.updatedAt?.toMillis?.()
+        if (t && (editedAt === null || t < editedAt)) editedAt = t
+      }
+      finalMap.set(d.id, data)
+    }
+    if (edits) console.log(`   Firestore sync (${game}): ${edits} card(s) edited during the sync — in the snapshot, kept as edits`)
+    return { asOf, editedAt }
+  } catch (err) {
+    console.warn(`   ⚠️  Catching up edits made during the sync (${game}) failed — snapshot as of the read: ${err.message}`)
+    return { asOf: readAt, editedAt: null }
+  }
+}
+
 // Writes this sync's prices into price_history/{game}/months/* — one merged field write per set
 // (days.{DD}), batched. Returns how many set-month docs were written.
+// A failed batch (e.g. one month doc over Firestore's 1 MiB limit — a huge set like Magic's Secret
+// Lair) is retried doc by doc, so only the docs that fail miss today (logged), never every set after.
 async function writeDailyPriceHistory(game, cards) {
   const entries = buildDailyEntries(cards)
   const docs = [...entries.entries()]
+  const write = (set, [docId, { setKey, month, day, value }]) => set(
+    doc(db, PRICE_HISTORY_COLLECTION, game, 'months', docId),
+    { game, setKey, month, days: { [day]: value } },
+    { merge: true },
+  )
+  let written = 0
   for (let i = 0; i < docs.length; i += 400) {
-    const batch = writeBatch(db)
-    for (const [docId, { setKey, month, day, value }] of docs.slice(i, i + 400)) {
-      batch.set(
-        doc(db, PRICE_HISTORY_COLLECTION, game, 'months', docId),
-        { game, setKey, month, days: { [day]: value } },
-        { merge: true },
-      )
+    const slice = docs.slice(i, i + 400)
+    try {
+      const batch = writeBatch(db)
+      for (const entry of slice) write((ref, data, opts) => batch.set(ref, data, opts), entry)
+      await batch.commit()
+      written += slice.length
+    } catch (err) {
+      console.warn(`   ⚠️  Price history (${game}): a batch failed (${err.message}) — writing its ${slice.length} doc(s) one by one`)
+      for (let j = 0; j < slice.length; j += 25) {
+        const results = await Promise.allSettled(slice.slice(j, j + 25).map((entry) => write(setDoc, entry)))
+        results.forEach((r, k) => {
+          if (r.status === 'fulfilled') written++
+          else console.warn(`   ⚠️  Price history (${game}): ${slice[j + k][0]} skipped today: ${r.reason?.message ?? r.reason}`)
+        })
+      }
     }
-    await batch.commit()
   }
-  return docs.length
+  return written
 }
 
 // Today's whole-game price file and the first-price map (see price-history.mjs "Daily closes").
@@ -1116,7 +1194,9 @@ async function reviewTcgplayerPromos(game, promoById, groups, { setIdByName = nu
       Object.assign(p, { ignored: false, reviewed: false, auto: true, addedAt: nowIso })
       delete p.decidedAt
       reoffered.push(p)
-      unhideIds.push(card.id)
+      // Back only if it has a set to show in — one with none stays hidden (below), never both
+      // hidden and unhidden (as Riftbound's returnedIds)
+      if (p.setName && !p.denied) unhideIds.push(card.id)
       changed = true
       newPlacements++
     }
@@ -1610,14 +1690,17 @@ const RUNE_TAGS  = { R01: ['Fury'],    R02: ['Calm'],    R03: ['Mind'],    R04: 
 const SET_NAMES_MAP = { OGN: 'Origins', SFD: 'Spiritforged', UNL: 'Unleashed', OGS: 'Proving Grounds', VEN: 'Vendetta', RAD: 'Radiance' }
 
 async function fetchRiftboundPrices() {
-  // Returns { prices: Map<key, {normal, foil, lowNormal, lowFoil}>, extraCards: Card[] }
+  // Returns { prices: Map<key, {normal, foil, lowNormal, lowFoil}>, extraCards: Card[], failedSets }
+  // failedSets: set codes whose CSV didn't download this run — their cards are left as they are
+  // (downloadRiftbound → syncToFirestore keepIds), never priced $0 or given the gallery's rarity back.
   const prices = new Map()
   const runeExtras = new Map() // cardId → card object
+  const failedSets = new Set()
   for (const { groupId, setCode } of await getTcgcsvGroups()) {
     try {
       const url = `https://tcgcsv.com/tcgplayer/89/${groupId}/ProductsAndPrices.csv`
       const res = await fetch(url, { headers: TCGCSV_HEADERS })
-      if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${setCode} failed: ${res.status}`); continue }
+      if (!res.ok) { console.warn(`   ⚠️  TCGCSV ${setCode} failed: ${res.status} — its cards left as they are`); failedSets.add(setCode); continue }
       const text = await res.text()
       // Read by column name, not position — TCGplayer's column order isn't fixed across groups.
       const rows = parseCsv(text)
@@ -1709,10 +1792,15 @@ async function fetchRiftboundPrices() {
       const runeCount  = [...runeExtras.keys()].filter(k => k.startsWith(setCode.toLowerCase())).length
       console.log(`   TCGCSV ${setCode}: ${priceCount} products, ${runeCount} rune cards`)
     } catch (err) {
-      console.warn(`   ⚠️  TCGCSV ${setCode} error: ${err.message}`)
+      console.warn(`   ⚠️  TCGCSV ${setCode} error: ${err.message} — its cards left as they are`)
+      failedSets.add(setCode)
     }
   }
-  return { prices, extraCards: [...runeExtras.values()] }
+  // A set that failed part-way may have left some of its rows behind — drop them, so the whole set
+  // is treated alike (left as it is)
+  for (const key of prices.keys()) if (failedSets.has(key.split(':')[0])) prices.delete(key)
+  for (const [id, card] of runeExtras) if (failedSets.has(card.setCode)) runeExtras.delete(id)
+  return { prices, extraCards: [...runeExtras.values()], failedSets }
 }
 
 function findCardsInNextData(obj, depth = 0) {
@@ -1744,8 +1832,11 @@ const REGULAR_RARITIES = new Set(['Common', 'Uncommon', 'Rare', 'Epic'])
 async function linkRiftboundHandAdded(registry, catalogCards, rowsOf) {
   const none = { fresh: [], productIds: new Set() }
   try {
-    const handSnap = await getDocs(query(collection(db, 'catalog', 'riftbound', 'cards'), where('source', '==', 'manual')))
-    const hand = handSnap.docs.map((d) => ({ ...d.data(), id: d.id })).filter((c) => !c.hidden)
+    // The whole catalog, not only the hand-added cards: every product a card in Firestore already is
+    // must count as taken (a set whose prices failed this run has no tcgProductId in `catalogCards`)
+    const catalogSnap = await getDocs(collection(db, 'catalog', 'riftbound', 'cards'))
+    const stored = catalogSnap.docs.map((d) => ({ ...d.data(), id: d.id }))
+    const hand = stored.filter((c) => c.source === 'manual' && !c.hidden)
     if (!hand.length) return none
     const res = await fetch('https://tcgcsv.com/tcgplayer/89/groups', { headers: TCGCSV_HEADERS })
     if (!res.ok) throw new Error(`groups: ${res.status}`)
@@ -1755,7 +1846,7 @@ async function linkRiftboundHandAdded(registry, catalogCards, rowsOf) {
     }
     // Products some catalog card already is — never linked to a second card
     const taken = new Set()
-    for (const c of [...catalogCards, ...hand]) {
+    for (const c of [...catalogCards, ...stored]) {
       const pid = productIdOf(c) ?? Number(/-(\d{6,})$/.exec(c.id)?.[1] ?? 0)
       if (pid > 0) taken.add(pid)
     }
@@ -1788,7 +1879,7 @@ export async function downloadRiftbound() {
   const registry = await loadRegistry()
   const registrySets = registry?.riftbound?.sets ?? []
   const rowsOf = tcgplayerRowCache()
-  const [galleryRes, { prices, extraCards }, tcgplayerOnlyCards] = await Promise.all([
+  const [galleryRes, { prices, extraCards, failedSets }, tcgplayerOnlyCards] = await Promise.all([
     fetch('https://playriftbound.com/en-us/card-gallery/', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -1862,7 +1953,11 @@ export async function downloadRiftbound() {
         // false for Overnumbered specifically). Including it used to make a foil TCGPlayer
         // listing silently win over the normal price for every Overnumbered card that had one.
         const isShowcaseOrStar = card.rarity === 'Alt Art' || card.id.includes('-star-') || key.includes(':sp')
-        card.marketPrice     = isShowcaseOrStar ? (p.foil    || p.normal)    : (p.normal    || p.foil)
+        // A regular card's price is its Normal printing's: market, else the Normal row's low price
+        // (a listed Normal with no sales yet) — the foil price only when there's no priced Normal
+        // row (Rares and Epics print foil only, so their foil is the card). Before, a Normal with no
+        // market took the foil price, valuing every non-foil copy at the foil's.
+        card.marketPrice     = isShowcaseOrStar ? (p.foil    || p.normal)    : (p.normal || p.lowNormal || p.foil)
         card.marketPriceFoil = isShowcaseOrStar ? 0           : p.foil
         card.lowPriceNM      = isShowcaseOrStar ? (p.lowFoil || p.lowNormal) : (p.lowNormal || p.lowFoil)
         card.lowPriceNMFoil  = isShowcaseOrStar ? 0           : p.lowFoil
@@ -1882,6 +1977,9 @@ export async function downloadRiftbound() {
       }
       return card
     })
+  // Gallery cards of a set whose TCGplayer prices failed to download: no prices, rarity fixes or
+  // product ids this run — syncToFirestore leaves the ones it has exactly as they are
+  const keepIds = new Set(all.filter((c) => failedSets.has(c.setCode)).map((c) => c.id))
 
   // Append extra cards (Runes etc.) sourced from TCGCSV rather than the official gallery.
   // Some sets' galleries (e.g. Vendetta) DO also list a Rune under the same id, but with a
@@ -2013,7 +2111,7 @@ export async function downloadRiftbound() {
   const priced = all.filter(c => c.marketPrice > 0).length
   console.log(`   Priced ${priced}/${all.length} cards from TCGCSV`)
   all.push(...hand.fresh)
-  const result = await syncToFirestore('riftbound', all, { hideIds: [...supersededStubIds, ...leftOutIds], unhideIds: returnedIds })
+  const result = await syncToFirestore('riftbound', all, { hideIds: [...supersededStubIds, ...leftOutIds], unhideIds: returnedIds, keepIds })
   return { ...result, discovered }
 }
 

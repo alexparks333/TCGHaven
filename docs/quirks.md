@@ -222,8 +222,11 @@ recorded stay daily and are never replaced. Cards were matched to their TCGplaye
 game's latest 30 recorded days (product id first; a ±1 day allowance, since our syncs and the
 archive snapshot at different hours): 96–99% of most games; the rest (Prize Wall cards, backup-priced
 cards) keep only our own record. The archives were converted outside the repo (py7zr). Daily-close
-files and first prices (Portfolio baselines) were not touched. A card's own chart asks for up to
-1,500 days (`/api/price-history` series). Past months are cached as final by running servers —
+files and first prices (Portfolio baselines) were not touched — and `scripts/backfill-daily-prices.mjs`
+now refuses to write without `--from YYYY-MM-DD` and keeps stored first prices (a re-run over the
+backfilled months would have made every card's first price its 2024 one). A card's own chart asks for up to
+1,500 days (`/api/price-history` series); its X axis is time-scaled (`PriceHistoryChart.tsx`), so the
+weekly years and the daily recent weeks keep their true widths. Past months are cached as final by running servers —
 redeploy after any backfill.
 
 **Shared price history.** Every successful sync writes that day's prices once, for everyone, to
@@ -236,11 +239,21 @@ server — the browser never downloads raw history:
   by each sync. Four past days per game instead of 13 months of every owned set (2026-11-01: that
   pattern re-downloaded every set's months every 15 minutes per server instance, growing each
   month — at scale the biggest bill in the app, and a memory crash). Don't move baselines back
-  onto month docs. `scripts/backfill-daily-prices.mjs` rebuilds both from the month docs.
+  onto month docs. A day's file is its last sync (~21:00 UTC), so a window takes the close nearest
+  its cutoff — up to 12h after it counts (yesterday's close is "24h ago"; before 2026-11-25 the
+  24h baseline was ~37h old for half of every day). A graded-priced slab's "first" reads only days
+  since the graded history began (2026-11-18), the newest 20 logged days. Days with no file are
+  remembered apart from the 60 cached files, so they never push a real one out.
+  `scripts/backfill-daily-prices.mjs` rebuilds both from the month docs (`--from` required, see above).
+- Without graded prices (`gradedAllowed` false) a slab still reads the raw history **as a slab** —
+  the Near Mint price, no condition discount, as the live price routes value it. Stripping its
+  grading (before 2026-11-25) applied the raw condition discount to history only: fake gains.
 - `series` (card detail chart) and `portfolio` (Analytics daily totals) read month docs, cached per
   doc: past months/days are kept for good, the current one re-read only after a new sync
   (`sync_status/{game}.lastGoodAt`, checked ≤ every 5 min). The month cache is an LRU with a byte
-  budget — keep it bounded. No timer-based refresh: history only changes when a sync lands.
+  budget — keep it bounded. Missing months are read in contiguous runs (never a range across cached
+  ones). A request reads 8 sets at a time and at most 400 sets; `portfolio` takes ≤ 5,000 cards
+  (413 beyond). No timer-based refresh: history only changes when a sync lands.
 
 The "Prices updated" check every open app makes every 15 minutes reads only `sync_status/{game}`
 (`lastGoodAt`, stamped by `syncToFirestore()`), never `catalog_meta` (~180KB for Pokémon: set list

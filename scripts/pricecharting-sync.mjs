@@ -172,6 +172,10 @@ async function main() {
     try {
       const snap = await readCompressedSnapshot(db, key)
       if (!snap) { console.log(`- ${key}: no catalog snapshot, skipped`); continue }
+      // Read first: a read error must not look like "staff set nothing" — prices written without
+      // the links and blocks would bring back every wrong match staff removed. A throw here skips
+      // this catalog entirely (no slimCards entry → not written), so its prices stay as last run's.
+      const d = (await getDoc(doc(db, 'graded_links', key))).data() ?? {}
       slimCards[key] = snap.cards.map((c) => ({ id: c.id, name: c.name, number: c.number, set: c.set, setCode: c.setCode, setName: c.setName,
         imageUrl: c.imageUrl, tcgProductId: c.tcgProductId, hidden: c.hidden,
         // for ungradedPrices(): which cards nothing else prices (stagnant.mjs)
@@ -179,7 +183,6 @@ async function main() {
         variantPrices: c.variantPrices, priceSource: c.priceSource, source: c.source }))
       matchedBy[key] = matchCatalog(snap.cards, byTcg)
       for (const e of matchedBy[key].entries) pricedById.add(`${key}:${e.id}`)
-      const d = (await getDoc(doc(db, 'graded_links', key)).catch(() => null))?.data() ?? {}
       linksBy[key] = d
       for (const slots of Object.values(d.links ?? {})) for (const pc of Object.values(slots ?? {})) if (pc) skipPc.add(String(pc))
       for (const pc of Object.keys(d.ignored ?? {})) skipPc.add(pc)

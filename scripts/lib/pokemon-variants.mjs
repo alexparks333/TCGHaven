@@ -59,6 +59,10 @@ export function newPriceEntry() {
   return { market: {}, low: {}, plain: new Set(), weak: { market: 0, low: 0 } }
 }
 
+// A bare number in brackets TCGplayer adds to tell same-named cards apart ("Pikachu (1)",
+// "Drowzee (74a)") — not a variant; cleanEnName() (pokemon-tcgplayer.mjs) drops it from names
+export const NUMBER_TAG = /\s*\(\d+[a-z]?\)/g
+
 export function addPriceRow(entry, row, opts = {}) {
   const v = classifySubtype(row.subTypeName, opts)
   if (!v) return
@@ -70,7 +74,7 @@ export function addPriceRow(entry, row, opts = {}) {
     return
   }
   const key = variantKey(v.edition, v.finish)
-  const isVariantProduct = /\(/.test(row.name ?? '')
+  const isVariantProduct = /\(/.test(String(row.name ?? '').replace(NUMBER_TAG, ''))
   if (isVariantProduct && entry.plain.has(key)) return
   if (!isVariantProduct && price > 0) entry.plain.add(key)
   if (price > 0) entry.market[key] = price
@@ -141,13 +145,30 @@ export function legacyFields(entry) {
   const l = (f) => entry.low[variantKey(e, f)] ?? 0
   const weakM = Object.keys(entry.market).length ? 0 : entry.weak.market
   const weakL = Object.keys(entry.low).length ? 0 : entry.weak.low
+  // One finish per slot, and both its prices from it (never market from Normal and low from Holo):
+  // the first with a market price, else the first with a low one
+  const pick = (finishes) => finishes.find((f) => m(f) > 0) ?? finishes.find((f) => l(f) > 0)
+  const regular = pick(['normal', 'holofoil'])
+  const foil = pick(['holofoil', 'reverse'])
   return {
     variantPrices: vp,
-    marketPrice: round2(m('normal') || m('holofoil') || weakM),
-    marketPriceFoil: round2(m('holofoil') || m('reverse')),
-    lowPriceNM: round2(l('normal') || l('holofoil') || weakL),
-    lowPriceNMFoil: round2(l('holofoil') || l('reverse')),
+    marketPrice: round2(regular ? m(regular) : weakM),
+    marketPriceFoil: round2(foil ? m(foil) : 0),
+    lowPriceNM: round2(regular ? l(regular) : weakL),
+    lowPriceNMFoil: round2(foil ? l(foil) : 0),
   }
+}
+
+/**
+ * The "no price → keep the last" rule for cards rebuilt from TCGplayer each sync (tcg- / jp-):
+ * a card with no price at all today keeps `old`'s prices (`old`: the card as the catalog has it
+ * now; none = a new card, nothing to keep).
+ */
+export function keepLastPrices(fresh, old) {
+  if (!old || fresh.marketPrice > 0 || fresh.marketPriceFoil > 0 || Object.keys(fresh.variantPrices ?? {}).length) return fresh
+  const out = { ...fresh }
+  for (const k of ['variantPrices', 'marketPrice', 'marketPriceFoil', 'lowPriceNM', 'lowPriceNMFoil']) if (old[k] !== undefined) out[k] = old[k]
+  return out
 }
 
 /**

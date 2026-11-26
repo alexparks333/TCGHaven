@@ -136,30 +136,42 @@ async function parseMonth(data: Record<string, unknown>): Promise<{ days: MonthD
   return { days, size }
 }
 
-// A set's month docs from `fromMonth` to now. Months not cached come in ONE document-id range
-// query (ids are `{setKey}__{YYYY-MM}`); a stale current month alone is a single get().
+// A set's month docs from `fromMonth` to now. Months not cached come in document-id range queries
+// (ids are `{setKey}__{YYYY-MM}`), one per contiguous run; a run of one month is a single get().
 async function loadSetMonths(store: Store, game: CatalogKey, setKey: string, fromMonth: string): Promise<Map<string, MonthDoc>> {
   const wanted = monthsFrom(fromMonth, new Date().toISOString().slice(0, 7))
   const keyOf = (month: string) => `${store.root}/${game}/${monthDocId(setKey, month)}`
   const missing: string[] = []
   for (const month of wanted) {
-    const hit = monthCache.get(keyOf(month))
+    const k = keyOf(month)
+    const hit = monthCache.get(k)
     if (!hit || !(await stillGood(store, game, hit.fetchedAt, endOfMonthMs(month)))) missing.push(month)
+    else { monthCache.delete(k); monthCache.set(k, hit) } // most recently used goes last (LRU)
   }
 
+  // Missing months in contiguous runs: a run of one is a get(), a longer run one id-range query —
+  // never a range across months that are cached (it would re-read everything in between).
+  const runs: string[][] = []
+  for (const month of missing) {
+    const run = runs[runs.length - 1]
+    if (run && wanted.indexOf(month) === wanted.indexOf(run[run.length - 1]) + 1) run.push(month)
+    else runs.push([month])
+  }
   const fetchedAt = Date.now()
   const found = new Map<string, Record<string, unknown>>()
-  if (missing.length === 1) {
-    const snap = await getDoc(doc(db, store.root, game, 'months', monthDocId(setKey, missing[0])))
-    if (snap.exists()) found.set(missing[0], snap.data())
-  } else if (missing.length > 1) {
+  await Promise.all(runs.map(async (run) => {
+    if (run.length === 1) {
+      const snap = await getDoc(doc(db, store.root, game, 'months', monthDocId(setKey, run[0])))
+      if (snap.exists()) found.set(run[0], snap.data())
+      return
+    }
     const snap = await getDocs(query(
       collection(db, store.root, game, 'months'),
-      where(documentId(), '>=', monthDocId(setKey, missing[0])),
-      where(documentId(), '<=', monthDocId(setKey, missing[missing.length - 1])),
+      where(documentId(), '>=', monthDocId(setKey, run[0])),
+      where(documentId(), '<=', monthDocId(setKey, run[run.length - 1])),
     ))
     snap.forEach((d) => found.set(String(d.data().month ?? ''), d.data()))
-  }
+  }))
   // A month with no doc is cached too (as empty), so it isn't asked for again.
   for (const month of missing) {
     const data = found.get(month)
@@ -181,17 +193,24 @@ async function loadSetMonths(store: Store, game: CatalogKey, setKey: string, fro
 // handful of these instead of months of every set — and past days never change, so they're kept.
 type PriceMap = Record<string, number[]>
 interface DayFile { t: number; prices: PriceMap }
-const dayCache = new Map<string, { file: DayFile | null; fetchedAt: number }>()
+const dayCache = new Map<string, { file: DayFile; fetchedAt: number }>()
+// Days with no file (before a history began, a missed sync) are remembered apart — tiny, and they
+// must never push a real (multi-MB) file out of the 60 slots above.
+const emptyDays = new Map<string, number>() // cacheKey → fetchedAt
 const dayLoading = new Map<string, Promise<DayFile | null>>() // requests at the same moment share one read
 const MAX_DAY_FILES = 60
+const MAX_EMPTY_DAYS = 2000
 
 async function loadDay(store: Store, key: CatalogKey, day: string): Promise<DayFile | null> {
   const cacheKey = `${store.root}/${key}/${day}`
+  const endsAt = Date.parse(`${day}T23:59:59.999Z`)
   const hit = dayCache.get(cacheKey)
-  if (hit && await stillGood(store, key, hit.fetchedAt, Date.parse(`${day}T23:59:59.999Z`))) {
+  if (hit && await stillGood(store, key, hit.fetchedAt, endsAt)) {
     dayCache.delete(cacheKey); dayCache.set(cacheKey, hit) // most recently used goes last
     return hit.file
   }
+  const emptyAt = emptyDays.get(cacheKey)
+  if (emptyAt !== undefined && await stillGood(store, key, emptyAt, endsAt)) return null
   let loading = dayLoading.get(cacheKey)
   if (!loading) {
     loading = fetchDay(store, key, day).finally(() => dayLoading.delete(cacheKey))
@@ -216,8 +235,14 @@ async function fetchDay(store: Store, key: CatalogKey, day: string): Promise<Day
     return null
   }
   const file = decoded ? { t: Date.parse(decoded.t), prices: decoded.prices as PriceMap } : null
-  dayCache.set(cacheKey, { file, fetchedAt: Date.now() })
-  while (dayCache.size > MAX_DAY_FILES) dayCache.delete(dayCache.keys().next().value!)
+  if (file) {
+    emptyDays.delete(cacheKey)
+    dayCache.set(cacheKey, { file, fetchedAt: Date.now() })
+    while (dayCache.size > MAX_DAY_FILES) dayCache.delete(dayCache.keys().next().value!)
+  } else {
+    emptyDays.delete(cacheKey); emptyDays.set(cacheKey, Date.now())
+    while (emptyDays.size > MAX_EMPTY_DAYS) emptyDays.delete(emptyDays.keys().next().value!)
+  }
   return file
 }
 
@@ -242,6 +267,20 @@ const BASELINE_WINDOWS = { d1: 1, d7: 7, d30: 30, d365: 365 } as const
 // How many days back from a cutoff to look for a card's last price (a day's file can be missing,
 // or a card unpriced that day) — the "latest price at or before" the month-doc series gives.
 const LOOKBACK_DAYS = 3
+
+// A day's file is that day's LAST sync (~21:00 UTC), so "at or before the cutoff" alone skipped
+// yesterday's close for half of every day: between ~09:00 and ~21:00 UTC the "24h" baseline was the
+// close two days back (~37h+ old). A file up to CLOSE_ALLOWANCE_MS after the cutoff counts — the
+// window uses the close nearest its cutoff (yesterday's close is "24h ago"). Only files dated the
+// cutoff's own day or earlier are read, so today's prices are never a baseline.
+const CLOSE_ALLOWANCE_MS = 12 * 60 * 60 * 1000
+
+// The graded history (scripts/lib/graded-history.mjs) began on this day: a slab logged earlier has
+// no graded "first", and those days are never read.
+const GRADED_HISTORY_START = '2026-11-18'
+// At most this many distinct logged days are looked up per catalog per request (each is a whole
+// game's day file) — the newest; older ones fall back to what was paid, as before the history.
+const MAX_ADDED_DAYS = 20
 
 // An item's price from a stored tuple — the raw history's tuple through the one pricing rule
 // (lib/pricing.ts), or the graded history's through the slab's grade. Null = no price.
@@ -273,7 +312,13 @@ const gradedPriceOf: PriceOf = (game, item, prices) => {
 
 /** Slabs valued at PriceCharting's graded price today read the graded history; everything else
  *  (raw cards, and slabs with no graded price, shown as "Raw est.") the raw history. */
-async function splitByStore(items: HistoryItem[]): Promise<{ raw: HistoryItem[]; graded: HistoryItem[] }> {
+async function splitByStore(items: HistoryItem[], gradedOk: boolean): Promise<{ raw: HistoryItem[]; graded: HistoryItem[] }> {
+  // Graded prices not allowed for this caller (Haven Premium, lib/api/gradedPrices.ts gradedAllowed):
+  // every slab reads the raw history, keeping its grading — copyPrice() then values it as a slab
+  // with no graded price (the Near Mint price, no condition discount), exactly as the live price
+  // routes do. Never strip the grading: that made it a raw copy and applied its condition's
+  // discount, while today's price didn't — a fake gain on every baseline and chart.
+  if (!gradedOk) return { raw: items, graded: [] }
   const gradedKeys = await gradedPricedKeys(items)
   return { raw: items.filter((i) => !gradedKeys.has(i.key)), graded: items.filter((i) => gradedKeys.has(i.key)) }
 }
@@ -294,8 +339,8 @@ function byCatalogOf(items: HistoryItem[]): Map<CatalogKey, { game: Game; items:
  *  when it was added is TCGplayer's ungraded one, and "what was paid" is $0 when left empty — the
  *  whole slab showed as gain (2026-11-20). None that day (logged before the graded history began
  *  on 2026-11-18) → null, and Portfolio falls back to what was paid. */
-export async function loadBaselines(items: HistoryItem[], now = Date.now()): Promise<Record<string, Baseline>> {
-  const { raw, graded } = await splitByStore(items)
+export async function loadBaselines(items: HistoryItem[], now = Date.now(), gradedOk = true): Promise<Record<string, Baseline>> {
+  const { raw, graded } = await splitByStore(items, gradedOk)
   const [a, b] = await Promise.all([baselinesFrom(RAW, rawPriceOf, raw, now), baselinesFrom(GRADED, gradedPriceOf, graded, now)])
   return { ...a, ...b }
 }
@@ -312,24 +357,35 @@ async function baselinesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[
       const files: DayFile[] = []
       for (let back = 0; back < LOOKBACK_DAYS; back++) {
         const file = await loadDay(store, key, new Date(cutoff - back * DAY_MS).toISOString().slice(0, 10))
-        if (file && file.t <= cutoff) files.push(file)
+        if (file && file.t <= cutoff + CLOSE_ALLOWANCE_MS) files.push(file)
       }
       return { name, files }
     }))
     const firsts = store === RAW ? await loadFirsts(key) : {}
-    // Graded: the day files on and just after each slab's logged day (one read per distinct day)
+    // Graded: the day files on and just after each slab's logged day — only days since the graded
+    // history began, the newest MAX_ADDED_DAYS distinct ones, and a later day only while some slab
+    // logged that day still has no price (usually one file per day).
     const addedFiles = new Map<string, DayFile[]>()
     if (store !== RAW) {
-      for (const day of Array.from(new Set(gameItems.map((i) => i.added).filter((d): d is string => !!d && /^\d{4}-\d{2}-\d{2}$/.test(d))))) {
+      const byAdded = new Map<string, HistoryItem[]>()
+      for (const it of gameItems) {
+        if (!it.added || !/^\d{4}-\d{2}-\d{2}$/.test(it.added) || it.added < GRADED_HISTORY_START) continue
+        byAdded.set(it.added, [...(byAdded.get(it.added) ?? []), it])
+      }
+      const days = Array.from(byAdded.keys()).sort().reverse().slice(0, MAX_ADDED_DAYS)
+      await Promise.all(days.map(async (day) => {
         const files: DayFile[] = []
-        for (let ahead = 0; ahead < LOOKBACK_DAYS; ahead++) {
+        let unpriced = byAdded.get(day)!
+        for (let ahead = 0; ahead < LOOKBACK_DAYS && unpriced.length; ahead++) {
           const at = Date.parse(`${day}T00:00:00Z`) + ahead * DAY_MS
           if (at > now) break
           const file = await loadDay(store, key, new Date(at).toISOString().slice(0, 10))
-          if (file) files.push(file)
+          if (!file) continue
+          files.push(file)
+          unpriced = unpriced.filter((it) => priceOf(game, it, file.prices, byId.get(it.apiId)) === null)
         }
         addedFiles.set(day, files)
-      }
+      }))
     }
 
     for (const item of gameItems) {
@@ -356,11 +412,20 @@ async function baselinesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[
 // Daily price points for each item from `from` until now, priced with the same rule every price
 // display uses (lib/pricing.ts) — so history and today's prices are always comparable. A
 // graded-priced slab's points are its grade's graded prices.
+// A request may touch at most this many distinct sets (each = a month doc per month asked for), and
+// reads SET_CONCURRENCY sets at a time — so one big collection can't fan out thousands of reads at once.
+export const MAX_SERIES_SETS = 400
+const SET_CONCURRENCY = 8
+
+/** Thrown when a request asks for more sets than MAX_SERIES_SETS (the route answers 413). */
+export class TooManySetsError extends Error {}
+
 export async function loadPriceSeries(
   items: HistoryItem[],
   from: Date,
+  gradedOk = true,
 ): Promise<Map<string, PricePoint[]>> {
-  const { raw, graded } = await splitByStore(items)
+  const { raw, graded } = await splitByStore(items, gradedOk)
   const [a, b] = await Promise.all([seriesFrom(RAW, rawPriceOf, raw, from), seriesFrom(GRADED, gradedPriceOf, graded, from)])
   b.forEach((points, key) => a.set(key, points))
   return a
@@ -386,7 +451,8 @@ async function seriesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[], 
       bySet.get(key)!.push({ item, card: { rarity: card.rarity, publicCode: card.publicCode } })
     }
 
-    await Promise.all(Array.from(bySet.entries()).map(async ([setKey, rows]) => {
+    if (bySet.size > MAX_SERIES_SETS) throw new TooManySetsError(`${bySet.size} sets`)
+    await eachLimited(Array.from(bySet.entries()), SET_CONCURRENCY, async ([setKey, rows]) => {
       const monthDocs = await loadSetMonths(store, catalogKey, setKey, fromMonth)
       for (const monthDoc of Array.from(monthDocs.values())) {
         for (const entry of Array.from(monthDoc.values())) {
@@ -399,11 +465,19 @@ async function seriesFrom(store: Store, priceOf: PriceOf, items: HistoryItem[], 
           }
         }
       }
-    }))
+    })
   }
 
   result.forEach((points) => points.sort((a, b) => a.date.localeCompare(b.date)))
   return result
+}
+
+// Runs `fn` over `list`, at most `limit` at a time.
+async function eachLimited<T>(list: T[], limit: number, fn: (x: T) => Promise<void>): Promise<void> {
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(limit, list.length) }, async () => {
+    while (next < list.length) await fn(list[next++])
+  }))
 }
 
 // Most recent price recorded at or before `cutoffMs`, or null.

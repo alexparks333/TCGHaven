@@ -80,7 +80,9 @@ export function productOf(rows) {
   for (const r of rows) {
     const sub = String(r.subTypeName ?? '').trim()
     if (finishes.some((f) => f.sub === sub)) continue
-    const p = parseFloat(r.marketPrice) || parseFloat(r.midPrice) || parseFloat(r.lowPrice) || 0
+    // Market, else mid — never the low listing (one lowball listing isn't the card's price; same
+    // rule as the other TCGplayer engines)
+    const p = parseFloat(r.marketPrice) || parseFloat(r.midPrice) || 0
     finishes.push({ sub, price: Math.round(p * 100) / 100 })
   }
   finishes.sort((x, y) => Number(/foil/i.test(x.sub)) - Number(/foil/i.test(y.sub)))
@@ -400,7 +402,10 @@ export function buildOnePieceCatalog({ apiCards, groups, productsByGroup, existi
     if (failedGroupIds.has(p.groupId)) continue
     p.finishes.forEach((f, i) => {
       if (claimed.has(keyOf(p.productId, f.sub))) return
+      // `tcg-{id}` only when no card has that id yet: a product first seen in one finish (tcg-500,
+      // Foil) that later lists a Normal row too gets `tcg-500-normal` — never a second tcg-500
       const second = i > 0 || (p.finishes.length > 1 && claimed.has(keyOf(p.productId, p.finishes[0].sub)))
+        || link.has(`tcg-${p.productId}`) || existing.has(`tcg-${p.productId}`)
       const id = second ? `tcg-${p.productId}-${(f.sub || 'other').toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : `tcg-${p.productId}`
       const card = {
         id, name: second ? `${p.name} (${f.sub})` : p.name, set: p.code.split('-')[0], setName: setOfProduct(p),

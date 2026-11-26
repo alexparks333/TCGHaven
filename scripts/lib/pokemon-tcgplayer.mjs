@@ -32,7 +32,7 @@
 
 import { normSetName, levenshtein } from './text-norm.mjs'
 import { fallbackPokemonSetId } from './pokemon-groups.mjs'
-import { EDITION_GROUPS, newPriceEntry, addPriceRow, legacyFields, classifySubtype, variantKey } from './pokemon-variants.mjs'
+import { EDITION_GROUPS, newPriceEntry, addPriceRow, legacyFields, classifySubtype, variantKey, NUMBER_TAG, keepLastPrices } from './pokemon-variants.mjs'
 import { cleanJpName, jpImageUrl, placeholderDates, JP_PROMO_ERA } from './pokemon-jp.mjs'
 
 // "001/195" → "1", "TG01/TG30" → "TG1" — the key a TCGplayer number and a GitHub number share.
@@ -131,7 +131,7 @@ export function matchGroupsToSets(groups, ghSets) {
 export function cleanEnName(name) {
   return cleanJpName(String(name ?? '')
     .replace(/\s+-\s+[A-Za-z]{0,5}\d+[a-z]?(?:\/[A-Za-z]{0,5}\d+)?(?=\s|$|[([])/g, '')
-    .replace(/\s*\(\d+[a-z]?\)/g, ''))
+    .replace(NUMBER_TAG, ''))
 }
 
 // Not cards: digital code cards, and rows TCGplayer gives no rarity ("None") and no number.
@@ -250,11 +250,14 @@ export function rarityTier(rarity) {
   return 'rare'
 }
 
-/** One catalog card built from a TCGplayer product. */
-export function tcgCard(product, set) {
+/**
+ * One catalog card built from a TCGplayer product. `old`: the card as the catalog has it now, if
+ * the caller has it — a product TCGplayer has no price for today keeps its last price.
+ */
+export function tcgCard(product, set, old) {
   const entry = newPriceEntry()
   for (const r of product.rows) addPriceRow(entry, r)
-  return {
+  return keepLastPrices({
     id: `tcg-${product.productId}`,
     name: product.name,
     set: set.id,
@@ -263,7 +266,7 @@ export function tcgCard(product, set) {
     rarity: githubRarity(product.extRarity),
     imageUrl: product.imageUrl,
     ...legacyFields(entry),
-  }
+  }, old)
 }
 
 // A group no name rule matched, matched by what's in it instead: if most of its numbered products
@@ -356,14 +359,23 @@ const baseScore = (p, gh) => (normSetName(p.name) === normSetName(gh.name) ? 100
  * @param unavailableSetIds GitHub sets whose card file failed to download this run. Their TCGplayer
  *                      products are skipped entirely — built as new cards they'd duplicate the
  *                      real ones (and those real cards just keep their current data this sync).
+ *                      Products in OTHER groups could be its cards too (pass C links a card filed
+ *                      in another group — Best of Game, Alternate Art Promos), so while any GitHub
+ *                      set is unavailable no numbered product pass 1 left unlinked becomes a card:
+ *                      they wait (existing tcg- cards keep their current data) for the next sync.
  * @param failedGroupIds TCGplayer groups whose CSV failed to download. The GitHub sets they price
- *                      are left out of this run (so their cards keep today's prices instead of $0).
+ *                      are left out of this run (so their cards keep today's prices instead of $0),
+ *                      and so is every GitHub card left with no price this run — it may be priced
+ *                      through a failed group in another set (pass C), which can't be told today.
+ * @param existing      Map catalog id → the card as it is now (optional): a `tcg-` product with no
+ *                      price today keeps its last price (tcgCard)
  */
-export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, previousSets = [], unavailableSetIds = new Set(), failedGroupIds = new Set() }) {
+export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, previousSets = [], unavailableSetIds = new Set(), failedGroupIds = new Set(), existing = new Map() }) {
   const report = {
     linked: 0, variants: [], newSets: [], oddGroups: [], githubOnly: [], editionOnly: [],
     duplicateListings: [], unnumberedInSets: [], shadowedGithubSets: [], differences: [],
     claimedCaughtUp: [], contentMatched: [], skippedGroups: [], linkedElsewhere: [], numberOnlyRejected: [],
+    heldBackProducts: [], stalePriceCards: [],
   }
   const groupById = new Map(groups.map((g) => [g.groupId, g]))
 
@@ -526,8 +538,14 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
   const takenNames = new Set([...ghSetById.values()].map((s) => normSetName(s.name)))
   const placeholders = placeholderDates(groups)
 
+  // A GitHub set file failed: an unlinked numbered product might be one of its cards (pass C) —
+  // built now it would be a permanent tcg- duplicate, so it waits for the next sync
+  const ghIncomplete = unavailableSetIds.size > 0
   for (const g of groups) {
-    const products = (productsByGroup.get(g.groupId) ?? []).filter((p) => !usedProducts.has(p.productId))
+    const unlinked = (productsByGroup.get(g.groupId) ?? []).filter((p) => !usedProducts.has(p.productId))
+    const held = ghIncomplete && !unavailableGroups.has(g.groupId) ? unlinked.filter((p) => p.numKey) : []
+    for (const p of held) report.heldBackProducts.push({ group: g.name, product: p.productId, name: p.rawName })
+    const products = held.length ? unlinked.filter((p) => !p.numKey) : unlinked
     const m = matches.get(g.groupId)
     if (m) {
       const set = ghSetById.get(m.setId)
@@ -539,11 +557,11 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
         if (!p.numKey) {
           // A card in a GitHub set with no number at all — can't be placed by number, so review it
           placements.push({ product: p, setId: set.id })
-          cards.push({ ...tcgCard(p, { id: set.id, name: set.name }), _review: true })
+          cards.push({ ...tcgCard(p, { id: set.id, name: set.name }, existing.get(`tcg-${p.productId}`)), _review: true })
           report.unnumberedInSets.push({ set: set.name, name: p.rawName, product: p.productId })
           continue
         }
-        cards.push(tcgCard(p, { id: set.id, name: set.name }))
+        cards.push(tcgCard(p, { id: set.id, name: set.name }, existing.get(`tcg-${p.productId}`)))
         report.variants.push({ set: set.name, setId: set.id, number: p.extNumber, name: p.rawName, product: p.productId, github: ghByKey.get(`${m.setId}:${p.numKey}`)?.[0]?.name ?? null })
       }
       continue
@@ -552,6 +570,8 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
 
     // Not a GitHub set: a set built from TCGplayer
     const previous = claimed.get(g.groupId)
+    // A new group with products held back waits whole (its kind is decided from all of them)
+    if (held.length && !previous) continue
     const numbered = previous ? previous.kind !== 'special' : isNumberedSet(g, products)
     const date = String(g.publishedOn ?? '').slice(0, 10)
     const releaseDate = previous?.releaseDate || ((numbered || !placeholders.has(date)) && date ? date.replace(/-/g, '/') : '')
@@ -570,7 +590,7 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
     }
     setList.push(set)
     for (const p of products) {
-      const card = tcgCard(p, set)
+      const card = tcgCard(p, set, existing.get(`tcg-${p.productId}`))
       if (numbered && p.numKey) cards.push(card)
       else { cards.push({ ...card, _review: true }); placements.push({ product: p, setId: set.id }) }
     }
@@ -583,6 +603,9 @@ export function buildPokemonCatalog({ ghSets, ghCards, groups, productsByGroup, 
   for (const c of ghCards) {
     if (shadowed.has(c.set) || stalePriceSets.has(c.set)) continue
     const entry = priceEntryById.get(c.id)
+    // No price this run while a group failed: it may be priced through that group (pass C — Best
+    // of Game, Alternate Art Promos, the Trainer Kits), so it keeps today's prices instead of $0
+    if (!entry && failedGroupIds.size) { report.stalePriceCards.push(c.id); continue }
     // tcgProductId: the TCGplayer product this card is linked to — how PriceCharting's graded
     // prices find it (docs/PriceCharting.md). Display only; the card's id never changes (rule 34).
     const pid = Number(linkOf.get(c.id)?.product?.productId)

@@ -88,7 +88,8 @@ async function set() {
   const foilArg = flag('--foil')
   const foil = foilArg === undefined ? undefined : Number(foilArg)
   const note = (flag('--note') ?? '').trim()
-  if (!CATALOGS.includes(game) || !id || !(price >= 0) || (foil !== undefined && !(foil >= 0))) {
+  // A hand price must be a real price (> 0) — $0 reads as "no price" everywhere else
+  if (!CATALOGS.includes(game) || !id || !(price > 0) || (foil !== undefined && !(foil > 0))) {
     throw new Error('usage: set <game> <card id> <price> [--foil <price>] --note "<where the price came from>"')
   }
   if (!note) throw new Error('--note is required: say where the price came from (e.g. "eBay sold, 3 sales Nov 2026")')

@@ -17,11 +17,17 @@ import { readCompressedSnapshot, writeCompressedSnapshot } from '@/scripts/lib/s
 
 const CHUNK_SIZE = 1500          // cards per snapshot chunk doc, safely under Firestore's 1MiB limit
 const STALE_MS = 2 * 60 * 1000   // how long a warm cache is trusted before checking for deltas
+// Deltas only add or replace cards — a card deleted from the catalog has no `updatedAt` to pull, so
+// a warm cache would keep it for the server's whole life. Every RELOAD_MS a warm cache is reloaded
+// whole from the snapshot (rewritten by every sync and by regenerateSnapshot() after a delete) in
+// the background — ~1MB per game per server instance a few times a day.
+const RELOAD_MS = 6 * 60 * 60 * 1000
 
 interface CacheEntry {
   cards: Map<string, Record<string, unknown>>
   lastSyncAt: Date
-  refreshing?: Promise<void>   // a background delta pull in flight
+  loadedAt?: number            // when the whole catalog was last read from the snapshot
+  refreshing?: Promise<void>   // a background delta pull (or full reload) in flight
 }
 
 const _cache = new Map<CatalogKey, CacheEntry>()
@@ -44,12 +50,12 @@ async function loadFromSnapshot(game: CatalogKey): Promise<CacheEntry> {
       const syncedAt = new Date()
       try {
         for (const card of await pullDeltas(game, compressed.asOf)) map.set(card.id, card)
-        return { cards: map, lastSyncAt: syncedAt }
+        return { cards: map, lastSyncAt: syncedAt, loadedAt: Date.now() }
       } catch (err) {
         // Keep the snapshot and fetch what changed since it on the next refresh — never throw the
         // whole catalog away over the small follow-up read
         console.warn(`Catalog deltas for ${game} failed, using the snapshot for now:`, (err as Error).message)
-        return { cards: map, lastSyncAt: compressed.asOf }
+        return { cards: map, lastSyncAt: compressed.asOf, loadedAt: Date.now() }
       }
     }
   } catch (err) {
@@ -67,7 +73,7 @@ async function loadFromSnapshot(game: CatalogKey): Promise<CacheEntry> {
     const cards = JSON.parse(raw) as Array<Record<string, unknown> & { id: string }>
     for (const c of cards) map.set(c.id, c)
   }
-  return { cards: map, lastSyncAt: new Date() }
+  return { cards: map, lastSyncAt: new Date(), loadedAt: Date.now() }
 }
 
 async function pullDeltas(game: CatalogKey, since: Date): Promise<Array<Record<string, unknown> & { id: string }>> {
@@ -91,7 +97,7 @@ export async function loadCatalog<T>(game: CatalogKey): Promise<T[]> {
     let loading = _loading.get(game)
     if (!loading) {
       const gen = _generation.get(game) ?? 0
-      loading = loadFromSnapshot(game).then((loaded) => {
+      const started: Promise<CacheEntry> = loadFromSnapshot(game).then((loaded) => {
         // An empty catalog is never kept (a game with no cards yet just loads again next time)
         if ((_generation.get(game) ?? 0) === gen && loaded.cards.size > 0) _cache.set(game, loaded)
         return loaded
@@ -99,14 +105,32 @@ export async function loadCatalog<T>(game: CatalogKey): Promise<T[]> {
         // Not kept either: this request goes without, the next one loads again
         console.warn(`Catalog load for ${game} failed:`, (err as Error).message)
         return { cards: new Map(), lastSyncAt: new Date() } as CacheEntry
-      }).finally(() => _loading.delete(game))
+      }).finally(() => {
+        // Only our own entry: after an invalidation a newer load may already be waiting there
+        if (_loading.get(game) === started) _loading.delete(game)
+      })
+      loading = started
       _loading.set(game, loading)
     }
     entry = await loading
     return Array.from(entry.cards.values()) as T[]
   }
 
-  if (!entry.refreshing && Date.now() - entry.lastSyncAt.getTime() > STALE_MS) {
+  if (!entry.refreshing && Date.now() - (entry.loadedAt ?? 0) > RELOAD_MS) {
+    // Whole reload in the background (deleted cards drop out); this request keeps the old copy
+    const target = entry
+    const gen = _generation.get(game) ?? 0
+    target.refreshing = loadFromSnapshot(game)
+      .then((loaded) => {
+        if ((_generation.get(game) ?? 0) === gen && _cache.get(game) === target && loaded.cards.size > 0) _cache.set(game, loaded)
+        else target.loadedAt = Date.now() // nothing usable: try again after another RELOAD_MS
+      })
+      .catch((err) => {
+        console.warn(`Catalog reload for ${game} failed:`, (err as Error).message)
+        target.loadedAt = Date.now()
+      })
+      .finally(() => { target.refreshing = undefined })
+  } else if (!entry.refreshing && Date.now() - entry.lastSyncAt.getTime() > STALE_MS) {
     const target = entry
     const startedAt = new Date()
     target.refreshing = pullDeltas(game, target.lastSyncAt)

@@ -48,7 +48,7 @@ export default function CardDetailPage() {
       .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
       .catch(() => {})
     return () => { stale = true }
-  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.gradingCompany, card?.grade, card?.gradeTier, card?.condition, gradedPriced, historyLocked])
+  }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.edition, card?.finish, card?.language, card?.gradingCompany, card?.grade, card?.gradeTier, card?.condition, gradedPriced, historyLocked])
 
   const chartData = useMemo(() => {
     if (!card) return []

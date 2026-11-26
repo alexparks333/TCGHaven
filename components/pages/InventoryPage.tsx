@@ -48,6 +48,11 @@ function cardDate(card: Card): string {
   return raw.length > 10 ? localDateString(new Date(raw)) : raw.slice(0, 10)
 }
 
+// A copy's worth in the totals — valued exactly as Portfolio and the value history value it
+// (lib/valueHistory.ts): its live price, or what was paid while it has none (an unpriced copy
+// counted as $0 here made Inventory's market total disagree with Portfolio's)
+const copyValue = (c: Card) => (c.currentPrice ?? c.purchasePrice) * c.quantity
+
 interface CardGroup {
   key: string
   lots: Card[]         // each Firestore document (separate purchase)
@@ -402,23 +407,20 @@ export default function InventoryPage() {
   const session = useMemo(() => {
     if (!sessionCards.length) return null
     const paid = sessionCards.reduce((s, c) => s + c.purchasePrice * c.quantity, 0)
-    const market = sessionCards.reduce(
-      (s, c) => s + ((c.currentPrice ?? 0) > 0 ? c.currentPrice! * c.quantity : 0),
-      0
-    )
+    const market = sessionCards.reduce((s, c) => s + copyValue(c), 0)
     const byGame = GAMES.map((game) => {
       const gc = sessionCards.filter((c) => c.game === game)
       return {
         game,
         count: gc.reduce((s, c) => s + c.quantity, 0),
-        market: gc.reduce((s, c) => s + ((c.currentPrice ?? 0) > 0 ? c.currentPrice! * c.quantity : 0), 0),
+        market: gc.reduce((s, c) => s + copyValue(c), 0),
       }
     }).filter((g) => g.count > 0)
     return { count: sessionCards.reduce((s, c) => s + c.quantity, 0), paid, market, byGame }
   }, [sessionCards])
 
   const { totalMarket, displayCount } = useMemo(() => ({
-    totalMarket: filtered.reduce((s, c) => s + ((c.currentPrice ?? 0) > 0 ? c.currentPrice! * c.quantity : 0), 0),
+    totalMarket: filtered.reduce((s, c) => s + copyValue(c), 0),
     displayCount: grouped
       ? grouped.reduce((s, g) => s + g.totalQty, 0)
       : filtered.reduce((s, c) => s + c.quantity, 0),

@@ -20,6 +20,7 @@ import type { ScanMatch } from '@/lib/scan/server'
 import { cn, localDateString, isFirstCopyOfCard, formatCurrency } from '@/lib/utils'
 import { useScrollLock } from '@/lib/useScrollLock'
 import { cardImage } from '@/lib/cardImage'
+import { conditionPrice } from '@/lib/pricing'
 
 const CONDITIONS = Object.entries(CONDITION_LABELS) as [Condition, string][]
 
@@ -61,6 +62,13 @@ function picked(row: Row, rows: CardSearchResult[]): { result: CardSearchResult;
   const result = rows.find((r) => r.isFoil === !!row.foil) ?? rows[0]
   const price = result.isFoil ? (result.marketPriceFoil > 0 ? result.marketPriceFoil : result.marketPrice) : result.marketPrice
   return { result, price: price > 0 ? price : 0, isFoil: result.isFoil }
+}
+
+// A Near Mint price as this row's copies are worth: × the condition's discount for a raw copy, as
+// everywhere a copy is valued (lib/pricing.ts conditionPrice — CLAUDE.md rule 40); a slab (saved
+// with its grade, below) keeps the raw Near Mint price until Inventory's price load grades it
+function rowPrice(nm: number, row: Row): number {
+  return conditionPrice(nm, { condition: row.condition, gradingCompany: row.slab?.company && row.slab.grade ? row.slab.company : undefined })
 }
 
 async function loadRows(m: ScanMatch): Promise<CardSearchResult[]> {
@@ -126,7 +134,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
   const ready = rows.every((r) => Array.isArray(rowsFor(r)))
   const total = useMemo(() => rows.reduce((sum, r) => {
     const cr = catalogRows[r.options[r.choice].key]
-    return sum + (Array.isArray(cr) ? picked(r, cr).price : r.options[r.choice].price) * r.quantity
+    return sum + rowPrice(Array.isArray(cr) ? picked(r, cr).price : r.options[r.choice].price, r) * r.quantity
   }, 0), [rows, catalogRows])
   const count = rows.reduce((n, r) => n + r.quantity, 0)
 
@@ -171,7 +179,9 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
           ...(hasPrintings(match.game) && vp && row.finish && { finish: row.finish }),
           ...(match.language === 'ja' && { language: 'ja' as Language }),
           ...(group.trim() && { group: group.trim() }),
-          ...(price > 0 && { currentPrice: price, priceUpdatedAt: now, priceAtEntry: price }),
+          // currentPrice as this copy is worth (its condition); priceAtEntry stays the Near Mint
+          // price, as Add Card saves it
+          ...(price > 0 && { currentPrice: rowPrice(price, row), priceUpdatedAt: now, priceAtEntry: price }),
         }
         const ref = newCardRef(user.uid)
         await saveCard(user.uid, ref.id, cardData)
@@ -262,7 +272,7 @@ export function ScanReviewDialog({ scanned, onClose }: { scanned: ScannedCard[];
               const loaded = Array.isArray(cr) ? cr : null
               const pick = loaded ? picked(row, loaded) : null
               const vp = loaded ? vpOf(loaded[0]) : null
-              const price = pick ? pick.price : match.price
+              const price = rowPrice(pick ? pick.price : match.price, row)
               // Every printing as a button with its price: Pokémon edition × finish, else Normal / Foil
               const printings: Array<{ id: string; label: string; price: number; on: boolean; set: () => void }> = []
               if (vp) {

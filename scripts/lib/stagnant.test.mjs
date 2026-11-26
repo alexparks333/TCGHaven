@@ -41,8 +41,26 @@ assert.deepEqual(livePriceFromPriceCharting(undefined, { id: 'x', marketPrice: 0
 assert.equal(livePriceFromPriceCharting(undefined, { id: 'x', marketPrice: 3 }, pc).marketPrice, 3, 'TCGplayer wins')
 // …TCGplayer turns up: PriceCharting steps aside
 assert.deepEqual(livePriceFromPriceCharting({ priceSource: 'pricecharting' }, { id: 'x', marketPrice: 3 }, pc), { id: 'x', marketPrice: 3, priceSource: '', pcUrl: '' })
-// …or PriceCharting has no price any more
-assert.deepEqual(livePriceFromPriceCharting({ priceSource: 'pricecharting' }, { id: 'x', marketPrice: 0 }, undefined), { id: 'x', marketPrice: 0, priceSource: '', pcUrl: '' })
+// …PriceCharting has no price today (or graded_prices couldn't be read): the card keeps its last
+// PriceCharting price and citation — the sync writes none of its price fields, never $0
+const pcCard = { id: 'x', tcgProductId: 5, marketPrice: 450, marketPriceFoil: 0, priceSource: 'pricecharting', pcUrl: pc.u }
+assert.deepEqual(livePriceFromPriceCharting(pcCard, { id: 'x', name: 'N', marketPrice: 0, marketPriceFoil: 0, lowPriceNM: 0, variantPrices: {} }, undefined), { id: 'x', name: 'N' })
+assert.deepEqual(livePriceFromPriceCharting(pcCard, { id: 'x', marketPrice: 0 }, { r: 0, u: pc.u }), { id: 'x' })
+// …so it stays tracked by PriceCharting's job (a $0 card with a TCGplayer product isn't stagnant)
+assert.equal(wantsPriceChartingPrice(pcCard), true)
+assert.equal(stagnantReason({ ...pcCard, marketPrice: 0, priceSource: '', pcUrl: '' }), null, 'why dropping to $0 lost it')
+// …and a new PriceCharting price replaces the old one
+assert.equal(livePriceFromPriceCharting(pcCard, { id: 'x', marketPrice: 0 }, { r: 470, u: pc.u }).marketPrice, 470)
+// Hand-added cards (in no sync's list — syncToFirestore builds { id } for them): never left with the
+// PriceCharting price but without its priceSource / pcUrl
+{
+  const handPc = { ...pcCard, source: 'manual' }
+  assert.deepEqual(keepHandPrice(handPc, livePriceFromPriceCharting(handPc, { id: 'x' }, undefined)), { id: 'x' }, 'left exactly as it is')
+  assert.deepEqual(keepHandPrice(handPc, livePriceFromPriceCharting(handPc, { id: 'x' }, { r: 500, u: pc.u })),
+    { id: 'x', marketPrice: 500, marketPriceFoil: 0, priceSource: 'pricecharting', pcUrl: pc.u })
+  const handManual = { id: 'x', source: 'manual', marketPrice: 40, priceSource: 'manual' }
+  assert.deepEqual(keepHandPrice(handManual, livePriceFromPriceCharting(handManual, { id: 'x' }, undefined)), { id: 'x' }, 'a hand price stays')
+}
 // a hand price hands over to PriceCharting's (keepHandPrice sees a price)
 assert.equal(keepHandPrice(hand, livePriceFromPriceCharting(hand, fresh, pc)).priceSource, 'pricecharting')
 assert.equal(wantsPriceChartingPrice({ id: 'x', marketPrice: 0 }), true)
