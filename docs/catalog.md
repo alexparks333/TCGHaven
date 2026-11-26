@@ -548,6 +548,10 @@ visible even from the "last known status" view, not just right after clicking Sy
   them and edits the sync didn't write keep admin-edit-wins protection.
 - **Price history writes:** a failed batch (a month doc over 1 MiB) is retried doc by doc — only the
   doc that fails is skipped.
+- **Lorcana cards Lorcast doesn't price** (no price, no TCGplayer id — the Illumineer's Quest cards) are
+  linked to the TCGplayer product with the same name and number when exactly one matches, and priced
+  live from it. TCGplayer's own group of them stays as staff accepted it in Needs Review (a second
+  "Illumineer's Quest: The Great Hunny Rescue" set — a known duplicate, left for the Owner to decide).
 - **Warm server caches** reload the snapshot every 6 hours (`RELOAD_MS`, lib/api/catalog.ts), so a
   deleted card drops out within 6 hours on every instance.
 

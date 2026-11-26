@@ -1116,6 +1116,31 @@ export async function downloadLorcana() {
     }
   }))
 
+  // Lorcast cards it has no price (and no TCGplayer id) for — the Illumineer's Quest cards, which TCGplayer
+  // files under its own group ("Illumineer's Quest: The Great Hunny Rescue") — are linked to the TCGplayer
+  // product with the same name and number, when exactly one matches (2026-11-25): priced live from it
+  // (tcgProductId). Any hand price (stagnant.mjs) hands over to the live one. The product itself still goes
+  // through Needs Review as before — staff accepted the Hunny Rescue group as its own set, and dropping it
+  // here would freeze those cards' prices while they stay visible.
+  const loose = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+  const promoByNameNumber = new Map()
+  for (const p of promoByProductId.values()) {
+    const k = `${loose(p.name)}|${p.number}`
+    promoByNameNumber.set(k, [...(promoByNameNumber.get(k) ?? []), p])
+  }
+  let linkedToTcgplayer = 0
+  for (const card of seen.values()) {
+    if (card.marketPrice > 0 || card.marketPriceFoil > 0 || Number(card.tcgProductId) > 0) continue
+    const matches = promoByNameNumber.get(`${loose(card.name)}|${String(parseInt(card.number, 10) || card.number)}`)
+    if (matches?.length !== 1 || !(matches[0].marketPrice > 0 || matches[0].marketPriceFoil > 0)) continue
+    const p = matches[0]
+    card.tcgProductId = Number(p.id.slice(4))
+    card.marketPrice = p.marketPrice
+    card.marketPriceFoil = p.marketPriceFoil
+    linkedToTcgplayer++
+  }
+  if (linkedToTcgplayer) console.log(`   ${linkedToTcgplayer} lorcast cards with no price linked to their TCGplayer product`)
+
   // Promo cards go through Needs Review (accept / ignore / deny / move / rename) before they're
   // merged into the main seen map.
   const review = await reviewTcgplayerPromos('lorcana', promoByProductId, tcgcsvGroups)

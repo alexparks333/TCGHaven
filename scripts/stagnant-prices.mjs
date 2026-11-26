@@ -82,18 +82,13 @@ async function list() {
   if (out.length > limit) console.log(`… ${out.length - limit} more (--limit, or --json for all)`)
 }
 
-async function set() {
-  const [, game, id, priceArg] = args
-  const price = Number(priceArg)
-  const foilArg = flag('--foil')
-  const foil = foilArg === undefined ? undefined : Number(foilArg)
-  const note = (flag('--note') ?? '').trim()
+/** One hand price: refuses a card that isn't stagnant, a price ≤ 0 or no note (the shared checks for set / set-batch) */
+async function setOne(db, { game, id, price, foil, note, dryRun }) {
   // A hand price must be a real price (> 0) — $0 reads as "no price" everywhere else
   if (!CATALOGS.includes(game) || !id || !(price > 0) || (foil !== undefined && !(foil > 0))) {
-    throw new Error('usage: set <game> <card id> <price> [--foil <price>] --note "<where the price came from>"')
+    throw new Error(`${game} ${id}: needs a game, a card id and a price > 0`)
   }
-  if (!note) throw new Error('--note is required: say where the price came from (e.g. "eBay sold, 3 sales Nov 2026")')
-  const db = getCatalogDb()
+  if (!note) throw new Error(`${game} ${id}: --note is required — say where the price came from (e.g. "eBay sold, 3 sales Nov 2026")`)
   const ref = doc(db, 'catalog', game, 'cards', id)
   const snap = await getDoc(ref)
   if (!snap.exists()) throw new Error(`No ${game} card ${id}`)
@@ -104,14 +99,46 @@ async function set() {
     marketPrice: price, priceSource: 'manual', manualPriceAt: new Date().toISOString(), manualPriceNote: note.slice(0, 300),
     ...(foil !== undefined && { marketPriceFoil: foil }), updatedAt: serverTimestamp(),
   }
-  if (args.includes('--dry-run')) { console.log('dry run —', id, JSON.stringify({ ...patch, updatedAt: 'now' })); return }
+  if (dryRun) { console.log('dry run —', id, JSON.stringify({ ...patch, updatedAt: 'now' })); return }
   await updateDoc(ref, patch)
   console.log(`✓ ${game} ${id} (${card.name}): $${price}${foil !== undefined ? ` / $${foil} foil` : ''} — was $${card.marketPrice ?? 0}`)
 }
 
-if (cmd !== 'list' && cmd !== 'set') {
-  console.error('npm run stagnant-prices -- list [--game g1,g2] [--json] [--limit n]\nnpm run stagnant-prices -- set <game> <id> <price> [--foil <price>] --note "<source>" [--dry-run]')
+async function set() {
+  const [, game, id, priceArg] = args
+  const foilArg = flag('--foil')
+  if (!id) throw new Error('usage: set <game> <card id> <price> [--foil <price>] --note "<where the price came from>"')
+  await setOne(getCatalogDb(), {
+    game, id, price: Number(priceArg), foil: foilArg === undefined ? undefined : Number(foilArg),
+    note: (flag('--note') ?? '').trim(), dryRun: args.includes('--dry-run'),
+  })
+}
+
+// Many prices in one run — ONE sign-in (2026-11-25: 56 separate `set` runs, each signing in, used up the
+// sync account's password-sign-in quota, which the scheduled syncs share). A tab-separated file, one card
+// a line: game <TAB> id <TAB> price <TAB> note [<TAB> foil price]. Each line is checked like `set`; a bad
+// line is reported and skipped, the rest still go in.
+async function setBatch() {
+  const file = args[1]
+  if (!file || !fs.existsSync(file)) throw new Error('usage: set-batch <file.tsv> [--dry-run]   (game⇥id⇥price⇥note[⇥foil] per line)')
+  const db = getCatalogDb()
+  const dryRun = args.includes('--dry-run')
+  let ok = 0, bad = 0
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    if (!line.trim() || line.startsWith('#')) continue
+    const [game, id, price, note, foil] = line.split('\t').map((x) => x?.trim())
+    try {
+      await setOne(db, { game, id, price: Number(price), foil: foil ? Number(foil) : undefined, note: note ?? '', dryRun })
+      ok++
+    } catch (e) { bad++; console.error(`✗ ${e.message}`) }
+  }
+  console.log(`${dryRun ? 'checked' : 'saved'} ${ok}${bad ? `, ${bad} skipped` : ''}`)
+  if (bad) process.exitCode = 1
+}
+
+if (cmd !== 'list' && cmd !== 'set' && cmd !== 'set-batch') {
+  console.error('npm run stagnant-prices -- list [--game g1,g2] [--json] [--limit n]\nnpm run stagnant-prices -- set <game> <id> <price> [--foil <price>] --note "<source>" [--dry-run]\nnpm run stagnant-prices -- set-batch <file.tsv> [--dry-run]   (game⇥id⇥price⇥note[⇥foil] per line — one sign-in)')
   process.exit(1)
 }
 await ensureSignedIn()
-await (cmd === 'list' ? list() : set()).then(() => process.exit(0), (err) => { console.error(err.message); process.exit(1) })
+await (cmd === 'list' ? list() : cmd === 'set-batch' ? setBatch() : set()).then(() => process.exit(process.exitCode ?? 0), (err) => { console.error(err.message); process.exit(1) })

@@ -22,8 +22,11 @@ What "stagnant" means and how the hand price survives syncs: docs/catalog.md "St
    - No trustworthy evidence → **skip it** and say why. Never guess or copy another card's price.
 3. **Show the person the proposed prices before writing anything** — a table: card, current price,
    new price, evidence (sales count, range, dates, links). Wait for their OK; they may change some.
-4. **Write the approved ones**, one call per card:
-   `npm run stagnant-prices -- set <game> <id> <price> [--foil <price>] --note "<source>"`
+4. **Write the approved ones in ONE batch** — a tab-separated file, one card a line
+   (`game⇥id⇥price⇥note[⇥foil]`), then `npm run stagnant-prices -- set-batch <file.tsv> --dry-run`
+   and, if clean, the same without `--dry-run`. It signs in once. Never loop `set` over many cards:
+   every run signs in, and ~50 in a row used up the sync account's sign-in quota (2026-11-25) — the
+   scheduled syncs share it. A single card: `npm run stagnant-prices -- set <game> <id> <price> [--foil <price>] --note "<source>"`
    - `--note` is required and is shown to staff: where, how many sales, the range, the month —
      e.g. `"eBay sold: 4 sales Nov 2026, $410–$480"`.
    - `--foil` only when the card has a separate foil printing with its own price.
