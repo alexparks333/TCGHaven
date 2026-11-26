@@ -602,11 +602,16 @@ function CardexTab({ profile, isMe, isFriend, view, onCount }: { profile: Profil
   useEffect(() => {
     if (isMe || !canView) return
     let live = true
+    // Their cards show as soon as they're read; today's prices fill in when they arrive (2026-11-25 —
+    // waiting for every price first left "Loading Brad's cards…" up 8–12 s while a cold server loaded
+    // each game's catalog)
     loadFriendCardex(profile.uid).then(async (r) => {
-      const priced = Array.isArray(r) ? await fetchCardPrices(r) : null
       if (!live) return
-      setFriendPrices(priced)
+      setFriendPrices(undefined)
       setFriendCards(r)
+      if (!Array.isArray(r)) return
+      const priced = await fetchCardPrices(r).catch(() => null)
+      if (live) setFriendPrices(priced)
     })
     return () => { live = false }
   }, [isMe, canView, profile.uid])
@@ -719,6 +724,10 @@ function CardexTab({ profile, isMe, isFriend, view, onCount }: { profile: Profil
 
   return (
     <div>
+      {/* A friend's prices are still on the way (their cards show first) — Top cards re-sort when they land */}
+      {!isMe && friendPrices === undefined && (
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-3"><Loader2 size={12} className="animate-spin" />Updating prices…</div>
+      )}
       {/* Game chips, then that game's sets */}
       {games.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-5">
