@@ -155,26 +155,30 @@ export function Sidebar() {
                 </div>
                 <ChevronRight size={14} className="rail-hide text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
               </Link>
-              {premium.loaded && !premium.member && (
-                <button
-                  type="button"
-                  onClick={() => premium.openPremium('general')}
-                  title="Haven Premium"
-                  className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-[#4a3412] bg-[#e4c06a] border border-[#b8892f] hover:bg-[#ebcb7c] active:translate-y-px transition-colors"
+              {/* Support, and to its right "Buy Premium" until you have Haven Premium (opens the Premium
+                  sheet — the App Store / Stripe purchase as everywhere else, docs/premium-business.md) */}
+              <div className="mt-1.5 flex items-center justify-center gap-3">
+                {/* Help: missing cards, account, bugs (components/pages/SupportPage.tsx) */}
+                <Link
+                  href="/support"
+                  title="Support"
+                  className={cn('flex items-center gap-1 text-[0.625rem] font-medium hover:underline underline-offset-2 transition-colors', pathname === '/support' ? 'text-ink' : 'text-slate-500 hover:text-ink')}
                 >
-                  <Crown size={14} className="shrink-0" />
-                  <span className="rail-hide">Buy Premium</span>
-                </button>
-              )}
-              {/* Help: missing cards, account, bugs (components/pages/SupportPage.tsx) */}
-              <Link
-                href="/support"
-                title="Support"
-                className={cn('mt-1.5 mx-auto w-fit flex items-center gap-1 text-[0.625rem] font-medium hover:underline underline-offset-2 transition-colors', pathname === '/support' ? 'text-ink' : 'text-slate-500 hover:text-ink')}
-              >
-                <LifeBuoy size={10} />
-                <span className="rail-hide">Support</span>
-              </Link>
+                  <LifeBuoy size={10} />
+                  <span className="rail-hide">Support</span>
+                </Link>
+                {premium.loaded && !premium.member && (
+                  <button
+                    type="button"
+                    onClick={() => premium.openPremium('general')}
+                    title="Haven Premium"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.625rem] font-bold text-[#4a3412] bg-[#e4c06a] border border-[#b8892f] hover:bg-[#ebcb7c] active:translate-y-px transition-colors"
+                  >
+                    <Crown size={10} className="shrink-0" />
+                    <span className="rail-hide">Buy Premium</span>
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>
