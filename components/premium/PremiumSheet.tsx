@@ -90,12 +90,14 @@ export function PremiumSheet({ reason, onClose }: { reason: PremiumReason; onClo
 }
 
 /** The plans and the buy / restore / manage buttons, a promo code (website) and the small print — the same
- *  in the Premium sheet and on the Premium page. `onBought`: called after a purchase in the app. */
-export function PremiumOffer({ onBought }: { onBought?: () => void }) {
+ *  in the Premium sheet and on the Premium page. `onBought`: called after a purchase in the app.
+ *  `plan`: chosen outside (the Premium page's Monthly / Yearly switch) — then its own plan cards aren't shown. */
+export function PremiumOffer({ onBought, plan: chosen }: { onBought?: () => void; plan?: Plan }) {
   const { user } = useAuth()
   const { member, entitlement } = usePremiumAccess()
   const [config, setConfig] = useState<PremiumConfig>(DEFAULT_PREMIUM)
-  const [plan, setPlan] = useState<Plan>('yearly')
+  const [ownPlan, setPlan] = useState<Plan>('yearly')
+  const plan = chosen ?? ownPlan
   const [busy, setBusy] = useState<'buy' | 'restore' | 'manage' | null>(null)
   const [error, setError] = useState('')
   const app = inApp()
@@ -129,17 +131,17 @@ export function PremiumOffer({ onBought }: { onBought?: () => void }) {
             </div>
           ) : (
             <>
-              <div className={`grid gap-2.5 ${config.yearlyOn ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {!chosen && <div className={`grid gap-2.5 ${config.yearlyOn ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 {config.yearlyOn && (
                   <PlanCard selected={plan === 'yearly'} onClick={() => setPlan('yearly')} label="Yearly" price={`${money(config.yearly)}/yr`}
                     note={`${money(config.yearly / 12)} a month`} badge={saving >= 0.05 ? `Save ${Math.round(saving * 100)}%` : undefined} />
                 )}
                 <PlanCard selected={plan === 'monthly'} onClick={() => setPlan('monthly')} label="Monthly" price={`${money(config.monthly)}/mo`} note="Cancel anytime" />
-              </div>
+              </div>}
               <button
                 onClick={() => run('buy')}
                 disabled={!!busy || !canBuyHere()}
-                className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white shadow-md transition-transform active:scale-[0.99] disabled:opacity-60"
+                className={`${chosen ? '' : 'mt-4 '}w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white shadow-md transition-transform active:scale-[0.99] disabled:opacity-60`}
                 style={{ background: GOLD }}
               >
                 {busy === 'buy' ? <Loader2 size={17} className="animate-spin" /> : <Check size={17} />}
