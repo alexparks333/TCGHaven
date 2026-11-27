@@ -59,9 +59,16 @@ export const titleLabel = (r: AccountRoleRecord) => r.staffTitle ?? ROLE_LABELS[
 /** Its colour: the Owner in gold, everyone else by role. */
 export const titleColor = (r: AccountRoleRecord) => (r.staffTitle === 'Owner' ? '#b8862b' : ROLE_COLORS[r.role])
 
-/** The Owner's collector account is the Owner's — always Staff, titled "Owner", never banned. */
+// The Owner's accounts IN THE APP: the Owner account (ADMIN_UID, alexparks@tcghaven.org) and the Owner's
+// personal collecting account (alexhparks@gmail.com — where their own cards live and they test, the
+// Owner's call 2026-11-27). Display only: the Owner title, Premium, Owner-only buttons. Real powers —
+// admin API routes, dev tools, firestore.rules / storage.rules — stay with ADMIN_UID alone (the
+// 2026-11-21 Owner/bot split took this account's server-side access away on purpose).
+export const APP_OWNER_UIDS = new Set([ADMIN_UID, 'kOVse5dvMDOSkxlitTAh1Q99sJD3'].filter(Boolean))
+
+/** The Owner's collector accounts are the Owner's — always Staff, titled "Owner", never banned. */
 export function withOwner(uid: string, r: AccountRoleRecord): AccountRoleRecord {
-  return ADMIN_UID && uid === ADMIN_UID ? { ...r, role: 'staff', staffTitle: 'Owner', banned: false, suspended: false } : r
+  return APP_OWNER_UIDS.has(uid) ? { ...r, role: 'staff', staffTitle: 'Owner', banned: false, suspended: false } : r
 }
 
 export const REGULAR: AccountRoleRecord = { role: 'regular' }
