@@ -22,7 +22,7 @@ side is in `docs/insights.md` (Statistics, Finances, the Haven Premium page) and
 - **Name:** stays **Haven Premium** everywhere.
 - **Free:** Inventory, Cardex, search, raw prices, Friends, profiles, joining Creator communities,
   earning badges (Grayscale look), basic portfolio value, **10 scans a month**.
-- **Premium:** unlimited scans; graded prices (PriceCharting) + price history; badges' Full look,
+- **Premium:** unlimited scans; price history; badges' Full look,
   3D pins, Pin Display, banner pins; Portfolio over time / P&L / Analytics; CSV export. Suggested:
   a 7-day free trial and a "founding member" price lock.
 - **Payments:** RevenueCat ties it together. iPhone = Apple in-app purchase, Android = Google Play
@@ -52,8 +52,11 @@ everything open on a server (CI's real-scan check uses it, and it doubles as an 
 - **Scans:** `/api/cards/scan` gives free accounts 10 a month. Each `scanId` counts once, in
   `scan_usage/{uid}`; after that the route answers 402. The phone shows a note, and the Inventory
   page opens the Premium sheet.
-- **Graded prices:** `gradedAllowed(req)` in `lib/api/gradedPrices.ts`. A free account's slabs are
-  priced as raw cards, and the reply carries `gradedLocked: true`.
+- **Graded prices: free for everyone since 2026-11-27** (the Owner's call — a slab's value isn't
+  something to gatekeep). `gradedAllowed(req)` (`lib/api/gradedPrices.ts`) now only follows the
+  `GRADED_PRICES` switch; the PriceCharting licence has no paid-users-only condition (attribution only;
+  the later revenue share is on total revenue). Graded *price history* stays Premium with the rest of
+  price history.
 - **Price history and the portfolio over time:** `/api/price-history` answers 402 for `series` and
   `portfolio`. Today's change (`baselines`) stays free. The app shows a `PremiumLock` on Portfolio →
   Over time, on Analytics, and on a card's Price History. Since 2026-11-19 the over-time charts read

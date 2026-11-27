@@ -19,7 +19,7 @@ const GOLD = '#b8862b'
 const HEADLINES: Record<PremiumReason, { title: string; sub: string }> = {
   general: { title: 'Haven Premium', sub: 'Everything TCG Haven can do, for the price of a booster pack a month.' },
   'scan-limit': { title: 'Keep scanning', sub: `You’ve used this month’s ${FREE_SCANS_PER_MONTH} free scans. Premium scans as many cards as you can lay down.` },
-  graded: { title: 'See what your slabs are worth', sub: 'Graded prices for every grade and company, with price history.' },
+  graded: { title: 'See how prices have moved', sub: 'Every card’s price history, by day — and your slabs’ graded history too.' },
   'badge-full': { title: 'You earned the full colour', sub: 'Premium shows your badges in full colour, as 3D pins, and on your profile.' },
   'portfolio-time': { title: 'Watch your collection grow', sub: 'Your collection’s value over time, profit and loss, and analytics.' },
   'pin-display': { title: 'Show off your pins', sub: 'Pin Display, banner pins and 3D pins come with Premium.' },
@@ -28,7 +28,7 @@ const HEADLINES: Record<PremiumReason, { title: string; sub: string }> = {
 
 const FEATURES: Array<{ icon: typeof ScanLine; label: string; reason: PremiumReason }> = [
   { icon: ScanLine, label: 'Unlimited card scans', reason: 'scan-limit' },
-  { icon: Award, label: 'Graded prices & price history', reason: 'graded' },
+  { icon: Award, label: 'Price history for every card', reason: 'graded' },
   { icon: Sparkles, label: 'Full-colour badges, 3D pins & Pin Display', reason: 'badge-full' },
   { icon: LineChart, label: 'Portfolio over time, profit & analytics', reason: 'portfolio-time' },
   { icon: Download, label: 'Export your collection', reason: 'export' },

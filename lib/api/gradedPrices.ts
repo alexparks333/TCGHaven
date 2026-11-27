@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { collection, doc, documentId, getDoc, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase/config'
-import { callerAccess } from '../premiumServer'
 import { gradedPrice, gradingOf, type CatalogPriceFields, type PrintingChoice } from '../pricing'
 import { gradedPriceKey, gradedVariantKey } from '@/scripts/lib/pricecharting.mjs'
 import { catalogKeyFor, type CatalogKey, type Condition, type Edition, type Finish, type Game, type Language } from '../types'
@@ -28,18 +27,11 @@ export interface GradedEntry {
 
 export const gradedPricesEnabled = () => process.env.GRADED_PRICES === 'on'
 
-// Haven Premium (docs/premium-business.md): once the launch switch is on, graded prices are for
-// Premium accounts; everyone else's slabs are priced as raw cards, as before graded prices existed.
-// Checked once per request (the routes call gradedFor and priceReply with the same request).
-const _allowed = new WeakMap<Request, Promise<boolean>>()
-export function gradedAllowed(req: Request): Promise<boolean> {
-  if (!gradedPricesEnabled()) return Promise.resolve(false)
-  let p = _allowed.get(req)
-  if (!p) {
-    p = callerAccess(req).then((a) => a.unlocked).catch(() => false)
-    _allowed.set(req, p)
-  }
-  return p
+// Graded prices are FREE for everyone (the Owner's call 2026-11-27 — what a slab is worth isn't
+// something to gatekeep); only the GRADED_PRICES switch turns them on or off. Price history stays
+// Haven Premium (app/api/price-history). Kept as a function of the request so the routes didn't change.
+export function gradedAllowed(_req: Request): Promise<boolean> {
+  return Promise.resolve(gradedPricesEnabled())
 }
 
 // The data changes once a day, and a game's chunks are megabytes (Firestore bills data leaving
