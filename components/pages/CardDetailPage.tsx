@@ -129,7 +129,7 @@ export default function CardDetailPage() {
               <div className="text-xs text-slate-500">#{card.number}</div>
               <div className="text-xs text-slate-500">{conditionLabel(card)}</div>
               <div className="text-xs text-slate-500">Qty: {card.quantity}</div>
-              <div className="text-xs text-slate-500">Bought: {formatDate(card.purchaseDate)}</div>
+              <div className="text-xs text-slate-500">Entered: {formatDate(card.purchaseDate)}</div>
               <Link
                 href={cardexLink}
                 onClick={(e) => e.stopPropagation()}
@@ -192,7 +192,7 @@ export default function CardDetailPage() {
             ? <PremiumLock reason="graded" title="Price history" sub="See how this card’s price has moved, by day, with Haven Premium." />
             : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]}
                 // the day you got it — your purchase date, else when you added it to TCG Haven
-                gotIt={(card.purchaseDate || card.createdAt) ? { date: card.purchaseDate || card.createdAt!, title: `You got it — ${formatDate(card.purchaseDate || card.createdAt!)}` } : undefined} />}
+                gotIt={(card.purchaseDate || card.createdAt) ? { date: card.purchaseDate || card.createdAt!, title: `Entered — ${formatDate(card.purchaseDate || card.createdAt!)}` } : undefined} />}
           <div className="text-center text-xs text-slate-600 mt-3">
             {chartData.length <= 2
               ? (gradedSource ? 'Graded price history started 19 Nov 2026 and builds up each day.' : 'Price history builds up automatically as prices update each day.')
