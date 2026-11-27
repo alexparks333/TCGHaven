@@ -190,7 +190,9 @@ export default function CardDetailPage() {
           </div>
           {historyLocked
             ? <PremiumLock reason="graded" title="Price history" sub="See how this card’s price has moved, by day, with Haven Premium." />
-            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]}
+            // a fresh chart (drawn left to right, the "Entered" card popping in as the line reaches it) when
+            // the real history arrives or the range changes — not a morph from the placeholder line
+            : <PriceHistoryChart key={`${range}-${history.length > 0}`} data={chartData} color={GAME_COLORS[card.game]}
                 // the day you got it — your purchase date, else when you added it to TCG Haven
                 gotIt={(card.purchaseDate || card.createdAt) ? { date: card.purchaseDate || card.createdAt!, title: `Entered — ${formatDate(card.purchaseDate || card.createdAt!)}` } : undefined} />}
           <div className="text-center text-xs text-slate-600 mt-3">

@@ -3,12 +3,13 @@
 import Link from 'next/link'
 import { LogoHover } from './LogoHover'
 import { usePathname } from 'next/navigation'
-import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2, PanelLeftClose, PanelLeftOpen, LifeBuoy } from 'lucide-react'
+import { Package, TrendingUp, BookOpen, Banknote, Users, ChevronRight, CircleUserRound, Award, Wand2, PanelLeftClose, PanelLeftOpen, LifeBuoy, Crown } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { FriendsSidebarSection } from '@/components/friends/FriendsSidebar'
 import { TitleTag } from '@/components/premium/TitleTag'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 import { useFriends } from '@/components/friends/FriendsProvider'
 import { Avatar } from '@/components/friends/Avatar'
 import { useAccountRole, canUseCreatorStudio } from '@/lib/accountRoles'
@@ -58,6 +59,9 @@ export function Sidebar() {
   const creator = canUseCreatorStudio(myRole)
   const studioLinks = useStudioLinks() // the Creator Studio is computers-only — no link in the app
   const owned = useCommunity(user?.uid).community // the community you run, if any
+  // Haven Premium: "Buy Premium" under your profile until you have it (opens the Premium sheet —
+  // its purchase goes through the App Store / Stripe as everywhere else, docs/premium-business.md)
+  const premium = usePremiumAccess()
   // A sideways phone can fold the menu to a strip of icons (more room for the page). Remembered on
   // this device; has no effect anywhere else (the .is-rail rules only apply to phoneland, globals.css).
   const [rail, setRail] = useState(false)
@@ -151,6 +155,17 @@ export function Sidebar() {
                 </div>
                 <ChevronRight size={14} className="rail-hide text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
               </Link>
+              {premium.loaded && !premium.member && (
+                <button
+                  type="button"
+                  onClick={() => premium.openPremium('general')}
+                  title="Haven Premium"
+                  className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-[#4a3412] bg-[#e4c06a] border border-[#b8892f] hover:bg-[#ebcb7c] active:translate-y-px transition-colors"
+                >
+                  <Crown size={14} className="shrink-0" />
+                  <span className="rail-hide">Buy Premium</span>
+                </button>
+              )}
               {/* Help: missing cards, account, bugs (components/pages/SupportPage.tsx) */}
               <Link
                 href="/support"

@@ -3,7 +3,12 @@
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot,
 } from 'recharts'
+import { useEffect, useState } from 'react'
 import { formatCurrency } from '@/lib/utils'
+
+/** How long the line takes to draw itself, left to right at an even speed — the "Entered" card pops in
+ *  just as the line reaches it (2026-11-27: it used to sit on the empty chart until the line caught up) */
+const DRAW_MS = 1200
 
 interface Props {
   data: { date: string; price: number }[]
@@ -27,13 +32,6 @@ function CardMark({ cx, cy, color }: { cx?: number; cy?: number; color: string }
 }
 
 export function PriceHistoryChart({ data, color, gotIt }: Props) {
-  if (data.length < 2) {
-    return (
-      <div className="flex items-center justify-center h-48 text-slate-600 text-sm">
-        Not enough price data to show a chart.
-      </div>
-    )
-  }
 
   // The X axis is TIME, not one slot per point: the history before we recorded it is one price a
   // week (2024 – Oct 2026) and daily after, so evenly spaced points squeezed two years into the
@@ -52,6 +50,26 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
   const mark = Number.isFinite(gotAt) && gotAt >= firstAt - 86400000 && gotAt <= lastAt + 86400000
     ? formatted.find((d) => d.at >= gotAt - 43200000) ?? formatted[formatted.length - 1]
     : null
+
+  // The marker (and its faint line down) appear when the drawing line reaches its date: that date's
+  // share of the chart's width × DRAW_MS. Re-timed whenever the range shown changes.
+  const [markOn, setMarkOn] = useState(false)
+  const markFrac = mark && lastAt > firstAt ? Math.min(1, Math.max(0, (mark.at - firstAt) / (lastAt - firstAt))) : 1
+  const drawKey = `${firstAt}|${lastAt}|${formatted.length}|${mark?.at ?? ''}`
+  useEffect(() => {
+    setMarkOn(false)
+    if (!Number.isFinite(markFrac)) return
+    const t = setTimeout(() => setMarkOn(true), markFrac * DRAW_MS)
+    return () => clearTimeout(t)
+  }, [drawKey, markFrac])
+
+  if (data.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-48 text-slate-600 text-sm">
+        Not enough price data to show a chart.
+      </div>
+    )
+  }
 
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -87,7 +105,7 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
           labelFormatter={(ms: number) => dateLabel(ms)}
           formatter={(val: number) => [formatCurrency(val), 'Price']}
         />
-        {mark && <ReferenceLine x={mark.at} stroke={color} strokeOpacity={0.35} strokeDasharray="3 3" />}
+        {mark && markOn && <ReferenceLine x={mark.at} stroke={color} strokeOpacity={0.35} strokeDasharray="3 3" />}
         <Area
           type="monotone"
           dataKey="price"
@@ -96,10 +114,12 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
           fill={`url(#grad-${color.replace('#', '')})`}
           dot={false}
           activeDot={{ r: 4, fill: color }}
+          animationDuration={DRAW_MS}
+          animationEasing="linear"
         />
-        {mark && gotIt && (
+        {mark && gotIt && markOn && (
           <ReferenceDot x={mark.at} y={mark.price} r={0} ifOverflow="extendDomain"
-            shape={(props: { cx?: number; cy?: number }) => <g><title>{gotIt.title}</title><CardMark cx={props.cx} cy={props.cy} color={color} /></g>} />
+            shape={(props: { cx?: number; cy?: number }) => <g className="chart-mark-pop"><title>{gotIt.title}</title><CardMark cx={props.cx} cy={props.cy} color={color} /></g>} />
         )}
       </AreaChart>
     </ResponsiveContainer>
