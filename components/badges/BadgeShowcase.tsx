@@ -52,7 +52,8 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  const pin = Math.max(56, Math.min(MAX_PIN, Math.max(0, width - 64) / COLS / 1.38))
+  // COLS tiles a row: each tile is pin × 1.25 + 24 wide, with up to 16px between them
+  const pin = Math.max(56, Math.min(MAX_PIN, Math.max(0, width - (COLS - 1) * 16 - COLS * 24 - 4) / COLS / 1.25))
 
   function place(spot: number, id: string) {
     const next = ids.map((x) => (x === id ? '' : x)) // a pin can only be in one spot: moving it
@@ -74,47 +75,44 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
   const places = shown.map((def, i) => ({ def, i })).filter((p) => isMe || p.def)
   const owner = first ? `${first}’s Pin Collection` : 'Pin Collection'
 
+  const filled = shown.filter(Boolean).length
+  // A tile for every spot — the pin centred on soft parchment, its nameplate below
+  const tile = { width: pin * 1.25 + 24, height: pin * 1.16 + pin * 0.2 + 28 }
+
   return (
     <div>
       <PinholeFilter />
-      {/* The case: walnut frame → the velvet well under glass */}
-      <div className="case-wood relative rounded-[16px] px-[clamp(12px,2.2vw,22px)] pt-[clamp(26px,3.6vw,38px)] pb-[clamp(22px,3vw,32px)]">
-        {/* brass corner caps */}
-        {(['top-[6px] left-[6px]', 'top-[6px] right-[6px] rotate-90', 'bottom-[6px] right-[6px] rotate-180', 'bottom-[6px] left-[6px] -rotate-90'] as const).map((at) => (
-          <span key={at} aria-hidden className={cn('case-brass case-corner pointer-events-none', at)} />
-        ))}
-        {/* Brass plaque on the top rail */}
-        <div className="absolute left-1/2 -translate-x-1/2 top-[clamp(5px,0.9vw,9px)] z-10 max-w-[80%]">
-          <div className="case-brass relative flex items-center gap-3 rounded-[3px] pl-6 pr-6 py-[5px]">
-            <span className="case-screw absolute left-[7px] top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full" />
-            <span className="pinbook-serif truncate text-[clamp(10px,1.3vw,14px)] font-bold uppercase tracking-[0.22em]">{owner}</span>
-            <span className="case-screw absolute right-[7px] top-1/2 -translate-y-1/2 w-[7px] h-[7px] rounded-full" />
+      {/* The Pin Display (2026-11-27 redesign): a flat parchment board in the app's own style — a header,
+          then one tile per spot. Was a walnut-and-brass case under glass (fake 3D, out of place). */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-[clamp(14px,2.4vw,24px)]">
+        <div className="flex items-end justify-between gap-3 flex-wrap mb-[clamp(14px,2vw,20px)]">
+          <div className="min-w-0">
+            <h3 className="pinbook-serif text-[clamp(1.05rem,1.8vw,1.35rem)] font-bold text-ink truncate">{owner}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {earned.length} {earned.length === 1 ? 'pin' : 'pins'} earned
+              {isMe && <> · {filled} of {allowed} {allowed === 1 ? 'spot' : 'spots'} filled</>}
+            </p>
           </div>
         </div>
 
-        <div className="case-bead rounded-[10px] p-[2px]">
-        <div ref={padRef} className="pinbook-page case-well relative rounded-[8px] overflow-hidden">
-          <div className="case-light absolute inset-0 pointer-events-none" />
+        <div ref={padRef} className="relative [container-type:inline-size]">
           {nothing && !isMe && (
-            <div className="relative text-center pinbook-serif text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/60 pt-12 pb-12">
+            <div className="rounded-xl border border-dashed border-slate-700 text-center text-sm text-slate-500 py-12">
               {first} hasn’t put any pins on display yet
             </div>
           )}
           {places.length > 0 && (
-            <div className="relative flex flex-wrap justify-center gap-x-[clamp(4px,3vw,40px)] gap-y-3 px-4 pt-[clamp(22px,3.4vw,40px)] pb-[clamp(20px,3vw,36px)]">
+            <div className="flex flex-wrap justify-center gap-[clamp(8px,1.6vw,16px)]">
               {width > 0 && places.map(({ def, i }) => (
-                <div key={`${i}-${def?.id ?? 'empty'}`} className="relative flex justify-center" style={{ width: pin * 1.25 }}>
+                <div key={`${i}-${def?.id ?? 'empty'}`} className="relative" style={tile}>
                   {def ? (
-                    <>
-                      {/* its pool of light, and its shadow pressed into the velvet */}
-                      <span aria-hidden className="case-spot absolute pointer-events-none" style={{ width: pin * 1.9, height: pin * 1.9, left: '50%', top: pin * 0.56, transform: 'translate(-50%, -50%)' }} />
-                      <span aria-hidden className="case-contact absolute pointer-events-none" style={{ width: pin * 0.9, height: pin * 0.22, left: '50%', top: pin * 1.06, transform: 'translate(-50%, -50%)' }} />
+                    <div className="h-full w-full rounded-2xl border border-slate-800 bg-[#f6eedb] flex items-center justify-center">
                       <BadgeSpot
                         def={def} badges={badges} pin={pin} isMe={isMe} interactive below={i < COLS}
                         progressRise={false} // what's unlocked, not progress toward the next look
                         onInspect={isMe ? () => setPicking(i) : setInspect}
                       />
-                    </>
+                    </div>
                   ) : i >= allowed ? (
                     <EmptyDisplaySpot size={pin} canAdd={isMe} premium onClick={() => openPremium('pin-display')} />
                   ) : (
@@ -124,17 +122,7 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
               ))}
             </div>
           )}
-          {/* The glass over it all */}
-          <div className="case-glass absolute inset-0 pointer-events-none rounded-[8px]" />
         </div>
-        </div>
-
-        {/* A small brass tag on the bottom rail: how many pins earned */}
-        {earned.length > 0 && (
-          <div className="absolute right-[clamp(40px,5vw,56px)] bottom-[clamp(4px,0.7vw,7px)] case-brass rounded-[2px] px-2 py-[2px] pinbook-serif text-[0.5625rem] font-bold uppercase tracking-[0.18em]">
-            {earned.length} {earned.length === 1 ? 'pin' : 'pins'} earned
-          </div>
-        )}
       </div>
 
       {picking !== null && (
@@ -165,19 +153,27 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
 // An empty place (the owner's view only): a fine engraved ring in the velvet with a faint + to fill it
 
 function EmptyDisplaySpot({ size, canAdd, onClick, premium }: { size: number; canAdd: boolean; onClick: () => void; premium?: boolean }) {
-  const d = size * 0.86
-  const Icon = premium ? Crown : Plus // a Premium spot on a free display: the crown opens the Premium sheet
-  const ring = (
-    <span className="case-empty relative flex items-center justify-center rounded-full transition-colors duration-200 group-hover:border-[rgba(241,213,143,0.6)]" style={{ width: d, height: d }}>
-      {canAdd && <Icon size={Math.max(18, size * 0.18)} strokeWidth={1.5} className="relative text-[#d9b25e]/40 transition-colors group-hover:text-[#f1d58f]/85" />}
-    </span>
+  // An empty spot: a dashed parchment tile. On a free display the Premium spots carry a gold crown —
+  // tapping one opens the Premium sheet. Visitors never see empty spots (BadgeShowcase leaves them out).
+  const Icon = premium ? Crown : Plus
+  const body = (
+    <>
+      <span className={cn('flex items-center justify-center rounded-full border border-dashed transition-colors',
+        premium ? 'border-[#b8862b]/50 text-[#b8862b] group-hover:border-[#b8862b]' : 'border-slate-700 text-slate-500 group-hover:border-slate-500 group-hover:text-ink')}
+        style={{ width: size * 0.62, height: size * 0.62 }}>
+        <Icon size={Math.max(16, size * 0.16)} strokeWidth={1.6} />
+      </span>
+      <span className={cn('text-[0.6875rem] font-semibold uppercase tracking-[0.14em]', premium ? 'text-[#b8862b]' : 'text-slate-500 group-hover:text-ink')}>
+        {premium ? 'Premium spot' : 'Add a pin'}
+      </span>
+    </>
   )
-  const box = { width: size * 1.25, height: size * 1.16 + size * 0.2 }
-  if (!canAdd) return <div className="flex items-center justify-center" style={box} aria-hidden>{ring}</div>
+  const cls = cn('h-full w-full rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-2.5 transition-colors',
+    premium ? 'border-[#b8862b]/30 bg-[rgba(184,134,43,0.05)] hover:border-[#b8862b]/60' : 'border-slate-800 hover:border-slate-700 hover:bg-slate-900/40')
+  if (!canAdd) return <div className={cls} aria-hidden>{body}</div>
   return (
-    <button type="button" onClick={onClick} aria-label={premium ? 'More display spots with Haven Premium' : 'Put a pin here'} className="group flex flex-col items-center justify-center gap-2 outline-none" style={box}>
-      {ring}
-      <span className="pinbook-serif text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/45 transition-colors group-hover:text-[#f1d58f]">{premium ? 'Premium' : 'Add a pin'}</span>
+    <button type="button" onClick={onClick} aria-label={premium ? 'More display spots with Haven Premium' : 'Put a pin here'} className={cn('group outline-none', cls)}>
+      {body}
     </button>
   )
 }
