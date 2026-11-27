@@ -5,7 +5,7 @@ import { GradedPriceNote, PriceChartingCredit, gradedLabel } from '@/components/
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, BookOpen, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, BookOpen, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch, cardexHref } from '@/lib/utils'
@@ -193,13 +193,16 @@ export default function CardDetailPage() {
           </div>
           {historyLocked
             ? <PremiumLock reason="graded" title="Price history" sub="See how this card’s price has moved, by day, with Haven Premium." />
-            // the line stretches from the placeholder to the real prices; the "Entered" card appears once
-            // the real line has landed (settled)
-            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} settled={historyIn}
+            // Nothing is drawn until the history answer is in — then the real line is drawn once (2026-11-27:
+            // a straight placeholder line from your entry to today was drawn first, then reshaped). The
+            // two-point line is only for a card with no recorded history at all.
+            : !historyIn
+            ? <div className="h-[260px] flex items-center justify-center gap-2 text-sm text-slate-500"><Loader2 size={15} className="animate-spin" />Loading price history…</div>
+            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]}
                 // the day you got it — your purchase date, else when you added it to TCG Haven
                 gotIt={(card.purchaseDate || card.createdAt) ? { date: card.purchaseDate || card.createdAt!, title: `Entered — ${formatDate(card.purchaseDate || card.createdAt!)}` } : undefined} />}
           <div className="text-center text-xs text-slate-600 mt-3">
-            {chartData.length <= 2
+            {!historyIn ? '\u00a0' : chartData.length <= 2
               ? (gradedSource ? 'Graded price history started 19 Nov 2026 and builds up each day.' : 'Price history builds up automatically as prices update each day.')
               : `${chartData.length} data points`}
           </div>
