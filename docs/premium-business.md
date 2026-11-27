@@ -25,6 +25,8 @@ side is in `docs/insights.md` (Statistics, Finances, the Haven Premium page) and
 - **Badges: free for everyone since 2026-11-27** (all looks, 3D pins, Pin Display) — Premium only
   raises the profile banner from **1 pin to 3** (`BannerPins` `allowed`, ProfilePage; pins placed past
   the limit are kept, just hidden; on your own free profile those spots show a crown → Premium sheet).
+  Same for the profile's **Pin Display: 4 spots free, 8 with Premium** (`BadgeShowcase` `allowed`;
+  `PIN_DISPLAY_SPOTS` = 8 stored, trailing empty spots not saved; firestore.rules allows ≤ 8).
 - **Premium:** unlimited scans; price history; 3 banner pins (1 free); badges' Full look (now free),
   3D pins, Pin Display, banner pins; Portfolio over time / P&L / Analytics; CSV export. Suggested:
   a 7-day free trial and a "founding member" price lock.

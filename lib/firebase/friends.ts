@@ -38,7 +38,8 @@ export const DEFAULT_PRIVACY: ProfilePrivacy = { cardex: true, badges: true, fri
 export const BIO_MAX = 160
 // The pin display pad on a profile's Badges tab: this many spots, each holding a badge id the owner
 // picked ('' = empty). Only earned badges are shown, whatever is stored.
-export const PIN_DISPLAY_SPOTS = 6
+// Pin Display spots: 8 stored at most — a free profile shows 4, Haven Premium 8 (2026-11-27, BadgeShowcase `allowed`)
+export const PIN_DISPLAY_SPOTS = 8
 // The pins attached to the profile's header banner, beside Settings: this many spots, same rules.
 export const BANNER_PIN_SPOTS = 3
 
@@ -264,7 +265,13 @@ export async function updateFriendCount(uid: string, friendCount: number): Promi
 /** Saves what the user curates on their profile: bio, what friends can see, and the pins on display. */
 export async function updateProfileDetails(uid: string, patch: { bio?: string; privacy?: ProfilePrivacy; pinDisplay?: string[]; bannerPins?: string[] }): Promise<void> {
   const data: Record<string, unknown> = { updatedAt: serverTimestamp() }
-  if (patch.pinDisplay) data.pinDisplay = toPinDisplay(patch.pinDisplay)
+  // Trailing empty spots aren't saved (a free display saves 4 or fewer — fits firestore.rules either way)
+  if (patch.pinDisplay) {
+    const spots = toPinDisplay(patch.pinDisplay)
+    let end = spots.length
+    while (end > 0 && !spots[end - 1]) end--
+    data.pinDisplay = spots.slice(0, end)
+  }
   if (patch.bannerPins) data.bannerPins = toBannerPins(patch.bannerPins)
   if (patch.bio !== undefined) data.bio = patch.bio.trim().slice(0, BIO_MAX)
   if (patch.privacy) data.privacy = { cardex: !!patch.privacy.cardex, badges: !!patch.privacy.badges, friends: patch.privacy.friends !== false }

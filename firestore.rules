@@ -364,7 +364,7 @@ service cloud.firestore {
         && (!('previousUsernames' in request.resource.data) || (request.resource.data.previousUsernames is list && request.resource.data.previousUsernames.size() <= 3))
         && (!('bio' in request.resource.data) || (request.resource.data.bio is string && request.resource.data.bio.size() <= 160))
         && (!('privacy' in request.resource.data) || request.resource.data.privacy.keys().hasOnly(['cardex', 'badges', 'friends']))
-        && (!('pinDisplay' in request.resource.data) || (request.resource.data.pinDisplay is list && request.resource.data.pinDisplay.size() <= 6))
+        && (!('pinDisplay' in request.resource.data) || (request.resource.data.pinDisplay is list && request.resource.data.pinDisplay.size() <= 8))
         && (!('bannerPins' in request.resource.data) || (request.resource.data.bannerPins is list && request.resource.data.bannerPins.size() <= 3))
         // how many friends they have — kept by their own app so a visitor sees the number (the friendships themselves stay private)
         && (!('friendCount' in request.resource.data) || (request.resource.data.friendCount is int && request.resource.data.friendCount >= 0 && request.resource.data.friendCount <= 100000))

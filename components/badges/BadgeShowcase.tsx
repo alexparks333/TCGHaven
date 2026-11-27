@@ -3,7 +3,8 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { PinInspector } from './pinInspectorLoader'
-import { Plus, X, Box, Trash2, Search, Sparkles } from 'lucide-react'
+import { Plus, X, Box, Trash2, Search, Sparkles, Crown } from 'lucide-react'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 import { cn } from '@/lib/utils'
 import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -20,21 +21,25 @@ import { BadgePin } from './BadgePin'
 // Real-object depth on purpose (like the Badges bookshelf); nothing glows or moves.
 
 const MAX_PIN = 140
-const COLS = 3
+const COLS = 4 // spots a row: 8 = two rows of 4 (2026-11-27; was 6 in rows of 3)
 
-export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
+export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed = 8 }: {
   badges: SharedBadges
   isMe: boolean
   ownerName: string
   ids: string[]                       // one per spot, '' = empty
   onChange?: (ids: string[]) => void  // the owner rearranged it
+  /** Spots this profile shows (2026-11-27: 4 free, 8 with Haven Premium — ProfilePage). Pins placed past it
+   *  are kept, just not shown; on your own profile those spots show a crown that opens the Premium sheet. */
+  allowed?: number
 }) {
+  const { openPremium } = usePremiumAccess()
   const { catalog } = useBadgeCatalog()
   const byId = useMemo(() => new Map(catalog.badges.map((b) => [b.id, b])), [catalog.badges])
   const tierOf = (d: BadgeDef) => badgeTier(d, badges.progress[d.id])
   const earned = useMemo(() => catalog.badges.filter((d) => badgeTier(d, badges.progress[d.id]) > 0), [catalog.badges, badges])
   // Only pins actually unlocked (any tier) are shown, whatever is stored — in their tier's look
-  const shown = ids.map((id) => { const d = id ? byId.get(id) : undefined; return d && tierOf(d) > 0 ? d : null })
+  const shown = ids.map((id, i) => { const d = id && i < allowed ? byId.get(id) : undefined; return d && tierOf(d) > 0 ? d : null })
   const [picking, setPicking] = useState<number | null>(null)
   const [inspect, setInspect] = useState<BadgeDef | null>(null)
 
@@ -110,6 +115,8 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
                         onInspect={isMe ? () => setPicking(i) : setInspect}
                       />
                     </>
+                  ) : i >= allowed ? (
+                    <EmptyDisplaySpot size={pin} canAdd={isMe} premium onClick={() => openPremium('pin-display')} />
                   ) : (
                     <EmptyDisplaySpot size={pin} canAdd={isMe} onClick={() => setPicking(i)} />
                   )}
@@ -157,19 +164,20 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange }: {
 
 // An empty place (the owner's view only): a fine engraved ring in the velvet with a faint + to fill it
 
-function EmptyDisplaySpot({ size, canAdd, onClick }: { size: number; canAdd: boolean; onClick: () => void }) {
+function EmptyDisplaySpot({ size, canAdd, onClick, premium }: { size: number; canAdd: boolean; onClick: () => void; premium?: boolean }) {
   const d = size * 0.86
+  const Icon = premium ? Crown : Plus // a Premium spot on a free display: the crown opens the Premium sheet
   const ring = (
     <span className="case-empty relative flex items-center justify-center rounded-full transition-colors duration-200 group-hover:border-[rgba(241,213,143,0.6)]" style={{ width: d, height: d }}>
-      {canAdd && <Plus size={Math.max(18, size * 0.18)} strokeWidth={1.5} className="relative text-[#d9b25e]/40 transition-colors group-hover:text-[#f1d58f]/85" />}
+      {canAdd && <Icon size={Math.max(18, size * 0.18)} strokeWidth={1.5} className="relative text-[#d9b25e]/40 transition-colors group-hover:text-[#f1d58f]/85" />}
     </span>
   )
   const box = { width: size * 1.25, height: size * 1.16 + size * 0.2 }
   if (!canAdd) return <div className="flex items-center justify-center" style={box} aria-hidden>{ring}</div>
   return (
-    <button type="button" onClick={onClick} aria-label="Put a pin here" className="group flex flex-col items-center justify-center gap-2 outline-none" style={box}>
+    <button type="button" onClick={onClick} aria-label={premium ? 'More display spots with Haven Premium' : 'Put a pin here'} className="group flex flex-col items-center justify-center gap-2 outline-none" style={box}>
       {ring}
-      <span className="pinbook-serif text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/45 transition-colors group-hover:text-[#f1d58f]">Add a pin</span>
+      <span className="pinbook-serif text-[0.625rem] font-bold uppercase tracking-[0.18em] text-[#d9b25e]/45 transition-colors group-hover:text-[#f1d58f]">{premium ? 'Premium' : 'Add a pin'}</span>
     </button>
   )
 }

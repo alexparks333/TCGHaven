@@ -811,6 +811,11 @@ function CardexTab({ profile, isMe, isFriend, view, onCount }: { profile: Profil
 // ── Badges: the Haven Badges pin book ──────────────────────────────────────────────────────
 
 function BadgesTab({ profile, isMe, isFriend, view, onSaved }: { profile: Profile; isMe: boolean; isFriend: boolean; view: BadgesView; onSaved: (p: Profile) => void }) {
+  // Whether this profile's owner has Haven Premium (their title, paid Premium, or — your own — your entitlement)
+  const premiumAccess = usePremiumAccess()
+  const ownerRole = useAccountRole(profile.uid).record
+  const ownerPaid = usePaidPremium(profile.uid)
+  const ownerPremium = !premiumAccess.gatesOn || hasPremium(shownTitle(ownerRole, ownerPaid)) || (isMe && premiumAccess.member)
   const [saveError, setSaveError] = useState(false)
   const { myBadges } = useFriends()
   const [theirs, setTheirs] = useState<SharedBadges | 'private' | undefined>(undefined)
@@ -842,7 +847,9 @@ function BadgesTab({ profile, isMe, isFriend, view, onSaved }: { profile: Profil
   }
   return (
     <>
-      <BadgeShowcase badges={badges} isMe={isMe} ownerName={profile.displayName} ids={profile.pinDisplay} onChange={isMe ? arrange : undefined} />
+      {/* 4 display spots free, 8 with Haven Premium (2026-11-27) — all 8 while the launch switch is off */}
+      <BadgeShowcase badges={badges} isMe={isMe} ownerName={profile.displayName} ids={profile.pinDisplay} onChange={isMe ? arrange : undefined}
+        allowed={ownerPremium ? 8 : 4} />
       {saveError && <p className="mt-2 text-xs text-red-500">Couldn’t save your display — try again.</p>}
     </>
   )
