@@ -356,10 +356,13 @@
 
 .card-zoom-mover {
   transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* its own GPU layer before the fly-in starts — not made mid-animation (an iPhone hitch, 2026-11-27) */
+  will-change: transform;
 }
 
 .card-zoom-flipper {
   transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .card-zoom-flipper.spin {

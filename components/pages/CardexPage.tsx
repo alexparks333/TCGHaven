@@ -2174,11 +2174,22 @@ function useCardInspect() {
 // The zoomed card's picture: the tile's copy (already downloaded) straight away, and the clear
 // full-size copy laid exactly over it, fading in once it has loaded — same box, same fit, so the
 // swap never moves or snaps.
-// The sharp copy fades in over the small one as soon as it's in — usually mid-spin, where the
-// motion hides the switch (kept that way on purpose, 2026-11-20)
+// The sharp copy is decoded first (img.decode(), off the main thread) and only fades in once the
+// opening flip has played (FLIP_MS after the zoom opened) — 2026-11-27: swapping it in mid-spin made
+// the iPhone decode a full-size picture during the animation, and the flip stuttered.
 function ZoomImage({ url, alt, filter }: { url: string; alt: string; filter?: string }) {
   const [sharp, setSharp] = useState(false)
+  const openedAt = useRef(performance.now()) // a version swap later (same zoom) needn't wait again
+  const sharpRef = useRef<HTMLImageElement | null>(null)
   useEffect(() => { setSharp(false) }, [url])
+  const reveal = useCallback((el: HTMLImageElement | null) => {
+    if (!el || !el.naturalWidth) return
+    const shownUrl = url
+    Promise.resolve(el.decode?.()).catch(() => {}).then(() => {
+      const wait = Math.max(0, openedAt.current + FLIP_MS + 40 - performance.now())
+      setTimeout(() => { if (sharpRef.current === el && el.src && shownUrl === url) setSharp(true) }, wait)
+    })
+  }, [url])
   return (
     // Rounded like its frame (rounded-[inherit]) on the pictures themselves: while the sharp copy
     // fades in, iPhone Safari draws it on its own layer and skips the frame's rounded clip — the
@@ -2190,8 +2201,8 @@ function ZoomImage({ url, alt, filter }: { url: string; alt: string; filter?: st
         alt={alt}
         draggable={false}
         decoding="async"
-        ref={(el) => { if (el?.complete && el.naturalWidth) setSharp(true) }}
-        onLoad={() => setSharp(true)}
+        ref={(el) => { sharpRef.current = el; if (el?.complete) reveal(el) }}
+        onLoad={(e) => reveal(e.currentTarget)}
         className="absolute inset-0 w-full h-full object-cover rounded-[inherit] transition-opacity duration-300"
         style={{ opacity: sharp ? 1 : 0 }}
       />
@@ -2494,7 +2505,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = fa
     ? { opacity: 0, transition: `opacity ${SWAP_OUT_MS}ms ease-in` }
     : swap === 'pre'
     ? { opacity: 0, transition: 'none' }
-    : { opacity: 1, transition: `opacity ${SWAP_IN_MS * 0.6}ms ease-out` }
+    : { opacity: 1, transition: `opacity ${SWAP_IN_MS * 0.6}ms ease-out, box-shadow 280ms ease-out` } // the shadow eases in as it lands
   // The flash of light as the card leaves and arrives (was brightness(1.7) on the whole layer)
   const swapFlash = (
     <div
@@ -2631,7 +2642,7 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = fa
             {slab ? (
               <div
                 className="card-zoom-face absolute inset-0 rounded-[1.125rem]"
-                style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)`, ...faceFade }}
+                style={{ transform: `translateZ(${SLAB_DEPTH / 2}px)`, boxShadow: inspect.ready ? `0 0 0 1px rgba(255,255,255,0.45), 0 0 28px -4px ${d.glowColor}aa, 0 24px 70px -12px rgba(0,0,0,0.8)` : '0 0 0 1px rgba(255,255,255,0.45)', ...faceFade }}
               >
                 <FullSlab slab={slab} name={dc.name} number={dc.number} setName={dc.setName}>
                   {dc.imageUrl
@@ -2644,7 +2655,9 @@ export function CardZoomOverlay({ data, onClose, viewOnly = false, soldLink = fa
             ) : (
             <div
               className="card-zoom-face absolute inset-0 rounded-2xl overflow-hidden"
-              style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)`, ...faceFade }}
+              // the big soft shadow only once it has landed (inspect.ready): a blurred shadow on a turning
+              // 3D face is repainted every frame on an iPhone — the flip stuttered (2026-11-27)
+              style={{ transform: `translateZ(${CARD_DEPTH / 2}px)`, boxShadow: inspect.ready ? `0 0 0 2px ${d.glowColor}55, 0 20px 60px -12px rgba(0,0,0,0.7)` : `0 0 0 2px ${d.glowColor}55`, ...faceFade }}
             >
               {dc.imageUrl ? (
                 <ZoomImage url={dc.imageUrl} alt={dc.name} filter={dc.owned ? 'none' : 'grayscale(1) brightness(0.55)'} />
