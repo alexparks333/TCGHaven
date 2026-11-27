@@ -106,7 +106,7 @@ const compactFormats = new Map<string, Intl.NumberFormat>()
 export function formatCurrencyCompact(value: number): string {
   const { code, rate } = displayCurrency()
   let f = compactFormats.get(code)
-  if (!f) compactFormats.set(code, (f = new Intl.NumberFormat(undefined, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol', notation: 'compact', maximumFractionDigits: 1 })))
+  if (!f) compactFormats.set(code, (f = new Intl.NumberFormat(undefined, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol', notation: 'compact', minimumFractionDigits: 0, maximumFractionDigits: 1 })))
   return f.format(value * rate)
 }
 
