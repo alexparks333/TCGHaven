@@ -6,10 +6,10 @@ import { PinInspector } from './pinInspectorLoader'
 import { Plus, X, Box, Trash2, Search, Sparkles, Crown } from 'lucide-react'
 import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 import { cn } from '@/lib/utils'
-import { badgeTier, pinSize, type BadgeDef } from '@/lib/badges'
+import { badgeTier, pinSize, pinDrawSize, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
 import type { SharedBadges } from '@/lib/firebase/badges'
-import { BadgeSpot, PinholeFilter } from './BadgeBook'
+import { PinholeFilter } from './BadgeBook'
 import { BadgePin } from './BadgePin'
 
 
@@ -76,8 +76,8 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
   const owner = first ? `${first}’s Pin Collection` : 'Pin Collection'
 
   const filled = shown.filter(Boolean).length
-  // A tile for every spot — the pin centred on soft parchment, its nameplate below
-  const tile = { width: pin * 1.25 + 24, height: pin * 1.16 + pin * 0.2 + 28 }
+  // A tile for every spot — the pin floating over its pedestal, its name below
+  const tile = { width: pin * 1.25 + 24, height: pin * 1.62 + 40 }
 
   return (
     <div>
@@ -106,12 +106,10 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
               {width > 0 && places.map(({ def, i }) => (
                 <div key={`${i}-${def?.id ?? 'empty'}`} className="relative" style={tile}>
                   {def ? (
-                    <div className="h-full w-full rounded-2xl border border-slate-800 bg-[#f6eedb] flex items-center justify-center">
-                      <BadgeSpot
-                        def={def} badges={badges} pin={pin} isMe={isMe} interactive below={i < COLS}
-                        progressRise={false} // what's unlocked, not progress toward the next look
-                        onInspect={isMe ? () => setPicking(i) : setInspect}
-                      />
+                    <div className="h-full w-full rounded-2xl border border-slate-800 bg-[#f6eedb]">
+                      <PedestalPin def={def} pin={pin} index={i} grayscale={tierOf(def) === 1}
+                        title={isMe ? `${def.name} — change or take off` : `${def.name} — view in 3D`}
+                        onClick={() => (isMe ? setPicking(i) : setInspect(def))} />
                     </div>
                   ) : i >= allowed ? (
                     <EmptyDisplaySpot size={pin} canAdd={isMe} premium onClick={() => openPremium('pin-display')} />
@@ -151,6 +149,39 @@ export function BadgeShowcase({ badges, isMe, ownerName, ids, onChange, allowed 
 }
 
 // An empty place (the owner's view only): a fine engraved ring in the velvet with a faint + to fill it
+
+/** A displayed pin on its pedestal (2026-11-27): it floats, bobbing gently, and turns slowly all the way
+ *  round — its back a dark silhouette, like an enamel pin's — over a small parchment pedestal whose shadow
+ *  shrinks as it rises. Hover pauses it; click opens the 3D view (visitors) or the picker (the owner).
+ *  Pins keep the pin book's proportions (pinDrawSize). Still for "reduce motion" (globals.css pedestal-*). */
+function PedestalPin({ def, pin, index, grayscale, title, onClick }: { def: BadgeDef; pin: number; index: number; grayscale: boolean; title: string; onClick: () => void }) {
+  const size = pinDrawSize(def, pin)
+  const delay = { animationDelay: `${-index * 1.7}s` } // staggered, so they don't move in step
+  return (
+    <button type="button" onClick={onClick} title={title} aria-label={title}
+      className="pedestal group relative h-full w-full flex flex-col items-center justify-end pb-3 outline-none [perspective:700px]">
+      {/* the pin: float (bob) → turn (turntable) → front and back faces */}
+      <span className="pedestal-float relative flex items-center justify-center" style={{ ...delay, height: pin * 1.1, width: '100%' }}>
+        <span className="pedestal-spin relative" style={{ ...delay, width: size, height: size * 1.12 }}>
+          <span className={cn('pedestal-face absolute inset-0 flex items-center justify-center', grayscale && 'grayscale')}>
+            <BadgePin art={def.art} imageUrl={def.imageUrl} size={size} />
+          </span>
+          <span className="pedestal-face pedestal-back absolute inset-0 flex items-center justify-center">
+            <BadgePin art={def.art} imageUrl={def.imageUrl} size={size} />
+          </span>
+        </span>
+      </span>
+      {/* the pedestal: a flat parchment drum, its top lit, the pin's shadow on it */}
+      <span className="relative flex flex-col items-center" style={{ width: pin * 0.92 }}>
+        <span className="relative w-full rounded-[50%] bg-[#ecdfc2] border border-[#cdb88f]" style={{ height: pin * 0.2 }}>
+          <span aria-hidden className="pedestal-shadow absolute left-1/2 top-1/2 rounded-[50%] bg-[#5b4426]" style={{ ...delay, width: pin * 0.5, height: pin * 0.09 }} />
+        </span>
+        <span className="w-[86%] -mt-[2px] rounded-b-lg bg-[#dcc8a0] border border-t-0 border-[#cdb88f]" style={{ height: pin * 0.22 }} />
+      </span>
+      <span className="mt-2 max-w-full truncate px-2 pinbook-serif text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-ink">{def.name}</span>
+    </button>
+  )
+}
 
 function EmptyDisplaySpot({ size, canAdd, onClick, premium }: { size: number; canAdd: boolean; onClick: () => void; premium?: boolean }) {
   // An empty spot: a dashed parchment tile. On a free display the Premium spots carry a gold crown —

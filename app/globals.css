@@ -1537,3 +1537,27 @@
 .chart-mark-dot  { animation: chart-mark-dot 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 .chart-mark-ring { animation: chart-mark-ring 0.7s ease-out 0.08s both; pointer-events: none; }
 .chart-mark-line { animation: chart-mark-line 0.5s ease-out 0.3s both; }
+
+/* Pin Display pedestals (BadgeShowcase PedestalPin): the pin floats and turns slowly all the way round;
+   its shadow on the pedestal shrinks as it rises; hover pauses it; still for "reduce motion" */
+@keyframes pedestal-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+@keyframes pedestal-turn {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+@keyframes pedestal-shadow {
+  0%, 100% { transform: translate(-50%, -50%) scale(1);    opacity: 0.32; }
+  50%      { transform: translate(-50%, -50%) scale(0.78); opacity: 0.2; }
+}
+.pedestal-float  { animation: pedestal-bob 4.2s ease-in-out infinite; }
+.pedestal-spin   { transform-style: preserve-3d; animation: pedestal-turn 11s linear infinite; will-change: transform; }
+.pedestal-face   { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.pedestal-back   { transform: rotateY(180deg); filter: brightness(0.32) sepia(0.5) saturate(0.6); }
+.pedestal-shadow { animation: pedestal-shadow 4.2s ease-in-out infinite; transform: translate(-50%, -50%); filter: blur(3px); }
+.pedestal:hover .pedestal-float, .pedestal:hover .pedestal-spin, .pedestal:hover .pedestal-shadow { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .pedestal-float, .pedestal-spin, .pedestal-shadow { animation: none; }
+}
