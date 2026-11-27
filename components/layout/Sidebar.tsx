@@ -173,9 +173,9 @@ export function Sidebar() {
                     type="button"
                     onClick={() => premium.openPremium('general')}
                     title="Haven Premium"
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.625rem] font-bold text-[#4a3412] bg-[#e4c06a] border border-[#b8892f] hover:bg-[#ebcb7c] active:translate-y-px transition-colors"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-slate-400 bg-slate-900/50 border border-slate-800 hover:text-ink hover:border-slate-700 hover:bg-slate-800/50 active:translate-y-px transition-colors"
                   >
-                    <Crown size={10} className="shrink-0" />
+                    <Crown size={10} className="shrink-0 text-[#b8862b]" />
                     <span className="rail-hide">Buy Premium</span>
                   </button>
                 )}
