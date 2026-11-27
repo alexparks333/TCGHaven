@@ -22,7 +22,10 @@ side is in `docs/insights.md` (Statistics, Finances, the Haven Premium page) and
 - **Name:** stays **Haven Premium** everywhere.
 - **Free:** Inventory, Cardex, search, raw prices, Friends, profiles, joining Creator communities,
   earning badges (Grayscale look), basic portfolio value, **10 scans a month**.
-- **Premium:** unlimited scans; price history; badges' Full look,
+- **Badges: free for everyone since 2026-11-27** (all looks, 3D pins, Pin Display) — Premium only
+  raises the profile banner from **1 pin to 3** (`BannerPins` `allowed`, ProfilePage; pins placed past
+  the limit are kept, just hidden; on your own free profile those spots show a crown → Premium sheet).
+- **Premium:** unlimited scans; price history; 3 banner pins (1 free); badges' Full look (now free),
   3D pins, Pin Display, banner pins; Portfolio over time / P&L / Analytics; CSV export. Suggested:
   a 7-day free trial and a "founding member" price lock.
 - **Payments:** RevenueCat ties it together. iPhone = Apple in-app purchase, Android = Google Play

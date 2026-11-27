@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Plus, Crown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { badgeTier, pinDrawSize, type BadgeDef } from '@/lib/badges'
 import { useBadgeCatalog } from '@/lib/badgeCatalog'
@@ -12,6 +12,7 @@ import { toBannerPins, updateProfileDetails, type Profile } from '@/lib/firebase
 import { PinInspector, preloadPinInspector } from './pinInspectorLoader'
 import { PinPicker } from './BadgeShowcase'
 import { BadgePin } from './BadgePin'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 import { useTrimmedArt } from './trimmedArt'
 
 // One pin on the banner. With a mouse it tilts toward the pointer while a glint of light moves
@@ -96,12 +97,17 @@ function BannerPin({ def, size, base, box, grayscale, title, onClick }: {
 // The owner always sees their spots (with nothing earned yet they lead to the Badges page); visitors see only the pins, and only when the owner's
 // Badges are public (a pin's look needs their badge progress, which is private otherwise).
 
-export function BannerPins({ profile, isMe, onSaved, size }: {
+export function BannerPins({ profile, isMe, onSaved, size, allowed = 3 }: {
   profile: Profile
   isMe: boolean
   onSaved: (p: Profile) => void
   size: number
+  /** How many banner pins this profile shows (2026-11-27: 1 free, 3 with Haven Premium — ProfilePage).
+   *  Pins already placed beyond it are kept, just not shown; on your own profile those spots show a
+   *  crown that opens the Premium sheet. */
+  allowed?: number
 }) {
+  const { openPremium } = usePremiumAccess()
   const { catalog } = useBadgeCatalog()
   const { myBadges, isFriend } = useFriends()
   const canSee = profile.privacy.badges || isFriend(profile.uid) // Everyone, or Friends and you're one
@@ -126,7 +132,7 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
     () => (badges ? catalog.badges.filter((d) => badgeTier(d, badges.progress[d.id]) > 0) : []),
     [catalog.badges, badges],
   )
-  const shown = ids.map((id) => { const d = id ? byId.get(id) : undefined; return d && tierOf(d) > 0 ? d : null })
+  const shown = ids.map((id, i) => { const d = id && i < allowed ? byId.get(id) : undefined; return d && tierOf(d) > 0 ? d : null })
 
   if (!badges) return null
   // Visitors: nothing on the strap → no strap at all. You: always, so you can fill it.
@@ -155,6 +161,7 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
   }
 
   const spots = shown.map((def, i) => ({ def, i })).filter((s) => isMe || s.def)
+  const locked = (i: number) => i >= allowed // a Premium spot on a free account
   // One scale for every pinned pin: the biggest Display size among them fills the banner's height
   const biggest = Math.max(1, ...spots.flatMap(({ def }) => (def ? [pinDrawSize(def, 1)] : [])))
   const base = size / biggest
@@ -165,7 +172,21 @@ export function BannerPins({ profile, isMe, onSaved, size }: {
       <div
         title={isMe && !profile.privacy.badges ? 'Only your friends can see these pins while your Badges are set to Friends' : undefined}
         className="relative flex items-center" style={{ gap: size * 0.12 }}>
-        {spots.map(({ def, i }) => def ? (
+        {spots.map(({ def, i }) => locked(i) ? (
+          <button
+            key={i}
+            type="button"
+            onClick={() => openPremium('pin-display')}
+            title="Show up to 3 pins on your banner with Haven Premium"
+            aria-label="Show up to 3 pins on your banner with Haven Premium"
+            className="group flex items-center justify-center outline-none"
+            style={box}
+          >
+            <span className="banner-hole flex items-center justify-center rounded-full transition-colors" style={{ width: size * 0.72, height: size * 0.72 }}>
+              <Crown size={Math.max(12, size * 0.18)} strokeWidth={1.5} className="text-[#8a6420]/55 group-hover:text-[#8a6420]" />
+            </span>
+          </button>
+        ) : def ? (
           <BannerPin
             key={i}
             def={def}

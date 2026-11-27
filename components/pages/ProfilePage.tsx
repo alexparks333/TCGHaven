@@ -22,7 +22,8 @@ import { useCommunity, type Community } from '@/lib/creatorBooks'
 import { Avatar } from '@/components/friends/Avatar'
 import { SettingsDialog } from '@/components/friends/SettingsDialog'
 import { PeopleListDialog } from '@/components/friends/PeopleListDialog'
-import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, type AccountRoleRecord } from '@/lib/accountRoles'
+import { useAccountRole, getAccountRole, REGULAR, titleColor, titleLabel, hasPremium, type AccountRoleRecord } from '@/lib/accountRoles'
+import { usePremiumAccess } from '@/components/premium/PremiumProvider'
 import { shownTitle, usePaidPremium } from '@/components/premium/TitleTag'
 import { BadgeLibrary } from '@/components/badges/BadgeLibrary'
 import { BadgeShowcase } from '@/components/badges/BadgeShowcase'
@@ -204,6 +205,7 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
   useEffect(() => { if (!isMe) getAccountRole(profile.uid).then(setTheirs) }, [isMe, profile.uid])
   // A Regular account that pays (or used a promo code) shows as Premium (TitleTag.tsx)
   const title = shownTitle(isMe ? mine : theirs, usePaidPremium(profile.uid))
+  const premium = usePremiumAccess()
   useEffect(() => {
     if (!isMe) return
     const params = new URLSearchParams(window.location.search)
@@ -322,7 +324,9 @@ function ProfileHeader({ profile, isMe, onSaved, friendship }: {
           // it with a margin either side, and came out small next to the pin book's — 2026-11-20)
           <div className="absolute top-0 bottom-0 flex items-center" style={{ right: 12 }}>
             <div className={isMe ? 'mr-[3.25rem] sm:mr-[7.5rem]' : undefined}>
-              <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin} />
+              {/* 1 banner pin free, 3 with Haven Premium (2026-11-27) — all 3 while the launch switch is off */}
+              <BannerPins profile={profile} isMe={isMe} onSaved={onSaved} size={bannerPin}
+                allowed={!premium.gatesOn || hasPremium(title) || (isMe && premium.member) ? 3 : 1} />
             </div>
           </div>
         )}
