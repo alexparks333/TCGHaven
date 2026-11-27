@@ -27,6 +27,7 @@ side is in `docs/insights.md` (Statistics, Finances, the Haven Premium page) and
   the limit are kept, just hidden; on your own free profile those spots show a crown → Premium sheet).
   Same for the profile's **Pin Display: 4 spots free, 8 with Premium** (`BadgeShowcase` `allowed`;
   `PIN_DISPLAY_SPOTS` = 8 stored, trailing empty spots not saved; firestore.rules allows ≤ 8).
+- **The Premium page** (`/premium`, components/pages/PremiumPage.tsx, 2026-11-27): free vs Premium side by side and the plans (`PremiumOffer`, shared with the Premium sheet); the sidebar's Buy Premium opens it, the sheet links to it (a full button when you already have Premium).
 - **Premium:** unlimited scans; price history; 3 banner pins (1 free); badges' Full look (now free),
   3D pins, Pin Display, banner pins; Portfolio over time / P&L / Analytics; CSV export. Suggested:
   a 7-day free trial and a "founding member" price lock.

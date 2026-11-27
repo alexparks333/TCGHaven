@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Award, Check, Download, LineChart, Loader2, ScanLine, Sparkles, Tag, X } from 'lucide-react'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { db } from '@/lib/firebase/config'
@@ -29,7 +30,7 @@ const HEADLINES: Record<PremiumReason, { title: string; sub: string }> = {
 const FEATURES: Array<{ icon: typeof ScanLine; label: string; reason: PremiumReason }> = [
   { icon: ScanLine, label: 'Unlimited card scans', reason: 'scan-limit' },
   { icon: Award, label: 'Price history for every card', reason: 'graded' },
-  { icon: Sparkles, label: 'Up to 3 pins on your profile banner (1 free)', reason: 'pin-display' },
+  { icon: Sparkles, label: 'Up to 3 banner pins and 8 Pin Display spots (1 and 4 free)', reason: 'pin-display' },
   { icon: LineChart, label: 'Portfolio over time, profit & analytics', reason: 'portfolio-time' },
   { icon: Download, label: 'Export your collection', reason: 'export' },
   { icon: Tag, label: 'The gold Premium tag next to your name', reason: 'general' },
@@ -38,34 +39,13 @@ const FEATURES: Array<{ icon: typeof ScanLine; label: string; reason: PremiumRea
 const money = (n: number) => `$${n.toFixed(2)}`
 
 export function PremiumSheet({ reason, onClose }: { reason: PremiumReason; onClose: () => void }) {
-  const { user } = useAuth()
-  const { member, entitlement } = usePremiumAccess()
-  const [config, setConfig] = useState<PremiumConfig>(DEFAULT_PREMIUM)
-  const [plan, setPlan] = useState<Plan>('yearly')
-  const [busy, setBusy] = useState<'buy' | 'restore' | 'manage' | null>(null)
-  const [error, setError] = useState('')
-  const app = inApp()
-
-  useEffect(() => { loadPremiumConfig(db).then((c) => { setConfig(c); if (!c.yearlyOn) setPlan('monthly') }) }, [])
+  const { member } = usePremiumAccess()
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
   const head = member ? { title: 'You have Haven Premium', sub: 'Thank you for supporting TCG Haven.' } : HEADLINES[reason]
-  const saving = yearlySaving(config)
-
-  async function run(kind: 'buy' | 'restore' | 'manage') {
-    if (!user) return
-    setBusy(kind); setError('')
-    const r = kind === 'buy' ? await buyPremium(user.uid, plan)
-      : kind === 'restore' ? await restorePremium(user.uid)
-      : await manageSubscription(entitlement?.source ?? null)
-    setBusy(null)
-    if (!r.ok && !r.cancelled) setError(r.error ?? 'Something went wrong.')
-    if (r.ok && kind !== 'manage' && app) onClose()
-  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center md:p-4" role="dialog" aria-modal="true" aria-label={head.title}>
@@ -90,7 +70,52 @@ export function PremiumSheet({ reason, onClose }: { reason: PremiumReason; onClo
               </li>
             ))}
           </ul>
+          <PremiumOffer onBought={onClose} />
+          {/* the full page: free vs Premium side by side (components/pages/PremiumPage.tsx) — a real button
+              when you already have it (2026-11-27), a small link under the buy button when you don't */}
+          {member ? (
+            <Link href="/premium" onClick={onClose}
+              className="mt-3 w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold text-ink border border-slate-800 bg-slate-950/60 hover:border-[#b8862b]/60 transition-colors">
+              <Check size={16} style={{ color: GOLD }} />You own Premium · Go to the Premium page
+            </Link>
+          ) : (
+            <Link href="/premium" onClick={onClose} className="mt-3 block text-center text-xs font-medium text-slate-500 hover:text-ink underline underline-offset-2">
+              See everything Premium includes
+            </Link>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
+/** The plans and the buy / restore / manage buttons, a promo code (website) and the small print — the same
+ *  in the Premium sheet and on the Premium page. `onBought`: called after a purchase in the app. */
+export function PremiumOffer({ onBought }: { onBought?: () => void }) {
+  const { user } = useAuth()
+  const { member, entitlement } = usePremiumAccess()
+  const [config, setConfig] = useState<PremiumConfig>(DEFAULT_PREMIUM)
+  const [plan, setPlan] = useState<Plan>('yearly')
+  const [busy, setBusy] = useState<'buy' | 'restore' | 'manage' | null>(null)
+  const [error, setError] = useState('')
+  const app = inApp()
+
+  useEffect(() => { loadPremiumConfig(db).then((c) => { setConfig(c); if (!c.yearlyOn) setPlan('monthly') }) }, [])
+  const saving = yearlySaving(config)
+
+  async function run(kind: 'buy' | 'restore' | 'manage') {
+    if (!user) return
+    setBusy(kind); setError('')
+    const r = kind === 'buy' ? await buyPremium(user.uid, plan)
+      : kind === 'restore' ? await restorePremium(user.uid)
+      : await manageSubscription(entitlement?.source ?? null)
+    setBusy(null)
+    if (!r.ok && !r.cancelled) setError(r.error ?? 'Something went wrong.')
+    if (r.ok && kind !== 'manage' && app) onBought?.()
+  }
+
+  return (
+    <>
           {member ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
               {entitlement?.active && entitlement.expiresAt ? (
@@ -115,7 +140,7 @@ export function PremiumSheet({ reason, onClose }: { reason: PremiumReason; onClo
                 onClick={() => run('buy')}
                 disabled={!!busy || !canBuyHere()}
                 className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-white shadow-md transition-transform active:scale-[0.99] disabled:opacity-60"
-                style={{ background: `linear-gradient(180deg, #c99a3e, ${GOLD})` }}
+                style={{ background: GOLD }}
               >
                 {busy === 'buy' ? <Loader2 size={17} className="animate-spin" /> : <Check size={17} />}
                 Get Haven Premium
@@ -142,9 +167,7 @@ export function PremiumSheet({ reason, onClose }: { reason: PremiumReason; onClo
               <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" target="_blank" rel="noreferrer" className="underline">Terms of Use</a>
             </p>
           )}
-        </div>
-      </div>
-    </div>
+    </>
   )
 }
 

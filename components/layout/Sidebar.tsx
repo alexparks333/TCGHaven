@@ -155,8 +155,8 @@ export function Sidebar() {
                 </div>
                 <ChevronRight size={14} className="rail-hide text-slate-500 group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
               </Link>
-              {/* Support, and to its right "Buy Premium" until you have Haven Premium (opens the Premium
-                  sheet — the App Store / Stripe purchase as everywhere else, docs/premium-business.md) */}
+              {/* Support, and to its right "Buy Premium" until you have Haven Premium (the Premium page,
+                  components/pages/PremiumPage.tsx — the App Store / Stripe purchase as everywhere else) */}
               <div className="mt-1.5 flex items-center justify-center gap-3">
                 {/* Help: missing cards, account, bugs (components/pages/SupportPage.tsx) */}
                 <Link
@@ -169,15 +169,14 @@ export function Sidebar() {
                 </Link>
                 {/* staff (the Owner included) always see it, to check the Premium sheet; everyone else until they have Premium */}
                 {premium.loaded && (!premium.member || myRole.role === 'staff') && (
-                  <button
-                    type="button"
-                    onClick={() => premium.openPremium('general')}
+                  <Link
+                    href="/premium"
                     title="Haven Premium"
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-slate-400 bg-slate-900/50 border border-slate-800 hover:text-ink hover:border-slate-700 hover:bg-slate-800/50 active:translate-y-px transition-colors"
+                    className={cn('flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.625rem] font-semibold text-slate-400 bg-slate-900/50 border border-slate-800 hover:text-ink hover:border-slate-700 hover:bg-slate-800/50 active:translate-y-px transition-colors', pathname === '/premium' && 'text-ink border-slate-700')}
                   >
                     <Crown size={10} className="shrink-0 text-[#b8862b]" />
                     <span className="rail-hide">Buy Premium</span>
-                  </button>
+                  </Link>
                 )}
               </div>
             </>
