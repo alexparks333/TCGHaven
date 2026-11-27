@@ -429,7 +429,7 @@ Trophies for collecting milestones, made only by TCG Haven and added over time.
     (slow) until it's re-saved in the Relief Studio (or bring back a bulk button: git `e9921aa`).
 - **Pin Display (profile Badges tab, 2026-10-29)** — `components/badges/BadgeShowcase.tsx`: the
   Badges tab opens on a velvet display pad (book velvet + gold frame in a leather border) with
-  `PIN_DISPLAY_SPOTS` (6) spots the owner fills: click an empty spot (a round carved pinhole,
+  `PIN_DISPLAY_SPOTS` (8 — 4 on a free profile, 8 with Premium) spots the owner fills: click an empty spot (a round carved pinhole,
   `#pinhole-inset`) → pick one of your earned pins; click a pin → swap / take off / view in 3D.
   Saved as `profiles/{uid}.pinDisplay` (badge ids, '' = empty; rules allow a list ≤ 6) via
   `updateProfileDetails`, shown at once and put back if the save fails. Only earned pins show.
