@@ -5,13 +5,12 @@ import { Check, Loader2, Minus, Crown } from 'lucide-react'
 import { authFetch } from '@/lib/firebase/authFetch'
 import { useAuth } from '@/components/auth/AuthProvider'
 import { usePremiumAccess } from '@/components/premium/PremiumProvider'
-import { PremiumOffer } from '@/components/premium/PremiumSheet'
+import { PremiumOffer, PlanCard } from '@/components/premium/PremiumSheet'
 import { FREE_SCANS_PER_MONTH } from '@/lib/premiumRules'
 import { useAccountRole, titleLabel } from '@/lib/accountRoles'
 import { db } from '@/lib/firebase/config'
 import { loadPremiumConfig, yearlySaving, DEFAULT_PREMIUM, type PremiumConfig } from '@/lib/premium'
 import type { Plan } from '@/lib/premiumPurchase'
-import { cn } from '@/lib/utils'
 
 // /premium — Haven Premium's page (2026-11-27): your current tier, then the two plans side by side —
 // Free on the left, Premium on the right — each with its price and button, then its checklist (Free's
@@ -60,8 +59,8 @@ export default function PremiumPage() {
   const { member, entitlement, loaded } = usePremiumAccess()
   const role = useAccountRole(user?.uid).record
   const [state, setState] = useState<'idle' | 'confirming' | 'done' | 'failed'>('idle')
-  // Monthly / Yearly — the switch above the cards; Premium's price (always shown, even with Premium) and
-  // its buy button follow it
+  // Yearly / Monthly — the two plan boxes in the Premium card (always shown, even with Premium); the buy
+  // button buys the chosen one
   const [config, setConfig] = useState<PremiumConfig>(DEFAULT_PREMIUM)
   const [plan, setPlan] = useState<Plan>('yearly')
   useEffect(() => { loadPremiumConfig(db).then((c) => { setConfig(c); if (!c.yearlyOn) setPlan('monthly') }).catch(() => {}) }, [])
@@ -110,22 +109,6 @@ export default function PremiumPage() {
         </div>
       </section>
 
-      {/* ── Monthly / Yearly ── */}
-      {config.yearlyOn && (
-        <div className="flex justify-center mb-8">
-          <div role="radiogroup" aria-label="Billing" className="inline-flex items-center gap-1 p-1 rounded-full border border-slate-800 bg-slate-950/60">
-            {(['monthly', 'yearly'] as const).map((p) => (
-              <button key={p} type="button" role="radio" aria-checked={plan === p} onClick={() => setPlan(p)}
-                className={cn('px-5 py-2 rounded-full text-sm font-semibold transition-colors', plan === p ? 'text-white' : 'text-slate-400 hover:text-ink')}
-                style={plan === p ? { background: GOLD } : undefined}>
-                {p === 'monthly' ? 'Monthly' : 'Yearly'}
-                {p === 'yearly' && saving >= 0.05 && <span className={cn('ml-1.5 text-[0.6875rem] font-bold', plan === p ? 'text-white/85' : '')} style={plan === p ? undefined : { color: GOLD }}>Save {Math.round(saving * 100)}%</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* ── The two plans, side by side ── */}
       <div className="grid gap-6 md:grid-cols-2 items-stretch">
         {/* Free */}
@@ -155,14 +138,16 @@ export default function PremiumPage() {
           {onPremium && <YourPlan />}
           <h2 className="text-3xl font-bold text-ink pinbook-serif flex items-center gap-2"><Crown size={24} style={{ color: GOLD }} />Premium</h2>
           <p className="mt-1 text-slate-400">For collectors going further</p>
-          {/* the price for the switch's plan — shown whether or not you have Premium */}
-          <div className="mt-5 flex items-baseline gap-1.5">
-            <span className="text-3xl font-bold text-ink tabular-nums">{money(yearly ? config.yearly : config.monthly)}</span>
-            <span className="text-slate-400">{yearly ? '/ year' : '/ month'}</span>
+          {/* the two plans side by side — shown whether or not you have Premium */}
+          <div className={`mt-5 grid gap-2.5 ${config.yearlyOn ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {config.yearlyOn && (
+              <PlanCard selected={yearly} onClick={() => setPlan('yearly')} label="Yearly" price={`${money(config.yearly)}/yr`}
+                note={`${money(config.yearly / 12)} a month`} badge={saving >= 0.05 ? `Save ${Math.round(saving * 100)}%` : undefined} />
+            )}
+            <PlanCard selected={!yearly} onClick={() => setPlan('monthly')} label="Monthly" price={`${money(config.monthly)}/mo`} note="Cancel anytime" />
           </div>
-          <p className="text-sm text-slate-500">{yearly ? `${money(config.yearly / 12)} a month, billed yearly${saving >= 0.05 ? ` — save ${Math.round(saving * 100)}%` : ''}` : 'Billed monthly · cancel anytime'}</p>
-          {/* the buy / manage buttons — the same as the Premium sheet's, on the switch's plan */}
-          <div className="mt-6">
+          {/* the buy / manage buttons — the same as the Premium sheet's, on the chosen plan */}
+          <div className="mt-4">
             {user ? <PremiumOffer plan={yearly ? 'yearly' : 'monthly'} /> : <a href="/login?next=/premium" className="btn-primary w-full justify-center">Sign in to get Premium</a>}
           </div>
           <div className="my-6 border-t border-slate-800" />

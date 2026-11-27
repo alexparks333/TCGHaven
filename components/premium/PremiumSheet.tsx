@@ -173,7 +173,7 @@ export function PremiumOffer({ onBought, plan: chosen }: { onBought?: () => void
   )
 }
 
-function PlanCard({ selected, onClick, label, price, note, badge }: { selected: boolean; onClick: () => void; label: string; price: string; note: string; badge?: string }) {
+export function PlanCard({ selected, onClick, label, price, note, badge }: { selected: boolean; onClick: () => void; label: string; price: string; note: string; badge?: string }) {
   return (
     <button
       onClick={onClick}
