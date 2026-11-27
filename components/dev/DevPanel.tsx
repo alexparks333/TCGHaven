@@ -8,7 +8,7 @@ import { sendDevReactions } from '@/lib/wallReactions'
 import { DEV_ALL_BADGES_KEY, DEV_ALL_BADGES_EVENT, readDevBadgePct } from '@/components/badges/BadgeLibrary'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/auth/AuthProvider'
-import { ADMIN_UID } from '@/lib/firebase/config'
+import { ADMIN_UID, PERSONAL_OWNER_UID } from '@/lib/firebase/config'
 import { authFetch } from '@/lib/firebase/authFetch'
 
 // Dev tools, bottom left, for the Owner only (ADMIN_UID — everyone else never sees it), and only
@@ -33,7 +33,8 @@ type Tab = 'general' | 'community'
 
 export function DevPanel() {
   const { user } = useAuth()
-  if (!user || !ADMIN_UID || user.uid !== ADMIN_UID) return null
+  // The Owner account, or the Owner's personal collecting account (this panel only exists on a local dev server)
+  if (!user || (user.uid !== ADMIN_UID && user.uid !== PERSONAL_OWNER_UID)) return null
   return <Panel uid={user.uid} />
 }
 

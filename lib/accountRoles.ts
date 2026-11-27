@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { doc, getDoc, onSnapshot, type DocumentData } from 'firebase/firestore'
-import { db, ADMIN_UID } from './firebase/config'
+import { db, ADMIN_UID, PERSONAL_OWNER_UID } from './firebase/config'
 
 // Accounts (2026-11-09) — each collector account's title and standing, set by staff in the staff
 // portal's Accounts page (components/admin/AccountsPage.tsx); nobody can set their own.
@@ -64,7 +64,7 @@ export const titleColor = (r: AccountRoleRecord) => (r.staffTitle === 'Owner' ? 
 // Owner's call 2026-11-27). Display only: the Owner title, Premium, Owner-only buttons. Real powers —
 // admin API routes, dev tools, firestore.rules / storage.rules — stay with ADMIN_UID alone (the
 // 2026-11-21 Owner/bot split took this account's server-side access away on purpose).
-export const APP_OWNER_UIDS = new Set([ADMIN_UID, 'kOVse5dvMDOSkxlitTAh1Q99sJD3'].filter(Boolean))
+export const APP_OWNER_UIDS = new Set([ADMIN_UID, PERSONAL_OWNER_UID].filter(Boolean))
 
 /** The Owner's collector accounts are the Owner's — always Staff, titled "Owner", never banned. */
 export function withOwner(uid: string, r: AccountRoleRecord): AccountRoleRecord {

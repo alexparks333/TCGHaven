@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_UID } from './config'
+import { ADMIN_UID, PERSONAL_OWNER_UID } from './config'
 
 // Every route that performs an admin-only write (the registry, cache invalidation, the per-game
 // catalog syncs) used to trust ANY caller who knew the URL — ensureAdminAuth() only signs the
@@ -143,11 +143,13 @@ export async function verifyUserRequest(request: Request): Promise<NextResponse 
   return (await callerUid(request)) ? null : NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 }
 
-// The Owner only (ADMIN_UID) — the collector app's dev tools (app/api/dev/*). Returns the
-// Owner's uid, or an error response to send back.
+// The Owner only — the collector app's dev tools (app/api/dev/*, which answer 404 outside a local dev
+// server). ADMIN_UID, and on a local dev server the Owner's personal collecting account too (where they
+// test, 2026-11-27). Returns the caller's uid, or an error response to send back.
 export async function verifyOwnerRequest(request: Request): Promise<{ uid: string } | NextResponse> {
   const uid = await callerUid(request)
-  if (!uid || uid !== ADMIN_UID) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const owner = !!uid && (uid === ADMIN_UID || (process.env.NODE_ENV === 'development' && uid === PERSONAL_OWNER_UID))
+  if (!owner) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   return { uid }
 }
 

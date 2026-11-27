@@ -34,3 +34,7 @@ export const googleProvider = new GoogleAuthProvider()
 // it lives here rather than in NEXT_PUBLIC_ADMIN_UID, which named the old account that was both the
 // Owner and the sync bot. The sync bot (ADMIN_EMAIL) is a separate account now.
 export const ADMIN_UID: string = 'gTjTFDy9wLWiptuFxhiCLOv8kEa2'
+// The Owner's personal collecting account (alexhparks@gmail.com — their own cards; where they test).
+// The Owner in the app (lib/accountRoles.ts APP_OWNER_UIDS) and on a LOCAL dev server's dev tools
+// (DevPanel, app/api/dev/*) — never for admin routes or security rules, which stay with ADMIN_UID.
+export const PERSONAL_OWNER_UID: string = 'kOVse5dvMDOSkxlitTAh1Q99sJD3'
