@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts'
 import { PieChart as PieIcon, TrendingUp } from 'lucide-react'
-import { cn, formatCurrency } from '@/lib/utils'
+import { cn, formatCurrency, formatCurrencyCompact } from '@/lib/utils'
 import type { Game } from '@/lib/types'
 import { usePortfolioTimeline } from './usePortfolioTimeline'
 import { localDay } from '@/lib/valueHistory'
@@ -234,7 +234,9 @@ function OverTime({ games }: { games: Game[] }) {
               </linearGradient>
             </defs>
             <XAxis dataKey="day" tickFormatter={fmtDay} tick={{ fontSize: 10, fill: '#8a7558' }} axisLine={false} tickLine={false} minTickGap={36} />
-            <YAxis hide domain={[Math.max(0, lo - pad), hi + pad]} />
+            {/* amounts up the side (2026-11-27), short: $850, $17.6K */}
+            <YAxis domain={[Math.max(0, lo - pad), hi + pad]} tickFormatter={(v: number) => formatCurrencyCompact(v)}
+              tick={{ fontSize: 10, fill: '#8a7558' }} axisLine={false} tickLine={false} width={46} tickCount={5} />
             <Tooltip
               cursor={{ stroke: color, strokeOpacity: 0.35, strokeDasharray: '3 3' }}
               wrapperStyle={{ zIndex: 20, outline: 'none' }}

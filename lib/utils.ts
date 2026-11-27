@@ -101,6 +101,15 @@ export function formatCurrency(value: number): string {
   return f.format(value * rate)
 }
 
+/** A short amount for chart axes, in the collector's currency: "$850", "$17.6K", "$1.2M" */
+const compactFormats = new Map<string, Intl.NumberFormat>()
+export function formatCurrencyCompact(value: number): string {
+  const { code, rate } = displayCurrency()
+  let f = compactFormats.get(code)
+  if (!f) compactFormats.set(code, (f = new Intl.NumberFormat(undefined, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol', notation: 'compact', maximumFractionDigits: 1 })))
+  return f.format(value * rate)
+}
+
 /** Always US dollars (staff finances, anything that must not be converted) */
 export function formatUSD(value: number): string {
   return USD.format(value)
