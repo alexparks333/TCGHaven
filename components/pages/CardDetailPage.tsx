@@ -34,10 +34,13 @@ export default function CardDetailPage() {
   // This card's daily prices from the shared, catalog-level history (app/api/price-history) —
   // the same history every owner of this card sees. Unmatched cards have none.
   const [history, setHistory] = useState<{ date: string; price: number }[]>([])
+  // Whether the history answer is in (even an empty one) — the chart's "Entered" card waits for the real line
+  const [historyIn, setHistoryIn] = useState(false)
   // Haven Premium: price history is a Premium feature (the server refuses it too)
   const historyLocked = !usePremiumAccess().unlocked
   useEffect(() => {
-    if (!card?.apiId || historyLocked) { setHistory([]); return }
+    setHistoryIn(false)
+    if (!card?.apiId || historyLocked) { setHistory([]); setHistoryIn(true); return }
     let stale = false
     authFetch('/api/price-history', {
       method: 'POST',
@@ -45,8 +48,8 @@ export default function CardDetailPage() {
       body: JSON.stringify({ mode: 'series', days: 1500, items: [{ key: card.id, game: card.game, apiId: card.apiId, isFoil: card.isFoil, edition: card.edition, finish: card.finish, language: card.language, gradingCompany: card.gradingCompany, grade: card.grade, gradeTier: card.gradeTier ?? undefined, condition: card.condition }] }),
     })
       .then((r) => (r.ok ? r.json() : {}))
-      .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) setHistory(data[card.id] ?? []) })
-      .catch(() => {})
+      .then((data: Record<string, { date: string; price: number }[]>) => { if (!stale) { setHistory(data[card.id] ?? []); setHistoryIn(true) } })
+      .catch(() => { if (!stale) setHistoryIn(true) })
     return () => { stale = true }
   }, [card?.id, card?.apiId, card?.game, card?.isFoil, card?.edition, card?.finish, card?.language, card?.gradingCompany, card?.grade, card?.gradeTier, card?.condition, gradedPriced, historyLocked])
 
@@ -190,9 +193,9 @@ export default function CardDetailPage() {
           </div>
           {historyLocked
             ? <PremiumLock reason="graded" title="Price history" sub="See how this card’s price has moved, by day, with Haven Premium." />
-            // a fresh chart (drawn left to right, the "Entered" card popping in as the line reaches it) when
-            // the real history arrives or the range changes — not a morph from the placeholder line
-            : <PriceHistoryChart key={`${range}-${history.length > 0}`} data={chartData} color={GAME_COLORS[card.game]}
+            // the line stretches from the placeholder to the real prices; the "Entered" card appears once
+            // the real line has landed (settled)
+            : <PriceHistoryChart data={chartData} color={GAME_COLORS[card.game]} settled={historyIn}
                 // the day you got it — your purchase date, else when you added it to TCG Haven
                 gotIt={(card.purchaseDate || card.createdAt) ? { date: card.purchaseDate || card.createdAt!, title: `Entered — ${formatDate(card.purchaseDate || card.createdAt!)}` } : undefined} />}
           <div className="text-center text-xs text-slate-600 mt-3">

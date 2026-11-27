@@ -1507,14 +1507,33 @@
 }
 
 
-/* Price chart: the "Entered" card pops onto the line as the line reaches it (PriceHistoryChart.tsx) */
-@keyframes chart-mark-pop {
-  0%   { opacity: 0; transform: translateY(6px) scale(0.6); }
-  70%  { opacity: 1; transform: translateY(-1px) scale(1.08); }
-  100% { opacity: 1; transform: none; }
+/* Price chart: the "Entered" card's arrival once the line has landed (PriceHistoryChart.tsx CardMark) —
+   the dot pops onto the line, a ring pulses out, the card drops in from above with a twist and a bounce,
+   the dashed line down fades in */
+@keyframes chart-mark-dot {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.6); }
+  100% { transform: scale(1); }
 }
-.chart-mark-pop {
+@keyframes chart-mark-ring {
+  0%   { transform: scale(0.2); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes chart-mark-card {
+  0%   { transform: translateY(-26px) rotate(-28deg) scale(0.4); opacity: 0; }
+  55%  { transform: translateY(3px) rotate(6deg) scale(1.08); opacity: 1; }
+  78%  { transform: translateY(-2px) rotate(-2deg) scale(0.98); }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes chart-mark-line {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.chart-mark-dot, .chart-mark-ring, .chart-mark-card {
   transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: chart-mark-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-origin: 50% 50%;
 }
+.chart-mark-card { transform-origin: 50% 100%; animation: chart-mark-card 0.6s cubic-bezier(0.34, 1.4, 0.64, 1) 0.12s both; }
+.chart-mark-dot  { animation: chart-mark-dot 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.chart-mark-ring { animation: chart-mark-ring 0.7s ease-out 0.08s both; pointer-events: none; }
+.chart-mark-line { animation: chart-mark-line 0.5s ease-out 0.3s both; }
