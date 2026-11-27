@@ -167,7 +167,8 @@ export function Sidebar() {
                   <LifeBuoy size={10} />
                   <span className="rail-hide">Support</span>
                 </Link>
-                {premium.loaded && !premium.member && (
+                {/* staff (the Owner included) always see it, to check the Premium sheet; everyone else until they have Premium */}
+                {premium.loaded && (!premium.member || myRole.role === 'staff') && (
                   <button
                     type="button"
                     onClick={() => premium.openPremium('general')}
