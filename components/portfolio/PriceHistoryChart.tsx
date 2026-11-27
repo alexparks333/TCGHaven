@@ -73,7 +73,10 @@ export function PriceHistoryChart({ data, color, gotIt }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={formatted} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+      <AreaChart data={formatted}
+        // room for the "Entered" card, which stands ~25px above its point and 7px either side — at the top
+        // or the last day of the chart it was cut off (2026-11-27)
+        margin={{ top: mark ? 30 : 5, right: mark ? 14 : 5, left: 5, bottom: 5 }}>
         <defs>
           <linearGradient id={`grad-${color.replace('#', '')}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor={color} stopOpacity={0.3} />
