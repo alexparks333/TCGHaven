@@ -21,12 +21,10 @@ import { useTrimmedArt } from './trimmedArt'
 // shadow sit on parts that don't tilt (a filter on the tilting element blurs it, see BadgeSpot).
 const BANNER_ZOOM = 1.25
 
-function BannerPin({ def, size, base, box, grayscale, title, onClick }: {
+function BannerPin({ def, drawn, box, grayscale, title, onClick }: {
   def: BadgeDef
-  /** the banner's height: no pin is drawn taller */
-  size: number
-  /** a 100% pin's size here (BannerPins: the biggest pinned one fills the banner's height) */
-  base: number
+  /** the size to draw it — pinDrawSize at one scale shared by every banner pin (BannerPins) */
+  drawn: number
   box: { width: number; height: number }
   grayscale: boolean
   title: string
@@ -35,17 +33,6 @@ function BannerPin({ def, size, base, box, grayscale, title, onClick }: {
   const [tilt, setTilt] = useState<{ x: number; y: number } | null>(null)
   const art = useTrimmedArt(def.imageUrl) // the glint is masked to the pin's own shape
   useEffect(() => { preloadPinInspector() }, []) // so a click opens the 3D view at once
-  // Its Display size, in the SAME ratio to the other pins as in the book (pinDrawSize — the book's
-  // rule): the biggest pinned one fills the banner's height, the others smaller by as much as in the
-  // book. Each used to be capped at the banner's height on its own, so a pin set bigger than another
-  // (Banned vs the Crystal Rose) came out the same size here (2026-11-20).
-  // ×BANNER_ZOOM: a pin's art leaves room round it inside its box, so at its slot's size it looked
-  // small in its slot (next to the empty spots' circles) — every pin a quarter bigger, together, so the
-  // ratio holds; it may reach past its box (the slots keep their spacing) — 2026-11-20
-  // …but never taller than the banner (`size` = its height): the art is drawn to its own shape in a
-  // 1 × 1.12 box (BadgePin), so its height is size × min(1.12, its aspect) — kept within, or the
-  // banner (overflow hidden) clips its top and bottom
-  const drawn = Math.min(pinDrawSize(def, base) * BANNER_ZOOM, size / Math.min(1.12, art?.aspect ?? 1.12))
   return (
     <button
       type="button"
@@ -133,6 +120,8 @@ export function BannerPins({ profile, isMe, onSaved, size, allowed = 3 }: {
     [catalog.badges, badges],
   )
   const shown = ids.map((id, i) => { const d = id && i < allowed ? byId.get(id) : undefined; return d && tierOf(d) > 0 ? d : null })
+  // Each pinned pin's real shape (BANNER_PIN_SPOTS = 3 — one hook call per spot, always the same three)
+  const shapes = [useTrimmedArt(shown[0]?.imageUrl), useTrimmedArt(shown[1]?.imageUrl), useTrimmedArt(shown[2]?.imageUrl)]
 
   if (!badges) return null
   // Visitors: nothing on the strap → no strap at all. You: always, so you can fill it.
@@ -162,9 +151,15 @@ export function BannerPins({ profile, isMe, onSaved, size, allowed = 3 }: {
 
   const spots = shown.map((def, i) => ({ def, i })).filter((s) => isMe || s.def)
   const locked = (i: number) => i >= allowed // a Premium spot on a free account
-  // One scale for every pinned pin: the biggest Display size among them fills the banner's height
+  // ONE scale for every pinned pin, so they keep exactly the ratio they have in the pin book
+  // (pinDrawSize — each badge's Display size): BANNER_ZOOM, unless that would make one of them taller
+  // than the banner — then the scale at which the one that'd overflow first just fits. (2026-11-27: each
+  // pin used to be capped to the banner on its own, by its own shape, so a tall pin was cut down more than
+  // a round one — Banned came out smaller than the Crystal Rose, the opposite of the book.)
   const biggest = Math.max(1, ...spots.flatMap(({ def }) => (def ? [pinDrawSize(def, 1)] : [])))
   const base = size / biggest
+  const heightOf = (i: number) => Math.min(1.12, shapes[i]?.aspect ?? 1.12) // the art's height per 1 of size (BadgePin's 1 × 1.12 box)
+  const zoom = Math.min(BANNER_ZOOM, ...spots.flatMap(({ def, i }) => (def ? [size / (pinDrawSize(def, base) * heightOf(i))] : [])))
   const box = { width: size * 1.02, height: size * 1.12 }
 
   return (
@@ -190,8 +185,7 @@ export function BannerPins({ profile, isMe, onSaved, size, allowed = 3 }: {
           <BannerPin
             key={i}
             def={def}
-            size={size}
-            base={base}
+            drawn={pinDrawSize(def, base) * zoom}
             box={box}
             grayscale={tierOf(def) === 1}
             title={isMe ? `${def.name} — change or take off` : `${def.name} — view in 3D`}
