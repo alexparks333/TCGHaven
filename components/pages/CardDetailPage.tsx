@@ -2,10 +2,11 @@
 
 import { PrintingTags, LanguageNote } from '@/components/PrintingTags'
 import { GradedPriceNote, PriceChartingCredit, gradedLabel } from '@/components/GradedPriceTag'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, BookOpen, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
+import { ArrowLeft, BookOpen, TrendingUp, TrendingDown, Loader2, Pencil } from 'lucide-react'
+import { AddCardDialog } from '@/components/inventory/AddCardDialog'
 import { useStore } from '@/lib/store'
 import { AuthGuard } from '@/components/auth/AuthGuard'
 import { formatCurrency, formatPercent, formatDate, localDateString, openEbaySearch, cardexHref } from '@/lib/utils'
@@ -26,6 +27,15 @@ export default function CardDetailPage() {
   const [range, setRange] = useState<Range>('all')
 
   const card = cards.find((c) => c.id === cardId)
+  // Edit this entry — the same window as Inventory's Edit (AddCardDialog saves it; the page follows the store)
+  const [editing, setEditing] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  // Deleted from the Edit window: back to Portfolio, not a "Card not found" page
+  const hadCard = useRef(false)
+  useEffect(() => {
+    if (card) hadCard.current = true
+    else if (hadCard.current) router.replace('/portfolio')
+  }, [card, router])
   // A slab valued at PriceCharting's graded price: the server answers with its grade's graded
   // history (lib/api/priceHistory.ts), so the chart is that grade's price, credited to PriceCharting.
   const gradedSource = useStore((s) => (card && s.gradedOn ? s.gradedSources[card.id] : undefined))
@@ -106,10 +116,20 @@ export default function CardDetailPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div
-            className="card-glass p-6 flex gap-5 cursor-pointer"
+            className="card-glass relative p-6 flex gap-5 cursor-pointer"
             onClick={(e) => { if (e.ctrlKey || e.metaKey) openEbaySearch(card) }}
             title="⌘/Ctrl+Click to search eBay sold listings"
           >
+            {/* Edit this entry (condition, price paid, date, quantity, group…) — Inventory's Edit window */}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setSaveError(null); setEditing(true) }}
+              aria-label="Edit this card's entry"
+              title="Edit entry"
+              className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-ink hover:bg-slate-800 transition-colors"
+            >
+              <Pencil size={15} />
+            </button>
             {card.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={cardImage(card.imageUrl, 'grid')} alt={card.name} width={112} height={160} className="w-28 h-40 object-contain rounded-xl" />
@@ -207,6 +227,15 @@ export default function CardDetailPage() {
               : `${chartData.length} data points`}
           </div>
         </div>
+        {saveError && <p className="text-xs text-red-600 mt-3">{saveError}</p>}
+        {editing && (
+          <AddCardDialog
+            defaultGame={card.game}
+            editCard={card}
+            onClose={() => setEditing(false)}
+            onSaveError={(msg) => setSaveError(msg)}
+          />
+        )}
       </div>
     </AuthGuard>
   )
